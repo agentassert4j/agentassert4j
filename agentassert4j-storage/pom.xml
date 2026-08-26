@@ -17,7 +17,5 @@
 
     <modules>
         <module>agentassert4j-storage-sqlite</module>
-        <module>agentassert4j-storage-mysql</module>
-        <module>agentassert4j-storage-pg</module>
     </modules>
 </project>
