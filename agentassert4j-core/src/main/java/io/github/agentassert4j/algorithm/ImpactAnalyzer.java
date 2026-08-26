@@ -6,6 +6,7 @@ import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -92,8 +93,15 @@ public class ImpactAnalyzer {
             // 全局 Prompt：采样策略
             for (String skill : allAffectedSkills) {
                 List<InteractionRecord> records = repository.findBySkillId(skill);
-                int limit = Math.min(GLOBAL_SAMPLE_PER_SKILL, records.size());
-                testCases.addAll(records.subList(0, limit));
+                // 复审 M5：存储层返回顺序未定义，top3 采样必须取规范序
+                // （timestamp + recordId 平局决胜）的前缀，两次分析选例才一致
+                List<InteractionRecord> ordered = records.stream()
+                        .sorted(Comparator
+                                .comparingLong(InteractionRecord::getTimestamp)
+                                .thenComparing(r -> r.getRecordId() != null ? r.getRecordId() : ""))
+                        .toList();
+                int limit = Math.min(GLOBAL_SAMPLE_PER_SKILL, ordered.size());
+                testCases.addAll(ordered.subList(0, limit));
             }
         } else {
             // 局部 Prompt：全量测试

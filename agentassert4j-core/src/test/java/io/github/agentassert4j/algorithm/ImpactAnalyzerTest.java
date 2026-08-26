@@ -305,5 +305,49 @@ class ImpactAnalyzerTest {
             assertTrue(result.isHasBaseline());
             assertTrue(result.getAllAffectedSkills().contains("skill-a"));
         }
+
+        @Test
+        @DisplayName("采样取确定性 top3（timestamp+recordId），与存储返回顺序无关（复审 M5）")
+        void sampling_deterministicRegardlessOfStorageOrder() {
+            // 10 个 Skill 触发全局采样阈值；skill-0 有 5 条时间戳可分辨的记录，
+            // 存储插入顺序故意乱序——top3 采样必须按 (timestamp, recordId) 规范序选取
+            for (int i = 0; i < 10; i++) {
+                String skillId = "skill-" + i;
+                if (i == 0) {
+                    long id = 300;
+                    repo.saveInteraction(scopedRecord(skillId, "hash-old", "s0", id, "r-" + id));
+                    id = 100;
+                    repo.saveInteraction(scopedRecord(skillId, "hash-old", "s0", id, "r-" + id));
+                    id = 500;
+                    repo.saveInteraction(scopedRecord(skillId, "hash-old", "s0", id, "r-" + id));
+                    id = 200;
+                    repo.saveInteraction(scopedRecord(skillId, "hash-old", "s0", id, "r-" + id));
+                    id = 400;
+                    repo.saveInteraction(scopedRecord(skillId, "hash-old", "s0", id, "r-" + id));
+                } else {
+                    repo.saveInteraction(makeRecord(skillId, "hash-old", "s" + i));
+                }
+                repo.skillProfiles.put("gk-" + i, makeSkillProfile("gk-" + i, skillId));
+            }
+
+            AnalysisResult result = analyzer.analyzeChange("hash-old", "hash-new");
+
+            List<String> pickedForSkill0 = result.getTestCases().stream()
+                    .filter(r -> "skill-0".equals(r.getSkillId()))
+                    .map(InteractionRecord::getRecordId)
+                    .sorted()
+                    .toList();
+            assertEquals(List.of("r-100", "r-200", "r-300"), pickedForSkill0,
+                    "top3 必须是规范序（timestamp,recordId）的前三条，两次分析选例必须一致");
+        }
+    }
+
+    /** 显式指定 timestamp 与 recordId 的记录构造（M5 测试专用） */
+    private InteractionRecord scopedRecord(String skillId, String hash, String session,
+                                            long ts, String recordId) {
+        InteractionRecord r = makeRecord(skillId, hash, session);
+        r.setRecordId(recordId);
+        r.setTimestamp(ts);
+        return r;
     }
 }

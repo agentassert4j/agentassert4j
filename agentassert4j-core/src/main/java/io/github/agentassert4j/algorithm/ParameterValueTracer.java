@@ -57,7 +57,9 @@ public class ParameterValueTracer {
         for (String sessionId : sessionIds) {
             List<InteractionRecord> chain = repository.findBySessionId(sessionId)
                     .stream()
-                    .sorted(Comparator.comparing(InteractionRecord::getTimestamp))
+                    // 复审 M4：timestamp 平局时按 recordId 决胜——同毫秒交互的边方向必须可复现
+                    .sorted(Comparator.comparingLong(InteractionRecord::getTimestamp)
+                            .thenComparing(r -> r.getRecordId() != null ? r.getRecordId() : ""))
                     .toList();
             traceDependency(chain);
         }

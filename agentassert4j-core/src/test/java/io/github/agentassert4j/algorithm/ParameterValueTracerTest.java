@@ -366,6 +366,27 @@ class ParameterValueTracerTest {
         assertSame(custom, t.getGraph());
     }
 
+    @Test
+    void rebuildGraph_sameTimestamp_orderDeterministicByRecordId() {
+        // 复审 M4：同毫秒交互仅按 timestamp 排序无平局决胜，存储返回顺序即结果——不可复现。
+        // 两边时间戳相同、记录 ID 决定次序；存储返回顺序故意与 ID 次序相反。
+        InteractionRecord first = record("skillA", "{\"orderId\":\"ORD-001\"}",
+                List.of(tc("tA", null)), 1000);
+        first.setRecordId("a-first");
+        InteractionRecord second = record("skillB", "ok",
+                List.of(tc("tB", Map.of("orderId", (Object) "ORD-001"))), 1000);
+        second.setRecordId("b-second");
+
+        StorageRepository repo = new SimpleTestRepo(
+                List.of("session1"),
+                Map.of("session1", List.of(second, first)));
+
+        tracer.rebuildGraph(repo);
+
+        assertTrue(tracer.getGraph().getSuccessors("skillA").contains("skillB"),
+                "同 timestamp 时必须按 recordId 平局决胜，保证依赖边方向确定");
+    }
+
     // ==================== 简单测试仓库 ====================
 
     private static class SimpleTestRepo implements StorageRepository {

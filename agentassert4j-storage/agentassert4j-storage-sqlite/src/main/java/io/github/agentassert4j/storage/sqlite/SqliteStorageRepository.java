@@ -174,12 +174,14 @@ public class SqliteStorageRepository implements StorageRepository {
 
     @Override
     public List<InteractionRecord> findBySkillId(String skillId) {
-        return queryInteractions("SELECT * FROM interactions WHERE skill_id = ?", skillId);
+        return queryInteractions("SELECT * FROM interactions WHERE skill_id = ?"
+                + " ORDER BY timestamp ASC, seq ASC, record_id ASC", skillId);
     }
 
     @Override
     public List<InteractionRecord> findByTemplateHash(String hash) {
-        return queryInteractions("SELECT * FROM interactions WHERE template_hash = ?", hash);
+        return queryInteractions("SELECT * FROM interactions WHERE template_hash = ?"
+                + " ORDER BY timestamp ASC, seq ASC, record_id ASC", hash);
     }
 
     @Override
@@ -199,7 +201,8 @@ public class SqliteStorageRepository implements StorageRepository {
 
     @Override
     public List<InteractionRecord> findBySessionId(String sessionId) {
-        return queryInteractions("SELECT * FROM interactions WHERE session_id = ?", sessionId);
+        return queryInteractions("SELECT * FROM interactions WHERE session_id = ?"
+                + " ORDER BY timestamp ASC, seq ASC, record_id ASC", sessionId);
     }
 
     @Override
