@@ -8,7 +8,7 @@ import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 
 /**
- * 基线生命周期管理（与方案文档 5.9 节一致）。
+ * 基线生命周期管理。
  *
  * <h3>设计哲学</h3>
  * <p>框架是侦探，不是法官。侦探负责发现变化和取证，法官（开发者）负责判断变化是否正确。

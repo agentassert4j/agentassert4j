@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * AgentAssert4j 主配置模型 — 从 agentassert4j.json 加载（与方案文档 3.10 节对应）。
+ * AgentAssert4j 主配置模型 — 从 agentassert4j.json 加载。
  *
  * <p>配置优先级：CLI 参数 > 环境变量 > agentassert4j.json > 默认值。</p>
  *

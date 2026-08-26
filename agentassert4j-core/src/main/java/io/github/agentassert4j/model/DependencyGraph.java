@@ -5,10 +5,9 @@ package io.github.agentassert4j.model;
  *
  * <p>用于外部展示（Dashboard / CLI），核心图计算在 InMemoryDependencyGraph 中进行。</p>
  *
- * <p><b>TODO: [模型简化]</b> 方案文档 4.6 节定义了 Node 内部类（skillId, groupKey, inboundCount, outboundCount）
- * 和 edges 结构。当前阶段 CLI/Dashboard 尚未实现，暂时简化为统计字段。
- * 待 Phase 1 CLI 开发时补充 Node 内部类和完整 edges 结构，
- * 并增加从 InMemoryDependencyGraph 转换的工厂方法。</p>
+ * <p><b>TODO: [模型简化]</b> 当前仅保留统计字段；CLI/Dashboard 落地时补充 Node 内部类
+ * （skillId, groupKey, inboundCount, outboundCount）、edges 结构及从
+ * InMemoryDependencyGraph 转换的工厂方法。</p>
  */
 public class DependencyGraph {
 

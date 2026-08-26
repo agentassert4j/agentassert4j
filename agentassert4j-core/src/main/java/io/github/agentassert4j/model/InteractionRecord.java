@@ -8,8 +8,7 @@ import java.util.List;
  * <p>录制层捕获后通过 Disruptor 异步写入 StorageRepository。
  * 核心算法（分组、指纹、图谱）全部基于此模型。</p>
  *
- * <p>字段集与 v1 定稿 schema 的 interactions 列一一对应
- * （《AgentAssert4j Schema定稿设计（2026-08-26）》§2）：
+ * <p>字段集与 v1 schema 的 interactions 列一一对应：
  * 只在调用时刻可知的观测事实（模型身份、采样参数、原文、token 遥测）
  * 必须由捕获侧填充，事后无法重建。</p>
  */

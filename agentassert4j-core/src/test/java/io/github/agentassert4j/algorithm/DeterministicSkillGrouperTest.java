@@ -130,12 +130,11 @@ class DeterministicSkillGrouperTest {
                 DeterministicSkillGrouper.group(r2).getGroupKey());
     }
 
-    // ==================== 无模板锚点回退（复审 M6） ====================
+    // ==================== 无模板锚点回退 ====================
 
     @Test
     void pureChat_nullTemplateHash_fallsBackToUserInputHash_notChatNull() {
-        // 复审 M6：templateHash 为 null 时 groupKey 坍缩为 "chat:null"，
-        // 不同 prompt 的纯对话记录互相污染同一基线
+        // templateHash 为 null 时绝不能坍缩为 "chat:null"，否则不同 prompt 的纯对话互相污染同一基线
         InteractionRecord r1 = record(null, null, false);
         r1.setUserInput("查询订单状态");
         InteractionRecord r2 = record(null, null, false);

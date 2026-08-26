@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 /**
  * 行为指纹提取器 — 从交互记录中提取四维度确定性指纹。
  *
- * <p>维度 1-2 全自动提取，维度 3-4 从声明式规则加载（与方案文档 5.3 节一致）。</p>
+ * <p>维度 1-2 全自动提取，维度 3-4 从声明式规则加载。</p>
  */
 public final class FingerprintExtractor {
 
@@ -105,7 +105,7 @@ public final class FingerprintExtractor {
         }
         fp.setToolParamTypes(paramTypes);
 
-        // toolParamRequired：当前阶段无来源，默认全部 false
+        // toolParamRequired：暂无数据来源，默认全部 false
         // TODO: 待 SDK 接入层提供 required 信息后填充
         Map<String, Boolean> paramRequired = new LinkedHashMap<>();
         for (String key : paramTypes.keySet()) {

@@ -5,7 +5,7 @@ import io.github.agentassert4j.util.HashUtil;
 /**
  * 脱敏策略枚举 — 指定敏感字段值的处理方式。
  *
- * <p>对应方案文档 13.2.2 节 data-protection.strategy 配置项。</p>
+ * <p>对应 data-protection.strategy 配置项。</p>
  */
 public enum SanitizeStrategy {
 

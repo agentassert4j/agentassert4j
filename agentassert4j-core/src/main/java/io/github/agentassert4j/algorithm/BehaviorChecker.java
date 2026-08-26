@@ -7,7 +7,7 @@ import java.util.Set;
 import java.util.function.BiFunction;
 
 /**
- * 内置行为校验库 — 维度 4 中用户声明的 behavior 校验（与方案文档 5.8 节一致）。
+ * 内置行为校验库 — 维度 4 中用户声明的 behavior 校验。
  *
  * <p>内置常用 behavior 8 个，覆盖 80% 场景。
  * 未知 behavior 默认通过（不误报比漏报好）。</p>

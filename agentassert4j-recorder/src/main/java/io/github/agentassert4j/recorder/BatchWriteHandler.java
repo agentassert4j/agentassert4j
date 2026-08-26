@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li>缓冲区达到 {@code batchSize} 时触发批量写入</li>
  *   <li>定时 flush（每 {@code flushIntervalMs} 毫秒）确保数据不长期滞留</li>
  *   <li>缓冲区上限 {@code maxBufferSize} 防止 OOM，超限丢弃新记录</li>
- *   <li>写入失败仅记计数器，不重试（L2 错误处理）</li>
+ *   <li>写入失败仅记计数器，不重试</li>
  * </ul>
  */
 public class BatchWriteHandler implements EventHandler<InteractionEvent> {
@@ -133,7 +133,6 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
             failedCount.addAndGet(toWrite.size());
             log.error("Batch write failed, {} records lost: {}",
                     toWrite.size(), e.getMessage(), e);
-            // L2 策略：不重试，记录丢失
         }
     }
 

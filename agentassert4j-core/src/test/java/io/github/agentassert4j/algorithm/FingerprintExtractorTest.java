@@ -95,7 +95,7 @@ class FingerprintExtractorTest {
 
         DeterministicFingerprint fp = FingerprintExtractor.extract(r);
 
-        // 当前阶段所有 required 均为 false（TODO: 待 SDK 接入后填充）
+        // 所有 required 均为 false（TODO: 待 SDK 接入后填充）
         assertFalse(fp.getToolParamRequired().get("x"));
         assertFalse(fp.getToolParamRequired().get("y"));
     }

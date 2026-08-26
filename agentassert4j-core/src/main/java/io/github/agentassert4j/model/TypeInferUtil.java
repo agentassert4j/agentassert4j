@@ -8,9 +8,8 @@ import java.util.Set;
  * 值类型推断工具 — 从实际参数值推断类型。
  * 优先级 2 策略：SDK 未提供 argTypes 时的退路。
  *
- * <p><b>TODO: [包位置]</b> 本类是工具类，按规范应放在 {@code util/} 包。
- * 但因与 ToolCall.argTypes 紧密关联，方案文档示意放在 model 包。
- * 待 Phase 2 后评估是否迁移至 util 包。</p>
+ * <p><b>TODO: [包位置]</b> 因与 ToolCall.argTypes 紧密关联暂留 model 包；
+ * 按规范工具类应在 {@code util/} 包，后续评估迁移。</p>
  */
 public final class TypeInferUtil {
 

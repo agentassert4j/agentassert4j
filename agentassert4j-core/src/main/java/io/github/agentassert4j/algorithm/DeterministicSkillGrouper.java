@@ -13,7 +13,7 @@ import java.util.stream.Stream;
 /**
  * 确定性 Skill 分组器 — 基于 toolName + paramSignature 的确定性分组。
  *
- * <p>分组规则（完全确定性，与方案文档 5.1 节一致）：
+ * <p>分组规则（完全确定性）：
  * <ul>
  *   <li>有工具调用：sorted(toolNames).join("+") + "[" + paramSignature + "]"</li>
  *   <li>无工具调用："chat:" + templateHash（无模板时回退 SHA-256(userInput)，双缺失为 "chat:no-anchor"）</li>
@@ -66,7 +66,7 @@ public final class DeterministicSkillGrouper {
             skillName = String.join("+", sortedNames);
             skillType = SkillType.TOOL_SKILL;
         } else {
-            // 无工具调用：纯对话。锚点优先级（复审 M6：杜绝 "chat:null" 坍缩污染基线）：
+            // 无工具调用：纯对话。锚点优先级（template_hash 为 null 时不得坍缩为 "chat:null"）：
             // template_hash（三元组语义主锚点）→ user_input hash（无模板时兜底）→ 稳定孤儿键
             String anchor = record.getTemplateHash();
             if (anchor == null || anchor.isEmpty()) {

@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 /**
  * 参数值追踪器 — 通过字段值精确匹配 + 字段名前缀匹配构建依赖图谱。
  *
- * <p>两层匹配策略（与方案文档 5.2 节一致）：
+ * <p>两层匹配策略：
  * <ul>
  *   <li>第 1 层：字段值精确 equals → HIGH 置信度</li>
  *   <li>第 2 层：字段名前缀匹配 + 值非空 → LOW 置信度</li>
@@ -57,7 +57,7 @@ public class ParameterValueTracer {
         for (String sessionId : sessionIds) {
             List<InteractionRecord> chain = repository.findBySessionId(sessionId)
                     .stream()
-                    // 复审 M4：timestamp 平局时按 recordId 决胜——同毫秒交互的边方向必须可复现
+                    // timestamp 平局时按 recordId 决胜——同毫秒交互的边方向必须可复现
                     .sorted(Comparator.comparingLong(InteractionRecord::getTimestamp)
                             .thenComparing(r -> r.getRecordId() != null ? r.getRecordId() : ""))
                     .toList();
@@ -129,7 +129,7 @@ public class ParameterValueTracer {
      * 但 modelResponse 是 LLM 的回复文本（可能包含 JSON）。
      * 更精确的做法是优先从 ToolCall.getResult()（工具实际返回的 JSON）提取，
      * 仅在无工具调用时降级到 modelResponse。
-     * 待 Phase 1 recorder 层确保 ToolCall.result 完整持久化后优化此处。</p>
+     * 待录制层确保 ToolCall.result 完整持久化后再优化此处。</p>
      */
     public Set<String> extractFieldValues(InteractionRecord record) {
         Set<String> values = new LinkedHashSet<>();

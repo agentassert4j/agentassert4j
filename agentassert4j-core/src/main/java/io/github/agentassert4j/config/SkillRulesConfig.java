@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 声明式规则配置 — 从 agentassert4j-rules.json 加载（与方案文档 3.10 节对应）。
+ * 声明式规则配置 — 从 agentassert4j-rules.json 加载。
  *
  * <p>维度 3（内容规则）和维度 4（约束行为）从用户声明的规则配置加载，
  * 而非自动提取。类比 JUnit：JUnit 不自动推断断言，开发者手写 assertEquals；

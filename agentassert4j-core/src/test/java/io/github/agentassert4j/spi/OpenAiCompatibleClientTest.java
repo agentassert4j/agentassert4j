@@ -259,7 +259,7 @@ class OpenAiCompatibleClientTest {
         assertNull(response.getContent());
     }
 
-    // ==================== 捕获保真（定稿文档 §8.5） ====================
+    // ==================== 捕获保真 ====================
 
     @Test
     void parseResponse_retainsUsageRawAndNormalizesDialect() throws Exception {
@@ -281,7 +281,7 @@ class OpenAiCompatibleClientTest {
         assertEquals("deepseek-chat-V3.1-0806", response.getServedModel());
         assertEquals("tool_calls", response.getFinishReason());
 
-        assertNotNull(response.getUsageRaw(), "usage 子树必须逐字保留（承重墙）");
+        assertNotNull(response.getUsageRaw(), "usage 子树必须逐字保留");
         assertTrue(response.getUsageRaw().contains("prompt_cache_hit_tokens"),
                 "usage_raw 是逐字原文，未归一的方言字段也必须在其中（回填来源）");
     }

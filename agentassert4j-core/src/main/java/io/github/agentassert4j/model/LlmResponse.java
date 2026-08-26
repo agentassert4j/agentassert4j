@@ -16,7 +16,7 @@ public class LlmResponse {
     private String servedModel;
     /** 归一化结束原因枚举（TEXT）：stop/tool_calls/max_tokens/content_filter/other；捕获层归一 */
     private String finishReason;
-    /** usage 子树原文逐字保留——未来一切新遥测列的回填来源（承重墙） */
+    /** usage 子树原文逐字保留——后续新增遥测列的回填来源 */
     private String usageRaw;
     /** 缓存读命中 token；供应商不报告时为 null */
     private Integer cacheReadTokens;

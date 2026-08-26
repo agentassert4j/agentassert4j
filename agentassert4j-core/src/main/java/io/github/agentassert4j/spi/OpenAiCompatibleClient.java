@@ -102,7 +102,7 @@ public class OpenAiCompatibleClient implements LlmClient {
 
                 if (statusCode == 200) {
                     LlmResponse parsed = parseResponse(response.body());
-                    // 端到端墙钟（含重试等待）——复审 M15：client 从不计时导致 latencyMs 恒 0
+                    // 端到端墙钟（含重试等待）：latencyMs 的语义是整次调用的耗时
                     parsed.setLatencyMs((System.nanoTime() - startNanos) / 1_000_000L);
                     return parsed;
                 }
@@ -264,7 +264,7 @@ public class OpenAiCompatibleClient implements LlmClient {
      *   <li>choices[0].message.tool_calls → 工具调用决策</li>
      *   <li>usage.prompt_tokens / completion_tokens → token 统计</li>
      *   <li>model → served_model（版本化快照）；choices[0].finish_reason → 结束原因</li>
-     *   <li>usage 子树逐字保留（usage_raw——未来遥测列的回填来源，定稿文档 §8 承重墙）</li>
+     *   <li>usage 子树逐字保留为 usage_raw——后续新增遥测列的回填来源</li>
      *   <li>prompt_tokens_details.cached_tokens / completion_tokens_details.reasoning_tokens
      *       → 方言归一化（仅捕获层允许持有方言知识，schema 存概念列）</li>
      * </ul>
@@ -290,7 +290,7 @@ public class OpenAiCompatibleClient implements LlmClient {
                 if (promptTokens != null) response.setInputTokens(Integer.parseInt(promptTokens));
                 if (completionTokens != null) response.setOutputTokens(Integer.parseInt(completionTokens));
 
-                // input_tokens 语义钉死为"总处理输入 token"（定稿文档 §6-1）：
+                // input_tokens 语义钉死为"总处理输入 token"：
                 // OpenAI/DeepSeek 的 prompt_tokens 已是总量；Anthropic 合成规则由其专属客户端实现
                 String promptDetails = extractSection(usageSection, "prompt_tokens_details");
                 if (promptDetails != null) {
@@ -321,7 +321,7 @@ public class OpenAiCompatibleClient implements LlmClient {
     }
 
     /**
-     * finish_reason 归一枚举（定稿文档 §6-3）：stop/tool_calls/max_tokens/content_filter/error/other。
+     * finish_reason 归一为固定枚举：stop/tool_calls/max_tokens/content_filter/error/other。
      * OpenAI 方言值 tool_calls/function_call → tool_calls；未知值归 other（TEXT 枚举加值零迁移）。
      */
     static String normalizeFinishReason(String raw) {

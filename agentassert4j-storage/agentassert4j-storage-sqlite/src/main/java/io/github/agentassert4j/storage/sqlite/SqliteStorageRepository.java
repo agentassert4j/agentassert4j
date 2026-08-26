@@ -118,8 +118,7 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setString(i++, r.getServedModel());
             ps.setString(i++, r.getEndpoint());
             ps.setString(i++, r.getSkillId());
-            // TODO: [group_key 占位空串] DeterministicSkillGrouper 已实现且 InteractionRecord 已有
-            //       groupKey 字段，但录制层尚未接线回填（复审 §5 管道断裂项，随步骤 6a 基线管道落地）
+            // TODO: [group_key 占位空串] 分组器已能产出 groupKey，录制管道接线后即回填
             ps.setString(i++, r.getGroupKey() != null ? r.getGroupKey() : "");
             ps.setString(i++, r.getUserInput());
             ps.setInt(i++, r.getTurnIndex());
@@ -589,8 +588,7 @@ public class SqliteStorageRepository implements StorageRepository {
             if (json.charAt(end) == '"') break;
             end++;
         }
-        // 复审 H6：写侧 escape 过的字符串读侧必须反转义，否则换行/引号/反斜杠
-        // 读回为两字符转义序列（扫描式反转义，链式 replace 会破坏 "\\\\" 组合）
+        // 写侧 escape 过的字符串读侧必须反转义；扫描式实现，链式 replace 会破坏 "\\\\" 组合
         return unescape(json.substring(start, end));
     }
 

@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 增量测试筛选 — 数据驱动的变更影响分析（与方案文档 5.5-5.6 节一致）。
+ * 增量测试筛选 — 数据驱动的变更影响分析。
  *
  * <p>核心洞察：测试范围由实际数据决定，不依赖变更类型猜测。
  * 框架已掌握回答"影响范围"所需的全部数据——每条 InteractionRecord 都存储了
@@ -93,7 +93,7 @@ public class ImpactAnalyzer {
             // 全局 Prompt：采样策略
             for (String skill : allAffectedSkills) {
                 List<InteractionRecord> records = repository.findBySkillId(skill);
-                // 复审 M5：存储层返回顺序未定义，top3 采样必须取规范序
+                // 存储查询自带确定性排序，top3 采样直接取规范序前缀
                 // （timestamp + recordId 平局决胜）的前缀，两次分析选例才一致
                 List<InteractionRecord> ordered = records.stream()
                         .sorted(Comparator

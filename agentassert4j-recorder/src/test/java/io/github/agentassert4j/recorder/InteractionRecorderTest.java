@@ -254,7 +254,7 @@ class InteractionRecorderTest {
         recorder.stop();
     }
 
-    // ========== 捕获保真（定稿文档 §8.5） ==========
+    // ========== 捕获保真 ==========
 
     @Test
     void intercept_blankRecordId_getsUuidAssigned() throws Exception {

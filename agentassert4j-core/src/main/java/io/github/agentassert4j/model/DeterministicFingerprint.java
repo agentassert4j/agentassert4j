@@ -16,7 +16,7 @@ import java.util.Set;
  *
  * <p><b>TODO: [值对象缺失]</b> 当前未实现 equals/hashCode，跨存储层反序列化后的指纹对象比较
  * 使用引用相等（==）而非值相等。当前 BaselineManagerTest 中测试能通过是因为直接持有对象引用。
- * 待 Phase 1 CLI 开发后，从 JSON 反序列化的指纹需要值比较时，必须实现 equals/hashCode。
+ * 一旦出现跨反序列化的值比较需求，必须先实现 equals/hashCode。
  * 实现需注意 Set 和 Map 字段的顺序无关比较。</p>
  */
 public class DeterministicFingerprint {

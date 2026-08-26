@@ -368,8 +368,8 @@ class ParameterValueTracerTest {
 
     @Test
     void rebuildGraph_sameTimestamp_orderDeterministicByRecordId() {
-        // 复审 M4：同毫秒交互仅按 timestamp 排序无平局决胜，存储返回顺序即结果——不可复现。
-        // 两边时间戳相同、记录 ID 决定次序；存储返回顺序故意与 ID 次序相反。
+        // 同毫秒交互必须可复现：时间戳相同则由记录 ID 决定次序；
+        // 存储返回顺序故意与 ID 次序相反，证明排序与返回顺序无关。
         InteractionRecord first = record("skillA", "{\"orderId\":\"ORD-001\"}",
                 List.of(tc("tA", null)), 1000);
         first.setRecordId("a-first");

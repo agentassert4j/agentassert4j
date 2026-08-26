@@ -307,7 +307,7 @@ class ImpactAnalyzerTest {
         }
 
         @Test
-        @DisplayName("采样取确定性 top3（timestamp+recordId），与存储返回顺序无关（复审 M5）")
+        @DisplayName("采样取确定性 top3（timestamp+recordId），与存储返回顺序无关")
         void sampling_deterministicRegardlessOfStorageOrder() {
             // 10 个 Skill 触发全局采样阈值；skill-0 有 5 条时间戳可分辨的记录，
             // 存储插入顺序故意乱序——top3 采样必须按 (timestamp, recordId) 规范序选取

@@ -14,7 +14,7 @@ import java.util.Set;
 /**
  * 配置式数据脱敏器 — 在 InteractionRecord 写入存储前执行脱敏。
  *
- * <p>脱敏范围（对应方案文档 13.2.2 节）：
+ * <p>脱敏范围：
  * <ul>
  *   <li>toolCalls.arguments — 按 sensitiveFields 匹配键名脱敏</li>
  *   <li>toolCalls.result — 按 sensitiveFields 匹配 JSON 键名脱敏</li>

@@ -6,7 +6,7 @@ import java.util.Set;
 /**
  * 对比器配置 — 可忽略字段、阈值等。
  *
- * <p>当前阶段提供默认空配置。待 config 包实现后从 agentassert4j.yml 加载。</p>
+ * <p>默认空配置，阈值与可忽略字段按需设置；外部化加载由调用方组装后注入。</p>
  */
 public class ComparatorConfig {
 

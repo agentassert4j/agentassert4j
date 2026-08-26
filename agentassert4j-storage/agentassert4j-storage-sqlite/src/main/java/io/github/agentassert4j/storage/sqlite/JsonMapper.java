@@ -30,8 +30,7 @@ import io.github.agentassert4j.model.TurnContext;
  * <p><b>技术债</b>：本类实现了完整的手写 JSON 序列化/反序列化逻辑（~570行）。
  * core util 包中的 RecursiveJsonParser 已完成（支持完整 RFC 8259），
  * 后续应重构为使用 RecursiveJsonParser.parse()/serialize() 替代本类的手写解析，
- * 大幅减少代码量并消除 SqliteStorageRepository 中的重复 JSON 解析代码。
- * 重构时机：Phase 1 核心算法链路完成后统一进行。</p>
+ * 大幅减少代码量并消除 SqliteStorageRepository 中的重复 JSON 解析代码。</p>
  */
 final class JsonMapper {
 

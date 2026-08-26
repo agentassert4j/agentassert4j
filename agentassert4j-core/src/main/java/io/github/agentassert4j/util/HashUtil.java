@@ -7,7 +7,7 @@ import java.util.HexFormat;
 
 /**
  * SHA-256 哈希工具 — ThreadLocal 复用 MessageDigest 实例。
- * 与方案文档 13.1.4 节一致。
+ * 
  */
 public final class HashUtil {
 

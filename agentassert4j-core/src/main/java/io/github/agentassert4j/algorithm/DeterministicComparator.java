@@ -12,7 +12,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 确定性对比器 — 四维度加权评分 + 确定性判定（与方案文档 5.4 节一致）。
+ * 确定性对比器 — 四维度加权评分 + 确定性判定。
  *
  * <p>判定矩阵：
  * <ul>

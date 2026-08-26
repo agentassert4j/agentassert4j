@@ -253,7 +253,7 @@ class SqliteStorageRepositoryTest {
 
     @Test
     void specialCharacters_roundTripUnescaped() {
-        // 复审 H6：写侧 escape 了 \、"、换行，读侧不反转义——读回的是两字符转义序列
+        // 特殊字符全链路往返：写入时 escape、读回时反转义，内容必须原样
         String resultWithSpecials = "第一行\n第二行 \"引号\" 制表\t符 反斜杠\\ 结尾";
         String argValueWithNewline = "参数值\n含换行";
 

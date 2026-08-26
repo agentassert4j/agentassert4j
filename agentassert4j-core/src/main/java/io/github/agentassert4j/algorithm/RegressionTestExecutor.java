@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 /**
  * 回归测试执行器 — 用新 Prompt + 历史输入重放 LLM 调用，对比决策行为。
  *
- * <p>核心流程（与方案文档 5.7.1 对齐）：</p>
+ * <p>核心流程：</p>
  * <ol>
  *   <li>buildReplayRequest — 构建重放请求</li>
  *   <li>llmClient.chat — 调用 LLM</li>
@@ -178,9 +178,9 @@ public class RegressionTestExecutor {
         current.setInputTokens(response.getInputTokens());
         current.setOutputTokens(response.getOutputTokens());
 
-        // 调用时刻遥测——只在此刻可知，事后无法重建（定稿文档 §1.1 单向门）。
+        // 调用时刻遥测——只在此刻可知，事后无法重建。
         // 模型身份（provider/endpoint 等）由持有客户端配置的持久化管道回填，
-        // 算法层不持方言知识（定稿文档 §6-5）
+        // 算法层不持有供应商方言知识，归一在捕获层完成
         current.setServedModel(response.getServedModel());
         current.setFinishReason(response.getFinishReason());
         current.setUsageRaw(response.getUsageRaw());

@@ -1,7 +1,7 @@
 package io.github.agentassert4j.model;
 
 /**
- * 基线状态枚举 — 三态生命周期（与方案文档 5.9 节一致）。
+ * 基线状态枚举 — 三态生命周期。
  *
  * <pre>
  * BASELINE  → 当前基线（首次录制自动建立）

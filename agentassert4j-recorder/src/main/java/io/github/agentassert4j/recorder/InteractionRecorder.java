@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>生命周期：构造 → {@link #start()} → {@link #intercept(InteractionRecord)} → {@link #stop()}。</p>
  *
- * <p>错误处理（L2）：
+ * <p>错误处理策略：
  * <ul>
  *   <li>RingBuffer 满时丢弃记录，不阻塞生产者</li>
  *   <li>批量写入失败记录丢弃计数器，不重试</li>
@@ -44,7 +44,7 @@ public class InteractionRecorder implements RecordingInterceptor {
     /** 因 RingBuffer 满而丢弃的记录数 */
     private final AtomicLong droppedCount = new AtomicLong(0);
     /**
-     * 录制进程内单调序号源——透传给每条记录的 seq（定稿文档 §2.2-A）。
+     * 录制进程内单调序号源——透传给每条记录的 seq。
      * 丢弃造成的空洞合法：同会话内 seq 单调即可，(session_id, seq) 为确定性排序键。
      */
     private final AtomicLong seqSource = new AtomicLong(0);
@@ -117,7 +117,7 @@ public class InteractionRecorder implements RecordingInterceptor {
 
         try {
             // TODO: [record_id UUID 兜底] 上游 SDK 未接线前在此兜底生成全局唯一 ID；
-            //       INSERT OR IGNORE 的防重放语义依赖其全局唯一性（定稿文档 §2.3）
+            //       INSERT OR IGNORE 的防重放语义依赖其全局唯一性
             if (record.getRecordId() == null || record.getRecordId().isEmpty()) {
                 record.setRecordId(UUID.randomUUID().toString());
             }

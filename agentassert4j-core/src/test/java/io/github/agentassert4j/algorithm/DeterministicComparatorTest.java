@@ -545,7 +545,7 @@ class DeterministicComparatorTest {
         assertEquals(Verdict.PASS, r.getVerdict());
     }
 
-    // ==================== error 自动回归 × ignorable 互斥（复审 H10） ====================
+    // ==================== error 自动回归 × ignorable 互斥 ====================
 
     @Test
     void addedErrorField_triggersRegression_evenWhenIgnorable() {
@@ -560,7 +560,7 @@ class DeterministicComparatorTest {
                 Set.of("field1"),
                 Map.of("field1", "String"), 0);
         // 当前指纹新增了 error 字段——即使用户把 error 配置为可忽略，
-        // 类字段自动回归的不变量也必须成立（L30 注释自声明的契约）
+        // 类字段自动回归的不变量不因 ignorable 配置而放宽
         DeterministicFingerprint current = fp(
                 Set.of("toolA"), Map.of("id", "String"),
                 "application/json",
