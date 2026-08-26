@@ -545,6 +545,58 @@ class DeterministicComparatorTest {
         assertEquals(Verdict.PASS, r.getVerdict());
     }
 
+    // ==================== error 自动回归 × ignorable 互斥（复审 H10） ====================
+
+    @Test
+    void addedErrorField_triggersRegression_evenWhenIgnorable() {
+        ComparatorConfig config = new ComparatorConfig();
+        config.setIgnorableFields(Set.of("error"));
+
+        DeterministicComparator cmp = new DeterministicComparator(config);
+
+        DeterministicFingerprint baseline = fp(
+                Set.of("toolA"), Map.of("id", "String"),
+                "application/json",
+                Set.of("field1"),
+                Map.of("field1", "String"), 0);
+        // 当前指纹新增了 error 字段——即使用户把 error 配置为可忽略，
+        // 类字段自动回归的不变量也必须成立（L30 注释自声明的契约）
+        DeterministicFingerprint current = fp(
+                Set.of("toolA"), Map.of("id", "String"),
+                "application/json",
+                Set.of("field1", "error"),
+                Map.of("field1", "String", "error", "String"), 0);
+
+        ComparisonResult r = cmp.compare(baseline, current, "output");
+
+        assertEquals(Verdict.REGRESSION, r.getVerdict(),
+                "error 字段自动回归与用户 ignorable 配置互斥，ignorable 不得击穿该不变量");
+    }
+
+    @Test
+    void addedNestedErrorField_triggersRegression_evenWhenIgnorable() {
+        ComparatorConfig config = new ComparatorConfig();
+        config.setIgnorableFields(Set.of("data.error"));
+
+        DeterministicComparator cmp = new DeterministicComparator(config);
+
+        DeterministicFingerprint baseline = fp(
+                Set.of("toolA"), Map.of("id", "String"),
+                "application/json",
+                Set.of("data.status"),
+                Map.of("data.status", "String"), 0);
+        DeterministicFingerprint current = fp(
+                Set.of("toolA"), Map.of("id", "String"),
+                "application/json",
+                Set.of("data.status", "data.error"),
+                Map.of("data.status", "String", "data.error", "String"), 0);
+
+        ComparisonResult r = cmp.compare(baseline, current, "output");
+
+        assertEquals(Verdict.REGRESSION, r.getVerdict(),
+                "嵌套路径 data.error 的叶子名 error 同样受自动回归不变量保护");
+    }
+
     // ==================== buildSummary ====================
 
     @Test

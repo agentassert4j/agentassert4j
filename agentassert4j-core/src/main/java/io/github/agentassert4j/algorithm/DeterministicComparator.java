@@ -63,8 +63,12 @@ public class DeterministicComparator {
         double d1 = (toolMatch ? 0.7 : 0.0) + (paramMatch ? 0.3 : 0.0);
 
         // === 维度 2：输出结构（25%）===
-        Set<String> bFields = filterIgnorable(baseline.getOutputFieldPaths());
-        Set<String> cFields = filterIgnorable(current.getOutputFieldPaths());
+        // H10 修复：自动回归检测需要"未过滤"集合——用户把 error 配置为可忽略时，
+        // 过滤后的 added 集合不再含 error，会静默击穿下方不变量。故先存原始集合。
+        Set<String> bFieldsRaw = baseline.getOutputFieldPaths();
+        Set<String> cFieldsRaw = current.getOutputFieldPaths();
+        Set<String> bFields = filterIgnorable(bFieldsRaw);
+        Set<String> cFields = filterIgnorable(cFieldsRaw);
         Set<String> added = new HashSet<>(cFields);
         added.removeAll(bFields);
         Set<String> removed = new HashSet<>(bFields);
@@ -130,8 +134,10 @@ public class DeterministicComparator {
         // === 确定性判定 ===
         Set<String> realRemoved = filterIgnorable(removed);
 
-        // 自动回归信号：error 类字段出现
-        boolean addedErrorField = added.stream()
+        // 自动回归信号：error 类字段出现（用未过滤集合——无论用户是否配置为可忽略）
+        Set<String> rawAdded = new HashSet<>(cFieldsRaw);
+        rawAdded.removeAll(bFieldsRaw);
+        boolean addedErrorField = rawAdded.stream()
                 .anyMatch(f -> AUTO_REGRESSION_FIELDS.contains(
                         f.contains(".") ? f.substring(f.lastIndexOf('.') + 1).toLowerCase() : f.toLowerCase()));
 
