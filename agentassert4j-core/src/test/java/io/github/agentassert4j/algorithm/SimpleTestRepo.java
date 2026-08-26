@@ -1,7 +1,6 @@
 package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.model.ArchivedBaseline;
-import io.github.agentassert4j.model.Checkpoint;
 import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
@@ -25,7 +24,6 @@ class SimpleTestRepo implements StorageRepository {
     final Map<String, String> promptTexts = new HashMap<>();
     String graphJson;
     final List<ArchivedBaseline> archivedBaselines = new ArrayList<>();
-    final List<Checkpoint> checkpoints = new ArrayList<>();
 
     @Override
     public String type() { return "test"; }
@@ -50,14 +48,14 @@ class SimpleTestRepo implements StorageRepository {
     }
 
     @Override
-    public List<InteractionRecord> findByPromptHash(String hash) {
+    public List<InteractionRecord> findByTemplateHash(String hash) {
         return interactions.stream()
                 .filter(r -> hash.equals(r.getTemplateHash()))
                 .collect(Collectors.toList());
     }
 
     @Override
-    public Set<String> findSkillIdsByPromptHash(String hash) {
+    public Set<String> findSkillIdsByTemplateHash(String hash) {
         return interactions.stream()
                 .filter(r -> hash.equals(r.getTemplateHash()))
                 .map(InteractionRecord::getSkillId)
@@ -96,10 +94,10 @@ class SimpleTestRepo implements StorageRepository {
     }
 
     @Override
-    public void savePromptText(String hash, String promptText) { promptTexts.put(hash, promptText); }
+    public void saveTemplateText(String hash, String templateText) { promptTexts.put(hash, templateText); }
 
     @Override
-    public String findPromptText(String hash) { return promptTexts.get(hash); }
+    public String findTemplateText(String hash) { return promptTexts.get(hash); }
 
     @Override
     public void saveGraph(String graphJson) { this.graphJson = graphJson; }
@@ -125,6 +123,4 @@ class SimpleTestRepo implements StorageRepository {
                 .orElse(null);
     }
 
-    @Override
-    public void saveCheckpoint(Checkpoint c) { checkpoints.add(c); }
 }

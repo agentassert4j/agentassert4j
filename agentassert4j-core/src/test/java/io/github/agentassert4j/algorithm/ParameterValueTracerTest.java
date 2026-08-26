@@ -383,8 +383,8 @@ class ParameterValueTracerTest {
         @Override public void saveInteraction(InteractionRecord r) {}
         @Override public void saveInteractions(List<InteractionRecord> records) {}
         @Override public List<InteractionRecord> findBySkillId(String skillId) { return Collections.emptyList(); }
-        @Override public List<InteractionRecord> findByPromptHash(String hash) { return Collections.emptyList(); }
-        @Override public Set<String> findSkillIdsByPromptHash(String hash) { return Collections.emptySet(); }
+        @Override public List<InteractionRecord> findByTemplateHash(String hash) { return Collections.emptyList(); }
+        @Override public Set<String> findSkillIdsByTemplateHash(String hash) { return Collections.emptySet(); }
         @Override public List<InteractionRecord> findBySessionId(String sessionId) {
             return data.getOrDefault(sessionId, Collections.emptyList());
         }
@@ -392,12 +392,11 @@ class ParameterValueTracerTest {
         @Override public void saveSkillProfile(io.github.agentassert4j.model.SkillProfile p) {}
         @Override public io.github.agentassert4j.model.SkillProfile findSkillByGroupKey(String key) { return null; }
         @Override public List<io.github.agentassert4j.model.SkillProfile> findAllSkills() { return Collections.emptyList(); }
-        @Override public void savePromptText(String hash, String promptText) {}
-        @Override public String findPromptText(String hash) { return null; }
+        @Override public void saveTemplateText(String hash, String templateText) {}
+        @Override public String findTemplateText(String hash) { return null; }
         @Override public void saveGraph(String graphJson) {}
         @Override public String loadGraph() { return null; }
         @Override public void archiveBaseline(String skillId, io.github.agentassert4j.model.DeterministicFingerprint fp, String tag) {}
         @Override public io.github.agentassert4j.model.ArchivedBaseline findArchivedBaseline(String skillId, String tag) { return null; }
-        @Override public void saveCheckpoint(io.github.agentassert4j.model.Checkpoint c) {}
     }
 }

@@ -53,7 +53,7 @@ public class ImpactAnalyzer {
      */
     public AnalysisResult analyzeChange(String oldPromptHash, String newPromptHash) {
         // 1. 查询直接受影响的 Skill
-        Set<String> directSkills = repository.findSkillIdsByPromptHash(oldPromptHash);
+        Set<String> directSkills = repository.findSkillIdsByTemplateHash(oldPromptHash);
 
         // 2. 冷启动检测
         if (directSkills.isEmpty()) {

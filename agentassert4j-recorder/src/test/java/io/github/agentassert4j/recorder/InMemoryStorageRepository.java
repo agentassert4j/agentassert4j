@@ -1,7 +1,6 @@
 package io.github.agentassert4j.recorder;
 
 import io.github.agentassert4j.model.ArchivedBaseline;
-import io.github.agentassert4j.model.Checkpoint;
 import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
@@ -59,10 +58,10 @@ class InMemoryStorageRepository implements StorageRepository {
     public List<InteractionRecord> findBySkillId(String skillId) { return List.of(); }
 
     @Override
-    public List<InteractionRecord> findByPromptHash(String hash) { return List.of(); }
+    public List<InteractionRecord> findByTemplateHash(String hash) { return List.of(); }
 
     @Override
-    public Set<String> findSkillIdsByPromptHash(String hash) { return Set.of(); }
+    public Set<String> findSkillIdsByTemplateHash(String hash) { return Set.of(); }
 
     @Override
     public List<InteractionRecord> findBySessionId(String sessionId) { return List.of(); }
@@ -80,10 +79,10 @@ class InMemoryStorageRepository implements StorageRepository {
     public List<SkillProfile> findAllSkills() { return List.of(); }
 
     @Override
-    public void savePromptText(String hash, String promptText) {}
+    public void saveTemplateText(String hash, String templateText) {}
 
     @Override
-    public String findPromptText(String hash) { return null; }
+    public String findTemplateText(String hash) { return null; }
 
     @Override
     public void saveGraph(String graphJson) {}
@@ -97,6 +96,4 @@ class InMemoryStorageRepository implements StorageRepository {
     @Override
     public ArchivedBaseline findArchivedBaseline(String skillId, String versionTag) { return null; }
 
-    @Override
-    public void saveCheckpoint(Checkpoint c) {}
 }

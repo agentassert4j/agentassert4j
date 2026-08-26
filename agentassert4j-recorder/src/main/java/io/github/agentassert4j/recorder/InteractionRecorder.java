@@ -7,7 +7,7 @@ import com.lmax.disruptor.SleepingWaitStrategy;
 import com.lmax.disruptor.util.DaemonThreadFactory;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.spi.RecordingInterceptor;
-import io.github.agentassert4j.spi.StorageRepository;
+import io.github.agentassert4j.spi.InteractionWriteStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,7 +31,7 @@ public class InteractionRecorder implements RecordingInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(InteractionRecorder.class);
 
-    private final StorageRepository repository;
+    private final InteractionWriteStore repository;
     private final RecorderConfig config;
     private final DataSanitizer sanitizer;
 
@@ -50,7 +50,7 @@ public class InteractionRecorder implements RecordingInterceptor {
      *
      * @param repository 存储仓库（不能为 null）
      */
-    public InteractionRecorder(StorageRepository repository) {
+    public InteractionRecorder(InteractionWriteStore repository) {
         this(repository, RecorderConfig.defaults());
     }
 
@@ -60,7 +60,7 @@ public class InteractionRecorder implements RecordingInterceptor {
      * @param repository 存储仓库（不能为 null）
      * @param config     录制器配置（null 时使用默认配置）
      */
-    public InteractionRecorder(StorageRepository repository, RecorderConfig config) {
+    public InteractionRecorder(InteractionWriteStore repository, RecorderConfig config) {
         if (repository == null) {
             throw new IllegalArgumentException("StorageRepository must not be null");
         }

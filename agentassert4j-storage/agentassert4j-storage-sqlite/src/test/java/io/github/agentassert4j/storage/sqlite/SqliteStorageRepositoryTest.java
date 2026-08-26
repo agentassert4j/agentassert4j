@@ -65,22 +65,22 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
-    void findByPromptHash() {
+    void findByTemplateHash() {
         repo.saveInteraction(createSampleRecord("r1", "s1", "sk1", "hash-xxx"));
         repo.saveInteraction(createSampleRecord("r2", "s2", "sk2", "hash-xxx"));
         repo.saveInteraction(createSampleRecord("r3", "s3", "sk3", "hash-yyy"));
 
-        List<InteractionRecord> results = repo.findByPromptHash("hash-xxx");
+        List<InteractionRecord> results = repo.findByTemplateHash("hash-xxx");
         assertEquals(2, results.size());
     }
 
     @Test
-    void findSkillIdsByPromptHash() {
+    void findSkillIdsByTemplateHash() {
         repo.saveInteraction(createSampleRecord("r1", "s1", "sk-alpha", "hash-111"));
         repo.saveInteraction(createSampleRecord("r2", "s2", "sk-beta", "hash-111"));
         repo.saveInteraction(createSampleRecord("r3", "s3", "sk-gamma", "hash-222"));
 
-        Set<String> skillIds = repo.findSkillIdsByPromptHash("hash-111");
+        Set<String> skillIds = repo.findSkillIdsByTemplateHash("hash-111");
         assertEquals(2, skillIds.size());
         assertTrue(skillIds.contains("sk-alpha"));
         assertTrue(skillIds.contains("sk-beta"));
@@ -161,14 +161,14 @@ class SqliteStorageRepositoryTest {
 
     @Test
     void saveAndFindPromptText() {
-        repo.savePromptText("hash-sha256-abc", "You are a helpful assistant.");
-        String loaded = repo.findPromptText("hash-sha256-abc");
+        repo.saveTemplateText("hash-sha256-abc", "You are a helpful assistant.");
+        String loaded = repo.findTemplateText("hash-sha256-abc");
         assertEquals("You are a helpful assistant.", loaded);
     }
 
     @Test
-    void findPromptText_notFound() {
-        assertNull(repo.findPromptText("nonexistent"));
+    void findTemplateText_notFound() {
+        assertNull(repo.findTemplateText("nonexistent"));
     }
 
     @Test

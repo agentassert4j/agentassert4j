@@ -2,7 +2,7 @@ package io.github.agentassert4j.recorder;
 
 import com.lmax.disruptor.EventHandler;
 import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.spi.StorageRepository;
+import io.github.agentassert4j.spi.InteractionWriteStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,7 +28,7 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
 
     private static final Logger log = LoggerFactory.getLogger(BatchWriteHandler.class);
 
-    private final StorageRepository repository;
+    private final InteractionWriteStore repository;
     private final int batchSize;
     private final int maxBufferSize;
     private final List<InteractionRecord> buffer;
@@ -42,7 +42,7 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
 
     private ScheduledExecutorService flushScheduler;
 
-    public BatchWriteHandler(StorageRepository repository, RecorderConfig config) {
+    public BatchWriteHandler(InteractionWriteStore repository, RecorderConfig config) {
         this.repository = repository;
         this.batchSize = config.getBatchSize();
         this.maxBufferSize = config.getMaxBufferSize();

@@ -19,7 +19,6 @@ import io.github.agentassert4j.model.ArchivedBaseline;
 import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
-import io.github.agentassert4j.model.Checkpoint;
 import io.github.agentassert4j.spi.StorageRepository;
 
 /**
@@ -179,12 +178,12 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public List<InteractionRecord> findByPromptHash(String hash) {
+    public List<InteractionRecord> findByTemplateHash(String hash) {
         return queryInteractions("SELECT * FROM interactions WHERE template_hash = ?", hash);
     }
 
     @Override
-    public Set<String> findSkillIdsByPromptHash(String hash) {
+    public Set<String> findSkillIdsByTemplateHash(String hash) {
         Set<String> result = new HashSet<>();
         String sql = "SELECT DISTINCT skill_id FROM interactions WHERE template_hash = ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -193,7 +192,7 @@ public class SqliteStorageRepository implements StorageRepository {
                 while (rs.next()) result.add(rs.getString("skill_id"));
             }
         } catch (SQLException e) {
-            LOG.log(Level.SEVERE, "findSkillIdsByPromptHash failed", e);
+            LOG.log(Level.SEVERE, "findSkillIdsByTemplateHash failed", e);
         }
         return result;
     }
@@ -279,20 +278,20 @@ public class SqliteStorageRepository implements StorageRepository {
     // ======================== Prompt 文本缓存 ========================
 
     @Override
-    public void savePromptText(String hash, String promptText) {
+    public void saveTemplateText(String hash, String templateText) {
         String sql = "INSERT OR REPLACE INTO prompt_texts (prompt_hash, prompt_text, created_at) VALUES (?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, hash);
-            ps.setString(2, promptText);
+            ps.setString(2, templateText);
             ps.setLong(3, System.currentTimeMillis());
             ps.executeUpdate();
         } catch (SQLException e) {
-            LOG.log(Level.SEVERE, "savePromptText failed", e);
+            LOG.log(Level.SEVERE, "saveTemplateText failed", e);
         }
     }
 
     @Override
-    public String findPromptText(String hash) {
+    public String findTemplateText(String hash) {
         String sql = "SELECT prompt_text FROM prompt_texts WHERE prompt_hash = ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, hash);
@@ -300,7 +299,7 @@ public class SqliteStorageRepository implements StorageRepository {
                 if (rs.next()) return rs.getString("prompt_text");
             }
         } catch (SQLException e) {
-            LOG.log(Level.SEVERE, "findPromptText failed", e);
+            LOG.log(Level.SEVERE, "findTemplateText failed", e);
         }
         return null;
     }
@@ -360,25 +359,6 @@ public class SqliteStorageRepository implements StorageRepository {
             LOG.log(Level.SEVERE, "findArchivedBaseline failed", e);
         }
         return null;
-    }
-
-    // ======================== 检查点 ========================
-
-    @Override
-    public void saveCheckpoint(Checkpoint c) {
-        String sql = "INSERT OR REPLACE INTO checkpoints (id, name, timestamp, passed, failed, diff, full_report) VALUES (?,?,?,?,?,?,?)";
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setString(1, c.getId());
-            ps.setString(2, c.getName());
-            ps.setLong(3, c.getTimestamp());
-            ps.setInt(4, c.getPassed());
-            ps.setInt(5, c.getFailed());
-            ps.setInt(6, c.getDiff());
-            ps.setString(7, c.getFullReport());
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            LOG.log(Level.SEVERE, "saveCheckpoint failed", e);
-        }
     }
 
     // ======================== 序列化辅助 ========================
