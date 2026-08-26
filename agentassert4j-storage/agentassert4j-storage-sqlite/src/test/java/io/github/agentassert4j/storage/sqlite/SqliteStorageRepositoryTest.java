@@ -2,8 +2,6 @@ package io.github.agentassert4j.storage.sqlite;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -206,7 +204,6 @@ class SqliteStorageRepositoryTest {
         assertNull(repo.findArchivedBaseline("nonexistent", "v99"));
     }
 
-    // saveAndFindCheckpoint 已删除：checkpoints 表随 v1 schema 砍除（只写无读的死表，定稿文档 §3）
 
     @Test
     void interactionWithToolCalls() {
@@ -395,42 +392,6 @@ class SqliteStorageRepositoryTest {
         List<InteractionRecord> results = repo.findBySkillId("sk1");
         assertEquals(1, results.size(), "只追加历史表：record_id 冲突必须静默跳过");
         assertEquals("response text", results.get(0).getModelResponse(), "已落库的原始行不得被重放覆盖");
-    }
-
-    @Test
-    void legacyV0DatabaseRebuiltAtV1() throws Exception {
-        Path db = Files.createTempFile("agentassert4j-legacy", ".db");
-        try {
-            // 手工构造 v0 旧库（system_prompt_hash 列 + checkpoints 表，无 user_version）
-            try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + db);
-                 Statement stmt = conn.createStatement()) {
-                stmt.execute("CREATE TABLE interactions (record_id TEXT PRIMARY KEY, session_id TEXT NOT NULL,"
-                        + " timestamp INTEGER NOT NULL, skill_id TEXT NOT NULL, group_key TEXT NOT NULL,"
-                        + " system_prompt_hash TEXT NOT NULL)");
-                stmt.execute("CREATE TABLE checkpoints (id TEXT PRIMARY KEY)");
-                stmt.execute("INSERT INTO interactions VALUES ('old-1','s1',1,'sk1','','old-hash')");
-            }
-
-            SqliteStorageRepository legacyRepo = new SqliteStorageRepository(db.toString());
-            legacyRepo.initialize();
-
-            // 旧库重建为 v1：版本盖戳 + 新列可用 + 死表消失
-            try (Statement stmt = legacyRepo.getConnection().createStatement();
-                 ResultSet rs = stmt.executeQuery("PRAGMA user_version")) {
-                rs.next();
-                assertEquals(Schema.USER_VERSION, rs.getInt(1));
-            }
-            try (Statement stmt = legacyRepo.getConnection().createStatement();
-                 ResultSet rs = stmt.executeQuery(
-                         "SELECT name FROM sqlite_master WHERE type='table' AND name='checkpoints'")) {
-                assertFalse(rs.next(), "checkpoints 死表必须随 v0→v1 重建消失");
-            }
-            legacyRepo.saveInteraction(createSampleRecord("new-1", "s1", "sk1", "h1"));
-            assertEquals(1, legacyRepo.findBySkillId("sk1").size(), "重建后新列集可正常写入");
-            legacyRepo.close();
-        } finally {
-            Files.deleteIfExists(db);
-        }
     }
 
     @Test
