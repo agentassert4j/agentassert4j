@@ -20,13 +20,6 @@ final class Schema {
     /** 当前 schema 契约版本（PRAGMA user_version） */
     static final int USER_VERSION = 1;
 
-    // ====== 表名常量 ======
-    static final String TABLE_INTERACTIONS = "interactions";
-    static final String TABLE_PROMPT_TEXTS = "prompt_texts";
-    static final String TABLE_SKILL_PROFILES = "skill_profiles";
-    static final String TABLE_ARCHIVED_BASELINES = "archived_baselines";
-    static final String TABLE_GRAPH_SNAPSHOT = "graph_snapshot";
-
     static final String[] ALL_DDL = {
 
         // 交互记录表（只追加历史）
