@@ -254,6 +254,46 @@ class SqliteStorageRepositoryTest {
         assertEquals("assistant", loadedTurns.get(1).getRole());
     }
 
+    @Test
+    void specialCharacters_roundTripUnescaped() {
+        // 复审 H6：写侧 escape 了 \、"、换行，读侧不反转义——读回的是两字符转义序列
+        String resultWithSpecials = "第一行\n第二行 \"引号\" 制表\t符 反斜杠\\ 结尾";
+        String argValueWithNewline = "参数值\n含换行";
+
+        InteractionRecord r = createSampleRecord("esc-1", "sess-e", "sk-e", "h-e");
+        ToolCall tc = new ToolCall();
+        tc.setToolName("queryOrder");
+        tc.setToolCallId("tc-e1");
+        tc.setSuccess(true);
+        tc.setResult(resultWithSpecials);
+        Map<String, Object> args = new HashMap<>();
+        args.put("note", argValueWithNewline);
+        tc.setArguments(args);
+        r.setToolCalls(new ArrayList<>(List.of(tc)));
+
+        repo.saveInteraction(r);
+
+        List<ToolCall> loadedTc = repo.findBySkillId("sk-e").get(0).getToolCalls();
+        assertEquals(resultWithSpecials, loadedTc.get(0).getResult(),
+                "tool result 读回必须与原文一致（真实换行/引号/反斜杠），不得残留转义序列");
+        assertEquals(argValueWithNewline, loadedTc.get(0).getArguments().get("note"),
+                "arguments 值读回同样必须反转义");
+
+        List<TurnContext> turns = new ArrayList<>();
+        turns.add(new TurnContext("user", "内容\"引号\"\n换行"));
+        InteractionRecord r2 = createSampleRecord("esc-2", "sess-e", "sk-e", "h-e");
+        r2.setPreviousTurns(turns);
+        repo.saveInteraction(r2);
+        List<InteractionRecord> all = repo.findBySkillId("sk-e");
+        assertEquals(2, all.size(), "esc-2 是新 record_id，必须正常落库");
+        TurnContext loadedTurn = all.stream()
+                .filter(x -> "esc-2".equals(x.getRecordId()))
+                .findFirst().orElseThrow()
+                .getPreviousTurns().get(0);
+        assertEquals("内容\"引号\"\n换行", loadedTurn.getContent(),
+                "previousTurns 内容读回必须反转义");
+    }
+
     // ======================== v1 schema 契约测试 ========================
 
     @Test

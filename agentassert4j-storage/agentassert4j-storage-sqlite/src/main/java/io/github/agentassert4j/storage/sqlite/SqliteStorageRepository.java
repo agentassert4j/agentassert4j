@@ -589,7 +589,38 @@ public class SqliteStorageRepository implements StorageRepository {
             if (json.charAt(end) == '"') break;
             end++;
         }
-        return json.substring(start, end);
+        // 复审 H6：写侧 escape 过的字符串读侧必须反转义，否则换行/引号/反斜杠
+        // 读回为两字符转义序列（扫描式反转义，链式 replace 会破坏 "\\\\" 组合）
+        return unescape(json.substring(start, end));
+    }
+
+    /**
+     * 扫描式 JSON 反转义——与写侧 {@link #escape(String)} 对称。
+     * 未知转义序列保留原样（不吞字符），与手写解析生态的能力面对齐。
+     */
+    private static String unescape(String s) {
+        if (s == null) return null;
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\\' && i + 1 < s.length()) {
+                char next = s.charAt(i + 1);
+                switch (next) {
+                    case 'n': sb.append('\n'); i++; break;
+                    case 'r': sb.append('\r'); i++; break;
+                    case 't': sb.append('\t'); i++; break;
+                    case 'b': sb.append('\b'); i++; break;
+                    case 'f': sb.append('\f'); i++; break;
+                    case '"': sb.append('"'); i++; break;
+                    case '\\': sb.append('\\'); i++; break;
+                    case '/': sb.append('/'); i++; break;
+                    default: sb.append(c);
+                }
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     private static boolean getBoolFromDb(String json, String key) {
@@ -705,10 +736,10 @@ public class SqliteStorageRepository implements StorageRepository {
             int colon = pair.indexOf(':');
             if (colon < 0) continue;
             String k = pair.substring(0, colon).trim();
-            if (k.startsWith("\"") && k.endsWith("\"")) k = k.substring(1, k.length() - 1);
+            if (k.startsWith("\"") && k.endsWith("\"")) k = unescape(k.substring(1, k.length() - 1));
             String v = pair.substring(colon + 1).trim();
             if (v.startsWith("\"") && v.endsWith("\"")) {
-                result.put(k, v.substring(1, v.length() - 1));
+                result.put(k, unescape(v.substring(1, v.length() - 1)));
             } else {
                 result.put(k, v);
             }
