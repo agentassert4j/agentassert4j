@@ -130,6 +130,58 @@ class DeterministicSkillGrouperTest {
                 DeterministicSkillGrouper.group(r2).getGroupKey());
     }
 
+    // ==================== 无模板锚点回退（复审 M6） ====================
+
+    @Test
+    void pureChat_nullTemplateHash_fallsBackToUserInputHash_notChatNull() {
+        // 复审 M6：templateHash 为 null 时 groupKey 坍缩为 "chat:null"，
+        // 不同 prompt 的纯对话记录互相污染同一基线
+        InteractionRecord r1 = record(null, null, false);
+        r1.setUserInput("查询订单状态");
+        InteractionRecord r2 = record(null, null, false);
+        r2.setUserInput("帮我写一首诗");
+
+        SkillProfile p1 = DeterministicSkillGrouper.group(r1);
+        SkillProfile p2 = DeterministicSkillGrouper.group(r2);
+
+        assertNotEquals(p1.getGroupKey(), p2.getGroupKey(),
+                "无模板时必须按 user_input hash 回退分组，不同输入不得坍缩为 chat:null");
+        assertNotEquals(p1.getSkillId(), p2.getSkillId());
+        assertFalse(p1.getGroupKey().contains("null"), "groupKey 不得出现字面 null 坍缩");
+    }
+
+    @Test
+    void pureChat_nullTemplateHash_sameUserInput_sameGroupKey() {
+        InteractionRecord r1 = record(null, null, false);
+        r1.setUserInput("相同的问题");
+        InteractionRecord r2 = record(null, null, false);
+        r2.setUserInput("相同的问题");
+
+        assertEquals(DeterministicSkillGrouper.group(r1).getGroupKey(),
+                DeterministicSkillGrouper.group(r2).getGroupKey(),
+                "同输入同无模板 → 同组（确定性不因回退而破坏）");
+    }
+
+    @Test
+    void pureChat_bothAnchorsAbsent_stableOrphanKey() {
+        InteractionRecord r = record(null, null, false);
+
+        SkillProfile p = DeterministicSkillGrouper.group(r);
+
+        assertEquals("chat:no-anchor", p.getGroupKey(), "双锚点缺失时使用稳定孤儿键，不再含字面 null");
+    }
+
+    @Test
+    void pureChat_templateHashTakesPrecedenceOverUserInputFallback() {
+        InteractionRecord r = record("template-hash-1", null, false);
+        r.setUserInput("some input");
+
+        SkillProfile p = DeterministicSkillGrouper.group(r);
+
+        assertEquals("chat:template-hash-1", p.getGroupKey(),
+                "模板 hash 存在时优先作为锚点（三元组语义），user_input 仅兜底");
+    }
+
     @Test
     void multiTool_differentParamSignature_differentSkill() {
         InteractionRecord r1 = record("abc",

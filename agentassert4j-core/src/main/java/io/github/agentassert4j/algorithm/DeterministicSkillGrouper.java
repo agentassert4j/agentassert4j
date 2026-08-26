@@ -16,7 +16,7 @@ import java.util.stream.Stream;
  * <p>分组规则（完全确定性，与方案文档 5.1 节一致）：
  * <ul>
  *   <li>有工具调用：sorted(toolNames).join("+") + "[" + paramSignature + "]"</li>
- *   <li>无工具调用："chat:" + SHA-256(systemPrompt)</li>
+ *   <li>无工具调用："chat:" + templateHash（无模板时回退 SHA-256(userInput)，双缺失为 "chat:no-anchor"）</li>
  * </ul>
  *
  * <p>paramSignature 归一化：所有类型名 toLowerCase()，
@@ -66,11 +66,16 @@ public final class DeterministicSkillGrouper {
             skillName = String.join("+", sortedNames);
             skillType = SkillType.TOOL_SKILL;
         } else {
-            // 无工具调用：纯对话
-            groupKey = "chat:" + record.getTemplateHash();
-            skillName = "chat:" + (record.getTemplateHash() != null
-                    ? record.getTemplateHash().substring(0, Math.min(8, record.getTemplateHash().length()))
-                    : "unknown");
+            // 无工具调用：纯对话。锚点优先级（复审 M6：杜绝 "chat:null" 坍缩污染基线）：
+            // template_hash（三元组语义主锚点）→ user_input hash（无模板时兜底）→ 稳定孤儿键
+            String anchor = record.getTemplateHash();
+            if (anchor == null || anchor.isEmpty()) {
+                anchor = record.getUserInput() != null && !record.getUserInput().isEmpty()
+                        ? HashUtil.sha256(record.getUserInput())
+                        : "no-anchor";
+            }
+            groupKey = "chat:" + anchor;
+            skillName = "chat:" + anchor.substring(0, Math.min(8, anchor.length()));
             skillType = SkillType.PURE_CHAT_SKILL;
         }
 
