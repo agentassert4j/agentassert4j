@@ -267,7 +267,7 @@ Map<String, String> types = new HashMap<>();
 - **footer（可选）**：
   - `Closes #N`：关联并自动关闭 issue
   - `BREAKING CHANGE: <说明>`：破坏性变更（同时 type 后加 `!`，如 `feat(core)!: ...`）
-  - `Co-Authored-By: <name> <email>`：AI 代理参与生成的提交**必标**（见 §十三-5）
+  - `Assisted-by: AI coding agent`：AI 代理参与生成的提交**必标**，固定取值，不写具体代理名称与邮箱（见 §十三-5）
 - **语言**：提交信息一律英文（国际化开源共识；README/用户文档走中英双语，与此不冲突）
 
 ### 11.2 原子提交
@@ -285,7 +285,7 @@ mismatch. InteractionRecord now stores the tools schema and
 RegressionTestExecutor passes it through to LlmRequest.
 
 Closes #12
-Co-Authored-By: zcode <noreply@zcode.dev>
+Assisted-by: AI coding agent
 ```
 
 ```
@@ -344,6 +344,7 @@ wait on the recording pipeline.
 2. **禁引用仓库外的文档**——贡献者无法核实的出处一律不写。可交叉引用的只有仓库内公开文件（如本文件的 R 编号原则）与同模块类名。
 3. **行为变更必须同步注释**——改代码不改注释等于留下错误信息，比没注释更糟。
 4. **Javadoc 只在签名不自明时写**——参数含义、返回值语义、抛出条件无法从命名看出的才写；getter/setter、一目了然的实现不写。
+5. **禁写方法体外的分割注释**——`// ===== 分组名 =====` 式横幅一律不写，类内结构靠方法命名与排列表达；确需步骤分隔时只能写在方法体内。
 
 自检方法：删掉这条注释，读者是否会失去仅凭代码得不到的信息？不会就删。
 
@@ -375,7 +376,7 @@ wait on the recording pipeline.
 
 ### 13.5 AI 参与的透明度
 
-AI 代理参与生成的提交，footer 标注 `Co-Authored-By: <代理名> <noreply 邮箱>`。哪个提交由人生成、哪个由 AI 辅助，对开源社区是可追溯的诚实义务，也让回归排查有据可依。
+AI 代理参与生成的提交，footer 统一标注固定值 `Assisted-by: AI coding agent`。标明哪些提交含 AI 协作即可满足可追溯与回归排查需要；不写具体代理名称与邮箱——`Co-Authored-By` 会被 GitHub 解析为贡献者身份（计入 Contributors 列表），AI 不应占用贡献者席位。
 
 ### 13.6 规范文件本身的变更
 
