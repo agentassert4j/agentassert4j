@@ -4,7 +4,6 @@ target/
 # IDE
 .idea/
 *.iml
-.qoder/
 
 # OS
 Thumbs.db
