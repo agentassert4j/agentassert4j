@@ -5,6 +5,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class InteractionRecorderTest {
@@ -250,5 +252,60 @@ class InteractionRecorderTest {
 
         assertEquals(2, repo.getStore().size());
         recorder.stop();
+    }
+
+    // ========== 捕获保真（定稿文档 §8.5） ==========
+
+    @Test
+    void intercept_blankRecordId_getsUuidAssigned() throws Exception {
+        RecorderConfig config = RecorderConfig.builder()
+                .batchSize(1)
+                .flushIntervalMs(100)
+                .ringBufferSize(1024)
+                .build();
+
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        InteractionRecord record = createRecord(null);
+        recorder.intercept(record);
+
+        Thread.sleep(200);
+        recorder.stop();
+
+        assertEquals(1, repo.getStore().size());
+        String generated = repo.getStore().get(0).getRecordId();
+        assertNotNull(generated);
+        assertFalse(generated.isEmpty(), "空 record_id 必须被兜底为 UUID（INSERT OR IGNORE 防重放的前提）");
+        assertFalse(generated.equals(createRecord("x").getRecordId()));
+    }
+
+    @Test
+    void intercept_seqStrictlyMonotonic() throws Exception {
+        RecorderConfig config = RecorderConfig.builder()
+                .batchSize(2)
+                .flushIntervalMs(100)
+                .ringBufferSize(1024)
+                .build();
+
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        for (int i = 0; i < 5; i++) {
+            recorder.intercept(createRecord("seq-" + i));
+        }
+
+        Thread.sleep(300);
+        recorder.stop();
+
+        List<Long> seqs = repo.getStore().stream()
+                .map(InteractionRecord::getSeq)
+                .sorted()
+                .toList();
+        assertEquals(5, seqs.size());
+        for (int i = 1; i < seqs.size(); i++) {
+            assertTrue(seqs.get(i) > seqs.get(i - 1),
+                    "同录制器内 seq 必须严格单调：(session_id, seq) 是确定性排序键");
+        }
     }
 }

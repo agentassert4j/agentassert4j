@@ -258,4 +258,54 @@ class OpenAiCompatibleClientTest {
         LlmResponse response = client.parseResponse(json);
         assertNull(response.getContent());
     }
+
+    // ==================== 捕获保真（定稿文档 §8.5） ====================
+
+    @Test
+    void parseResponse_retainsUsageRawAndNormalizesDialect() throws Exception {
+        // DeepSeek 风格 usage：prompt_cache_hit_tokens + prompt_tokens_details.cached_tokens
+        String usage = "{\"prompt_tokens\":2048,\"completion_tokens\":100," +
+                "\"prompt_cache_hit_tokens\":1024," +
+                "\"prompt_tokens_details\":{\"cached_tokens\":1024}," +
+                "\"completion_tokens_details\":{\"reasoning_tokens\":64}}";
+        String json = "{\"id\":\"resp-1\",\"model\":\"deepseek-chat-V3.1-0806\"," +
+                "\"choices\":[{\"message\":{\"content\":\"ok\"},\"finish_reason\":\"tool_calls\"}]," +
+                "\"usage\":" + usage + "}";
+
+        LlmResponse response = client.parseResponse(json);
+
+        assertEquals(2048, response.getInputTokens());
+        assertEquals(100, response.getOutputTokens());
+        assertEquals(Integer.valueOf(1024), response.getCacheReadTokens(), "cached_tokens 归一为缓存读");
+        assertEquals(Integer.valueOf(64), response.getReasoningTokens());
+        assertEquals("deepseek-chat-V3.1-0806", response.getServedModel());
+        assertEquals("tool_calls", response.getFinishReason());
+
+        assertNotNull(response.getUsageRaw(), "usage 子树必须逐字保留（承重墙）");
+        assertTrue(response.getUsageRaw().contains("prompt_cache_hit_tokens"),
+                "usage_raw 是逐字原文，未归一的方言字段也必须在其中（回填来源）");
+    }
+
+    @Test
+    void parseResponse_absentOptionalTelemetry_staysNull() throws Exception {
+        String json = "{\"choices\":[{\"message\":{\"content\":\"hi\"},\"finish_reason\":\"stop\"}]," +
+                "\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2}}";
+
+        LlmResponse response = client.parseResponse(json);
+
+        assertNull(response.getCacheReadTokens());
+        assertNull(response.getCacheWriteTokens());
+        assertNull(response.getReasoningTokens());
+        assertNull(response.getServedModel(), "无顶层 model 字段时保持 null");
+        assertEquals("stop", response.getFinishReason());
+    }
+
+    @Test
+    void parseResponse_finishReasonNormalized() {
+        assertEquals("max_tokens", OpenAiCompatibleClient.normalizeFinishReason("length"));
+        assertEquals("tool_calls", OpenAiCompatibleClient.normalizeFinishReason("function_call"));
+        assertEquals("content_filter", OpenAiCompatibleClient.normalizeFinishReason("content_filter"));
+        assertEquals("other", OpenAiCompatibleClient.normalizeFinishReason("weird_new_reason"));
+        assertNull(OpenAiCompatibleClient.normalizeFinishReason(null));
+    }
 }

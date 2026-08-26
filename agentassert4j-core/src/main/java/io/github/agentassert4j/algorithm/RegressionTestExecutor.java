@@ -177,6 +177,16 @@ public class RegressionTestExecutor {
         current.setModelResponse(response.getContent());
         current.setInputTokens(response.getInputTokens());
         current.setOutputTokens(response.getOutputTokens());
+
+        // 调用时刻遥测——只在此刻可知，事后无法重建（定稿文档 §1.1 单向门）。
+        // 模型身份（provider/endpoint 等）由持有客户端配置的持久化管道回填，
+        // 算法层不持方言知识（定稿文档 §6-5）
+        current.setServedModel(response.getServedModel());
+        current.setFinishReason(response.getFinishReason());
+        current.setUsageRaw(response.getUsageRaw());
+        current.setCacheReadTokens(response.getCacheReadTokens());
+        current.setCacheWriteTokens(response.getCacheWriteTokens());
+        current.setReasoningTokens(response.getReasoningTokens());
         current.setLatencyMs(response.getLatencyMs());
 
         // 多模态复用

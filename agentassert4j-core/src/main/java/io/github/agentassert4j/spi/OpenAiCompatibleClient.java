@@ -81,6 +81,7 @@ public class OpenAiCompatibleClient implements LlmClient {
                 .build();
 
         Exception lastException = null;
+        long startNanos = System.nanoTime();
 
         for (int attempt = 0; attempt <= DEFAULT_MAX_RETRIES; attempt++) {
             if (attempt > 0) {
@@ -100,7 +101,10 @@ public class OpenAiCompatibleClient implements LlmClient {
                 int statusCode = response.statusCode();
 
                 if (statusCode == 200) {
-                    return parseResponse(response.body());
+                    LlmResponse parsed = parseResponse(response.body());
+                    // 端到端墙钟（含重试等待）——复审 M15：client 从不计时导致 latencyMs 恒 0
+                    parsed.setLatencyMs((System.nanoTime() - startNanos) / 1_000_000L);
+                    return parsed;
                 }
 
                 // 可重试的状态码
@@ -259,6 +263,10 @@ public class OpenAiCompatibleClient implements LlmClient {
      *   <li>choices[0].message.content → 文本输出</li>
      *   <li>choices[0].message.tool_calls → 工具调用决策</li>
      *   <li>usage.prompt_tokens / completion_tokens → token 统计</li>
+     *   <li>model → served_model（版本化快照）；choices[0].finish_reason → 结束原因</li>
+     *   <li>usage 子树逐字保留（usage_raw——未来遥测列的回填来源，定稿文档 §8 承重墙）</li>
+     *   <li>prompt_tokens_details.cached_tokens / completion_tokens_details.reasoning_tokens
+     *       → 方言归一化（仅捕获层允许持有方言知识，schema 存概念列）</li>
      * </ul>
      */
     LlmResponse parseResponse(String body) throws LlmApiException {
@@ -273,14 +281,35 @@ public class OpenAiCompatibleClient implements LlmClient {
             List<ToolCallResult> toolCalls = parseToolCalls(body);
             response.setToolCalls(toolCalls);
 
-            // 提取 usage
+            // 提取 usage 子树：原文保留 + 概念归一
             String usageSection = extractSection(body, "usage");
             if (usageSection != null) {
+                response.setUsageRaw(usageSection);
                 String promptTokens = extractNumericField(usageSection, "prompt_tokens");
                 String completionTokens = extractNumericField(usageSection, "completion_tokens");
                 if (promptTokens != null) response.setInputTokens(Integer.parseInt(promptTokens));
                 if (completionTokens != null) response.setOutputTokens(Integer.parseInt(completionTokens));
+
+                // input_tokens 语义钉死为"总处理输入 token"（定稿文档 §6-1）：
+                // OpenAI/DeepSeek 的 prompt_tokens 已是总量；Anthropic 合成规则由其专属客户端实现
+                String promptDetails = extractSection(usageSection, "prompt_tokens_details");
+                if (promptDetails != null) {
+                    String cached = extractNumericField(promptDetails, "cached_tokens");
+                    if (cached != null) response.setCacheReadTokens(Integer.parseInt(cached));
+                }
+                String completionDetails = extractSection(usageSection, "completion_tokens_details");
+                if (completionDetails != null) {
+                    String reasoning = extractNumericField(completionDetails, "reasoning_tokens");
+                    if (reasoning != null) response.setReasoningTokens(Integer.parseInt(reasoning));
+                }
             }
+
+            // 响应报告的实际服务模型（首个顶层 "model" 字段）
+            response.setServedModel(extractStringField(body, "model"));
+
+            // choices[0].finish_reason
+            String finishReason = extractStringField(body, "finish_reason");
+            response.setFinishReason(normalizeFinishReason(finishReason));
 
             response.setHasError(false);
             return response;
@@ -289,6 +318,21 @@ public class OpenAiCompatibleClient implements LlmClient {
             if (e instanceof LlmApiException) throw (LlmApiException) e;
             throw new LlmApiException("Failed to parse response: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * finish_reason 归一枚举（定稿文档 §6-3）：stop/tool_calls/max_tokens/content_filter/error/other。
+     * OpenAI 方言值 tool_calls/function_call → tool_calls；未知值归 other（TEXT 枚举加值零迁移）。
+     */
+    static String normalizeFinishReason(String raw) {
+        if (raw == null || raw.isEmpty()) return null;
+        return switch (raw) {
+            case "stop" -> "stop";
+            case "tool_calls", "function_call" -> "tool_calls";
+            case "max_tokens", "length" -> "max_tokens";
+            case "content_filter" -> "content_filter";
+            default -> "other";
+        };
     }
 
     // ==================== JSON 解析辅助 ====================

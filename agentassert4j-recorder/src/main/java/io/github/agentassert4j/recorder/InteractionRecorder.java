@@ -11,6 +11,7 @@ import io.github.agentassert4j.spi.InteractionWriteStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -42,6 +43,11 @@ public class InteractionRecorder implements RecordingInterceptor {
     private final AtomicLong recordedCount = new AtomicLong(0);
     /** 因 RingBuffer 满而丢弃的记录数 */
     private final AtomicLong droppedCount = new AtomicLong(0);
+    /**
+     * 录制进程内单调序号源——透传给每条记录的 seq（定稿文档 §2.2-A）。
+     * 丢弃造成的空洞合法：同会话内 seq 单调即可，(session_id, seq) 为确定性排序键。
+     */
+    private final AtomicLong seqSource = new AtomicLong(0);
 
     private volatile boolean started = false;
 
@@ -110,8 +116,17 @@ public class InteractionRecorder implements RecordingInterceptor {
         }
 
         try {
+            // TODO: [record_id UUID 兜底] 上游 SDK 未接线前在此兜底生成全局唯一 ID；
+            //       INSERT OR IGNORE 的防重放语义依赖其全局唯一性（定稿文档 §2.3）
+            if (record.getRecordId() == null || record.getRecordId().isEmpty()) {
+                record.setRecordId(UUID.randomUUID().toString());
+            }
+
             // 脱敏
             InteractionRecord sanitized = sanitizer.sanitize(record);
+
+            // seq 透传：录制进程内单调（空洞合法）
+            sanitized.setSeq(seqSource.incrementAndGet());
 
             // 非阻塞发布到 RingBuffer：满时丢弃不阻塞业务线程（R8 零侵入）
             long sequence = disruptor.getRingBuffer().tryNext();
