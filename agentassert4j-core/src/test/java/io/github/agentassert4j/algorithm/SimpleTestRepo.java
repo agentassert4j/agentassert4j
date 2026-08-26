@@ -52,14 +52,14 @@ class SimpleTestRepo implements StorageRepository {
     @Override
     public List<InteractionRecord> findByPromptHash(String hash) {
         return interactions.stream()
-                .filter(r -> hash.equals(r.getSystemPromptHash()))
+                .filter(r -> hash.equals(r.getTemplateHash()))
                 .collect(Collectors.toList());
     }
 
     @Override
     public Set<String> findSkillIdsByPromptHash(String hash) {
         return interactions.stream()
-                .filter(r -> hash.equals(r.getSystemPromptHash()))
+                .filter(r -> hash.equals(r.getTemplateHash()))
                 .map(InteractionRecord::getSkillId)
                 .filter(id -> id != null && !id.isEmpty())
                 .collect(Collectors.toSet());

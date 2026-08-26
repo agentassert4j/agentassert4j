@@ -35,7 +35,7 @@ class ImpactAnalyzerTest {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId("rec-" + skillId + "-" + System.nanoTime());
         r.setSkillId(skillId);
-        r.setSystemPromptHash(promptHash);
+        r.setTemplateHash(promptHash);
         r.setSessionId(sessionId);
         r.setTimestamp(System.currentTimeMillis());
         r.setModelResponse("{\"status\":\"ok\"}");

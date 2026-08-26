@@ -15,7 +15,7 @@ import java.util.Set;
  *
  * <p>核心洞察：测试范围由实际数据决定，不依赖变更类型猜测。
  * 框架已掌握回答"影响范围"所需的全部数据——每条 InteractionRecord 都存储了
- * systemPromptHash，可直接查询哪些 Skill 使用了该 Prompt。</p>
+ * templateHash，可直接查询哪些 Skill 使用了该 Prompt。</p>
  *
  * <h3>工作流程</h3>
  * <ol>

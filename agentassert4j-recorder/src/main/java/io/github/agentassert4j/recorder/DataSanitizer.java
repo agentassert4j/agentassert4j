@@ -350,24 +350,46 @@ public class DataSanitizer {
 
     /**
      * 深拷贝 InteractionRecord。
+     * 必须覆盖全部字段：漏拷贝的字段会在脱敏路径上静默丢失（捕获数据不可重建）。
      */
     private InteractionRecord copyRecord(InteractionRecord original) {
         InteractionRecord copy = new InteractionRecord();
         copy.setRecordId(original.getRecordId());
         copy.setTimestamp(original.getTimestamp());
-        copy.setSystemPromptHash(original.getSystemPromptHash());
+        copy.setSeq(original.getSeq());
+        copy.setTemplateId(original.getTemplateId());
+        copy.setTemplateHash(original.getTemplateHash());
+        copy.setVariablesFingerprint(original.getVariablesFingerprint());
+        copy.setApiProtocol(original.getApiProtocol());
+        copy.setProvider(original.getProvider());
+        copy.setModel(original.getModel());
+        copy.setServedModel(original.getServedModel());
+        copy.setEndpoint(original.getEndpoint());
         copy.setUserInput(original.getUserInput());
         copy.setTurnIndex(original.getTurnIndex());
-        copy.setModelRequest(original.getModelRequest());
+        copy.setToolsDefinition(original.getToolsDefinition());
+        copy.setSamplingParams(original.getSamplingParams());
+        copy.setModelRequestRaw(original.getModelRequestRaw());
+        copy.setFinishReason(original.getFinishReason());
         copy.setModelResponse(original.getModelResponse());
+        copy.setModelResponseRaw(original.getModelResponseRaw());
         copy.setInputTokens(original.getInputTokens());
         copy.setOutputTokens(original.getOutputTokens());
+        copy.setCacheReadTokens(original.getCacheReadTokens());
+        copy.setCacheWriteTokens(original.getCacheWriteTokens());
+        copy.setReasoningTokens(original.getReasoningTokens());
+        copy.setUsageRaw(original.getUsageRaw());
         copy.setLatencyMs(original.getLatencyMs());
+        copy.setTtftMs(original.getTtftMs());
+        copy.setCostUsd(original.getCostUsd());
         copy.setHasToolCalls(original.isHasToolCalls());
         copy.setSessionId(original.getSessionId());
         copy.setSkillId(original.getSkillId());
+        copy.setGroupKey(original.getGroupKey());
         copy.setMultimodalInput(original.isMultimodalInput());
         copy.setMultimodalContent(original.getMultimodalContent());
+        copy.setMetadata(original.getMetadata());
+        copy.setRecorderVersion(original.getRecorderVersion());
 
         // 深拷贝 toolCalls
         if (original.getToolCalls() != null) {

@@ -109,7 +109,7 @@ class RegressionTestExecutorTest {
         InteractionRecord current = executor.buildCurrentRecord(baseline, response, "new prompt");
 
         assertNotNull(current.getRecordId());
-        assertNotNull(current.getSystemPromptHash());
+        assertNotNull(current.getTemplateHash());
         assertEquals("input", current.getUserInput());
         assertEquals("response text", current.getModelResponse());
         assertEquals(100, current.getInputTokens());
@@ -211,7 +211,7 @@ class RegressionTestExecutorTest {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId("rec-1");
         r.setSkillId("skill-1");
-        r.setSystemPromptHash(promptHash);
+        r.setTemplateHash(promptHash);
         r.setUserInput(userInput);
         r.setTurnIndex(0);
         r.setSessionId("session-1");

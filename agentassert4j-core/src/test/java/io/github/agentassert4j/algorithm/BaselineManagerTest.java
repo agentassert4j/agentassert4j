@@ -52,7 +52,7 @@ class BaselineManagerTest {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId("rec-" + System.nanoTime());
         r.setSkillId(skillId);
-        r.setSystemPromptHash("hash-" + skillId);
+        r.setTemplateHash("hash-" + skillId);
         r.setModelResponse("{\"result\":\"ok\"}");
         r.setToolCalls(List.of(
             new ToolCall() {{ setToolName(toolName); setArguments(Map.of("arg1", "val1")); }}

@@ -67,9 +67,9 @@ public final class DeterministicSkillGrouper {
             skillType = SkillType.TOOL_SKILL;
         } else {
             // 无工具调用：纯对话
-            groupKey = "chat:" + record.getSystemPromptHash();
-            skillName = "chat:" + (record.getSystemPromptHash() != null
-                    ? record.getSystemPromptHash().substring(0, Math.min(8, record.getSystemPromptHash().length()))
+            groupKey = "chat:" + record.getTemplateHash();
+            skillName = "chat:" + (record.getTemplateHash() != null
+                    ? record.getTemplateHash().substring(0, Math.min(8, record.getTemplateHash().length()))
                     : "unknown");
             skillType = SkillType.PURE_CHAT_SKILL;
         }

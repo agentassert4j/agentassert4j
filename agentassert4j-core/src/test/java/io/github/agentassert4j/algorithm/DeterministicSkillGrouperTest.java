@@ -16,7 +16,7 @@ class DeterministicSkillGrouperTest {
 
     private InteractionRecord record(String promptHash, List<ToolCall> calls, boolean hasToolCalls) {
         InteractionRecord r = new InteractionRecord();
-        r.setSystemPromptHash(promptHash);
+        r.setTemplateHash(promptHash);
         r.setToolCalls(calls);
         r.setHasToolCalls(hasToolCalls);
         return r;

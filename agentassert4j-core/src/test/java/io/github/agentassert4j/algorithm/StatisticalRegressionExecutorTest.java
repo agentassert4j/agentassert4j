@@ -164,7 +164,7 @@ class StatisticalRegressionExecutorTest {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId("rec-1");
         r.setSkillId("skill-1");
-        r.setSystemPromptHash("abc123");
+        r.setTemplateHash("abc123");
         r.setUserInput("test input");
         r.setTurnIndex(0);
         r.setSessionId("session-1");

@@ -34,7 +34,7 @@ class DataSanitizerTest {
         InteractionRecord record = new InteractionRecord();
         record.setRecordId("test-001");
         record.setTimestamp(System.currentTimeMillis());
-        record.setSystemPromptHash("abc123");
+        record.setTemplateHash("abc123");
         record.setUserInput("My password is secret123");
         record.setModelResponse("Your token is tok_abc");
         record.setHasToolCalls(true);

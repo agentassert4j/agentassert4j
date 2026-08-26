@@ -21,7 +21,6 @@ import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.model.SkillType;
 import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.model.TurnContext;
-import io.github.agentassert4j.model.Checkpoint;
 
 /**
  * JSON 序列化工具 — 手写简易实现，零外部依赖。
@@ -45,7 +44,8 @@ final class JsonMapper {
         sb.append("{");
         stringField(sb, "recordId", r.getRecordId());
         sb.append(","); longField(sb, "timestamp", r.getTimestamp());
-        sb.append(","); stringField(sb, "systemPromptHash", r.getSystemPromptHash());
+        sb.append(","); longField(sb, "seq", r.getSeq());
+        sb.append(","); stringField(sb, "templateHash", r.getTemplateHash());
         sb.append(","); stringField(sb, "userInput", r.getUserInput());
         sb.append(","); intField(sb, "turnIndex", r.getTurnIndex());
         sb.append(","); stringField(sb, "modelResponse", r.getModelResponse());
@@ -66,7 +66,8 @@ final class JsonMapper {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(getString(json, "recordId"));
         r.setTimestamp(getLong(json, "timestamp"));
-        r.setSystemPromptHash(getString(json, "systemPromptHash"));
+        r.setSeq(getLong(json, "seq"));
+        r.setTemplateHash(getString(json, "templateHash"));
         r.setUserInput(getString(json, "userInput"));
         r.setTurnIndex(getInt(json, "turnIndex"));
         r.setModelResponse(getString(json, "modelResponse"));
@@ -192,6 +193,13 @@ final class JsonMapper {
         String status = rs.getString("baseline_status");
         p.setBaselineStatus(status != null ? BaselineStatus.valueOf(status) : BaselineStatus.BASELINE);
         p.setVersionTag(rs.getString("version_tag"));
+        p.setAlgoVersion(rs.getString("algo_version"));
+        p.setParamSignature(rs.getString("param_signature"));
+        int sampleCount = rs.getInt("sample_count");
+        p.setSampleCount(rs.wasNull() ? null : sampleCount);
+        p.setApprovedBy(rs.getString("approved_by"));
+        long approvedAt = rs.getLong("approved_at");
+        p.setApprovedAt(rs.wasNull() ? null : approvedAt);
         p.setTotalRecords(rs.getInt("total_records"));
         return p;
     }
@@ -205,20 +213,6 @@ final class JsonMapper {
         ab.setVersionTag(rs.getString("version_tag"));
         ab.setArchivedAt(rs.getLong("archived_at"));
         return ab;
-    }
-
-    // ======================== Checkpoint from ResultSet ========================
-
-    static Checkpoint toCheckpoint(ResultSet rs) throws SQLException {
-        Checkpoint c = new Checkpoint();
-        c.setId(rs.getString("id"));
-        c.setName(rs.getString("name"));
-        c.setTimestamp(rs.getLong("timestamp"));
-        c.setPassed(rs.getInt("passed"));
-        c.setFailed(rs.getInt("failed"));
-        c.setDiff(rs.getInt("diff"));
-        c.setFullReport(rs.getString("full_report"));
-        return c;
     }
 
     // ======================== RegexPattern ========================

@@ -7,6 +7,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -49,6 +50,11 @@ public class SqliteStorageRepository implements StorageRepository {
         return "sqlite";
     }
 
+    /** 包级可见：供同包测试校验 PRAGMA user_version 等底层状态 */
+    Connection getConnection() {
+        return connection;
+    }
+
     @Override
     public void initialize() {
         try {
@@ -60,12 +66,13 @@ public class SqliteStorageRepository implements StorageRepository {
             }
             connection = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
             connection.setAutoCommit(true);
-            try (Statement stmt = connection.createStatement()) {
-                for (String ddl : Schema.ALL_DDL) {
-                    stmt.execute(ddl);
-                }
-            }
+            SchemaMigrator.migrate(connection);
         } catch (SQLException e) {
+            // 初始化失败不得泄漏已打开的连接
+            if (connection != null) {
+                try { connection.close(); } catch (SQLException ignored) {}
+                connection = null;
+            }
             LOG.log(Level.SEVERE, "SQLite 初始化失败: " + dbPath, e);
             throw new RuntimeException("Storage initialization failed", e);
         }
@@ -83,36 +90,67 @@ public class SqliteStorageRepository implements StorageRepository {
 
     @Override
     public void saveInteraction(InteractionRecord r) {
-        String sql = "INSERT OR REPLACE INTO interactions" +
-            " (record_id, session_id, timestamp, skill_id, group_key, system_prompt_hash," +
-            "  user_input, turn_index, model_response, tool_calls, has_tool_calls," +
-            "  latency_ms, multimodal_input, multimodal_content, previous_turns, fingerprint)" +
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        // INSERT OR IGNORE：interactions 是只追加历史，record_id 冲突（崩溃重放双写）静默跳过
+        String sql = "INSERT OR IGNORE INTO interactions" +
+            " (record_id, session_id, timestamp, seq," +
+            "  template_id, template_hash, variables_fingerprint," +
+            "  api_protocol, provider, model, served_model, endpoint," +
+            "  skill_id, group_key, user_input, turn_index," +
+            "  tools_definition, sampling_params, model_request_raw," +
+            "  finish_reason, model_response, model_response_raw," +
+            "  tool_calls, has_tool_calls," +
+            "  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens," +
+            "  reasoning_tokens, usage_raw, latency_ms, ttft_ms, cost_usd," +
+            "  multimodal_input, multimodal_content, previous_turns, fingerprint," +
+            "  metadata, recorder_version)" +
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setString(1, r.getRecordId());
-            ps.setString(2, r.getSessionId());
-            ps.setLong(3, r.getTimestamp());
-            ps.setString(4, r.getSkillId());
-            // TODO: group_key 当前写死空串。DeterministicSkillGrouper 已实现，
-            //       但 InteractionRecord 无 groupKey 字段，需在 recorder 层通过
-            //       DeterministicSkillGrouper.group(record).getGroupKey() 获取后回填至 record.setSkillId()，
-            //       并在此处使用 r.getSkillId() 对应的 SkillProfile.getGroupKey() 写入
-            ps.setString(5, "");
-            ps.setString(6, r.getSystemPromptHash());
-            ps.setString(7, r.getUserInput());
-            ps.setInt(8, r.getTurnIndex());
-            ps.setString(9, r.getModelResponse());
-            ps.setString(10, serializeToolCalls(r.getToolCalls()));
-            ps.setInt(11, r.isHasToolCalls() ? 1 : 0);
-            ps.setLong(12, r.getLatencyMs());
-            ps.setInt(13, r.isMultimodalInput() ? 1 : 0);
-            ps.setString(14, r.getMultimodalContent());
-            ps.setString(15, serializeTurnContexts(r.getPreviousTurns()));
+            int i = 1;
+            ps.setString(i++, r.getRecordId());
+            ps.setString(i++, r.getSessionId());
+            ps.setLong(i++, r.getTimestamp());
+            setNullableLong(ps, i++, r.getSeq());
+            ps.setString(i++, r.getTemplateId());
+            ps.setString(i++, r.getTemplateHash());
+            ps.setString(i++, r.getVariablesFingerprint());
+            ps.setString(i++, r.getApiProtocol());
+            ps.setString(i++, r.getProvider());
+            ps.setString(i++, r.getModel());
+            ps.setString(i++, r.getServedModel());
+            ps.setString(i++, r.getEndpoint());
+            ps.setString(i++, r.getSkillId());
+            // TODO: [group_key 占位空串] DeterministicSkillGrouper 已实现且 InteractionRecord 已有
+            //       groupKey 字段，但录制层尚未接线回填（复审 §5 管道断裂项，随步骤 6a 基线管道落地）
+            ps.setString(i++, r.getGroupKey() != null ? r.getGroupKey() : "");
+            ps.setString(i++, r.getUserInput());
+            ps.setInt(i++, r.getTurnIndex());
+            ps.setString(i++, r.getToolsDefinition());
+            ps.setString(i++, r.getSamplingParams());
+            ps.setString(i++, r.getModelRequestRaw());
+            ps.setString(i++, r.getFinishReason());
+            ps.setString(i++, r.getModelResponse());
+            ps.setString(i++, r.getModelResponseRaw());
+            ps.setString(i++, serializeToolCalls(r.getToolCalls()));
+            ps.setInt(i++, r.isHasToolCalls() ? 1 : 0);
+            setNullableInt(ps, i++, r.getInputTokens());
+            setNullableInt(ps, i++, r.getOutputTokens());
+            setNullableInt(ps, i++, r.getCacheReadTokens());
+            setNullableInt(ps, i++, r.getCacheWriteTokens());
+            setNullableInt(ps, i++, r.getReasoningTokens());
+            ps.setString(i++, r.getUsageRaw());
+            setNullableLong(ps, i++, r.getLatencyMs());
+            setNullableLong(ps, i++, r.getTtftMs());
+            setNullableDouble(ps, i++, r.getCostUsd());
+            ps.setInt(i++, r.isMultimodalInput() ? 1 : 0);
+            ps.setString(i++, r.getMultimodalContent());
+            ps.setString(i++, serializeTurnContexts(r.getPreviousTurns()));
             // TODO: fingerprint 字段暂存 null。FingerprintExtractor 已实现，
             //       但 InteractionRecord 无 fingerprint 字段，需在 recorder 层通过
             //       FingerprintExtractor.extract(record) 生成指纹，序列化后写入。
             //       届时应使用 JsonMapper.toJson(FingerprintExtractor.extract(r)) 替代此 null
-            ps.setString(16, null);
+            ps.setString(i++, null);
+            ps.setString(i++, r.getMetadata());
+            ps.setString(i++, r.getRecorderVersion());
             ps.executeUpdate();
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "saveInteraction failed", e);
@@ -142,13 +180,13 @@ public class SqliteStorageRepository implements StorageRepository {
 
     @Override
     public List<InteractionRecord> findByPromptHash(String hash) {
-        return queryInteractions("SELECT * FROM interactions WHERE system_prompt_hash = ?", hash);
+        return queryInteractions("SELECT * FROM interactions WHERE template_hash = ?", hash);
     }
 
     @Override
     public Set<String> findSkillIdsByPromptHash(String hash) {
         Set<String> result = new HashSet<>();
-        String sql = "SELECT DISTINCT skill_id FROM interactions WHERE system_prompt_hash = ?";
+        String sql = "SELECT DISTINCT skill_id FROM interactions WHERE template_hash = ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, hash);
             try (ResultSet rs = ps.executeQuery()) {
@@ -184,19 +222,27 @@ public class SqliteStorageRepository implements StorageRepository {
     public void saveSkillProfile(SkillProfile p) {
         String sql = "INSERT OR REPLACE INTO skill_profiles" +
             " (skill_id, group_key, skill_name, skill_type, fingerprint," +
-            "  candidate_fingerprint, baseline_status, version_tag, total_records, updated_at)" +
-            " VALUES (?,?,?,?,?,?,?,?,?,?)";
+            "  candidate_fingerprint, baseline_status, version_tag," +
+            "  algo_version, param_signature, sample_count, approved_by, approved_at," +
+            "  total_records, updated_at)" +
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setString(1, p.getSkillId());
-            ps.setString(2, p.getGroupKey());
-            ps.setString(3, p.getSkillName());
-            ps.setString(4, p.getSkillType() != null ? p.getSkillType().name() : "TOOL_SKILL");
-            ps.setString(5, JsonMapper.toJson(p.getFingerprint()));
-            ps.setString(6, JsonMapper.toJson(p.getCandidateFingerprint()));
-            ps.setString(7, p.getBaselineStatus() != null ? p.getBaselineStatus().name() : "BASELINE");
-            ps.setString(8, p.getVersionTag());
-            ps.setInt(9, p.getTotalRecords());
-            ps.setLong(10, System.currentTimeMillis());
+            int i = 1;
+            ps.setString(i++, p.getSkillId());
+            ps.setString(i++, p.getGroupKey());
+            ps.setString(i++, p.getSkillName());
+            ps.setString(i++, p.getSkillType() != null ? p.getSkillType().name() : "TOOL_SKILL");
+            ps.setString(i++, JsonMapper.toJson(p.getFingerprint()));
+            ps.setString(i++, JsonMapper.toJson(p.getCandidateFingerprint()));
+            ps.setString(i++, p.getBaselineStatus() != null ? p.getBaselineStatus().name() : "BASELINE");
+            ps.setString(i++, p.getVersionTag());
+            ps.setString(i++, p.getAlgoVersion());
+            ps.setString(i++, p.getParamSignature());
+            setNullableInt(ps, i++, p.getSampleCount());
+            ps.setString(i++, p.getApprovedBy());
+            setNullableLong(ps, i++, p.getApprovedAt());
+            ps.setInt(i++, p.getTotalRecords());
+            ps.setLong(i++, System.currentTimeMillis());
             ps.executeUpdate();
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "saveSkillProfile failed", e);
@@ -385,37 +431,90 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     private InteractionRecord mapRecord(ResultSet rs) throws SQLException {
-        String json = null;
-        // 从数据库读取所有字段重建 InteractionRecord
-        // 由于没有存储完整 JSON，逐字段映射
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(rs.getString("record_id"));
         r.setSessionId(rs.getString("session_id"));
         r.setTimestamp(rs.getLong("timestamp"));
+        r.setSeq(rs.getLong("seq"));
+        r.setTemplateId(rs.getString("template_id"));
+        r.setTemplateHash(rs.getString("template_hash"));
+        r.setVariablesFingerprint(rs.getString("variables_fingerprint"));
+        r.setApiProtocol(rs.getString("api_protocol"));
+        r.setProvider(rs.getString("provider"));
+        r.setModel(rs.getString("model"));
+        r.setServedModel(rs.getString("served_model"));
+        r.setEndpoint(rs.getString("endpoint"));
         r.setSkillId(rs.getString("skill_id"));
-        r.setSystemPromptHash(rs.getString("system_prompt_hash"));
+        r.setGroupKey(rs.getString("group_key"));
         r.setUserInput(rs.getString("user_input"));
         r.setTurnIndex(rs.getInt("turn_index"));
+        r.setToolsDefinition(rs.getString("tools_definition"));
+        r.setSamplingParams(rs.getString("sampling_params"));
+        r.setModelRequestRaw(rs.getString("model_request_raw"));
+        r.setFinishReason(rs.getString("finish_reason"));
         r.setModelResponse(rs.getString("model_response"));
+        r.setModelResponseRaw(rs.getString("model_response_raw"));
         r.setHasToolCalls(rs.getInt("has_tool_calls") == 1);
+        r.setInputTokens(rs.getInt("input_tokens"));
+        r.setOutputTokens(rs.getInt("output_tokens"));
+        r.setCacheReadTokens(getNullableInt(rs, "cache_read_tokens"));
+        r.setCacheWriteTokens(getNullableInt(rs, "cache_write_tokens"));
+        r.setReasoningTokens(getNullableInt(rs, "reasoning_tokens"));
+        r.setUsageRaw(rs.getString("usage_raw"));
         r.setLatencyMs(rs.getLong("latency_ms"));
+        r.setTtftMs(getNullableLong(rs, "ttft_ms"));
+        r.setCostUsd(getNullableDouble(rs, "cost_usd"));
         r.setMultimodalInput(rs.getInt("multimodal_input") == 1);
         r.setMultimodalContent(rs.getString("multimodal_content"));
+        r.setMetadata(rs.getString("metadata"));
+        r.setRecorderVersion(rs.getString("recorder_version"));
 
         // 解析 JSON 字段
         String toolCallsJson = rs.getString("tool_calls");
         if (toolCallsJson != null && !toolCallsJson.isEmpty()) {
-            json = "{\"toolCalls\":" + toolCallsJson + "}";
+            String json = "{\"toolCalls\":" + toolCallsJson + "}";
             r.setToolCalls(parseToolCallsFromDb(json));
         }
 
         String turnsJson = rs.getString("previous_turns");
         if (turnsJson != null && !turnsJson.isEmpty()) {
-            json = "{\"previousTurns\":" + turnsJson + "}";
+            String json = "{\"previousTurns\":" + turnsJson + "}";
             r.setPreviousTurns(parseTurnsFromDb(json));
         }
 
         return r;
+    }
+
+    // ====== 可空数值列的 JDBC 绑定/读取辅助 ======
+
+    private static void setNullableInt(PreparedStatement ps, int index, Integer value) throws SQLException {
+        if (value == null) ps.setNull(index, Types.INTEGER);
+        else ps.setInt(index, value);
+    }
+
+    private static void setNullableLong(PreparedStatement ps, int index, Long value) throws SQLException {
+        if (value == null) ps.setNull(index, Types.INTEGER);
+        else ps.setLong(index, value);
+    }
+
+    private static void setNullableDouble(PreparedStatement ps, int index, Double value) throws SQLException {
+        if (value == null) ps.setNull(index, Types.REAL);
+        else ps.setDouble(index, value);
+    }
+
+    private static Integer getNullableInt(ResultSet rs, String column) throws SQLException {
+        int value = rs.getInt(column);
+        return rs.wasNull() ? null : value;
+    }
+
+    private static Long getNullableLong(ResultSet rs, String column) throws SQLException {
+        long value = rs.getLong(column);
+        return rs.wasNull() ? null : value;
+    }
+
+    private static Double getNullableDouble(ResultSet rs, String column) throws SQLException {
+        double value = rs.getDouble(column);
+        return rs.wasNull() ? null : value;
     }
 
     // ToolCall 和 TurnContext 的独立序列化（供 saveInteraction 使用）

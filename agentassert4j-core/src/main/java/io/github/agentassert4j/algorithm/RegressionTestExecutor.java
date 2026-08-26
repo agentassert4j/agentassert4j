@@ -158,7 +158,7 @@ public class RegressionTestExecutor {
         InteractionRecord current = new InteractionRecord();
         current.setRecordId(UUID.randomUUID().toString());
         current.setTimestamp(System.currentTimeMillis());
-        current.setSystemPromptHash(HashUtil.sha256(newPrompt));
+        current.setTemplateHash(HashUtil.sha256(newPrompt));
         current.setUserInput(baseline.getUserInput());
         current.setTurnIndex(baseline.getTurnIndex());
         current.setSessionId(baseline.getSessionId());

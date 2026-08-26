@@ -361,9 +361,9 @@ class DeepSeekIntegrationTest {
             LlmResponse resp2 = callLlm(prompt, input);
 
             InteractionRecord rec1 = responseToRecord(resp1);
-            rec1.setSystemPromptHash(io.github.agentassert4j.util.HashUtil.sha256(prompt));
+            rec1.setTemplateHash(io.github.agentassert4j.util.HashUtil.sha256(prompt));
             InteractionRecord rec2 = responseToRecord(resp2);
-            rec2.setSystemPromptHash(io.github.agentassert4j.util.HashUtil.sha256(prompt));
+            rec2.setTemplateHash(io.github.agentassert4j.util.HashUtil.sha256(prompt));
 
             DeterministicFingerprint fp1 = FingerprintExtractor.extract(rec1);
             DeterministicFingerprint fp2 = FingerprintExtractor.extract(rec2);
@@ -732,7 +732,7 @@ class DeepSeekIntegrationTest {
             InteractionRecord baseline = responseToRecord(baselineResp);
             baseline.setRecordId("lifecycle-text-1");
             baseline.setSkillId("math-skill");
-            baseline.setSystemPromptHash(
+            baseline.setTemplateHash(
                     io.github.agentassert4j.util.HashUtil.sha256(originalPrompt));
 
             System.out.println("[9.1] 基线响应: " + baselineResp.getContent());
@@ -842,7 +842,7 @@ class DeepSeekIntegrationTest {
             InteractionRecord baseline = new InteractionRecord();
             baseline.setRecordId("lifecycle-multi-1");
             baseline.setSkillId("chat-skill");
-            baseline.setSystemPromptHash(io.github.agentassert4j.util.HashUtil.sha256(prompt));
+            baseline.setTemplateHash(io.github.agentassert4j.util.HashUtil.sha256(prompt));
             baseline.setUserInput("我叫什么名字？只回答名字。");
             baseline.setTurnIndex(2);
             baseline.setModelResponse(resp2.getContent());
@@ -961,7 +961,7 @@ class DeepSeekIntegrationTest {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(recordId);
         r.setSkillId("integration-skill");
-        r.setSystemPromptHash("fake-hash");
+        r.setTemplateHash("fake-hash");
         r.setUserInput(userInput);
         r.setTurnIndex(0);
         r.setSessionId("session-integration");
@@ -976,7 +976,7 @@ class DeepSeekIntegrationTest {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(recordId);
         r.setSkillId("integration-skill");
-        r.setSystemPromptHash("fake-hash");
+        r.setTemplateHash("fake-hash");
         r.setUserInput(userInput);
         r.setTurnIndex(0);
         r.setSessionId("session-integration");

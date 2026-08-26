@@ -32,7 +32,7 @@ class ParameterValueTracerTest {
         r.setModelResponse(modelResponse);
         r.setToolCalls(toolCalls);
         r.setHasToolCalls(toolCalls != null && !toolCalls.isEmpty());
-        r.setSystemPromptHash("hash");
+        r.setTemplateHash("hash");
         return r;
     }
 

@@ -25,7 +25,7 @@ class InteractionRecorderTest {
         InteractionRecord record = new InteractionRecord();
         record.setRecordId(id);
         record.setTimestamp(System.currentTimeMillis());
-        record.setSystemPromptHash("hash-" + id);
+        record.setTemplateHash("hash-" + id);
         return record;
     }
 

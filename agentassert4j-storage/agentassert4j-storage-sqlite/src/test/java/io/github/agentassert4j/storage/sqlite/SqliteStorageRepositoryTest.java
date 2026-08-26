@@ -1,5 +1,11 @@
 package io.github.agentassert4j.storage.sqlite;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -14,7 +20,6 @@ import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.model.SkillType;
 import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.model.TurnContext;
-import io.github.agentassert4j.model.Checkpoint;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,7 +57,7 @@ class SqliteStorageRepositoryTest {
         assertEquals("rec-1", loaded.getRecordId());
         assertEquals("session-1", loaded.getSessionId());
         assertEquals("skill-1", loaded.getSkillId());
-        assertEquals("hash-abc", loaded.getSystemPromptHash());
+        assertEquals("hash-abc", loaded.getTemplateHash());
         assertEquals("hello", loaded.getUserInput());
         assertEquals("response text", loaded.getModelResponse());
         assertTrue(loaded.isHasToolCalls());
@@ -201,23 +206,7 @@ class SqliteStorageRepositoryTest {
         assertNull(repo.findArchivedBaseline("nonexistent", "v99"));
     }
 
-    @Test
-    void saveAndFindCheckpoint() {
-        Checkpoint c = new Checkpoint();
-        c.setId("cp-001");
-        c.setName("post-prompt-change");
-        c.setTimestamp(System.currentTimeMillis());
-        c.setPassed(10);
-        c.setFailed(2);
-        c.setDiff(1);
-        c.setFullReport("{\"summary\":\"2 failures\"}");
-        repo.saveCheckpoint(c);
-
-        // Checkpoint 保存只验证不抛异常（没有 find 方法在 SPI 中）
-        // 通过重新保存验证覆盖不报错
-        c.setPassed(12);
-        assertDoesNotThrow(() -> repo.saveCheckpoint(c));
-    }
+    // saveAndFindCheckpoint 已删除：checkpoints 表随 v1 schema 砍除（只写无读的死表，定稿文档 §3）
 
     @Test
     void interactionWithToolCalls() {
@@ -265,6 +254,173 @@ class SqliteStorageRepositoryTest {
         assertEquals("assistant", loadedTurns.get(1).getRole());
     }
 
+    // ======================== v1 schema 契约测试 ========================
+
+    @Test
+    void schemaVersionStamped() throws Exception {
+        try (Statement stmt = repo.getConnection().createStatement();
+             ResultSet rs = stmt.executeQuery("PRAGMA user_version")) {
+            rs.next();
+            assertEquals(Schema.USER_VERSION, rs.getInt(1), "initialize 后必须盖戳 user_version");
+        }
+    }
+
+    @Test
+    void reinitializeIsIdempotent() {
+        assertDoesNotThrow(() -> {
+            repo.close();
+            repo.initialize();
+        }, "重复 initialize（已盖戳版本）不得重建或报错");
+    }
+
+    @Test
+    void futureSchemaVersionRejected() throws Exception {
+        // :memory: 库连接关闭即消失，版本戳必须落在文件库上验证
+        Path db = Files.createTempFile("agentassert4j-future", ".db");
+        try {
+            SqliteStorageRepository futureRepo = new SqliteStorageRepository(db.toString());
+            futureRepo.initialize();
+            try (Statement stmt = futureRepo.getConnection().createStatement()) {
+                stmt.execute("PRAGMA user_version = " + (Schema.USER_VERSION + 1));
+            }
+            futureRepo.close();
+
+            assertThrows(RuntimeException.class, futureRepo::initialize,
+                    "高于支持版本的库必须被拒绝，不得静默打开");
+            futureRepo.close();
+        } finally {
+            Files.deleteIfExists(db);
+        }
+    }
+
+    @Test
+    void captureFidelityColumnsRoundTrip() {
+        InteractionRecord r = createSampleRecord("rec-v1", "sess-v1", "sk-v1", "hash-v1");
+        r.setSeq(42L);
+        r.setTemplateId("order-extract");
+        r.setVariablesFingerprint("var-fp-1");
+        r.setApiProtocol("openai-chat");
+        r.setProvider("deepseek");
+        r.setModel("deepseek-chat");
+        r.setServedModel("deepseek-chat-v3-0324");
+        r.setEndpoint("https://api.deepseek.com");
+        r.setToolsDefinition("[{\"type\":\"function\",\"function\":{\"name\":\"queryOrder\"}}]");
+        r.setSamplingParams("{\"temperature\":0.7,\"max_tokens\":1024}");
+        r.setModelRequestRaw("{\"model\":\"deepseek-chat\",\"messages\":[]}");
+        r.setFinishReason("tool_calls");
+        r.setModelResponseRaw("{\"id\":\"resp-1\",\"choices\":[]}");
+        r.setCacheReadTokens(1024);
+        r.setCacheWriteTokens(null);
+        r.setReasoningTokens(512);
+        r.setUsageRaw("{\"prompt_tokens\":2048,\"completion_tokens\":100}");
+        r.setTtftMs(120L);
+        r.setCostUsd(0.0021);
+        r.setGroupKey("queryOrder[orderId:string]");
+        r.setMetadata("{\"agent.role\":\"build\"}");
+        r.setRecorderVersion("1.0.0-SNAPSHOT");
+        repo.saveInteraction(r);
+
+        InteractionRecord loaded = repo.findBySkillId("sk-v1").get(0);
+        assertEquals(42L, loaded.getSeq());
+        assertEquals("order-extract", loaded.getTemplateId());
+        assertEquals("var-fp-1", loaded.getVariablesFingerprint());
+        assertEquals("openai-chat", loaded.getApiProtocol());
+        assertEquals("deepseek", loaded.getProvider());
+        assertEquals("deepseek-chat", loaded.getModel());
+        assertEquals("deepseek-chat-v3-0324", loaded.getServedModel());
+        assertEquals("https://api.deepseek.com", loaded.getEndpoint());
+        assertTrue(loaded.getToolsDefinition().contains("queryOrder"));
+        assertTrue(loaded.getSamplingParams().contains("temperature"));
+        assertTrue(loaded.getModelRequestRaw().contains("messages"));
+        assertEquals("tool_calls", loaded.getFinishReason());
+        assertTrue(loaded.getModelResponseRaw().contains("choices"));
+        assertEquals(Integer.valueOf(1024), loaded.getCacheReadTokens());
+        assertNull(loaded.getCacheWriteTokens(), "供应商不报告的缓存写必须保持 NULL");
+        assertEquals(Integer.valueOf(512), loaded.getReasoningTokens());
+        assertTrue(loaded.getUsageRaw().contains("prompt_tokens"));
+        assertEquals(Long.valueOf(120L), loaded.getTtftMs());
+        assertEquals(Double.valueOf(0.0021), loaded.getCostUsd(), 1e-9);
+        assertEquals("queryOrder[orderId:string]", loaded.getGroupKey());
+        assertTrue(loaded.getMetadata().contains("agent.role"));
+        assertEquals("1.0.0-SNAPSHOT", loaded.getRecorderVersion());
+    }
+
+    @Test
+    void duplicateRecordIdIgnored() {
+        InteractionRecord r = createSampleRecord("dup-1", "s1", "sk1", "h1");
+        repo.saveInteraction(r);
+        r.setModelResponse("changed response");
+        repo.saveInteraction(r); // 崩溃重放双写场景：同 record_id 不得覆盖已有历史
+
+        List<InteractionRecord> results = repo.findBySkillId("sk1");
+        assertEquals(1, results.size(), "只追加历史表：record_id 冲突必须静默跳过");
+        assertEquals("response text", results.get(0).getModelResponse(), "已落库的原始行不得被重放覆盖");
+    }
+
+    @Test
+    void legacyV0DatabaseRebuiltAtV1() throws Exception {
+        Path db = Files.createTempFile("agentassert4j-legacy", ".db");
+        try {
+            // 手工构造 v0 旧库（system_prompt_hash 列 + checkpoints 表，无 user_version）
+            try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + db);
+                 Statement stmt = conn.createStatement()) {
+                stmt.execute("CREATE TABLE interactions (record_id TEXT PRIMARY KEY, session_id TEXT NOT NULL,"
+                        + " timestamp INTEGER NOT NULL, skill_id TEXT NOT NULL, group_key TEXT NOT NULL,"
+                        + " system_prompt_hash TEXT NOT NULL)");
+                stmt.execute("CREATE TABLE checkpoints (id TEXT PRIMARY KEY)");
+                stmt.execute("INSERT INTO interactions VALUES ('old-1','s1',1,'sk1','','old-hash')");
+            }
+
+            SqliteStorageRepository legacyRepo = new SqliteStorageRepository(db.toString());
+            legacyRepo.initialize();
+
+            // 旧库重建为 v1：版本盖戳 + 新列可用 + 死表消失
+            try (Statement stmt = legacyRepo.getConnection().createStatement();
+                 ResultSet rs = stmt.executeQuery("PRAGMA user_version")) {
+                rs.next();
+                assertEquals(Schema.USER_VERSION, rs.getInt(1));
+            }
+            try (Statement stmt = legacyRepo.getConnection().createStatement();
+                 ResultSet rs = stmt.executeQuery(
+                         "SELECT name FROM sqlite_master WHERE type='table' AND name='checkpoints'")) {
+                assertFalse(rs.next(), "checkpoints 死表必须随 v0→v1 重建消失");
+            }
+            legacyRepo.saveInteraction(createSampleRecord("new-1", "s1", "sk1", "h1"));
+            assertEquals(1, legacyRepo.findBySkillId("sk1").size(), "重建后新列集可正常写入");
+            legacyRepo.close();
+        } finally {
+            Files.deleteIfExists(db);
+        }
+    }
+
+    @Test
+    void skillProfileGovernanceColumnsRoundTrip() {
+        SkillProfile p = new SkillProfile();
+        p.setSkillId("sk-gov");
+        p.setGroupKey("gov-key");
+        p.setSkillName("gov");
+        p.setSkillType(SkillType.TOOL_SKILL);
+        p.setBaselineStatus(BaselineStatus.BASELINE);
+        p.setVersionTag("v2");
+        p.setAlgoVersion("1.0");
+        p.setParamSignature("orderId:string");
+        p.setSampleCount(7);
+        p.setApprovedBy("axy-yxa");
+        p.setApprovedAt(1735689600000L);
+        p.setTotalRecords(10);
+        DeterministicFingerprint fp = new DeterministicFingerprint();
+        fp.setToolCallSet(new java.util.HashSet<>());
+        p.setFingerprint(fp);
+        repo.saveSkillProfile(p);
+
+        SkillProfile loaded = repo.findSkillByGroupKey("gov-key");
+        assertEquals("1.0", loaded.getAlgoVersion());
+        assertEquals("orderId:string", loaded.getParamSignature());
+        assertEquals(Integer.valueOf(7), loaded.getSampleCount());
+        assertEquals("axy-yxa", loaded.getApprovedBy());
+        assertEquals(Long.valueOf(1735689600000L), loaded.getApprovedAt());
+    }
+
     // ======================== 辅助方法 ========================
 
     private InteractionRecord createSampleRecord(String id, String sessionId, String skillId, String promptHash) {
@@ -273,7 +429,7 @@ class SqliteStorageRepositoryTest {
         r.setSessionId(sessionId);
         r.setTimestamp(System.currentTimeMillis());
         r.setSkillId(skillId);
-        r.setSystemPromptHash(promptHash);
+        r.setTemplateHash(promptHash);
         r.setUserInput("hello");
         r.setModelResponse("response text");
         r.setHasToolCalls(true);

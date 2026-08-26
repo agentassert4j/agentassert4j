@@ -28,6 +28,12 @@ public class SkillProfile {
     private BaselineStatus baselineStatus;
     /** 基线版本标签（如 "v2.3.0"） */
     private String versionTag;
+    /** 判定算法语义版本（防算法升级悄悄重解释历史基线） */
+    private String algoVersion;
+    /** 批准人（企业治理审计链：这次行为变更由谁批准） */
+    private String approvedBy;
+    /** 批准时间戳（毫秒 epoch） */
+    private Long approvedAt;
 
     // ========== Getters & Setters ==========
 
@@ -63,4 +69,13 @@ public class SkillProfile {
 
     public String getVersionTag() { return versionTag; }
     public void setVersionTag(String versionTag) { this.versionTag = versionTag; }
+
+    public String getAlgoVersion() { return algoVersion; }
+    public void setAlgoVersion(String algoVersion) { this.algoVersion = algoVersion; }
+
+    public String getApprovedBy() { return approvedBy; }
+    public void setApprovedBy(String approvedBy) { this.approvedBy = approvedBy; }
+
+    public Long getApprovedAt() { return approvedAt; }
+    public void setApprovedAt(Long approvedAt) { this.approvedAt = approvedAt; }
 }
