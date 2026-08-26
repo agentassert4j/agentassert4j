@@ -92,13 +92,9 @@ public class SkillRulesConfig {
         return config;
     }
 
-    // ========== 内部方法（用于测试） ==========
-
     void addRule(String skillId, SkillRule rule) {
         rules.put(skillId, rule);
     }
-
-    // ==================== 嵌套类：SkillRule ====================
 
     /**
      * 单个 Skill 的规则声明 — 维度 3（内容规则）+ 维度 4（约束行为）。

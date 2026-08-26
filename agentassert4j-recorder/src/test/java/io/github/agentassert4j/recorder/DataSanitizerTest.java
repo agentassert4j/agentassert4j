@@ -13,8 +13,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DataSanitizerTest {
 
-    // ========== 辅助方法 ==========
-
     private RecorderConfig configWithFields(SanitizeStrategy strategy, String... fields) {
         return RecorderConfig.builder()
                 .sensitiveFields(Arrays.asList(fields))
@@ -56,8 +54,6 @@ class DataSanitizerTest {
         return record;
     }
 
-    // ========== null 安全 ==========
-
     @Test
     void sanitize_nullRecord_returnsNull() {
         DataSanitizer sanitizer = new DataSanitizer(RecorderConfig.defaults());
@@ -81,8 +77,6 @@ class DataSanitizerTest {
         InteractionRecord result = sanitizer.sanitize(record);
         assertSame(record, result);
     }
-
-    // ========== MASK 策略 ==========
 
     @Test
     void sanitize_maskStrategy_masksSensitiveArgs() {
@@ -119,8 +113,6 @@ class DataSanitizerTest {
         assertTrue(sanitizedResult.contains("visible"));
     }
 
-    // ========== HASH 策略 ==========
-
     @Test
     void sanitize_hashStrategy_hashesSensitiveArgs() {
         DataSanitizer sanitizer = new DataSanitizer(
@@ -139,8 +131,6 @@ class DataSanitizerTest {
         assertEquals("SELECT * FROM users", sanitizedTc.getArguments().get("query"));
     }
 
-    // ========== DROP 策略 ==========
-
     @Test
     void sanitize_dropStrategy_removesSensitiveArgs() {
         DataSanitizer sanitizer = new DataSanitizer(
@@ -156,8 +146,6 @@ class DataSanitizerTest {
         assertTrue(sanitizedTc.getArguments().containsKey("query"));
     }
 
-    // ========== 忽略大小写匹配 ==========
-
     @Test
     void sanitize_caseInsensitiveMatch() {
         DataSanitizer sanitizer = new DataSanitizer(
@@ -170,8 +158,6 @@ class DataSanitizerTest {
         assertEquals("***", sanitizedTc.getArguments().get("password"));
         assertEquals("***", sanitizedTc.getArguments().get("token"));
     }
-
-    // ========== userInput / modelResponse 脱敏 ==========
 
     @Test
     void sanitize_userInputAndModelResponse_notSanitizedByDefault() {
@@ -202,8 +188,6 @@ class DataSanitizerTest {
         assertEquals("***", result.getModelResponse());
     }
 
-    // ========== 不修改原始记录 ==========
-
     @Test
     void sanitize_doesNotModifyOriginal() {
         DataSanitizer sanitizer = new DataSanitizer(
@@ -216,8 +200,6 @@ class DataSanitizerTest {
         assertEquals("secret123", record.getToolCalls().get(0).getArguments().get("password"));
         assertEquals("My password is secret123", record.getUserInput());
     }
-
-    // ========== 边界场景 ==========
 
     @Test
     void sanitize_recordWithNoToolCalls() {
@@ -283,8 +265,6 @@ class DataSanitizerTest {
         assertNull(result.getToolCalls().get(0).getResult());
     }
 
-    // ========== JSON 字符串脱敏 ==========
-
     @Test
     void sanitizeJsonString_nestedJson() {
         DataSanitizer sanitizer = new DataSanitizer(
@@ -317,8 +297,6 @@ class DataSanitizerTest {
         assertNull(sanitizer.sanitizeJsonString(null));
         assertEquals("", sanitizer.sanitizeJsonString(""));
     }
-
-    // ========== DROP 策略 JSON 尾逗号修复验证 ==========
 
     @Test
     void sanitizeJsonString_dropMiddleKey_noTrailingComma() {

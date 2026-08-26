@@ -36,8 +36,6 @@ public class InMemoryDependencyGraph {
     /** 反向邻接表：target → Set<source> */
     private final Map<String, Set<String>> inEdges = new HashMap<>();
 
-    // ==================== 边操作 ====================
-
     /**
      * 添加一条边（默认 HIGH 置信度）。
      * 同一条边多次添加时合并 confidence：HIGH > LOW > TRANSPARENT。
@@ -78,8 +76,6 @@ public class InMemoryDependencyGraph {
         // 维护反向邻接表
         inEdges.computeIfAbsent(tgt, k -> new LinkedHashSet<>()).add(src);
     }
-
-    // ==================== 查询 ====================
 
     /**
      * BFS 下游遍历（微秒级），从 start 出发的所有可达节点（不含自身）。
@@ -186,8 +182,6 @@ public class InMemoryDependencyGraph {
         return getAllEdges().size();
     }
 
-    // ==================== 节点移除 ====================
-
     /**
      * 移除节点及其关联的所有边。
      * 正向和反向邻接表同步清理。
@@ -214,8 +208,6 @@ public class InMemoryDependencyGraph {
             }
         }
     }
-
-    // ==================== 穿透压缩 ====================
 
     /**
      * 穿透压缩 — 被排除的节点不是简单删除，而是将前驱和后继直接连通。
@@ -287,8 +279,6 @@ public class InMemoryDependencyGraph {
 
     /** 搜索方向 */
     private enum Direction { UP, DOWN }
-
-    // ==================== JSON 序列化/反序列化 ====================
 
     /**
      * 将图谱序列化为 JSON 字符串。

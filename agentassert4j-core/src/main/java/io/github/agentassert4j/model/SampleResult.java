@@ -39,8 +39,6 @@ public class SampleResult {
         this.latencyMs = latencyMs;
     }
 
-    // ========== Getters & Setters ==========
-
     public int getSampleIndex() { return sampleIndex; }
     public void setSampleIndex(int sampleIndex) { this.sampleIndex = sampleIndex; }
 

@@ -21,28 +21,22 @@ import java.util.Set;
  */
 public class DeterministicFingerprint {
 
-    // ====== 维度 1：工具调用（权重 40%，全自动提取）======
     private Set<String> toolCallSet;
     private Map<String, String> toolParamTypes;
     private Map<String, Boolean> toolParamRequired;
 
-    // ====== 维度 2：输出结构（权重 25%，全自动提取）======
     private String outputContentType;
     private Set<String> outputFieldPaths;
     private Map<String, String> outputFieldTypeMap;
     /** 纯文本输出退化为长度数量级（100字→2, 1000字→3） */
     private int textLengthMagnitude;
 
-    // ====== 维度 3：内容规则（权重 20%，用户声明式配置）======
     private Set<String> requiredKeywords;
     private Set<String> forbiddenKeywords;
     private List<RegexPattern> regexPatterns;
 
-    // ====== 维度 4：约束行为（权重 15%，用户声明式配置）======
     private Set<String> declaredBehaviors;
     private boolean hasError;
-
-    // ========== Getters & Setters ==========
 
     public Set<String> getToolCallSet() { return toolCallSet; }
     public void setToolCallSet(Set<String> toolCallSet) { this.toolCallSet = toolCallSet; }

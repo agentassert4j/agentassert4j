@@ -14,8 +14,6 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class SkillRulesConfigTest {
 
-    // ==================== 空配置 ====================
-
     @Nested
     @DisplayName("空配置行为")
     class Empty {
@@ -40,8 +38,6 @@ class SkillRulesConfigTest {
             assertTrue(rule.getBehaviors().isEmpty());
         }
     }
-
-    // ==================== JSON 解析 ====================
 
     @Nested
     @DisplayName("JSON 解析")
@@ -159,8 +155,6 @@ class SkillRulesConfigTest {
         }
     }
 
-    // ==================== SkillRule Setter 安全性 ====================
-
     @Nested
     @DisplayName("SkillRule Setter 空值安全")
     class SkillRuleSetterSafety {
@@ -202,8 +196,6 @@ class SkillRulesConfigTest {
         }
     }
 
-    // ==================== addRule 测试 ====================
-
     @Test
     @DisplayName("addRule 可手动添加规则")
     void addRule() {
@@ -216,8 +208,6 @@ class SkillRulesConfigTest {
         assertEquals(1, config.getDeclaredSkillIds().size());
         assertEquals(Set.of("testBehavior"), config.getRulesForSkill("mySkill").getBehaviors());
     }
-
-    // ==================== 不可变性 ====================
 
     @Test
     @DisplayName("getDeclaredSkillIds 不可修改")

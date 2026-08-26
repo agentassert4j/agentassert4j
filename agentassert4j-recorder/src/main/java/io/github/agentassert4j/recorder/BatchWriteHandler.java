@@ -136,8 +136,6 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
         }
     }
 
-    // ========== 统计 ==========
-
     public long getDroppedCount() {
         return droppedCount.get();
     }

@@ -18,8 +18,6 @@ public interface StorageRepository extends
         GraphStore,
         BaselineArchiveStore {
 
-    // --- 生命周期 ---
-
     /** 存储后端类型标识（如 "sqlite"） */
     String type();
 

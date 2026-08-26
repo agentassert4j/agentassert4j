@@ -130,8 +130,6 @@ class DeterministicSkillGrouperTest {
                 DeterministicSkillGrouper.group(r2).getGroupKey());
     }
 
-    // ==================== 无模板锚点回退 ====================
-
     @Test
     void pureChat_nullTemplateHash_fallsBackToUserInputHash_notChatNull() {
         // templateHash 为 null 时绝不能坍缩为 "chat:null"，否则不同 prompt 的纯对话互相污染同一基线

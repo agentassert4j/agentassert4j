@@ -85,8 +85,6 @@ public class SqliteStorageRepository implements StorageRepository {
         }
     }
 
-    // ======================== 交互记录 ========================
-
     @Override
     public void saveInteraction(InteractionRecord r) {
         // INSERT OR IGNORE：interactions 是只追加历史，record_id 冲突（崩溃重放双写）静默跳过
@@ -217,8 +215,6 @@ public class SqliteStorageRepository implements StorageRepository {
         return result;
     }
 
-    // ======================== Skill 画像 ========================
-
     @Override
     public void saveSkillProfile(SkillProfile p) {
         String sql = "INSERT OR REPLACE INTO skill_profiles" +
@@ -277,8 +273,6 @@ public class SqliteStorageRepository implements StorageRepository {
         return result;
     }
 
-    // ======================== Prompt 文本缓存 ========================
-
     @Override
     public void saveTemplateText(String hash, String templateText) {
         String sql = "INSERT OR REPLACE INTO prompt_texts (prompt_hash, prompt_text, created_at) VALUES (?,?,?)";
@@ -306,8 +300,6 @@ public class SqliteStorageRepository implements StorageRepository {
         return null;
     }
 
-    // ======================== 依赖图谱 ========================
-
     @Override
     public void saveGraph(String graphJson) {
         String sql = "INSERT OR REPLACE INTO graph_snapshot (id, graph_json, updated_at) VALUES ('current',?,?)";
@@ -331,8 +323,6 @@ public class SqliteStorageRepository implements StorageRepository {
         }
         return null;
     }
-
-    // ======================== 基线归档 ========================
 
     @Override
     public void archiveBaseline(String skillId, DeterministicFingerprint fingerprint, String versionTag) {
@@ -363,8 +353,6 @@ public class SqliteStorageRepository implements StorageRepository {
         return null;
     }
 
-    // ======================== 序列化辅助 ========================
-
     // TODO: [技术债] 以下序列化方法（serializeToolCalls/serializeTurnContexts/escape 等）
     //       与 JsonMapper 中的手写 JSON 逻辑存在重复。
     //       待 RecursiveJsonParser 在 core util 包稳定后，应重构为统一使用 RecursiveJsonParser.parse()/serialize()，
@@ -394,8 +382,6 @@ public class SqliteStorageRepository implements StorageRepository {
         sb.append("]");
         return sb.toString();
     }
-
-    // ======================== 内部辅助 ========================
 
     private List<InteractionRecord> queryInteractions(String sql, String param) {
         List<InteractionRecord> result = new ArrayList<>();
@@ -466,8 +452,6 @@ public class SqliteStorageRepository implements StorageRepository {
 
         return r;
     }
-
-    // ====== 可空数值列的 JDBC 绑定/读取辅助 ======
 
     private static void setNullableInt(PreparedStatement ps, int index, Integer value) throws SQLException {
         if (value == null) ps.setNull(index, Types.INTEGER);
@@ -670,8 +654,6 @@ public class SqliteStorageRepository implements StorageRepository {
         if (!last.isEmpty()) items.add(last);
         return items;
     }
-
-    // ========== Map 序列化/反序列化（供 toolCallToJson/parseToolCallsFromDb 使用） ==========
 
     private static String mapToJson(java.util.Map<String, Object> map) {
         if (map == null || map.isEmpty()) return "{}";

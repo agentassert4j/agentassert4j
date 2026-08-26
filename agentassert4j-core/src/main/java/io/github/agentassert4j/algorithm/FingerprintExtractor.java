@@ -77,8 +77,6 @@ public final class FingerprintExtractor {
         return fp;
     }
 
-    // ==================== 维度 1：工具调用提取 ====================
-
     private static void extractDimension1(InteractionRecord record, DeterministicFingerprint fp) {
         if (record.getToolCalls() == null || record.getToolCalls().isEmpty()) {
             fp.setToolCallSet(Collections.emptySet());
@@ -113,8 +111,6 @@ public final class FingerprintExtractor {
         }
         fp.setToolParamRequired(paramRequired);
     }
-
-    // ==================== 维度 2：输出结构提取 ====================
 
     private static void extractDimension2(InteractionRecord record, DeterministicFingerprint fp) {
         String response = record.getModelResponse();

@@ -35,8 +35,6 @@ class RegressionTestExecutorTest {
         );
     }
 
-    // ==================== buildReplayRequest ====================
-
     @Test
     void buildReplayRequest_replacesSystemPrompt() {
         InteractionRecord baseline = makeBaseline("old prompt hash", "user input");
@@ -89,8 +87,6 @@ class RegressionTestExecutorTest {
         assertTrue(request.getPreviousTurns() == null || request.getPreviousTurns().isEmpty());
     }
 
-    // ==================== buildCurrentRecord ====================
-
     @Test
     void buildCurrentRecord_extractsToolCalls() {
         InteractionRecord baseline = makeBaseline("hash", "input");
@@ -138,8 +134,6 @@ class RegressionTestExecutorTest {
         assertTrue(current.isMultimodalInput());
         assertEquals("[{\"type\":\"image\"}]", current.getMultimodalContent());
     }
-
-    // ==================== execute — 完整流程 ====================
 
     @Test
     void execute_success_returnsComparisonResult() {
@@ -205,8 +199,6 @@ class RegressionTestExecutorTest {
         assertEquals(5000, stubClient.lastTimeoutMs);
     }
 
-    // ==================== 辅助方法 ====================
-
     private InteractionRecord makeBaseline(String promptHash, String userInput) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId("rec-1");
@@ -255,8 +247,6 @@ class RegressionTestExecutorTest {
         response.setOutputTokens(5);
         return response;
     }
-
-    // ==================== Stub LlmClient ====================
 
     static class StubLlmClient implements LlmClient {
         LlmResponse response;

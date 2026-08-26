@@ -25,8 +25,6 @@ class StatisticalRegressionExecutorTest {
                 stubClient, new DeterministicComparator());
     }
 
-    // ==================== 单次模式 ====================
-
     @Test
     void execute_singleMode_wrapsAsStatistical() {
         StatisticalTestConfig config = StatisticalTestConfig.defaults(); // sampleCount=1
@@ -37,8 +35,6 @@ class StatisticalRegressionExecutorTest {
         assertEquals(1, result.getActualSampleCount());
         assertEquals(1, stubClient.callCount);
     }
-
-    // ==================== 串行模式 ====================
 
     @Test
     void execute_serial_collectsAllSamples() {
@@ -63,8 +59,6 @@ class StatisticalRegressionExecutorTest {
         assertEquals(3, result.getActualSampleCount());
     }
 
-    // ==================== 并发模式 ====================
-
     @Test
     void execute_concurrent_collectsAllSamples() {
         StatisticalTestConfig config = new StatisticalTestConfig();
@@ -76,8 +70,6 @@ class StatisticalRegressionExecutorTest {
         assertEquals(6, result.getActualSampleCount());
         assertEquals(6, stubClient.callCount);
     }
-
-    // ==================== 成本截断 ====================
 
     @Test
     void execute_costTruncation_noSamples() {
@@ -95,8 +87,6 @@ class StatisticalRegressionExecutorTest {
         assertTrue(result.getActualSampleCount() <= 2);
         assertTrue(result.getActualSampleCount() < 10);
     }
-
-    // ==================== 退化不中断 ====================
 
     @Test
     void execute_timeoutOnThirdSample_othersContinue() {
@@ -132,8 +122,6 @@ class StatisticalRegressionExecutorTest {
         assertTrue(hasErrorSample);
     }
 
-    // ==================== 耗时和费用 ====================
-
     @Test
     void execute_totalLatencyAndCostCalculated() {
         StatisticalTestConfig config = new StatisticalTestConfig();
@@ -145,8 +133,6 @@ class StatisticalRegressionExecutorTest {
         assertTrue(result.getEstimatedCost() > 0);
     }
 
-    // ==================== dryRun ====================
-
     @Test
     void execute_dryRun_noLlmCalls() {
         StatisticalTestConfig config = new StatisticalTestConfig();
@@ -157,8 +143,6 @@ class StatisticalRegressionExecutorTest {
 
         assertEquals(0, stubClient.callCount);
     }
-
-    // ==================== 辅助方法 ====================
 
     private InteractionRecord makeBaseline() {
         InteractionRecord r = new InteractionRecord();
@@ -185,8 +169,6 @@ class StatisticalRegressionExecutorTest {
         r.setHasToolCalls(true);
         return r;
     }
-
-    // ==================== Stub Client ====================
 
     static class CountingLlmClient implements LlmClient {
         int callCount = 0;

@@ -25,12 +25,8 @@ public class StatisticalRegressionResult {
     private String baselineRecordId;
     private String skillId;
 
-    // ====== 采样明细 ======
-
     /** 所有采样结果（不可变） */
     private List<SampleResult> samples = new ArrayList<>();
-
-    // ====== 统计摘要 ======
 
     /** 实际采样次数 */
     private int actualSampleCount;
@@ -61,8 +57,6 @@ public class StatisticalRegressionResult {
 
     /** 总 API 费用估算（美元） */
     private double estimatedCost;
-
-    // ====== 工厂方法 ======
 
     /**
      * 从采样结果列表聚合统计。
@@ -155,8 +149,6 @@ public class StatisticalRegressionResult {
 
         return result;
     }
-
-    // ========== Getters & Setters ==========
 
     public String getBaselineRecordId() { return baselineRecordId; }
     public void setBaselineRecordId(String id) { this.baselineRecordId = id; }

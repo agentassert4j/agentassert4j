@@ -33,8 +33,6 @@ public class RegressionTestResult {
         return r;
     }
 
-    // ========== Getters & Setters ==========
-
     public String getBaselineRecordId() { return baselineRecordId; }
     public void setBaselineRecordId(String baselineRecordId) { this.baselineRecordId = baselineRecordId; }
 

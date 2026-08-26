@@ -11,8 +11,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class InMemoryDependencyGraphTest {
 
-    // ==================== addEdge ====================
-
     @Test
     void addEdge_singleEdge() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
@@ -66,8 +64,6 @@ class InMemoryDependencyGraphTest {
         assertTrue(edge.getThroughNodes().contains("C"));
     }
 
-    // ==================== traverseDownstream ====================
-
     @Test
     void traverseDownstream_singleHop() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
@@ -115,8 +111,6 @@ class InMemoryDependencyGraphTest {
         assertTrue(result.isEmpty());
     }
 
-    // ==================== detectCycles ====================
-
     @Test
     void detectCycles_noCycle() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
@@ -155,8 +149,6 @@ class InMemoryDependencyGraphTest {
         assertTrue(g.detectCycles().isEmpty());
     }
 
-    // ==================== getPredecessors / getSuccessors ====================
-
     @Test
     void getPredecessors_multiple() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
@@ -183,8 +175,6 @@ class InMemoryDependencyGraphTest {
         assertTrue(g.getPredecessors("A").isEmpty());
     }
 
-    // ==================== removeNode ====================
-
     @Test
     void removeNode_cleansAllEdges() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
@@ -209,8 +199,6 @@ class InMemoryDependencyGraphTest {
         assertDoesNotThrow(() -> g.removeNode("NONEXISTENT"));
         assertEquals(1, g.edgeCount());
     }
-
-    // ==================== compressExcludedNodes ====================
 
     @Test
     void compressExcludedNodes_noExclusion() {
@@ -282,8 +270,6 @@ class InMemoryDependencyGraphTest {
         assertDoesNotThrow(() -> g.compressExcludedNodes(null));
     }
 
-    // ==================== toJson / fromJson ====================
-
     @Test
     void toJson_fromJson_roundTrip() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
@@ -322,8 +308,6 @@ class InMemoryDependencyGraphTest {
         InMemoryDependencyGraph restored = InMemoryDependencyGraph.fromJson(json);
         assertEquals(0, restored.edgeCount());
     }
-
-    // ==================== 边界情况 ====================
 
     @Test
     void emptyGraph_operations() {

@@ -7,7 +7,6 @@ import java.util.Set;
  */
 public class ComparisonResult {
 
-    // ====== 各维度匹配结果 ======
     private boolean toolCallMatch;
     private boolean paramTypeMatch;
     private Set<String> addedFields;
@@ -17,12 +16,9 @@ public class ComparisonResult {
     private boolean regexMatch;
     private boolean behaviorMatch;
 
-    // ====== 综合结果 ======
     private double score;
     private Verdict verdict;
     private String summary;
-
-    // ========== Getters & Setters ==========
 
     public boolean isToolCallMatch() { return toolCallMatch; }
     public void setToolCallMatch(boolean toolCallMatch) { this.toolCallMatch = toolCallMatch; }

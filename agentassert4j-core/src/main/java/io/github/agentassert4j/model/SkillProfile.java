@@ -35,8 +35,6 @@ public class SkillProfile {
     /** 批准时间戳（毫秒 epoch） */
     private Long approvedAt;
 
-    // ========== Getters & Setters ==========
-
     public String getSkillId() { return skillId; }
     public void setSkillId(String skillId) { this.skillId = skillId; }
 

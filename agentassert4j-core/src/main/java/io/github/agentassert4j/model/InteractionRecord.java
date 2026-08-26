@@ -17,11 +17,9 @@ public class InteractionRecord {
     private String recordId;
     private long timestamp;
 
-    // ====== A. 顺序与确定性 ======
     /** 录制进程内单调序号（Disruptor 序号透传），与 timestamp 组成确定性排序键 */
     private long seq;
 
-    // ====== B. Prompt 身份三元组 ======
     /** 模板 ID（SDK 显式声明的模板标识，如 "order-extract/v2"） */
     private String templateId;
     /** 模板文本 SHA-256 hash（分组依据 + 变更检测） */
@@ -29,7 +27,6 @@ public class InteractionRecord {
     /** 变量取值指纹（同模板不同变量形态的区分键） */
     private String variablesFingerprint;
 
-    // ====== C. 模型与部署身份 ======
     /** 协议枚举（TEXT）：openai-chat / anthropic-messages / openai-responses / gemini-native */
     private String apiProtocol;
     /** 供应商标识：openai / anthropic / deepseek / qwen / ollama / vllm / custom */
@@ -45,7 +42,6 @@ public class InteractionRecord {
     /** 多轮对话中的当前轮次索引（0-based） */
     private int turnIndex;
 
-    // ====== D. 请求保真 ======
     /** 发送的 tools 定义 JSON 数组原文（重放完备性） */
     private String toolsDefinition;
     /** 采样参数 JSON 打包（temperature/top_p/max_tokens/stop/seed 等） */
@@ -53,14 +49,12 @@ public class InteractionRecord {
     /** 请求原文逐字保留（未来一切新概念列的回填来源） */
     private String modelRequestRaw;
 
-    // ====== E. 响应保真 ======
     /** 归一化结束原因枚举（TEXT）：stop/tool_calls/max_tokens/content_filter/other */
     private String finishReason;
     private String modelResponse;
     /** 响应原文逐字保留（与请求 raw 对称的保险） */
     private String modelResponseRaw;
 
-    // ====== F. 遥测（方言中立命名，方言归一化在捕获层完成） ======
     /** 总处理输入 token（OpenAI 语义直接取 prompt_tokens；Anthropic 需含缓存读写合成） */
     private int inputTokens;
     private int outputTokens;
@@ -78,11 +72,9 @@ public class InteractionRecord {
     /** 调用时刻冻结的费用（USD）；无价格表时为 null */
     private Double costUsd;
 
-    // ====== 工具调用 ======
     private List<ToolCall> toolCalls;
     private boolean hasToolCalls;
 
-    // ====== 分组与关联 ======
     /** 会话 ID（按 sessionId 分组追踪依赖链） */
     private String sessionId;
     /** Skill ID（由 SkillGrouper 分组后回填） */
@@ -90,23 +82,18 @@ public class InteractionRecord {
     /** 确定性分组键（DeterministicSkillGrouper 生成） */
     private String groupKey;
 
-    // ====== 多模态支持 ======
     /** 是否包含多模态输入（图片/音频/视频） */
     private boolean multimodalInput;
     /** 多模态内容（JSON 数组，原样存储和回放） */
     private String multimodalContent;
 
-    // ====== 多轮对话 ======
     /** 前序轮次上下文（用于重放） */
     private List<TurnContext> previousTurns;
 
-    // ====== G. 通用性字段 ======
     /** 自由元数据 JSON（OTel attributes / Langfuse metadata 惯例） */
     private String metadata;
     /** 录制方 SDK 版本（数据法医学） */
     private String recorderVersion;
-
-    // ========== Getters & Setters ==========
 
     public String getRecordId() { return recordId; }
     public void setRecordId(String recordId) { this.recordId = recordId; }

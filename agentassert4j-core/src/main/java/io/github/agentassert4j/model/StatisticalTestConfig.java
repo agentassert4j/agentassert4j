@@ -11,8 +11,6 @@ package io.github.agentassert4j.model;
  */
 public class StatisticalTestConfig {
 
-    // ====== 基础配置（与 TestExecutionConfig 一致）======
-
     /** 单次测试用例上限 */
     private int maxTestCases = 50;
 
@@ -30,8 +28,6 @@ public class StatisticalTestConfig {
 
     /** 覆盖默认模型 */
     private String model;
-
-    // ====== 统计模式配置（新增）======
 
     /** 采样次数。默认 1（单次模式）。范围 [1, 100] */
     private int sampleCount = 1;
@@ -74,8 +70,6 @@ public class StatisticalTestConfig {
         concurrency = Math.max(1, Math.min(10, concurrency));
         maxCostPerCase = Math.max(0.01, maxCostPerCase);
     }
-
-    // ========== Getters & Setters ==========
 
     public int getMaxTestCases() { return maxTestCases; }
     public void setMaxTestCases(int maxTestCases) { this.maxTestCases = maxTestCases; }

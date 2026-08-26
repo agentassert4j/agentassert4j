@@ -23,8 +23,6 @@ public class ToolCall {
     private String result;
     private boolean success;
 
-    // ========== Getters & Setters ==========
-
     public String getToolName() { return toolName; }
     public void setToolName(String toolName) { this.toolName = toolName; }
 

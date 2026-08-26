@@ -70,8 +70,6 @@ public class AgentAssert4jConfig {
         return config;
     }
 
-    // ========== Getters & Setters ==========
-
     public StorageConfig getStorage() { return storage; }
     public void setStorage(StorageConfig storage) { this.storage = storage; }
 
@@ -86,8 +84,6 @@ public class AgentAssert4jConfig {
 
     public ToolsConfig getTools() { return tools; }
     public void setTools(ToolsConfig tools) { this.tools = tools; }
-
-    // ==================== 嵌套配置类 ====================
 
     /**
      * 存储配置。
@@ -222,8 +218,6 @@ public class AgentAssert4jConfig {
             this.excludeFromGraph = excludeFromGraph != null ? excludeFromGraph : Collections.emptyList();
         }
     }
-
-    // ==================== JSON 解析辅助方法 ====================
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> getMap(Map<String, Object> parent, String key) {

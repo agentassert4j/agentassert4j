@@ -25,8 +25,6 @@ public final class RecursiveJsonParser {
 
     private RecursiveJsonParser() {}
 
-    // ==================== parse ====================
-
     /**
      * 解析 JSON 字符串，返回标准 Java 类型。
      * 输入 null / 空白 / 解析失败均返回 null（退化不中断）。
@@ -48,8 +46,6 @@ public final class RecursiveJsonParser {
         }
     }
 
-    // ==================== serialize ====================
-
     /**
      * 将标准 Java 对象序列化为 JSON 字符串。
      * 支持 Map、List、String、Number、Boolean、null。
@@ -60,8 +56,6 @@ public final class RecursiveJsonParser {
         writeValue(sb, obj);
         return sb.toString();
     }
-
-    // ==================== extractFieldPaths ====================
 
     /**
      * 递归提取 JSON 对象中所有字段路径（点分表示法）。
@@ -76,8 +70,6 @@ public final class RecursiveJsonParser {
         return paths;
     }
 
-    // ==================== extractFieldTypeMap ====================
-
     /**
      * 推断每个字段路径的值类型。
      * 返回 Map: path → 类型名（"string","number","boolean","null","object","array"）。
@@ -87,8 +79,6 @@ public final class RecursiveJsonParser {
         collectTypes(json, "", typeMap);
         return typeMap;
     }
-
-    // ==================== 内部实现 ====================
 
     private static void collectPaths(Object node, String prefix, Set<String> paths) {
         if (node instanceof Map) {
@@ -179,8 +169,6 @@ public final class RecursiveJsonParser {
         return "unknown";
     }
 
-    // ==================== 序列化辅助 ====================
-
     private static void writeValue(StringBuilder sb, Object obj) {
         if (obj == null) {
             sb.append("null");
@@ -250,8 +238,6 @@ public final class RecursiveJsonParser {
         }
         sb.append('"');
     }
-
-    // ==================== 递归下降解析器 ====================
 
     private static final class Parser {
         final String input;
@@ -468,8 +454,6 @@ public final class RecursiveJsonParser {
             }
         }
     }
-
-    // ==================== 异常 ====================
 
     private static final class ParseException extends RuntimeException {
         ParseException(String message) {

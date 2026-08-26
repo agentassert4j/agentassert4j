@@ -22,8 +22,6 @@ class BehaviorCheckerTest {
         fpHasError.setHasError(true);
     }
 
-    // ==================== mustUseChinese ====================
-
     @Test
     void mustUseChinese_positive() {
         assertTrue(BehaviorChecker.check("mustUseChinese", fpNoError, "你好世界"));
@@ -39,8 +37,6 @@ class BehaviorCheckerTest {
         assertFalse(BehaviorChecker.check("mustUseChinese", fpNoError, null));
     }
 
-    // ==================== mustUseEnglish ====================
-
     @Test
     void mustUseEnglish_positive() {
         assertTrue(BehaviorChecker.check("mustUseEnglish", fpNoError, "Hello World"));
@@ -55,8 +51,6 @@ class BehaviorCheckerTest {
     void mustUseEnglish_negative_noEnglishLetters() {
         assertFalse(BehaviorChecker.check("mustUseEnglish", fpNoError, "12345!@#"));
     }
-
-    // ==================== returnsEmptyOnError ====================
 
     @Test
     void returnsEmptyOnError_noError_anyOutput_passes() {
@@ -88,8 +82,6 @@ class BehaviorCheckerTest {
         assertFalse(BehaviorChecker.check("returnsEmptyOnError", fpHasError, "some error content"));
     }
 
-    // ==================== returnsErrorCode ====================
-
     @Test
     void returnsErrorCode_hasError_passes() {
         assertTrue(BehaviorChecker.check("returnsErrorCode", fpHasError, "error"));
@@ -100,8 +92,6 @@ class BehaviorCheckerTest {
         assertFalse(BehaviorChecker.check("returnsErrorCode", fpNoError, "ok"));
     }
 
-    // ==================== noError ====================
-
     @Test
     void noError_noError_passes() {
         assertTrue(BehaviorChecker.check("noError", fpNoError, "ok"));
@@ -111,8 +101,6 @@ class BehaviorCheckerTest {
     void noError_hasError_fails() {
         assertFalse(BehaviorChecker.check("noError", fpHasError, "error"));
     }
-
-    // ==================== jsonOutput ====================
 
     @Test
     void jsonOutput_object_passes() {
@@ -139,8 +127,6 @@ class BehaviorCheckerTest {
         assertTrue(BehaviorChecker.check("jsonOutput", fpNoError, "  {\"key\":\"value\"}  "));
     }
 
-    // ==================== nonEmptyOutput ====================
-
     @Test
     void nonEmptyOutput_nonEmpty_passes() {
         assertTrue(BehaviorChecker.check("nonEmptyOutput", fpNoError, "content"));
@@ -160,8 +146,6 @@ class BehaviorCheckerTest {
     void nonEmptyOutput_blank_fails() {
         assertFalse(BehaviorChecker.check("nonEmptyOutput", fpNoError, "   "));
     }
-
-    // ==================== containsCjk ====================
 
     @Test
     void containsCjk_chinese_passes() {
@@ -188,8 +172,6 @@ class BehaviorCheckerTest {
         assertFalse(BehaviorChecker.check("containsCjk", fpNoError, null));
     }
 
-    // ==================== 未知 behavior ====================
-
     @Test
     void unknownBehavior_defaultPasses() {
         assertTrue(BehaviorChecker.check("unknownBehavior123", fpNoError, "anything"));
@@ -199,8 +181,6 @@ class BehaviorCheckerTest {
     void unknownBehavior_nullOutput_stillPasses() {
         assertTrue(BehaviorChecker.check("nonexistent", fpNoError, null));
     }
-
-    // ==================== checkAll ====================
 
     @Test
     void checkAll_allPass_returnsTrue() {
@@ -223,8 +203,6 @@ class BehaviorCheckerTest {
     void checkAll_nullSet_returnsTrue() {
         assertTrue(BehaviorChecker.checkAll(null, fpNoError, "hello"));
     }
-
-    // ==================== getBuiltinBehaviorNames ====================
 
     @Test
     void getBuiltinBehaviorNames_returns8() {

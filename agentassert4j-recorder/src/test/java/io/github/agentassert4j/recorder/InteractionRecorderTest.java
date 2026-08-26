@@ -31,8 +31,6 @@ class InteractionRecorderTest {
         return record;
     }
 
-    // ========== 生命周期 ==========
-
     @Test
     void constructor_nullRepository_throwsException() {
         assertThrows(IllegalArgumentException.class, () -> new InteractionRecorder(null));
@@ -68,8 +66,6 @@ class InteractionRecorderTest {
         recorder.stop(); // 第二次调用不抛异常
         assertFalse(recorder.isStarted());
     }
-
-    // ========== 异步录制 ==========
 
     @Test
     void intercept_singleRecord_writtenAfterStop() throws Exception {
@@ -144,8 +140,6 @@ class InteractionRecorderTest {
         assertTrue(repo.getStore().isEmpty());
     }
 
-    // ========== record() 便利方法 ==========
-
     @Test
     void record_delegatesToIntercept() throws Exception {
         RecorderConfig config = RecorderConfig.builder()
@@ -164,8 +158,6 @@ class InteractionRecorderTest {
 
         assertEquals(1, repo.getStore().size());
     }
-
-    // ========== 脱敏集成 ==========
 
     @Test
     void intercept_withSanitization_masksSensitiveData() throws Exception {
@@ -191,8 +183,6 @@ class InteractionRecorderTest {
         // 原始 record 不被修改
         assertEquals("ignore", record.getUserInput());
     }
-
-    // ========== 统计 ==========
 
     @Test
     void statistics_afterMultipleRecords() throws Exception {
@@ -228,8 +218,6 @@ class InteractionRecorderTest {
         assertFalse(recorder.isStarted());
     }
 
-    // ========== flush ==========
-
     @Test
     void flush_manualFlush_writesBufferedRecords() throws Exception {
         RecorderConfig config = RecorderConfig.builder()
@@ -253,8 +241,6 @@ class InteractionRecorderTest {
         assertEquals(2, repo.getStore().size());
         recorder.stop();
     }
-
-    // ========== 捕获保真 ==========
 
     @Test
     void intercept_blankRecordId_getsUuidAssigned() throws Exception {

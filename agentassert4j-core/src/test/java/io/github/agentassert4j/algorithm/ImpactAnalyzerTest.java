@@ -29,8 +29,6 @@ class ImpactAnalyzerTest {
         analyzer = new ImpactAnalyzer(repo, graph);
     }
 
-    // ==================== 辅助方法 ====================
-
     private InteractionRecord makeRecord(String skillId, String promptHash, String sessionId) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId("rec-" + skillId + "-" + System.nanoTime());
@@ -48,8 +46,6 @@ class ImpactAnalyzerTest {
         p.setSkillId(skillId);
         return p;
     }
-
-    // ==================== 冷启动测试 ====================
 
     @Nested
     @DisplayName("冷启动检测")
@@ -76,8 +72,6 @@ class ImpactAnalyzerTest {
             assertTrue(result.getMessage().contains("未找到使用此 Prompt hash"));
         }
     }
-
-    // ==================== 单 Skill 直接受影响 ====================
 
     @Nested
     @DisplayName("单 Skill 直接受影响")
@@ -114,8 +108,6 @@ class ImpactAnalyzerTest {
             assertEquals(5, result.getTestCases().size());
         }
     }
-
-    // ==================== 多 Skill + 图遍历下游 ====================
 
     @Nested
     @DisplayName("多 Skill + 图遍历下游")
@@ -182,8 +174,6 @@ class ImpactAnalyzerTest {
             assertTrue(result.getAllAffectedSkills().contains("skill-c"));
         }
     }
-
-    // ==================== 全局 Prompt 采样策略 ====================
 
     @Nested
     @DisplayName("全局 Prompt 采样策略")
@@ -253,8 +243,6 @@ class ImpactAnalyzerTest {
             assertEquals(23, result.getTestCases().size());
         }
     }
-
-    // ==================== 边界场景 ====================
 
     @Nested
     @DisplayName("边界场景")

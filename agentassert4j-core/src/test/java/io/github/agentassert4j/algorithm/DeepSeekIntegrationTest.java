@@ -53,8 +53,6 @@ class DeepSeekIntegrationTest {
         client = new OpenAiCompatibleClient(ENDPOINT, apiKey, "deepseek-chat");
     }
 
-    // ==================== 辅助常量 ====================
-
     /** 一个简单的 get_weather 工具定义 */
     private static final String WEATHER_TOOL = "{\"type\":\"function\",\"function\":{"
             + "\"name\":\"get_weather\","
@@ -79,8 +77,6 @@ class DeepSeekIntegrationTest {
             + "},"
             + "\"required\":[\"keyword\"]"
             + "}}}";
-
-    // ==================== 1. OpenAiCompatibleClient 基础验证 ====================
 
     @Nested
     @DisplayName("1. Client 基础连通性")
@@ -165,8 +161,6 @@ class DeepSeekIntegrationTest {
             System.out.println("[1.5] " + n + " 线程并发全部成功");
         }
     }
-
-    // ==================== 2. Tool Calls 真实触发 ====================
 
     @Nested
     @DisplayName("2. Tool Calls — LLM 真实返回 tool_calls")
@@ -268,8 +262,6 @@ class DeepSeekIntegrationTest {
         }
     }
 
-    // ==================== 3. FingerprintExtractor + 真实 LLM ====================
-
     @Nested
     @DisplayName("3. FingerprintExtractor — 真实 LLM 响应指纹提取")
     class FingerprintTests {
@@ -345,8 +337,6 @@ class DeepSeekIntegrationTest {
         }
     }
 
-    // ==================== 4. DeterministicComparator 真实对比 ====================
-
     @Nested
     @DisplayName("4. DeterministicComparator — 真实指纹对比")
     class ComparatorTests {
@@ -413,8 +403,6 @@ class DeepSeekIntegrationTest {
         }
     }
 
-    // ==================== 5. BehaviorChecker 真实输出校验 ====================
-
     @Nested
     @DisplayName("5. BehaviorChecker — 真实输出行为校验")
     class BehaviorCheckerTests {
@@ -460,8 +448,6 @@ class DeepSeekIntegrationTest {
                     + ", content=" + resp.getContent().substring(0, Math.min(80, resp.getContent().length())));
         }
     }
-
-    // ==================== 6. RegressionTestExecutor 完整链路 ====================
 
     @Nested
     @DisplayName("6. RegressionTestExecutor — 完整重放链路")
@@ -554,8 +540,6 @@ class DeepSeekIntegrationTest {
             assertEquals(TestResultStatus.SKIP, result.getStatus());
         }
     }
-
-    // ==================== 7. StatisticalRegressionExecutor ====================
 
     @Nested
     @DisplayName("7. StatisticalRegressionExecutor — 多次真实采样")
@@ -659,8 +643,6 @@ class DeepSeekIntegrationTest {
         }
     }
 
-    // ==================== 8. CostEstimator 真实 token 验证 ====================
-
     @Nested
     @DisplayName("8. CostEstimator — 真实 token 消耗验证")
     class CostEstimatorTests {
@@ -714,8 +696,6 @@ class DeepSeekIntegrationTest {
             System.out.println("[8.2] " + estimate);
         }
     }
-
-    // ==================== 9. 完整生命周期 — 从录制到判定 ====================
 
     @Nested
     @DisplayName("9. 完整生命周期 — 录制→指纹→对比→判定")
@@ -913,8 +893,6 @@ class DeepSeekIntegrationTest {
             System.out.println("  Cost: $" + String.format("%.4f", result.getEstimatedCost()));
         }
     }
-
-    // ==================== 辅助方法 ====================
 
     private LlmResponse callLlm(String systemPrompt, String userInput) throws Exception {
         LlmRequest request = new LlmRequest();

@@ -9,8 +9,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class TextDiffUtilsTest {
 
-    // ==================== diff ====================
-
     @Test
     void diff_sameText_returnsNull() {
         assertNull(TextDiffUtils.diff("hello", "hello"));
@@ -68,8 +66,6 @@ class TextDiffUtilsTest {
         assertNotNull(result);
         assertTrue(result.contains("文本发生变化"));
     }
-
-    // ==================== computeAddedRemoved ====================
 
     @Test
     void computeAddedRemoved_noChange() {
@@ -137,8 +133,6 @@ class TextDiffUtilsTest {
         assertTrue(result.get("removed").isEmpty());
     }
 
-    // ==================== intersectionSize ====================
-
     @Test
     void intersectionSize_overlap() {
         Set<String> a = Set.of("x", "y", "z");
@@ -165,8 +159,6 @@ class TextDiffUtilsTest {
         assertEquals(0, TextDiffUtils.intersectionSize(Set.of("a"), null));
         assertEquals(0, TextDiffUtils.intersectionSize(null, null));
     }
-
-    // ==================== jaccardSimilarity ====================
 
     @Test
     void jaccardSimilarity_identical() {

@@ -157,8 +157,6 @@ public class DeterministicComparator {
         return r;
     }
 
-    // ==================== 维度 2 计算 ====================
-
     private double computeDimension2(DeterministicFingerprint baseline,
                                       DeterministicFingerprint current,
                                       Set<String> removed, boolean typeOk) {
@@ -183,14 +181,10 @@ public class DeterministicComparator {
         }
     }
 
-    // ==================== 正则匹配 ====================
-
     private boolean matchRegexPatterns(List<RegexPattern> patterns, String output) {
         if (patterns == null || patterns.isEmpty()) return true;
         return patterns.stream().allMatch(p -> p.matches(output));
     }
-
-    // ==================== 辅助方法 ====================
 
     private Set<String> filterIgnorable(Set<String> fields) {
         if (fields == null) return Collections.emptySet();
@@ -206,8 +200,6 @@ public class DeterministicComparator {
     private boolean isEmpty(Set<String> set) {
         return set == null || set.isEmpty();
     }
-
-    // ==================== 摘要构建 ====================
 
     private String buildSummary(ComparisonResult r) {
         StringBuilder sb = new StringBuilder();

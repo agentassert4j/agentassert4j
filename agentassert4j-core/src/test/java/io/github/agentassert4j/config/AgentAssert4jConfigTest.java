@@ -11,8 +11,6 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class AgentAssert4jConfigTest {
 
-    // ==================== 默认值 ====================
-
     @Nested
     @DisplayName("默认值完整性")
     class Defaults {
@@ -73,8 +71,6 @@ class AgentAssert4jConfigTest {
             assertTrue(t.getExcludeFromGraph().isEmpty());
         }
     }
-
-    // ==================== JSON 解析 ====================
 
     @Nested
     @DisplayName("JSON 解析")
@@ -163,8 +159,6 @@ class AgentAssert4jConfigTest {
             assertEquals(100, config.getRecorder().getBatchSize());
         }
     }
-
-    // ==================== Setter 安全性 ====================
 
     @Nested
     @DisplayName("Setter 空值安全")

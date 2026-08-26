@@ -24,14 +24,10 @@ class OpenAiCompatibleClientTest {
                 "https://api.openai.com", "test-key", "gpt-4o");
     }
 
-    // ==================== name() ====================
-
     @Test
     void name_returnsDefaultModel() {
         assertEquals("gpt-4o", client.name());
     }
-
-    // ==================== buildRequestBody ====================
 
     @Test
     void buildRequestBody_containsSystemPrompt() {
@@ -116,8 +112,6 @@ class OpenAiCompatibleClientTest {
         assertTrue(body.contains("\"role\":\"user\""));
     }
 
-    // ==================== parseResponse ====================
-
     @Test
     void parseResponse_extractsContent() throws Exception {
         String json = "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\"," +
@@ -192,8 +186,6 @@ class OpenAiCompatibleClientTest {
         assertEquals("{\"status\":\"active\"}", args.get("filter"));
     }
 
-    // ==================== 重试逻辑 ====================
-
     @Test
     void chat_retriesOnServerError() throws Exception {
         // 这个测试验证重试计数 — 通过 mock HttpClient 实现较复杂
@@ -201,8 +193,6 @@ class OpenAiCompatibleClientTest {
         // 此处验证 client 配置正确
         assertEquals("gpt-4o", client.name());
     }
-
-    // ==================== endpoint normalization ====================
 
     @Test
     void constructor_normalizesTrailingSlash() {
@@ -213,16 +203,12 @@ class OpenAiCompatibleClientTest {
         assertEquals("deepseek-chat", c.name());
     }
 
-    // ==================== isAvailable ====================
-
     @Test
     void isAvailable_unreachableEndpoint_returnsFalse() {
         OpenAiCompatibleClient c = new OpenAiCompatibleClient(
                 "http://localhost:1", "fake-key", "test");
         assertFalse(c.isAvailable());
     }
-
-    // ==================== arguments 解析 ====================
 
     @Test
     void parseResponse_argumentsWithNumberTypes() throws Exception {
@@ -258,8 +244,6 @@ class OpenAiCompatibleClientTest {
         LlmResponse response = client.parseResponse(json);
         assertNull(response.getContent());
     }
-
-    // ==================== 捕获保真 ====================
 
     @Test
     void parseResponse_retainsUsageRawAndNormalizesDialect() throws Exception {

@@ -44,8 +44,6 @@ public class ParameterValueTracer {
         return graph;
     }
 
-    // ==================== 图谱重建入口 ====================
-
     /**
      * 从存储层重建完整依赖图谱。
      * 按 sessionId 分组，每个 session 内按 timestamp 排序后追踪依赖。
@@ -64,8 +62,6 @@ public class ParameterValueTracer {
             traceDependency(chain);
         }
     }
-
-    // ==================== 单 session 依赖追踪 ====================
 
     /**
      * 在单个 session 的有序链中追踪数据流依赖。
@@ -119,8 +115,6 @@ public class ParameterValueTracer {
         }
     }
 
-    // ==================== 值提取 ====================
-
     /**
      * 从前序工具的 JSON 返回值中提取所有叶子节点的字符串值。
      * 使用 RecursiveJsonParser 解析，深度限制 3 层。
@@ -172,8 +166,6 @@ public class ParameterValueTracer {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
-    // ==================== 名字提取 ====================
-
     /**
      * 从前序工具的 JSON 返回值中提取所有字段名。
      */
@@ -212,8 +204,6 @@ public class ParameterValueTracer {
                 .flatMap(tc -> tc.getArguments().keySet().stream())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
-
-    // ==================== 辅助方法 ====================
 
     /**
      * 判断是否为"有意义的值"——排除纯数字、单个字符、布尔值等噪声。

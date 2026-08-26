@@ -14,8 +14,6 @@ class DeterministicComparatorTest {
 
     private final DeterministicComparator comparator = new DeterministicComparator();
 
-    // ==================== 辅助方法 ====================
-
     private DeterministicFingerprint fp() {
         return fp(null, null, "text/plain", null, null, 1, null, null, false);
     }
@@ -105,8 +103,6 @@ class DeterministicComparatorTest {
                 typeMap, 0);
     }
 
-    // ==================== PASS 判定 ====================
-
     @Test
     void identicalFingerprints_passVerdict() {
         DeterministicFingerprint baseline = identicalJsonFp();
@@ -140,8 +136,6 @@ class DeterministicComparatorTest {
         assertEquals(1.0, r.getScore(), 0.001);
         assertEquals(Verdict.PASS, r.getVerdict());
     }
-
-    // ==================== DIFF 判定 ====================
 
     @Test
     void diffVerdict_scoreBelow095_noFieldRemoval() {
@@ -191,8 +185,6 @@ class DeterministicComparatorTest {
         assertTrue(r.getAddedFields().contains("field2"));
         assertTrue(r.getRemovedFields().isEmpty());
     }
-
-    // ==================== REGRESSION 判定 ====================
 
     @Test
     void regression_toolSetChanged() {
@@ -317,8 +309,6 @@ class DeterministicComparatorTest {
         assertTrue(r.getScore() < 0.70);
     }
 
-    // ==================== 动态权重重分配 ====================
-
     @Test
     void dynamicWeight_noRulesNoBehaviors_weightRedistributes() {
         // 无规则无行为 → w1=0.60, w2=0.40, w3=0, w4=0
@@ -349,8 +339,6 @@ class DeterministicComparatorTest {
         assertTrue(r.isBehaviorMatch());
         assertTrue(r.getScore() > 0.0);
     }
-
-    // ==================== 纯文本退化策略 ====================
 
     @Test
     void textPlain_sameMagnitude_d2isOne() {
@@ -405,8 +393,6 @@ class DeterministicComparatorTest {
         // score = 1.0*0.60 + 0.0*0.40 = 0.60 → REGRESSION
         assertEquals(Verdict.REGRESSION, r.getVerdict());
     }
-
-    // ==================== 维度 3：内容规则 ====================
 
     @Test
     void dimension3_requiredKeywordsPresent_passes() {
@@ -479,8 +465,6 @@ class DeterministicComparatorTest {
         assertFalse(r.isRegexMatch());
     }
 
-    // ==================== 维度 4：约束行为 ====================
-
     @Test
     void dimension4_behaviorPass_contributesToScore() {
         DeterministicFingerprint baseline = fpWithBehaviors(Set.of("nonEmptyOutput"));
@@ -504,8 +488,6 @@ class DeterministicComparatorTest {
 
         assertFalse(r.isBehaviorMatch());
     }
-
-    // ==================== ComparatorConfig ====================
 
     @Test
     void ignorableFields_removedFieldsNotCounted() {
@@ -544,8 +526,6 @@ class DeterministicComparatorTest {
 
         assertEquals(Verdict.PASS, r.getVerdict());
     }
-
-    // ==================== error 自动回归 × ignorable 互斥 ====================
 
     @Test
     void addedErrorField_triggersRegression_evenWhenIgnorable() {
@@ -596,8 +576,6 @@ class DeterministicComparatorTest {
         assertEquals(Verdict.REGRESSION, r.getVerdict(),
                 "嵌套路径 data.error 的叶子名 error 同样受自动回归不变量保护");
     }
-
-    // ==================== buildSummary ====================
 
     @Test
     void summary_containsScoreAndVerdict() {
@@ -675,8 +653,6 @@ class DeterministicComparatorTest {
 
         assertTrue(r.getSummary().contains("删除字段"));
     }
-
-    // ==================== null / edge cases ====================
 
     @Test
     void nullOutput_treatedAsEmpty() {

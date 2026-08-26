@@ -15,8 +15,6 @@ class CostEstimatorTest {
         return r;
     }
 
-    // ==================== estimate() ====================
-
     @Test
     void estimate_singleTestCase_turnIndex0() {
         List<InteractionRecord> cases = List.of(makeRecord(0));
@@ -63,8 +61,6 @@ class CostEstimatorTest {
         assertTrue(result.contains("$0.0030"));
     }
 
-    // ==================== estimateCostPerCall() ====================
-
     @Test
     void estimateCostPerCall_knownModels() {
         assertEquals(0.004, CostEstimator.estimateCostPerCall("gpt-4o"));
@@ -99,8 +95,6 @@ class CostEstimatorTest {
     void estimateCostPerCall_null() {
         assertEquals(0.003, CostEstimator.estimateCostPerCall(null));
     }
-
-    // ==================== estimateStatistical() ====================
 
     @Test
     void estimateStatistical_correctCalculation() {

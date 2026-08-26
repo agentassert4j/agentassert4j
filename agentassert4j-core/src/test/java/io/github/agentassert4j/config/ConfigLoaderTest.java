@@ -24,8 +24,6 @@ class ConfigLoaderTest {
         System.clearProperty(ConfigLoader.RULES_PATH_PROPERTY);
     }
 
-    // ==================== 环境变量替换 ====================
-
     @Nested
     @DisplayName("resolveEnvVars 环境变量替换")
     class ResolveEnvVars {
@@ -88,8 +86,6 @@ class ConfigLoaderTest {
         }
     }
 
-    // ==================== loadFromFile ====================
-
     @Nested
     @DisplayName("loadFromFile 文件加载")
     class LoadFromFile {
@@ -121,8 +117,6 @@ class ConfigLoaderTest {
         }
     }
 
-    // ==================== loadFromClasspath ====================
-
     @Nested
     @DisplayName("loadFromClasspath classpath 加载")
     class LoadFromClasspath {
@@ -133,8 +127,6 @@ class ConfigLoaderTest {
             assertNull(ConfigLoader.loadFromClasspath("nonexistent-config-abc.json"));
         }
     }
-
-    // ==================== loadAgentAssert4jConfig 优先级 ====================
 
     @Nested
     @DisplayName("配置加载优先级")
@@ -186,8 +178,6 @@ class ConfigLoaderTest {
             }
         }
     }
-
-    // ==================== loadRulesConfig ====================
 
     @Nested
     @DisplayName("规则配置加载")

@@ -11,8 +11,6 @@ import static org.junit.jupiter.api.Assertions.*;
 @SuppressWarnings("unchecked")
 class RecursiveJsonParserTest {
 
-    // ==================== parse — 基本类型 ====================
-
     @Test
     void parse_null_returnsNull() {
         assertNull(RecursiveJsonParser.parse("null"));
@@ -89,8 +87,6 @@ class RecursiveJsonParserTest {
         assertEquals("中文", RecursiveJsonParser.parse("\"\\u4e2d\\u6587\""));
     }
 
-    // ==================== parse — 对象 ====================
-
     @Test
     void parse_emptyObject() {
         Object result = RecursiveJsonParser.parse("{}");
@@ -113,8 +109,6 @@ class RecursiveJsonParserTest {
         String[] keys = map.keySet().toArray(new String[0]);
         assertArrayEquals(new String[]{"a", "b", "c"}, keys);
     }
-
-    // ==================== parse — 数组 ====================
 
     @Test
     void parse_emptyArray() {
@@ -141,8 +135,6 @@ class RecursiveJsonParserTest {
         assertNull(list.get(3));
         assertEquals(3.14, list.get(4));
     }
-
-    // ==================== parse — 嵌套 ====================
 
     @Test
     void parse_nestedObject() {
@@ -172,8 +164,6 @@ class RecursiveJsonParserTest {
         List<Object> items = (List<Object>) map.get("items");
         assertEquals(List.of(1L, 2L, 3L), items);
     }
-
-    // ==================== parse — 实际数据结构 ====================
 
     @Test
     void parse_toolCallsStructure() {
@@ -206,8 +196,6 @@ class RecursiveJsonParserTest {
         Map<String, Object> qo = (Map<String, Object>) adj.get("queryOrderDB");
         assertEquals(2L, qo.get("formatOrder"));
     }
-
-    // ==================== parse — 边界情况 ====================
 
     @Test
     void parse_nullInput() {
@@ -249,8 +237,6 @@ class RecursiveJsonParserTest {
         // 超出 Long 范围应降级为 Double
         assertInstanceOf(Number.class, result);
     }
-
-    // ==================== serialize ====================
 
     @Test
     void serialize_null() {
@@ -295,8 +281,6 @@ class RecursiveJsonParserTest {
         assertEquals("\"a\\\\b\"", RecursiveJsonParser.serialize("a\\b"));
     }
 
-    // ==================== round-trip ====================
-
     @Test
     void roundTrip_simpleObject() {
         String json = "{\"name\":\"test\",\"count\":42,\"active\":true}";
@@ -323,8 +307,6 @@ class RecursiveJsonParserTest {
         Object reparsed = RecursiveJsonParser.parse(serialized);
         assertEquals(parsed, reparsed);
     }
-
-    // ==================== extractFieldPaths ====================
 
     @Test
     void extractFieldPaths_flatObject() {
@@ -362,8 +344,6 @@ class RecursiveJsonParserTest {
         assertTrue(paths.contains("toolParamTypes.orderId"));
         assertTrue(paths.contains("outputFields[]"));
     }
-
-    // ==================== extractFieldTypeMap ====================
 
     @Test
     void extractFieldTypeMap_mixedTypes() {

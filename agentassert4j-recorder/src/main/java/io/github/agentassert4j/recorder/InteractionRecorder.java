@@ -195,8 +195,6 @@ public class InteractionRecorder implements RecordingInterceptor {
         }
     }
 
-    // ========== 统计信息 ==========
-
     public long getRecordedCount() {
         return recordedCount.get();
     }

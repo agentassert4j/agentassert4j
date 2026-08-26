@@ -168,8 +168,6 @@ public class OpenAiCompatibleClient implements LlmClient {
         }
     }
 
-    // ==================== 请求构建 ====================
-
     /**
      * 构建 OpenAI Chat Completion 请求体。
      *
@@ -253,8 +251,6 @@ public class OpenAiCompatibleClient implements LlmClient {
         return sb.toString();
     }
 
-    // ==================== 响应解析 ====================
-
     /**
      * 解析 OpenAI Chat Completion 响应体。
      *
@@ -334,8 +330,6 @@ public class OpenAiCompatibleClient implements LlmClient {
             default -> "other";
         };
     }
-
-    // ==================== JSON 解析辅助 ====================
 
     /**
      * 从 JSON 中提取 tool_calls 数组。
@@ -462,8 +456,6 @@ public class OpenAiCompatibleClient implements LlmClient {
 
         return map;
     }
-
-    // ==================== JSON 工具方法 ====================
 
     private String extractStringField(String json, String field) {
         String key = "\"" + field + "\"";

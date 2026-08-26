@@ -42,8 +42,6 @@ public class TestExecutionConfig {
         temperature = Math.max(0.0, Math.min(2.0, temperature));
     }
 
-    // ========== Builder ==========
-
     public TestExecutionConfig maxTestCases(int maxTestCases) {
         this.maxTestCases = maxTestCases;
         return this;
@@ -73,8 +71,6 @@ public class TestExecutionConfig {
         this.model = model;
         return this;
     }
-
-    // ========== Getters & Setters ==========
 
     public int getMaxTestCases() { return maxTestCases; }
     public void setMaxTestCases(int maxTestCases) { this.maxTestCases = maxTestCases; }

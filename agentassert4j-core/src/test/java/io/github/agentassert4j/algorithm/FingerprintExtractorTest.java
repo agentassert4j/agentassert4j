@@ -15,8 +15,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class FingerprintExtractorTest {
 
-    // ==================== 辅助方法 ====================
-
     private InteractionRecord record(List<ToolCall> toolCalls, String modelResponse) {
         InteractionRecord r = new InteractionRecord();
         r.setToolCalls(toolCalls);
@@ -35,8 +33,6 @@ class FingerprintExtractorTest {
         tc.setSuccess(success);
         return tc;
     }
-
-    // ==================== 维度 1：工具调用提取 ====================
 
     @Test
     void dim1_singleTool_extractsToolCallSet() {
@@ -132,8 +128,6 @@ class FingerprintExtractorTest {
         assertTrue(fp.getToolParamTypes().isEmpty());
         assertTrue(fp.getToolParamRequired().isEmpty());
     }
-
-    // ==================== 维度 2：输出结构提取 ====================
 
     @Test
     void dim2_jsonObject_contentTypeAndFields() {
@@ -231,8 +225,6 @@ class FingerprintExtractorTest {
         assertEquals(0, fp.getTextLengthMagnitude());
     }
 
-    // ==================== 维度 3 & 4：声明式规则（当前空集合）====================
-
     @Test
     void dim3_emptyByDefault() {
         InteractionRecord r = record(null, "hello");
@@ -252,8 +244,6 @@ class FingerprintExtractorTest {
 
         assertTrue(fp.getDeclaredBehaviors().isEmpty());
     }
-
-    // ==================== hasError 标记 ====================
 
     @Test
     void hasError_trueWhenToolCallFailed() {
@@ -286,8 +276,6 @@ class FingerprintExtractorTest {
         assertFalse(fp.isHasError());
     }
 
-    // ==================== 带规则的 extract 重载 ====================
-
     @Test
     void extractWithRules_overridesDim3And4() {
         InteractionRecord r = record(null, "hello");
@@ -316,8 +304,6 @@ class FingerprintExtractorTest {
         assertTrue(fp.getForbiddenKeywords().isEmpty());
         assertTrue(fp.getDeclaredBehaviors().isEmpty());
     }
-
-    // ==================== 综合测试 ====================
 
     @Test
     void fullExtraction_toolSkill_jsonOutput() {

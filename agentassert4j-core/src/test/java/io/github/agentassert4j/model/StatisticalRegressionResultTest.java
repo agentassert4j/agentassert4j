@@ -12,8 +12,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class StatisticalRegressionResultTest {
 
-    // ==================== 全 PASS → STABLE ====================
-
     @Test
     void aggregate_allPass_stable() {
         List<SampleResult> samples = makeSamples(10, Verdict.PASS, 1.0);
@@ -40,8 +38,6 @@ class StatisticalRegressionResultTest {
         assertEquals(0.9, result.getVerdictRates().get(Verdict.PASS), 0.001);
     }
 
-    // ==================== 部分不一致 → UNSTABLE ====================
-
     @Test
     void aggregate_passRate80_threshold90_unstable() {
         List<SampleResult> samples = new ArrayList<>();
@@ -53,8 +49,6 @@ class StatisticalRegressionResultTest {
 
         assertEquals(StatisticalVerdict.UNSTABLE, result.getStatisticalVerdict());
     }
-
-    // ==================== REGRESSION 超限 → FLAKY ====================
 
     @Test
     void aggregate_regressionOverTolerance_flaky() {
@@ -84,8 +78,6 @@ class StatisticalRegressionResultTest {
         assertEquals(StatisticalVerdict.STABLE, result.getStatisticalVerdict());
     }
 
-    // ==================== 空采样列表 ====================
-
     @Test
     void aggregate_emptySamples_noException() {
         StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
@@ -94,8 +86,6 @@ class StatisticalRegressionResultTest {
         assertEquals(StatisticalVerdict.STABLE, result.getStatisticalVerdict());
         assertEquals(0, result.getActualSampleCount());
     }
-
-    // ==================== 单个采样 ====================
 
     @Test
     void aggregate_singleSample_correct() {
@@ -111,8 +101,6 @@ class StatisticalRegressionResultTest {
         assertEquals(0.0, result.getScoreStdDev(), 0.001);
         assertEquals(0.95, result.getMinScore(), 0.001);
     }
-
-    // ==================== 不可变集合 ====================
 
     @Test
     void samples_isImmutable() {
@@ -147,8 +135,6 @@ class StatisticalRegressionResultTest {
                 result.getVerdictRates().put(Verdict.DIFF, 0.5));
     }
 
-    // ==================== score 统计 ====================
-
     @Test
     void aggregate_scoreStatistics() {
         // scores: 1.0, 0.9, 0.8 → mean=0.9, stddev=0.1, min=0.8
@@ -165,8 +151,6 @@ class StatisticalRegressionResultTest {
         assertEquals(0.1, result.getScoreStdDev(), 0.001);
         assertEquals(0.8, result.getMinScore(), 0.001);
     }
-
-    // ==================== 差异模式 ====================
 
     @Test
     void aggregate_frequentDiffPatterns_top5() {
@@ -188,8 +172,6 @@ class StatisticalRegressionResultTest {
         assertEquals("tool A missing", result.getFrequentDiffPatterns().get(0));
     }
 
-    // ==================== null verdict 处理 ====================
-
     @Test
     void aggregate_nullVerdict_treatedAsRegression() {
         List<SampleResult> samples = List.of(
@@ -202,8 +184,6 @@ class StatisticalRegressionResultTest {
 
         assertEquals(1, result.getVerdictCounts().get(Verdict.REGRESSION));
     }
-
-    // ==================== 辅助方法 ====================
 
     private List<SampleResult> makeSamples(int count, Verdict verdict, double score) {
         List<SampleResult> list = new ArrayList<>(count);

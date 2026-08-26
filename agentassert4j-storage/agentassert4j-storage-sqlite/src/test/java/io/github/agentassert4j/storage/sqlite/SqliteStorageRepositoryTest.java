@@ -204,7 +204,6 @@ class SqliteStorageRepositoryTest {
         assertNull(repo.findArchivedBaseline("nonexistent", "v99"));
     }
 
-
     @Test
     void interactionWithToolCalls() {
         InteractionRecord r = createSampleRecord("rec-tools", "sess-1", "sk1", "h1");
@@ -290,8 +289,6 @@ class SqliteStorageRepositoryTest {
         assertEquals("内容\"引号\"\n换行", loadedTurn.getContent(),
                 "previousTurns 内容读回必须反转义");
     }
-
-    // ======================== v1 schema 契约测试 ========================
 
     @Test
     void schemaVersionStamped() throws Exception {
@@ -421,8 +418,6 @@ class SqliteStorageRepositoryTest {
         assertEquals("axy-yxa", loaded.getApprovedBy());
         assertEquals(Long.valueOf(1735689600000L), loaded.getApprovedAt());
     }
-
-    // ======================== 辅助方法 ========================
 
     private InteractionRecord createSampleRecord(String id, String sessionId, String skillId, String promptHash) {
         InteractionRecord r = new InteractionRecord();

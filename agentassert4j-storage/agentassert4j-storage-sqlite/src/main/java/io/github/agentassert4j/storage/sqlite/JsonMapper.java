@@ -36,8 +36,6 @@ final class JsonMapper {
 
     private JsonMapper() {}
 
-    // ======================== InteractionRecord ========================
-
     static String toJson(InteractionRecord r) {
         StringBuilder sb = new StringBuilder(512);
         sb.append("{");
@@ -81,8 +79,6 @@ final class JsonMapper {
         return r;
     }
 
-    // ======================== ToolCall ========================
-
     private static String toJson(ToolCall tc) {
         StringBuilder sb = new StringBuilder(128);
         sb.append("{");
@@ -114,8 +110,6 @@ final class JsonMapper {
         return result;
     }
 
-    // ======================== TurnContext ========================
-
     private static String toJson(TurnContext tc) {
         return "{\"role\":\"" + escape(tc.getRole()) + "\"," +
                "\"content\":\"" + escape(tc.getContent()) + "\"," +
@@ -138,8 +132,6 @@ final class JsonMapper {
         }
         return result;
     }
-
-    // ======================== DeterministicFingerprint ========================
 
     static String toJson(DeterministicFingerprint fp) {
         if (fp == null) return "{}";
@@ -179,8 +171,6 @@ final class JsonMapper {
         return fp;
     }
 
-    // ======================== SkillProfile from ResultSet ========================
-
     static SkillProfile toSkillProfile(ResultSet rs) throws SQLException {
         SkillProfile p = new SkillProfile();
         p.setSkillId(rs.getString("skill_id"));
@@ -203,8 +193,6 @@ final class JsonMapper {
         return p;
     }
 
-    // ======================== ArchivedBaseline from ResultSet ========================
-
     static ArchivedBaseline toArchivedBaseline(ResultSet rs) throws SQLException {
         ArchivedBaseline ab = new ArchivedBaseline();
         ab.setSkillId(rs.getString("skill_id"));
@@ -213,8 +201,6 @@ final class JsonMapper {
         ab.setArchivedAt(rs.getLong("archived_at"));
         return ab;
     }
-
-    // ======================== RegexPattern ========================
 
     private static String regexPatternsToArray(List<RegexPattern> patterns) {
         if (patterns == null || patterns.isEmpty()) return "[]";
@@ -240,8 +226,6 @@ final class JsonMapper {
         }
         return result;
     }
-
-    // ======================== 基础 JSON 辅助方法 ========================
 
     private static void stringField(StringBuilder sb, String key, String value) {
         sb.append("\"").append(key).append("\":");
@@ -333,8 +317,6 @@ final class JsonMapper {
         sb.append("]");
         return sb.toString();
     }
-
-    // ======================== JSON 解析辅助 ========================
 
     private static String escape(String s) {
         if (s == null) return "";

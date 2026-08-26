@@ -29,8 +29,6 @@ class BaselineManagerTest {
         manager = new BaselineManager(repo);
     }
 
-    // ==================== 辅助方法 ====================
-
     private SkillProfile makeProfileWithBaseline(String groupKey, String skillId) {
         SkillProfile p = new SkillProfile();
         p.setGroupKey(groupKey);
@@ -59,8 +57,6 @@ class BaselineManagerTest {
         ));
         return r;
     }
-
-    // ==================== approve ====================
 
     @Nested
     @DisplayName("approve - 批准候选为基线")
@@ -146,8 +142,6 @@ class BaselineManagerTest {
         }
     }
 
-    // ==================== reject ====================
-
     @Nested
     @DisplayName("reject - 否决候选")
     class Reject {
@@ -176,8 +170,6 @@ class BaselineManagerTest {
                 () -> manager.reject("nonexistent"));
         }
     }
-
-    // ==================== rollback ====================
 
     @Nested
     @DisplayName("rollback - 回滚到归档基线")
@@ -247,8 +239,6 @@ class BaselineManagerTest {
         }
     }
 
-    // ==================== autoEstablishBaseline ====================
-
     @Nested
     @DisplayName("autoEstablishBaseline - 首次自动建立基线")
     class AutoEstablish {
@@ -311,8 +301,6 @@ class BaselineManagerTest {
             assertTrue(repo.findAllSkills().isEmpty());
         }
     }
-
-    // ==================== 版本标签生成 ====================
 
     @Nested
     @DisplayName("版本标签生成")

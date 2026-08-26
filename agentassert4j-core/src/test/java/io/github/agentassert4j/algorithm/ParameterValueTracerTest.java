@@ -23,8 +23,6 @@ class ParameterValueTracerTest {
         tracer = new ParameterValueTracer();
     }
 
-    // ==================== 辅助方法 ====================
-
     private InteractionRecord record(String skillId, String modelResponse,
                                       List<ToolCall> toolCalls) {
         InteractionRecord r = new InteractionRecord();
@@ -50,8 +48,6 @@ class ParameterValueTracerTest {
         tc.setSuccess(true);
         return tc;
     }
-
-    // ==================== isMeaningfulValue ====================
 
     @Test
     void isMeaningfulValue_normalString() {
@@ -88,8 +84,6 @@ class ParameterValueTracerTest {
         assertTrue(tracer.isMeaningfulValue("abc"));
     }
 
-    // ==================== extractPrefix ====================
-
     @Test
     void extractPrefix_camelCase() {
         assertEquals("order", tracer.extractPrefix("orderId"));
@@ -119,8 +113,6 @@ class ParameterValueTracerTest {
     void extractPrefix_empty() {
         assertEquals("", tracer.extractPrefix(""));
     }
-
-    // ==================== extractFieldValues ====================
 
     @Test
     void extractFieldValues_jsonObject() {
@@ -173,8 +165,6 @@ class ParameterValueTracerTest {
         assertTrue(tracer.extractFieldValues(null).isEmpty());
     }
 
-    // ==================== extractArgValues ====================
-
     @Test
     void extractArgValues_withArguments() {
         InteractionRecord r = record("s1", null,
@@ -199,8 +189,6 @@ class ParameterValueTracerTest {
         InteractionRecord r = record("s1", null, List.of(tc));
         assertTrue(tracer.extractArgValues(r).isEmpty());
     }
-
-    // ==================== extractFieldNames ====================
 
     @Test
     void extractFieldNames_jsonObject() {
@@ -228,8 +216,6 @@ class ParameterValueTracerTest {
         assertTrue(tracer.extractFieldNames(r).isEmpty());
     }
 
-    // ==================== extractArgNames ====================
-
     @Test
     void extractArgNames_withArguments() {
         InteractionRecord r = record("s1", null,
@@ -245,8 +231,6 @@ class ParameterValueTracerTest {
         InteractionRecord r = record("s1", null, null);
         assertTrue(tracer.extractArgNames(r).isEmpty());
     }
-
-    // ==================== traceDependency ====================
 
     @Test
     void traceDependency_valueMatch_highConfidence() {
@@ -339,8 +323,6 @@ class ParameterValueTracerTest {
         assertTrue(tracer.getGraph().getSuccessors("skillB").contains("skillC"));
     }
 
-    // ==================== rebuildGraph ====================
-
     @Test
     void rebuildGraph_withSimpleRepository() {
         // 创建简单内存仓库
@@ -386,8 +368,6 @@ class ParameterValueTracerTest {
         assertTrue(tracer.getGraph().getSuccessors("skillA").contains("skillB"),
                 "同 timestamp 时必须按 recordId 平局决胜，保证依赖边方向确定");
     }
-
-    // ==================== 简单测试仓库 ====================
 
     private static class SimpleTestRepo implements StorageRepository {
         private final List<String> sessionIds;
