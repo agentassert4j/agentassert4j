@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.github.agentassert4j</groupId>
+    <artifactId>agentassert4j-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>AgentAssert4j — AI Agent Behavior Assertion Testing Framework</name>
+    <description>
+        Zero-intrusion Java AI Agent behavior assertion testing tool.
+        Assert Your Agent, Like You Assert Your Code.
+    </description>
+
+    <modules>
+        <!-- 核心模块 -->
+        <module>agentassert4j-core</module>
+        <module>agentassert4j-bom</module>
+        <module>agentassert4j-recorder</module>
+        <module>agentassert4j-cli</module>
+
+        <!-- 存储插件（聚合） -->
+        <module>agentassert4j-storage</module>
+
+        <!-- 框架适配 SDK（聚合） -->
+        <module>agentassert4j-sdk</module>
+
+        <!-- 接入方式 -->
+        <module>agentassert4j-proxy</module>
+        <module>agentassert4j-agent</module>
+
+        <!-- 独立模块 -->
+        <module>agentassert4j-dashboard</module>
+        <module>agentassert4j-embedding</module>
+    </modules>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+
+        <!-- Dependency versions -->
+        <junit.version>5.10.3</junit.version>
+        <disruptor.version>4.0.0</disruptor.version>
+        <sqlite.version>3.46.0.0</sqlite.version>
+        <mysql.version>8.4.0</mysql.version>
+        <postgresql.version>42.7.3</postgresql.version>
+        <netty.version>4.1.111.Final</netty.version>
+        <bytebuddy.version>1.14.18</bytebuddy.version>
+        <spring-boot.version>3.3.1</spring-boot.version>
+        <spring-ai.version>1.0.0-M6</spring-ai.version>
+        <langchain4j.version>0.34.0</langchain4j.version>
+        <picocli.version>4.7.6</picocli.version>
+        <slf4j.version>2.0.13</slf4j.version>
+        <jackson.version>2.17.1</jackson.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Internal modules -->
+            <dependency>
+                <groupId>io.github.agentassert4j</groupId>
+                <artifactId>agentassert4j-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.agentassert4j</groupId>
+                <artifactId>agentassert4j-storage-sqlite</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.agentassert4j</groupId>
+                <artifactId>agentassert4j-storage-mysql</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.agentassert4j</groupId>
+                <artifactId>agentassert4j-storage-pg</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.agentassert4j</groupId>
+                <artifactId>agentassert4j-recorder</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.agentassert4j</groupId>
+                <artifactId>agentassert4j-proxy</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.agentassert4j</groupId>
+                <artifactId>agentassert4j-agent</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.agentassert4j</groupId>
+                <artifactId>agentassert4j-sdk-spring</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.agentassert4j</groupId>
+                <artifactId>agentassert4j-sdk-lang</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.agentassert4j</groupId>
+                <artifactId>agentassert4j-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.agentassert4j</groupId>
+                <artifactId>agentassert4j-cli</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.agentassert4j</groupId>
+                <artifactId>agentassert4j-dashboard</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.agentassert4j</groupId>
+                <artifactId>agentassert4j-embedding</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Test -->
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <source>17</source>
+                    <target>17</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.3.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.1</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>

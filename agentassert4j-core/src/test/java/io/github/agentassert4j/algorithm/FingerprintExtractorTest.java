@@ -1,0 +1,346 @@
+package io.github.agentassert4j.algorithm;
+
+import io.github.agentassert4j.config.SkillRulesConfig;
+import io.github.agentassert4j.model.DeterministicFingerprint;
+import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.ToolCall;
+import org.junit.jupiter.api.Test;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class FingerprintExtractorTest {
+
+    // ==================== 辅助方法 ====================
+
+    private InteractionRecord record(List<ToolCall> toolCalls, String modelResponse) {
+        InteractionRecord r = new InteractionRecord();
+        r.setToolCalls(toolCalls);
+        r.setModelResponse(modelResponse);
+        return r;
+    }
+
+    private ToolCall tc(String name, Map<String, String> argTypes) {
+        return tc(name, argTypes, true);
+    }
+
+    private ToolCall tc(String name, Map<String, String> argTypes, boolean success) {
+        ToolCall tc = new ToolCall();
+        tc.setToolName(name);
+        tc.setArgTypes(argTypes);
+        tc.setSuccess(success);
+        return tc;
+    }
+
+    // ==================== 维度 1：工具调用提取 ====================
+
+    @Test
+    void dim1_singleTool_extractsToolCallSet() {
+        InteractionRecord r = record(
+                List.of(tc("queryOrder", Map.of("orderId", "String"))),
+                "{\"result\":\"ok\"}");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertEquals(Set.of("queryOrder"), fp.getToolCallSet());
+    }
+
+    @Test
+    void dim1_multiTool_extractsAllNames() {
+        InteractionRecord r = record(
+                List.of(tc("toolA", null), tc("toolB", null)),
+                "{}");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertEquals(Set.of("toolA", "toolB"), fp.getToolCallSet());
+    }
+
+    @Test
+    void dim1_extractsParamTypes() {
+        InteractionRecord r = record(
+                List.of(tc("tool", Map.of("orderId", "String", "limit", "Integer"))),
+                "{}");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertEquals(Map.of("orderid", "string", "limit", "integer"), fp.getToolParamTypes());
+    }
+
+    @Test
+    void dim1_multiTool_mergesParamTypes() {
+        InteractionRecord r = record(
+                List.of(
+                        tc("toolA", Map.of("a", "String")),
+                        tc("toolB", Map.of("b", "Integer"))
+                ),
+                "{}");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertEquals(2, fp.getToolParamTypes().size());
+        assertEquals("string", fp.getToolParamTypes().get("a"));
+        assertEquals("integer", fp.getToolParamTypes().get("b"));
+    }
+
+    @Test
+    void dim1_paramRequired_allFalseByDefault() {
+        InteractionRecord r = record(
+                List.of(tc("tool", Map.of("x", "String", "y", "Integer"))),
+                "{}");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        // 当前阶段所有 required 均为 false（TODO: 待 SDK 接入后填充）
+        assertFalse(fp.getToolParamRequired().get("x"));
+        assertFalse(fp.getToolParamRequired().get("y"));
+    }
+
+    @Test
+    void dim1_noToolCalls_emptySets() {
+        InteractionRecord r = record(null, "hello");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertNotNull(fp.getToolCallSet());
+        assertTrue(fp.getToolCallSet().isEmpty());
+        assertTrue(fp.getToolParamTypes().isEmpty());
+        assertTrue(fp.getToolParamRequired().isEmpty());
+    }
+
+    @Test
+    void dim1_emptyToolCalls_emptySets() {
+        InteractionRecord r = record(Collections.emptyList(), "hello");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertTrue(fp.getToolCallSet().isEmpty());
+    }
+
+    @Test
+    void dim1_toolCallNoArgTypes_emptyParamTypes() {
+        InteractionRecord r = record(
+                List.of(tc("toolA", null)),
+                "{}");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertTrue(fp.getToolParamTypes().isEmpty());
+        assertTrue(fp.getToolParamRequired().isEmpty());
+    }
+
+    // ==================== 维度 2：输出结构提取 ====================
+
+    @Test
+    void dim2_jsonObject_contentTypeAndFields() {
+        String json = "{\"name\":\"Alice\",\"age\":30,\"active\":true}";
+        InteractionRecord r = record(null, json);
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertEquals("application/json", fp.getOutputContentType());
+        assertFalse(fp.getOutputFieldPaths().isEmpty());
+        assertFalse(fp.getOutputFieldTypeMap().isEmpty());
+        assertEquals(0, fp.getTextLengthMagnitude());
+    }
+
+    @Test
+    void dim2_jsonArray_contentTypeAndFields() {
+        String json = "[{\"id\":1,\"name\":\"A\"},{\"id\":2,\"name\":\"B\"}]";
+        InteractionRecord r = record(null, json);
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertEquals("application/json", fp.getOutputContentType());
+        assertFalse(fp.getOutputFieldPaths().isEmpty());
+    }
+
+    @Test
+    void dim2_nestedJson_extractsDeepPaths() {
+        String json = "{\"user\":{\"name\":\"Bob\",\"address\":{\"city\":\"NYC\"}}}";
+        InteractionRecord r = record(null, json);
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertTrue(fp.getOutputFieldPaths().stream().anyMatch(p -> p.contains("user")));
+        assertTrue(fp.getOutputFieldPaths().stream().anyMatch(p -> p.contains("address")));
+    }
+
+    @Test
+    void dim2_plainText_contentTypeTextPlain() {
+        InteractionRecord r = record(null, "This is a plain text response");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertEquals("text/plain", fp.getOutputContentType());
+        assertTrue(fp.getOutputFieldPaths().isEmpty());
+        assertTrue(fp.getOutputFieldTypeMap().isEmpty());
+    }
+
+    @Test
+    void dim2_plainText_textLengthMagnitude() {
+        // 1-9 字 → magnitude 1
+        InteractionRecord r1 = record(null, "hello");
+        assertEquals(1, FingerprintExtractor.extract(r1).getTextLengthMagnitude());
+
+        // 10-99 字 → magnitude 2
+        InteractionRecord r2 = record(null, "a".repeat(50));
+        assertEquals(2, FingerprintExtractor.extract(r2).getTextLengthMagnitude());
+
+        // 100-999 字 → magnitude 3
+        InteractionRecord r3 = record(null, "a".repeat(500));
+        assertEquals(3, FingerprintExtractor.extract(r3).getTextLengthMagnitude());
+
+        // 1000+ 字 → magnitude 4
+        InteractionRecord r4 = record(null, "a".repeat(1000));
+        assertEquals(4, FingerprintExtractor.extract(r4).getTextLengthMagnitude());
+    }
+
+    @Test
+    void dim2_nullResponse_textPlainZeroMagnitude() {
+        InteractionRecord r = record(null, null);
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertEquals("text/plain", fp.getOutputContentType());
+        assertEquals(0, fp.getTextLengthMagnitude());
+        assertTrue(fp.getOutputFieldPaths().isEmpty());
+    }
+
+    @Test
+    void dim2_blankResponse_textPlainZeroMagnitude() {
+        InteractionRecord r = record(null, "   ");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertEquals("text/plain", fp.getOutputContentType());
+        assertEquals(0, fp.getTextLengthMagnitude());
+    }
+
+    @Test
+    void dim2_emptyString_textPlainZeroMagnitude() {
+        InteractionRecord r = record(null, "");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertEquals("text/plain", fp.getOutputContentType());
+        assertEquals(0, fp.getTextLengthMagnitude());
+    }
+
+    // ==================== 维度 3 & 4：声明式规则（当前空集合）====================
+
+    @Test
+    void dim3_emptyByDefault() {
+        InteractionRecord r = record(null, "hello");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertTrue(fp.getRequiredKeywords().isEmpty());
+        assertTrue(fp.getForbiddenKeywords().isEmpty());
+        assertTrue(fp.getRegexPatterns().isEmpty());
+    }
+
+    @Test
+    void dim4_emptyBehaviorsByDefault() {
+        InteractionRecord r = record(null, "hello");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertTrue(fp.getDeclaredBehaviors().isEmpty());
+    }
+
+    // ==================== hasError 标记 ====================
+
+    @Test
+    void hasError_trueWhenToolCallFailed() {
+        InteractionRecord r = record(
+                List.of(tc("tool", null, false)), // success = false
+                "error");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertTrue(fp.isHasError());
+    }
+
+    @Test
+    void hasError_falseWhenAllToolCallsSucceed() {
+        InteractionRecord r = record(
+                List.of(tc("tool", null, true)),
+                "ok");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertFalse(fp.isHasError());
+    }
+
+    @Test
+    void hasError_falseWhenNoToolCalls() {
+        InteractionRecord r = record(null, "hello");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        assertFalse(fp.isHasError());
+    }
+
+    // ==================== 带规则的 extract 重载 ====================
+
+    @Test
+    void extractWithRules_overridesDim3And4() {
+        InteractionRecord r = record(null, "hello");
+
+        // 构建 SkillRulesConfig
+        String rulesJson = "{\"skills\":{\"testSkill\":{"
+                + "\"requiredKeywords\":[\"keyword1\"],"
+                + "\"forbiddenKeywords\":[\"badword\"],"
+                + "\"behaviors\":[\"nonEmptyOutput\"]}}}";
+        SkillRulesConfig rules = SkillRulesConfig.fromJson(rulesJson);
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r, rules, "testSkill");
+
+        assertEquals(Set.of("keyword1"), fp.getRequiredKeywords());
+        assertEquals(Set.of("badword"), fp.getForbiddenKeywords());
+        assertEquals(Set.of("nonEmptyOutput"), fp.getDeclaredBehaviors());
+    }
+
+    @Test
+    void extractWithRules_nullConfig_defaultToEmpty() {
+        InteractionRecord r = record(null, "hello");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r, null, null);
+
+        assertTrue(fp.getRequiredKeywords().isEmpty());
+        assertTrue(fp.getForbiddenKeywords().isEmpty());
+        assertTrue(fp.getDeclaredBehaviors().isEmpty());
+    }
+
+    // ==================== 综合测试 ====================
+
+    @Test
+    void fullExtraction_toolSkill_jsonOutput() {
+        InteractionRecord r = record(
+                List.of(tc("queryOrder", Map.of("orderId", "String"), true)),
+                "{\"orderId\":\"ORD-001\",\"amount\":99.9,\"items\":[{\"name\":\"Widget\"}]}");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
+
+        // 维度 1
+        assertEquals(Set.of("queryOrder"), fp.getToolCallSet());
+        assertEquals(Map.of("orderid", "string"), fp.getToolParamTypes());
+
+        // 维度 2
+        assertEquals("application/json", fp.getOutputContentType());
+        assertTrue(fp.getOutputFieldPaths().stream().anyMatch(p -> p.contains("orderId")));
+        assertTrue(fp.getOutputFieldPaths().stream().anyMatch(p -> p.contains("amount")));
+
+        // 维度 3 & 4 空
+        assertTrue(fp.getRequiredKeywords().isEmpty());
+        assertTrue(fp.getDeclaredBehaviors().isEmpty());
+
+        // hasError
+        assertFalse(fp.isHasError());
+    }
+}

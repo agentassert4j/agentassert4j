@@ -1,0 +1,14 @@
+# Build
+target/
+
+# IDE
+.idea/
+*.iml
+.qoder/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# 内部工作文档（不入公开仓库）
+/AgentAssert*.md

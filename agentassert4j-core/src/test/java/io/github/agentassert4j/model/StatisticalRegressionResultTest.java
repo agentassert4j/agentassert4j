@@ -1,0 +1,215 @@
+package io.github.agentassert4j.model;
+
+import io.github.agentassert4j.result.StatisticalVerdict;
+import io.github.agentassert4j.result.Verdict;
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class StatisticalRegressionResultTest {
+
+    // ==================== 全 PASS → STABLE ====================
+
+    @Test
+    void aggregate_allPass_stable() {
+        List<SampleResult> samples = makeSamples(10, Verdict.PASS, 1.0);
+
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
+                "rec-1", "skill-1", samples, 1.0, 0.0);
+
+        assertEquals(StatisticalVerdict.STABLE, result.getStatisticalVerdict());
+        assertEquals(10, result.getVerdictCounts().get(Verdict.PASS));
+        assertEquals(1.0, result.getVerdictRates().get(Verdict.PASS), 0.001);
+    }
+
+    @Test
+    void aggregate_passRate90_threshold90_stable() {
+        // 9 PASS + 1 DIFF
+        List<SampleResult> samples = new ArrayList<>();
+        for (int i = 0; i < 9; i++) samples.add(new SampleResult(i + 1, Verdict.PASS, 1.0, null, 100));
+        samples.add(new SampleResult(10, Verdict.DIFF, 0.85, "field changed", 100));
+
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
+                "rec-1", "skill-1", samples, 0.9, 0.0);
+
+        assertEquals(StatisticalVerdict.STABLE, result.getStatisticalVerdict());
+        assertEquals(0.9, result.getVerdictRates().get(Verdict.PASS), 0.001);
+    }
+
+    // ==================== 部分不一致 → UNSTABLE ====================
+
+    @Test
+    void aggregate_passRate80_threshold90_unstable() {
+        List<SampleResult> samples = new ArrayList<>();
+        for (int i = 0; i < 8; i++) samples.add(new SampleResult(i + 1, Verdict.PASS, 1.0, null, 100));
+        for (int i = 0; i < 2; i++) samples.add(new SampleResult(9 + i, Verdict.DIFF, 0.8, "diff", 100));
+
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
+                "rec-1", "skill-1", samples, 0.9, 0.0);
+
+        assertEquals(StatisticalVerdict.UNSTABLE, result.getStatisticalVerdict());
+    }
+
+    // ==================== REGRESSION 超限 → FLAKY ====================
+
+    @Test
+    void aggregate_regressionOverTolerance_flaky() {
+        List<SampleResult> samples = new ArrayList<>();
+        for (int i = 0; i < 7; i++) samples.add(new SampleResult(i + 1, Verdict.PASS, 1.0, null, 100));
+        for (int i = 0; i < 3; i++) samples.add(new SampleResult(8 + i, Verdict.REGRESSION, 0.3, "regression", 100));
+
+        // regressionTolerance = 0.2, 但 REGRESSION 占 30%
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
+                "rec-1", "skill-1", samples, 0.9, 0.2);
+
+        assertEquals(StatisticalVerdict.FLAKY, result.getStatisticalVerdict());
+        assertEquals(0.3, result.getVerdictRates().get(Verdict.REGRESSION), 0.001);
+    }
+
+    @Test
+    void aggregate_regressionWithinTolerance_notFlaky() {
+        List<SampleResult> samples = new ArrayList<>();
+        for (int i = 0; i < 9; i++) samples.add(new SampleResult(i + 1, Verdict.PASS, 1.0, null, 100));
+        samples.add(new SampleResult(10, Verdict.REGRESSION, 0.3, "reg", 100));
+
+        // 10% REGRESSION, tolerance 20%
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
+                "rec-1", "skill-1", samples, 0.9, 0.2);
+
+        // PASS 率 90% >= 0.9 → STABLE
+        assertEquals(StatisticalVerdict.STABLE, result.getStatisticalVerdict());
+    }
+
+    // ==================== 空采样列表 ====================
+
+    @Test
+    void aggregate_emptySamples_noException() {
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
+                "rec-1", "skill-1", Collections.emptyList(), 0.9, 0.0);
+
+        assertEquals(StatisticalVerdict.STABLE, result.getStatisticalVerdict());
+        assertEquals(0, result.getActualSampleCount());
+    }
+
+    // ==================== 单个采样 ====================
+
+    @Test
+    void aggregate_singleSample_correct() {
+        List<SampleResult> samples = List.of(
+                new SampleResult(1, Verdict.PASS, 0.95, null, 50));
+
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
+                "rec-1", "skill-1", samples, 1.0, 0.0);
+
+        assertEquals(StatisticalVerdict.STABLE, result.getStatisticalVerdict());
+        assertEquals(1, result.getActualSampleCount());
+        assertEquals(0.95, result.getAverageScore(), 0.001);
+        assertEquals(0.0, result.getScoreStdDev(), 0.001);
+        assertEquals(0.95, result.getMinScore(), 0.001);
+    }
+
+    // ==================== 不可变集合 ====================
+
+    @Test
+    void samples_isImmutable() {
+        List<SampleResult> samples = makeSamples(3, Verdict.PASS, 1.0);
+
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
+                "rec-1", "skill-1", samples, 1.0, 0.0);
+
+        assertThrows(UnsupportedOperationException.class, () ->
+                result.getSamples().add(new SampleResult()));
+    }
+
+    @Test
+    void verdictCounts_isImmutable() {
+        List<SampleResult> samples = makeSamples(3, Verdict.PASS, 1.0);
+
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
+                "rec-1", "skill-1", samples, 1.0, 0.0);
+
+        assertThrows(UnsupportedOperationException.class, () ->
+                result.getVerdictCounts().put(Verdict.DIFF, 1));
+    }
+
+    @Test
+    void verdictRates_isImmutable() {
+        List<SampleResult> samples = makeSamples(3, Verdict.PASS, 1.0);
+
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
+                "rec-1", "skill-1", samples, 1.0, 0.0);
+
+        assertThrows(UnsupportedOperationException.class, () ->
+                result.getVerdictRates().put(Verdict.DIFF, 0.5));
+    }
+
+    // ==================== score 统计 ====================
+
+    @Test
+    void aggregate_scoreStatistics() {
+        // scores: 1.0, 0.9, 0.8 → mean=0.9, stddev=0.1, min=0.8
+        List<SampleResult> samples = List.of(
+                new SampleResult(1, Verdict.PASS, 1.0, null, 100),
+                new SampleResult(2, Verdict.PASS, 0.9, null, 100),
+                new SampleResult(3, Verdict.PASS, 0.8, null, 100)
+        );
+
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
+                "rec-1", "skill-1", samples, 1.0, 0.0);
+
+        assertEquals(0.9, result.getAverageScore(), 0.001);
+        assertEquals(0.1, result.getScoreStdDev(), 0.001);
+        assertEquals(0.8, result.getMinScore(), 0.001);
+    }
+
+    // ==================== 差异模式 ====================
+
+    @Test
+    void aggregate_frequentDiffPatterns_top5() {
+        List<SampleResult> samples = new ArrayList<>();
+        // 6 PASS
+        for (int i = 0; i < 6; i++) samples.add(new SampleResult(i + 1, Verdict.PASS, 1.0, null, 100));
+        // 2x "tool A missing"
+        samples.add(new SampleResult(7, Verdict.DIFF, 0.7, "tool A missing", 100));
+        samples.add(new SampleResult(8, Verdict.DIFF, 0.7, "tool A missing", 100));
+        // 1x "field changed"
+        samples.add(new SampleResult(9, Verdict.DIFF, 0.8, "field changed", 100));
+        // 1x "extra param"
+        samples.add(new SampleResult(10, Verdict.REGRESSION, 0.3, "extra param", 100));
+
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
+                "rec-1", "skill-1", samples, 0.9, 0.2);
+
+        assertEquals(3, result.getFrequentDiffPatterns().size());
+        assertEquals("tool A missing", result.getFrequentDiffPatterns().get(0));
+    }
+
+    // ==================== null verdict 处理 ====================
+
+    @Test
+    void aggregate_nullVerdict_treatedAsRegression() {
+        List<SampleResult> samples = List.of(
+                new SampleResult(1, Verdict.PASS, 1.0, null, 100),
+                new SampleResult(2, null, 0.0, "error", 100)  // null verdict → REGRESSION
+        );
+
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
+                "rec-1", "skill-1", samples, 1.0, 0.0);
+
+        assertEquals(1, result.getVerdictCounts().get(Verdict.REGRESSION));
+    }
+
+    // ==================== 辅助方法 ====================
+
+    private List<SampleResult> makeSamples(int count, Verdict verdict, double score) {
+        List<SampleResult> list = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            list.add(new SampleResult(i + 1, verdict, score, null, 100));
+        }
+        return list;
+    }
+}

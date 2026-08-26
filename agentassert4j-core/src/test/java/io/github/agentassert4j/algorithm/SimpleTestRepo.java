@@ -1,0 +1,130 @@
+package io.github.agentassert4j.algorithm;
+
+import io.github.agentassert4j.model.ArchivedBaseline;
+import io.github.agentassert4j.model.Checkpoint;
+import io.github.agentassert4j.model.DeterministicFingerprint;
+import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.SkillProfile;
+import io.github.agentassert4j.spi.StorageRepository;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+/**
+ * ImpactAnalyzer 和 BaselineManager 测试共用的内存 StorageRepository 模拟。
+ * 所有数据存于内存 Map，不做 SQL 操作。
+ */
+class SimpleTestRepo implements StorageRepository {
+
+    final List<InteractionRecord> interactions = new ArrayList<>();
+    final Map<String, SkillProfile> skillProfiles = new HashMap<>();
+    final Map<String, String> promptTexts = new HashMap<>();
+    String graphJson;
+    final List<ArchivedBaseline> archivedBaselines = new ArrayList<>();
+    final List<Checkpoint> checkpoints = new ArrayList<>();
+
+    @Override
+    public String type() { return "test"; }
+
+    @Override
+    public void initialize() {}
+
+    @Override
+    public void close() {}
+
+    @Override
+    public void saveInteraction(InteractionRecord r) { interactions.add(r); }
+
+    @Override
+    public void saveInteractions(List<InteractionRecord> records) { interactions.addAll(records); }
+
+    @Override
+    public List<InteractionRecord> findBySkillId(String skillId) {
+        return interactions.stream()
+                .filter(r -> skillId.equals(r.getSkillId()))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<InteractionRecord> findByPromptHash(String hash) {
+        return interactions.stream()
+                .filter(r -> hash.equals(r.getSystemPromptHash()))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public Set<String> findSkillIdsByPromptHash(String hash) {
+        return interactions.stream()
+                .filter(r -> hash.equals(r.getSystemPromptHash()))
+                .map(InteractionRecord::getSkillId)
+                .filter(id -> id != null && !id.isEmpty())
+                .collect(Collectors.toSet());
+    }
+
+    @Override
+    public List<InteractionRecord> findBySessionId(String sessionId) {
+        return interactions.stream()
+                .filter(r -> sessionId.equals(r.getSessionId()))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<String> findAllSessionIds() {
+        return interactions.stream()
+                .map(InteractionRecord::getSessionId)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public void saveSkillProfile(SkillProfile p) {
+        skillProfiles.put(p.getGroupKey(), p);
+    }
+
+    @Override
+    public SkillProfile findSkillByGroupKey(String key) {
+        return skillProfiles.get(key);
+    }
+
+    @Override
+    public List<SkillProfile> findAllSkills() {
+        return new ArrayList<>(skillProfiles.values());
+    }
+
+    @Override
+    public void savePromptText(String hash, String promptText) { promptTexts.put(hash, promptText); }
+
+    @Override
+    public String findPromptText(String hash) { return promptTexts.get(hash); }
+
+    @Override
+    public void saveGraph(String graphJson) { this.graphJson = graphJson; }
+
+    @Override
+    public String loadGraph() { return graphJson; }
+
+    @Override
+    public void archiveBaseline(String skillId, DeterministicFingerprint fingerprint, String versionTag) {
+        ArchivedBaseline ab = new ArchivedBaseline();
+        ab.setSkillId(skillId);
+        ab.setFingerprint(fingerprint);
+        ab.setVersionTag(versionTag);
+        ab.setArchivedAt(System.currentTimeMillis());
+        archivedBaselines.add(ab);
+    }
+
+    @Override
+    public ArchivedBaseline findArchivedBaseline(String skillId, String versionTag) {
+        return archivedBaselines.stream()
+                .filter(ab -> skillId.equals(ab.getSkillId()) && versionTag.equals(ab.getVersionTag()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    @Override
+    public void saveCheckpoint(Checkpoint c) { checkpoints.add(c); }
+}
