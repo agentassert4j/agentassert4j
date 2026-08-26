@@ -24,7 +24,7 @@ class ParameterValueTracerTest {
     }
 
     private InteractionRecord record(String skillId, String modelResponse,
-                                      List<ToolCall> toolCalls) {
+                                     List<ToolCall> toolCalls) {
         InteractionRecord r = new InteractionRecord();
         r.setSkillId(skillId);
         r.setModelResponse(modelResponse);
@@ -35,7 +35,7 @@ class ParameterValueTracerTest {
     }
 
     private InteractionRecord record(String skillId, String modelResponse,
-                                      List<ToolCall> toolCalls, long timestamp) {
+                                     List<ToolCall> toolCalls, long timestamp) {
         InteractionRecord r = record(skillId, modelResponse, toolCalls);
         r.setTimestamp(timestamp);
         return r;
@@ -378,26 +378,91 @@ class ParameterValueTracerTest {
             this.data = data;
         }
 
-        @Override public String type() { return "test"; }
-        @Override public void initialize() {}
-        @Override public void close() {}
-        @Override public void saveInteraction(InteractionRecord r) {}
-        @Override public void saveInteractions(List<InteractionRecord> records) {}
-        @Override public List<InteractionRecord> findBySkillId(String skillId) { return Collections.emptyList(); }
-        @Override public List<InteractionRecord> findByTemplateHash(String hash) { return Collections.emptyList(); }
-        @Override public Set<String> findSkillIdsByTemplateHash(String hash) { return Collections.emptySet(); }
-        @Override public List<InteractionRecord> findBySessionId(String sessionId) {
+        @Override
+        public String type() {
+            return "test";
+        }
+
+        @Override
+        public void initialize() {
+        }
+
+        @Override
+        public void close() {
+        }
+
+        @Override
+        public void saveInteraction(InteractionRecord r) {
+        }
+
+        @Override
+        public void saveInteractions(List<InteractionRecord> records) {
+        }
+
+        @Override
+        public List<InteractionRecord> findBySkillId(String skillId) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<InteractionRecord> findByTemplateHash(String hash) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public Set<String> findSkillIdsByTemplateHash(String hash) {
+            return Collections.emptySet();
+        }
+
+        @Override
+        public List<InteractionRecord> findBySessionId(String sessionId) {
             return data.getOrDefault(sessionId, Collections.emptyList());
         }
-        @Override public List<String> findAllSessionIds() { return sessionIds; }
-        @Override public void saveSkillProfile(io.github.agentassert4j.model.SkillProfile p) {}
-        @Override public io.github.agentassert4j.model.SkillProfile findSkillByGroupKey(String key) { return null; }
-        @Override public List<io.github.agentassert4j.model.SkillProfile> findAllSkills() { return Collections.emptyList(); }
-        @Override public void saveTemplateText(String hash, String templateText) {}
-        @Override public String findTemplateText(String hash) { return null; }
-        @Override public void saveGraph(String graphJson) {}
-        @Override public String loadGraph() { return null; }
-        @Override public void archiveBaseline(String skillId, io.github.agentassert4j.model.DeterministicFingerprint fp, String tag) {}
-        @Override public io.github.agentassert4j.model.ArchivedBaseline findArchivedBaseline(String skillId, String tag) { return null; }
+
+        @Override
+        public List<String> findAllSessionIds() {
+            return sessionIds;
+        }
+
+        @Override
+        public void saveSkillProfile(io.github.agentassert4j.model.SkillProfile p) {
+        }
+
+        @Override
+        public io.github.agentassert4j.model.SkillProfile findSkillByGroupKey(String key) {
+            return null;
+        }
+
+        @Override
+        public List<io.github.agentassert4j.model.SkillProfile> findAllSkills() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public void saveTemplateText(String hash, String templateText) {
+        }
+
+        @Override
+        public String findTemplateText(String hash) {
+            return null;
+        }
+
+        @Override
+        public void saveGraph(String graphJson) {
+        }
+
+        @Override
+        public String loadGraph() {
+            return null;
+        }
+
+        @Override
+        public void archiveBaseline(String skillId, io.github.agentassert4j.model.DeterministicFingerprint fp, String tag) {
+        }
+
+        @Override
+        public io.github.agentassert4j.model.ArchivedBaseline findArchivedBaseline(String skillId, String tag) {
+            return null;
+        }
     }
 }

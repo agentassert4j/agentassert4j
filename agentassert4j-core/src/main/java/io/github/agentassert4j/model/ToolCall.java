@@ -18,26 +18,58 @@ public class ToolCall {
     private String toolName;
     private String toolCallId;
     private Map<String, Object> arguments;
-    /** 参数类型签名，如 {"orderId":"String","limit":"Integer"} */
+    /**
+     * 参数类型签名，如 {"orderId":"String","limit":"Integer"}
+     */
     private Map<String, String> argTypes;
     private String result;
     private boolean success;
 
-    public String getToolName() { return toolName; }
-    public void setToolName(String toolName) { this.toolName = toolName; }
+    public String getToolName() {
+        return toolName;
+    }
 
-    public String getToolCallId() { return toolCallId; }
-    public void setToolCallId(String toolCallId) { this.toolCallId = toolCallId; }
+    public void setToolName(String toolName) {
+        this.toolName = toolName;
+    }
 
-    public Map<String, Object> getArguments() { return arguments; }
-    public void setArguments(Map<String, Object> arguments) { this.arguments = arguments; }
+    public String getToolCallId() {
+        return toolCallId;
+    }
 
-    public Map<String, String> getArgTypes() { return argTypes; }
-    public void setArgTypes(Map<String, String> argTypes) { this.argTypes = argTypes; }
+    public void setToolCallId(String toolCallId) {
+        this.toolCallId = toolCallId;
+    }
 
-    public String getResult() { return result; }
-    public void setResult(String result) { this.result = result; }
+    public Map<String, Object> getArguments() {
+        return arguments;
+    }
 
-    public boolean isSuccess() { return success; }
-    public void setSuccess(boolean success) { this.success = success; }
+    public void setArguments(Map<String, Object> arguments) {
+        this.arguments = arguments;
+    }
+
+    public Map<String, String> getArgTypes() {
+        return argTypes;
+    }
+
+    public void setArgTypes(Map<String, String> argTypes) {
+        this.argTypes = argTypes;
+    }
+
+    public String getResult() {
+        return result;
+    }
+
+    public void setResult(String result) {
+        this.result = result;
+    }
+
+    public boolean isSuccess() {
+        return success;
+    }
+
+    public void setSuccess(boolean success) {
+        this.success = success;
+    }
 }

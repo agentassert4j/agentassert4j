@@ -14,66 +14,154 @@ public class SkillProfile {
     private String skillId;
     private String skillName;
     private SkillType skillType;
-    /** 确定性分组键 */
+    /**
+     * 确定性分组键
+     */
     private String groupKey;
-    /** 参数类型签名，如 "orderId:String" */
+    /**
+     * 参数类型签名，如 "orderId:String"
+     */
     private String paramSignature;
     private int totalRecords;
-    /** 采样记录数（不加载完整记录，按需查询） */
+    /**
+     * 采样记录数（不加载完整记录，按需查询）
+     */
     private int sampleCount;
-    /** 当前基线指纹 */
+    /**
+     * 当前基线指纹
+     */
     private DeterministicFingerprint fingerprint;
-    /** 候选指纹（等待开发者裁决） */
+    /**
+     * 候选指纹（等待开发者裁决）
+     */
     private DeterministicFingerprint candidateFingerprint;
     private BaselineStatus baselineStatus;
-    /** 基线版本标签（如 "v2.3.0"） */
+    /**
+     * 基线版本标签（如 "v2.3.0"）
+     */
     private String versionTag;
-    /** 判定算法语义版本（防算法升级悄悄重解释历史基线） */
+    /**
+     * 判定算法语义版本（防算法升级悄悄重解释历史基线）
+     */
     private String algoVersion;
-    /** 批准人（企业治理审计链：这次行为变更由谁批准） */
+    /**
+     * 批准人（企业治理审计链：这次行为变更由谁批准）
+     */
     private String approvedBy;
-    /** 批准时间戳（毫秒 epoch） */
+    /**
+     * 批准时间戳（毫秒 epoch）
+     */
     private Long approvedAt;
 
-    public String getSkillId() { return skillId; }
-    public void setSkillId(String skillId) { this.skillId = skillId; }
+    public String getSkillId() {
+        return skillId;
+    }
 
-    public String getSkillName() { return skillName; }
-    public void setSkillName(String skillName) { this.skillName = skillName; }
+    public void setSkillId(String skillId) {
+        this.skillId = skillId;
+    }
 
-    public SkillType getSkillType() { return skillType; }
-    public void setSkillType(SkillType skillType) { this.skillType = skillType; }
+    public String getSkillName() {
+        return skillName;
+    }
 
-    public String getGroupKey() { return groupKey; }
-    public void setGroupKey(String groupKey) { this.groupKey = groupKey; }
+    public void setSkillName(String skillName) {
+        this.skillName = skillName;
+    }
 
-    public String getParamSignature() { return paramSignature; }
-    public void setParamSignature(String paramSignature) { this.paramSignature = paramSignature; }
+    public SkillType getSkillType() {
+        return skillType;
+    }
 
-    public int getTotalRecords() { return totalRecords; }
-    public void setTotalRecords(int totalRecords) { this.totalRecords = totalRecords; }
+    public void setSkillType(SkillType skillType) {
+        this.skillType = skillType;
+    }
 
-    public int getSampleCount() { return sampleCount; }
-    public void setSampleCount(int sampleCount) { this.sampleCount = sampleCount; }
+    public String getGroupKey() {
+        return groupKey;
+    }
 
-    public DeterministicFingerprint getFingerprint() { return fingerprint; }
-    public void setFingerprint(DeterministicFingerprint fingerprint) { this.fingerprint = fingerprint; }
+    public void setGroupKey(String groupKey) {
+        this.groupKey = groupKey;
+    }
 
-    public DeterministicFingerprint getCandidateFingerprint() { return candidateFingerprint; }
-    public void setCandidateFingerprint(DeterministicFingerprint candidateFingerprint) { this.candidateFingerprint = candidateFingerprint; }
+    public String getParamSignature() {
+        return paramSignature;
+    }
 
-    public BaselineStatus getBaselineStatus() { return baselineStatus; }
-    public void setBaselineStatus(BaselineStatus baselineStatus) { this.baselineStatus = baselineStatus; }
+    public void setParamSignature(String paramSignature) {
+        this.paramSignature = paramSignature;
+    }
 
-    public String getVersionTag() { return versionTag; }
-    public void setVersionTag(String versionTag) { this.versionTag = versionTag; }
+    public int getTotalRecords() {
+        return totalRecords;
+    }
 
-    public String getAlgoVersion() { return algoVersion; }
-    public void setAlgoVersion(String algoVersion) { this.algoVersion = algoVersion; }
+    public void setTotalRecords(int totalRecords) {
+        this.totalRecords = totalRecords;
+    }
 
-    public String getApprovedBy() { return approvedBy; }
-    public void setApprovedBy(String approvedBy) { this.approvedBy = approvedBy; }
+    public int getSampleCount() {
+        return sampleCount;
+    }
 
-    public Long getApprovedAt() { return approvedAt; }
-    public void setApprovedAt(Long approvedAt) { this.approvedAt = approvedAt; }
+    public void setSampleCount(int sampleCount) {
+        this.sampleCount = sampleCount;
+    }
+
+    public DeterministicFingerprint getFingerprint() {
+        return fingerprint;
+    }
+
+    public void setFingerprint(DeterministicFingerprint fingerprint) {
+        this.fingerprint = fingerprint;
+    }
+
+    public DeterministicFingerprint getCandidateFingerprint() {
+        return candidateFingerprint;
+    }
+
+    public void setCandidateFingerprint(DeterministicFingerprint candidateFingerprint) {
+        this.candidateFingerprint = candidateFingerprint;
+    }
+
+    public BaselineStatus getBaselineStatus() {
+        return baselineStatus;
+    }
+
+    public void setBaselineStatus(BaselineStatus baselineStatus) {
+        this.baselineStatus = baselineStatus;
+    }
+
+    public String getVersionTag() {
+        return versionTag;
+    }
+
+    public void setVersionTag(String versionTag) {
+        this.versionTag = versionTag;
+    }
+
+    public String getAlgoVersion() {
+        return algoVersion;
+    }
+
+    public void setAlgoVersion(String algoVersion) {
+        this.algoVersion = algoVersion;
+    }
+
+    public String getApprovedBy() {
+        return approvedBy;
+    }
+
+    public void setApprovedBy(String approvedBy) {
+        this.approvedBy = approvedBy;
+    }
+
+    public Long getApprovedAt() {
+        return approvedAt;
+    }
+
+    public void setApprovedAt(Long approvedAt) {
+        this.approvedAt = approvedAt;
+    }
 }

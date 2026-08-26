@@ -6,7 +6,10 @@ import io.github.agentassert4j.result.ComparisonResult;
 import io.github.agentassert4j.result.Verdict;
 import org.junit.jupiter.api.Test;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -19,11 +22,11 @@ class DeterministicComparatorTest {
     }
 
     private DeterministicFingerprint fp(Set<String> toolCallSet,
-                                         Map<String, String> toolParamTypes,
-                                         String contentType,
-                                         Set<String> fieldPaths,
-                                         Map<String, String> fieldTypeMap,
-                                         int textLengthMagnitude) {
+                                        Map<String, String> toolParamTypes,
+                                        String contentType,
+                                        Set<String> fieldPaths,
+                                        Map<String, String> fieldTypeMap,
+                                        int textLengthMagnitude) {
         DeterministicFingerprint fp = new DeterministicFingerprint();
         fp.setToolCallSet(toolCallSet != null ? toolCallSet : Collections.emptySet());
         fp.setToolParamTypes(toolParamTypes != null ? toolParamTypes : Collections.emptyMap());
@@ -40,14 +43,14 @@ class DeterministicComparatorTest {
     }
 
     private DeterministicFingerprint fp(Set<String> toolCallSet,
-                                         Map<String, String> toolParamTypes,
-                                         String contentType,
-                                         Set<String> fieldPaths,
-                                         Map<String, String> fieldTypeMap,
-                                         int textLengthMagnitude,
-                                         Set<String> requiredKeywords,
-                                         Set<String> forbiddenKeywords,
-                                         boolean hasError) {
+                                        Map<String, String> toolParamTypes,
+                                        String contentType,
+                                        Set<String> fieldPaths,
+                                        Map<String, String> fieldTypeMap,
+                                        int textLengthMagnitude,
+                                        Set<String> requiredKeywords,
+                                        Set<String> forbiddenKeywords,
+                                        boolean hasError) {
         DeterministicFingerprint f = new DeterministicFingerprint();
         f.setToolCallSet(toolCallSet != null ? toolCallSet : Collections.emptySet());
         f.setToolParamTypes(toolParamTypes != null ? toolParamTypes : Collections.emptyMap());

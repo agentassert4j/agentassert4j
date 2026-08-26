@@ -24,7 +24,8 @@ import java.util.stream.Stream;
  */
 public final class DeterministicSkillGrouper {
 
-    private DeterministicSkillGrouper() {}
+    private DeterministicSkillGrouper() {
+    }
 
     /**
      * 对单条交互记录进行分组，返回对应的 SkillProfile（不含指纹）。

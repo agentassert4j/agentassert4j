@@ -8,7 +8,8 @@ public class RegexPattern {
     private String pattern;
     private String description;
 
-    public RegexPattern() {}
+    public RegexPattern() {
+    }
 
     public RegexPattern(String pattern, String description) {
         this.pattern = pattern;
@@ -27,9 +28,19 @@ public class RegexPattern {
         return java.util.regex.Pattern.compile(pattern).matcher(text).find();
     }
 
-    public String getPattern() { return pattern; }
-    public void setPattern(String pattern) { this.pattern = pattern; }
+    public String getPattern() {
+        return pattern;
+    }
 
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
+    public void setPattern(String pattern) {
+        this.pattern = pattern;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
 }

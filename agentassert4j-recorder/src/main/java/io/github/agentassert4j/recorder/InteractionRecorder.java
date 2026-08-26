@@ -1,13 +1,13 @@
 package io.github.agentassert4j.recorder;
 
 import com.lmax.disruptor.InsufficientCapacityException;
+import com.lmax.disruptor.SleepingWaitStrategy;
 import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ProducerType;
-import com.lmax.disruptor.SleepingWaitStrategy;
 import com.lmax.disruptor.util.DaemonThreadFactory;
 import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.spi.RecordingInterceptor;
 import io.github.agentassert4j.spi.InteractionWriteStore;
+import io.github.agentassert4j.spi.RecordingInterceptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,20 +35,21 @@ public class InteractionRecorder implements RecordingInterceptor {
     private final InteractionWriteStore repository;
     private final RecorderConfig config;
     private final DataSanitizer sanitizer;
-
-    private Disruptor<InteractionEvent> disruptor;
-    private BatchWriteHandler batchHandler;
-
-    /** 已入队的记录数（含丢弃） */
+    /**
+     * 已入队的记录数（含丢弃）
+     */
     private final AtomicLong recordedCount = new AtomicLong(0);
-    /** 因 RingBuffer 满而丢弃的记录数 */
+    /**
+     * 因 RingBuffer 满而丢弃的记录数
+     */
     private final AtomicLong droppedCount = new AtomicLong(0);
     /**
      * 录制进程内单调序号源——透传给每条记录的 seq。
      * 丢弃造成的空洞合法：同会话内 seq 单调即可，(session_id, seq) 为确定性排序键。
      */
     private final AtomicLong seqSource = new AtomicLong(0);
-
+    private Disruptor<InteractionEvent> disruptor;
+    private BatchWriteHandler batchHandler;
     private volatile boolean started = false;
 
     /**

@@ -1,11 +1,6 @@
 package io.github.agentassert4j.algorithm;
 
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.RegressionTestResult;
-import io.github.agentassert4j.model.SampleResult;
-import io.github.agentassert4j.model.StatisticalRegressionResult;
-import io.github.agentassert4j.model.StatisticalTestConfig;
-import io.github.agentassert4j.model.TestResultStatus;
+import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.LlmClient;
 
@@ -34,7 +29,7 @@ public class StatisticalRegressionExecutor {
      * @param comparator 确定性对比器
      */
     public StatisticalRegressionExecutor(LlmClient llmClient,
-                                          DeterministicComparator comparator) {
+                                         DeterministicComparator comparator) {
         this.llmClient = llmClient;
         this.singleExecutor = new RegressionTestExecutor(llmClient, comparator, null);
     }
@@ -42,9 +37,9 @@ public class StatisticalRegressionExecutor {
     /**
      * 执行统计回归测试。
      *
-     * @param baseline       历史交互基线
+     * @param baseline        历史交互基线
      * @param newSystemPrompt 新 System Prompt
-     * @param config         统计测试配置
+     * @param config          统计测试配置
      * @return 聚合统计结果
      */
     public StatisticalRegressionResult execute(

@@ -11,46 +11,71 @@ package io.github.agentassert4j.model;
  */
 public class StatisticalTestConfig {
 
-    /** 单次测试用例上限 */
+    /**
+     * 单次测试用例上限
+     */
     private int maxTestCases = 50;
 
-    /** 单次 LLM 调用超时（毫秒） */
+    /**
+     * 单次 LLM 调用超时（毫秒）
+     */
     private long timeoutMs = 30000;
 
-    /** API 失败重试次数 */
+    /**
+     * API 失败重试次数
+     */
     private int maxRetries = 2;
 
-    /** LLM 采样温度 */
+    /**
+     * LLM 采样温度
+     */
     private double temperature = 0.0;
 
-    /** 干跑模式 */
+    /**
+     * 干跑模式
+     */
     private boolean dryRun = false;
 
-    /** 覆盖默认模型 */
+    /**
+     * 覆盖默认模型
+     */
     private String model;
 
-    /** 采样次数。默认 1（单次模式）。范围 [1, 100] */
+    /**
+     * 采样次数。默认 1（单次模式）。范围 [1, 100]
+     */
     private int sampleCount = 1;
 
-    /** PASS 一致率阈值。默认 1.0（100%）。范围 (0.0, 1.0] */
+    /**
+     * PASS 一致率阈值。默认 1.0（100%）。范围 (0.0, 1.0]
+     */
     private double passThreshold = 1.0;
 
-    /** REGRESSION 比例上限。默认 0.0。范围 [0.0, 1.0) */
+    /**
+     * REGRESSION 比例上限。默认 0.0。范围 [0.0, 1.0)
+     */
     private double regressionTolerance = 0.0;
 
-    /** 并发度。默认 1（串行）。范围 [1, 10] */
+    /**
+     * 并发度。默认 1（串行）。范围 [1, 10]
+     */
     private int concurrency = 1;
 
-    /** 单个用例最大 API 费用上限（美元）。默认 1.0 */
+    /**
+     * 单个用例最大 API 费用上限（美元）。默认 1.0
+     */
     private double maxCostPerCase = 1.0;
 
-    public StatisticalTestConfig() {}
+    public StatisticalTestConfig() {
+    }
 
     public static StatisticalTestConfig defaults() {
         return new StatisticalTestConfig();
     }
 
-    /** 是否为统计模式 */
+    /**
+     * 是否为统计模式
+     */
     public boolean isStatisticalMode() {
         return sampleCount > 1;
     }
@@ -71,36 +96,91 @@ public class StatisticalTestConfig {
         maxCostPerCase = Math.max(0.01, maxCostPerCase);
     }
 
-    public int getMaxTestCases() { return maxTestCases; }
-    public void setMaxTestCases(int maxTestCases) { this.maxTestCases = maxTestCases; }
+    public int getMaxTestCases() {
+        return maxTestCases;
+    }
 
-    public long getTimeoutMs() { return timeoutMs; }
-    public void setTimeoutMs(long timeoutMs) { this.timeoutMs = timeoutMs; }
+    public void setMaxTestCases(int maxTestCases) {
+        this.maxTestCases = maxTestCases;
+    }
 
-    public int getMaxRetries() { return maxRetries; }
-    public void setMaxRetries(int maxRetries) { this.maxRetries = maxRetries; }
+    public long getTimeoutMs() {
+        return timeoutMs;
+    }
 
-    public double getTemperature() { return temperature; }
-    public void setTemperature(double temperature) { this.temperature = temperature; }
+    public void setTimeoutMs(long timeoutMs) {
+        this.timeoutMs = timeoutMs;
+    }
 
-    public boolean isDryRun() { return dryRun; }
-    public void setDryRun(boolean dryRun) { this.dryRun = dryRun; }
+    public int getMaxRetries() {
+        return maxRetries;
+    }
 
-    public String getModel() { return model; }
-    public void setModel(String model) { this.model = model; }
+    public void setMaxRetries(int maxRetries) {
+        this.maxRetries = maxRetries;
+    }
 
-    public int getSampleCount() { return sampleCount; }
-    public void setSampleCount(int sampleCount) { this.sampleCount = sampleCount; }
+    public double getTemperature() {
+        return temperature;
+    }
 
-    public double getPassThreshold() { return passThreshold; }
-    public void setPassThreshold(double passThreshold) { this.passThreshold = passThreshold; }
+    public void setTemperature(double temperature) {
+        this.temperature = temperature;
+    }
 
-    public double getRegressionTolerance() { return regressionTolerance; }
-    public void setRegressionTolerance(double regressionTolerance) { this.regressionTolerance = regressionTolerance; }
+    public boolean isDryRun() {
+        return dryRun;
+    }
 
-    public int getConcurrency() { return concurrency; }
-    public void setConcurrency(int concurrency) { this.concurrency = concurrency; }
+    public void setDryRun(boolean dryRun) {
+        this.dryRun = dryRun;
+    }
 
-    public double getMaxCostPerCase() { return maxCostPerCase; }
-    public void setMaxCostPerCase(double maxCostPerCase) { this.maxCostPerCase = maxCostPerCase; }
+    public String getModel() {
+        return model;
+    }
+
+    public void setModel(String model) {
+        this.model = model;
+    }
+
+    public int getSampleCount() {
+        return sampleCount;
+    }
+
+    public void setSampleCount(int sampleCount) {
+        this.sampleCount = sampleCount;
+    }
+
+    public double getPassThreshold() {
+        return passThreshold;
+    }
+
+    public void setPassThreshold(double passThreshold) {
+        this.passThreshold = passThreshold;
+    }
+
+    public double getRegressionTolerance() {
+        return regressionTolerance;
+    }
+
+    public void setRegressionTolerance(double regressionTolerance) {
+        this.regressionTolerance = regressionTolerance;
+    }
+
+    public int getConcurrency() {
+        return concurrency;
+    }
+
+    public void setConcurrency(int concurrency) {
+        this.concurrency = concurrency;
+    }
+
+    public double getMaxCostPerCase() {
+        return maxCostPerCase;
+    }
+
+    public void setMaxCostPerCase(double maxCostPerCase) {
+        this.maxCostPerCase = maxCostPerCase;
+    }
 }

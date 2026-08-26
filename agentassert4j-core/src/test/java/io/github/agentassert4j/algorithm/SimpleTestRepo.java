@@ -6,11 +6,7 @@ import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -22,23 +18,31 @@ class SimpleTestRepo implements StorageRepository {
     final List<InteractionRecord> interactions = new ArrayList<>();
     final Map<String, SkillProfile> skillProfiles = new HashMap<>();
     final Map<String, String> promptTexts = new HashMap<>();
-    String graphJson;
     final List<ArchivedBaseline> archivedBaselines = new ArrayList<>();
+    String graphJson;
 
     @Override
-    public String type() { return "test"; }
+    public String type() {
+        return "test";
+    }
 
     @Override
-    public void initialize() {}
+    public void initialize() {
+    }
 
     @Override
-    public void close() {}
+    public void close() {
+    }
 
     @Override
-    public void saveInteraction(InteractionRecord r) { interactions.add(r); }
+    public void saveInteraction(InteractionRecord r) {
+        interactions.add(r);
+    }
 
     @Override
-    public void saveInteractions(List<InteractionRecord> records) { interactions.addAll(records); }
+    public void saveInteractions(List<InteractionRecord> records) {
+        interactions.addAll(records);
+    }
 
     @Override
     public List<InteractionRecord> findBySkillId(String skillId) {
@@ -94,16 +98,24 @@ class SimpleTestRepo implements StorageRepository {
     }
 
     @Override
-    public void saveTemplateText(String hash, String templateText) { promptTexts.put(hash, templateText); }
+    public void saveTemplateText(String hash, String templateText) {
+        promptTexts.put(hash, templateText);
+    }
 
     @Override
-    public String findTemplateText(String hash) { return promptTexts.get(hash); }
+    public String findTemplateText(String hash) {
+        return promptTexts.get(hash);
+    }
 
     @Override
-    public void saveGraph(String graphJson) { this.graphJson = graphJson; }
+    public void saveGraph(String graphJson) {
+        this.graphJson = graphJson;
+    }
 
     @Override
-    public String loadGraph() { return graphJson; }
+    public String loadGraph() {
+        return graphJson;
+    }
 
     @Override
     public void archiveBaseline(String skillId, DeterministicFingerprint fingerprint, String versionTag) {

@@ -47,6 +47,17 @@ class ImpactAnalyzerTest {
         return p;
     }
 
+    /**
+     * 显式指定 timestamp 与 recordId 的记录构造（M5 测试专用）
+     */
+    private InteractionRecord scopedRecord(String skillId, String hash, String session,
+                                           long ts, String recordId) {
+        InteractionRecord r = makeRecord(skillId, hash, session);
+        r.setRecordId(recordId);
+        r.setTimestamp(ts);
+        return r;
+    }
+
     @Nested
     @DisplayName("冷启动检测")
     class ColdStart {
@@ -328,14 +339,5 @@ class ImpactAnalyzerTest {
             assertEquals(List.of("r-100", "r-200", "r-300"), pickedForSkill0,
                     "top3 必须是规范序（timestamp,recordId）的前三条，两次分析选例必须一致");
         }
-    }
-
-    /** 显式指定 timestamp 与 recordId 的记录构造（M5 测试专用） */
-    private InteractionRecord scopedRecord(String skillId, String hash, String session,
-                                            long ts, String recordId) {
-        InteractionRecord r = makeRecord(skillId, hash, session);
-        r.setRecordId(recordId);
-        r.setTimestamp(ts);
-        return r;
     }
 }

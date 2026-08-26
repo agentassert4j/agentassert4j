@@ -18,7 +18,9 @@ public class GraphEdge {
     private String source;
     private String target;
     private Confidence confidence;
-    /** 穿透经过的中间节点（仅 TRANSPARENT 有值） */
+    /**
+     * 穿透经过的中间节点（仅 TRANSPARENT 有值）
+     */
     private List<String> throughNodes;
 
     public GraphEdge() {
@@ -39,15 +41,35 @@ public class GraphEdge {
         this.throughNodes = throughNodes != null ? throughNodes : new ArrayList<>();
     }
 
-    public String getSource() { return source; }
-    public void setSource(String source) { this.source = source; }
+    public String getSource() {
+        return source;
+    }
 
-    public String getTarget() { return target; }
-    public void setTarget(String target) { this.target = target; }
+    public void setSource(String source) {
+        this.source = source;
+    }
 
-    public Confidence getConfidence() { return confidence; }
-    public void setConfidence(Confidence confidence) { this.confidence = confidence; }
+    public String getTarget() {
+        return target;
+    }
 
-    public List<String> getThroughNodes() { return throughNodes; }
-    public void setThroughNodes(List<String> throughNodes) { this.throughNodes = throughNodes; }
+    public void setTarget(String target) {
+        this.target = target;
+    }
+
+    public Confidence getConfidence() {
+        return confidence;
+    }
+
+    public void setConfidence(Confidence confidence) {
+        this.confidence = confidence;
+    }
+
+    public List<String> getThroughNodes() {
+        return throughNodes;
+    }
+
+    public void setThroughNodes(List<String> throughNodes) {
+        this.throughNodes = throughNodes;
+    }
 }

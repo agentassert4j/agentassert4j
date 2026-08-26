@@ -80,14 +80,14 @@ class AgentAssert4jConfigTest {
         @DisplayName("完整 JSON 解析")
         void fullJson() {
             String json = """
-                {
-                  "storage": {"type": "mysql", "url": "jdbc:mysql://localhost/db"},
-                  "recorder": {"batchSize": 200, "flushIntervalMs": 10000},
-                  "regression": {"ignorableFields": ["debugInfo", "timestamp"]},
-                  "llm": {"apiKey": "sk-test", "endpoint": "https://api.deepseek.com", "model": "deepseek-chat", "timeoutMs": 60000},
-                  "tools": {"excludeFromGraph": ["read_file", "bash"]}
-                }
-                """;
+                    {
+                      "storage": {"type": "mysql", "url": "jdbc:mysql://localhost/db"},
+                      "recorder": {"batchSize": 200, "flushIntervalMs": 10000},
+                      "regression": {"ignorableFields": ["debugInfo", "timestamp"]},
+                      "llm": {"apiKey": "sk-test", "endpoint": "https://api.deepseek.com", "model": "deepseek-chat", "timeoutMs": 60000},
+                      "tools": {"excludeFromGraph": ["read_file", "bash"]}
+                    }
+                    """;
 
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
 
@@ -107,8 +107,8 @@ class AgentAssert4jConfigTest {
         @DisplayName("部分 JSON — 缺失字段使用默认值")
         void partialJson_usesDefaults() {
             String json = """
-                {"storage": {"type": "postgresql"}}
-                """;
+                    {"storage": {"type": "postgresql"}}
+                    """;
 
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
 
@@ -143,8 +143,8 @@ class AgentAssert4jConfigTest {
         @DisplayName("数字字符串的 int 字段解析")
         void intField_fromString() {
             String json = """
-                {"recorder": {"batchSize": "50"}}
-                """;
+                    {"recorder": {"batchSize": "50"}}
+                    """;
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
             assertEquals(50, config.getRecorder().getBatchSize());
         }
@@ -153,8 +153,8 @@ class AgentAssert4jConfigTest {
         @DisplayName("非数字字符串的 int 字段退化为默认值")
         void intField_invalidString_defaults() {
             String json = """
-                {"recorder": {"batchSize": "abc"}}
-                """;
+                    {"recorder": {"batchSize": "abc"}}
+                    """;
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
             assertEquals(100, config.getRecorder().getBatchSize());
         }

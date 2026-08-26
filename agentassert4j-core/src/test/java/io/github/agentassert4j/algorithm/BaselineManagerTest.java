@@ -1,10 +1,6 @@
 package io.github.agentassert4j.algorithm;
 
-import io.github.agentassert4j.model.BaselineStatus;
-import io.github.agentassert4j.model.DeterministicFingerprint;
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.SkillProfile;
-import io.github.agentassert4j.model.ToolCall;
+import io.github.agentassert4j.model.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -53,7 +49,10 @@ class BaselineManagerTest {
         r.setTemplateHash("hash-" + skillId);
         r.setModelResponse("{\"result\":\"ok\"}");
         r.setToolCalls(List.of(
-            new ToolCall() {{ setToolName(toolName); setArguments(Map.of("arg1", "val1")); }}
+                new ToolCall() {{
+                    setToolName(toolName);
+                    setArguments(Map.of("arg1", "val1"));
+                }}
         ));
         return r;
     }
@@ -92,7 +91,7 @@ class BaselineManagerTest {
             repo.saveSkillProfile(profile);
 
             IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> manager.approve("gk-1"));
+                    () -> manager.approve("gk-1"));
             assertTrue(ex.getMessage().contains("No candidate"));
         }
 
@@ -100,7 +99,7 @@ class BaselineManagerTest {
         @DisplayName("Skill profile 不存在 → 抛出 IllegalStateException")
         void profileNotFound_throwsException() {
             assertThrows(IllegalStateException.class,
-                () -> manager.approve("nonexistent"));
+                    () -> manager.approve("nonexistent"));
         }
 
         @Test
@@ -167,7 +166,7 @@ class BaselineManagerTest {
         @DisplayName("Skill profile 不存在 → 抛出 IllegalStateException")
         void profileNotFound_throwsException() {
             assertThrows(IllegalStateException.class,
-                () -> manager.reject("nonexistent"));
+                    () -> manager.reject("nonexistent"));
         }
     }
 
@@ -208,14 +207,14 @@ class BaselineManagerTest {
             repo.saveSkillProfile(profile);
 
             assertThrows(IllegalStateException.class,
-                () -> manager.rollback("gk-1", "v99"));
+                    () -> manager.rollback("gk-1", "v99"));
         }
 
         @Test
         @DisplayName("Skill profile 不存在 → 抛出 IllegalStateException")
         void profileNotFound_throwsException() {
             assertThrows(IllegalStateException.class,
-                () -> manager.rollback("nonexistent", "v1"));
+                    () -> manager.rollback("nonexistent", "v1"));
         }
 
         @Test

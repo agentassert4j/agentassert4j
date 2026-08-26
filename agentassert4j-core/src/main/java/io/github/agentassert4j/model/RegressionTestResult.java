@@ -33,21 +33,51 @@ public class RegressionTestResult {
         return r;
     }
 
-    public String getBaselineRecordId() { return baselineRecordId; }
-    public void setBaselineRecordId(String baselineRecordId) { this.baselineRecordId = baselineRecordId; }
+    public String getBaselineRecordId() {
+        return baselineRecordId;
+    }
 
-    public String getSkillId() { return skillId; }
-    public void setSkillId(String skillId) { this.skillId = skillId; }
+    public void setBaselineRecordId(String baselineRecordId) {
+        this.baselineRecordId = baselineRecordId;
+    }
 
-    public ComparisonResult getComparison() { return comparison; }
-    public void setComparison(ComparisonResult comparison) { this.comparison = comparison; }
+    public String getSkillId() {
+        return skillId;
+    }
 
-    public DeterministicFingerprint getCandidateFingerprint() { return candidateFingerprint; }
-    public void setCandidateFingerprint(DeterministicFingerprint candidateFingerprint) { this.candidateFingerprint = candidateFingerprint; }
+    public void setSkillId(String skillId) {
+        this.skillId = skillId;
+    }
 
-    public TestResultStatus getStatus() { return status; }
-    public void setStatus(TestResultStatus status) { this.status = status; }
+    public ComparisonResult getComparison() {
+        return comparison;
+    }
 
-    public String getErrorMessage() { return errorMessage; }
-    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+    public void setComparison(ComparisonResult comparison) {
+        this.comparison = comparison;
+    }
+
+    public DeterministicFingerprint getCandidateFingerprint() {
+        return candidateFingerprint;
+    }
+
+    public void setCandidateFingerprint(DeterministicFingerprint candidateFingerprint) {
+        this.candidateFingerprint = candidateFingerprint;
+    }
+
+    public TestResultStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(TestResultStatus status) {
+        this.status = status;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
+    }
 }

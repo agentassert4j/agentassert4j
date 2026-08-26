@@ -12,18 +12,18 @@ public class ComparatorConfig {
 
     private Set<String> ignorableFields = Collections.emptySet();
 
+    /**
+     * 创建默认配置（无可忽略字段）。
+     */
+    public static ComparatorConfig defaults() {
+        return new ComparatorConfig();
+    }
+
     public Set<String> getIgnorableFields() {
         return ignorableFields;
     }
 
     public void setIgnorableFields(Set<String> ignorableFields) {
         this.ignorableFields = ignorableFields != null ? ignorableFields : Collections.emptySet();
-    }
-
-    /**
-     * 创建默认配置（无可忽略字段）。
-     */
-    public static ComparatorConfig defaults() {
-        return new ComparatorConfig();
     }
 }

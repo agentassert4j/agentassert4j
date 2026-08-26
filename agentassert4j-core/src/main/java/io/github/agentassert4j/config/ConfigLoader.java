@@ -24,18 +24,27 @@ import java.util.regex.Pattern;
  */
 public final class ConfigLoader {
 
-    /** 主配置文件名 */
+    /**
+     * 主配置文件名
+     */
     public static final String MAIN_CONFIG_FILE = "agentassert4j.json";
-    /** 规则配置文件名 */
+    /**
+     * 规则配置文件名
+     */
     public static final String RULES_CONFIG_FILE = "agentassert4j-rules.json";
-    /** 系统属性键：显式配置路径 */
+    /**
+     * 系统属性键：显式配置路径
+     */
     public static final String CONFIG_PATH_PROPERTY = "agentassert4j.config.path";
-    /** 规则配置路径系统属性键 */
+    /**
+     * 规则配置路径系统属性键
+     */
     public static final String RULES_PATH_PROPERTY = "agentassert4j.rules.path";
 
     private static final Pattern ENV_VAR_PATTERN = Pattern.compile("\\$\\{(\\w+)\\}");
 
-    private ConfigLoader() {}
+    private ConfigLoader() {
+    }
 
     /**
      * 加载主配置。按优先级搜索配置文件，解析失败时安全退化为默认值。

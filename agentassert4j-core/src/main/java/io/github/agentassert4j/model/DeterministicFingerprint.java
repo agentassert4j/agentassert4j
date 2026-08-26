@@ -28,7 +28,9 @@ public class DeterministicFingerprint {
     private String outputContentType;
     private Set<String> outputFieldPaths;
     private Map<String, String> outputFieldTypeMap;
-    /** 纯文本输出退化为长度数量级（100字→2, 1000字→3） */
+    /**
+     * 纯文本输出退化为长度数量级（100字→2, 1000字→3）
+     */
     private int textLengthMagnitude;
 
     private Set<String> requiredKeywords;
@@ -38,39 +40,99 @@ public class DeterministicFingerprint {
     private Set<String> declaredBehaviors;
     private boolean hasError;
 
-    public Set<String> getToolCallSet() { return toolCallSet; }
-    public void setToolCallSet(Set<String> toolCallSet) { this.toolCallSet = toolCallSet; }
+    public Set<String> getToolCallSet() {
+        return toolCallSet;
+    }
 
-    public Map<String, String> getToolParamTypes() { return toolParamTypes; }
-    public void setToolParamTypes(Map<String, String> toolParamTypes) { this.toolParamTypes = toolParamTypes; }
+    public void setToolCallSet(Set<String> toolCallSet) {
+        this.toolCallSet = toolCallSet;
+    }
 
-    public Map<String, Boolean> getToolParamRequired() { return toolParamRequired; }
-    public void setToolParamRequired(Map<String, Boolean> toolParamRequired) { this.toolParamRequired = toolParamRequired; }
+    public Map<String, String> getToolParamTypes() {
+        return toolParamTypes;
+    }
 
-    public String getOutputContentType() { return outputContentType; }
-    public void setOutputContentType(String outputContentType) { this.outputContentType = outputContentType; }
+    public void setToolParamTypes(Map<String, String> toolParamTypes) {
+        this.toolParamTypes = toolParamTypes;
+    }
 
-    public Set<String> getOutputFieldPaths() { return outputFieldPaths; }
-    public void setOutputFieldPaths(Set<String> outputFieldPaths) { this.outputFieldPaths = outputFieldPaths; }
+    public Map<String, Boolean> getToolParamRequired() {
+        return toolParamRequired;
+    }
 
-    public Map<String, String> getOutputFieldTypeMap() { return outputFieldTypeMap; }
-    public void setOutputFieldTypeMap(Map<String, String> outputFieldTypeMap) { this.outputFieldTypeMap = outputFieldTypeMap; }
+    public void setToolParamRequired(Map<String, Boolean> toolParamRequired) {
+        this.toolParamRequired = toolParamRequired;
+    }
 
-    public int getTextLengthMagnitude() { return textLengthMagnitude; }
-    public void setTextLengthMagnitude(int textLengthMagnitude) { this.textLengthMagnitude = textLengthMagnitude; }
+    public String getOutputContentType() {
+        return outputContentType;
+    }
 
-    public Set<String> getRequiredKeywords() { return requiredKeywords; }
-    public void setRequiredKeywords(Set<String> requiredKeywords) { this.requiredKeywords = requiredKeywords; }
+    public void setOutputContentType(String outputContentType) {
+        this.outputContentType = outputContentType;
+    }
 
-    public Set<String> getForbiddenKeywords() { return forbiddenKeywords; }
-    public void setForbiddenKeywords(Set<String> forbiddenKeywords) { this.forbiddenKeywords = forbiddenKeywords; }
+    public Set<String> getOutputFieldPaths() {
+        return outputFieldPaths;
+    }
 
-    public List<RegexPattern> getRegexPatterns() { return regexPatterns; }
-    public void setRegexPatterns(List<RegexPattern> regexPatterns) { this.regexPatterns = regexPatterns; }
+    public void setOutputFieldPaths(Set<String> outputFieldPaths) {
+        this.outputFieldPaths = outputFieldPaths;
+    }
 
-    public Set<String> getDeclaredBehaviors() { return declaredBehaviors; }
-    public void setDeclaredBehaviors(Set<String> declaredBehaviors) { this.declaredBehaviors = declaredBehaviors; }
+    public Map<String, String> getOutputFieldTypeMap() {
+        return outputFieldTypeMap;
+    }
 
-    public boolean isHasError() { return hasError; }
-    public void setHasError(boolean hasError) { this.hasError = hasError; }
+    public void setOutputFieldTypeMap(Map<String, String> outputFieldTypeMap) {
+        this.outputFieldTypeMap = outputFieldTypeMap;
+    }
+
+    public int getTextLengthMagnitude() {
+        return textLengthMagnitude;
+    }
+
+    public void setTextLengthMagnitude(int textLengthMagnitude) {
+        this.textLengthMagnitude = textLengthMagnitude;
+    }
+
+    public Set<String> getRequiredKeywords() {
+        return requiredKeywords;
+    }
+
+    public void setRequiredKeywords(Set<String> requiredKeywords) {
+        this.requiredKeywords = requiredKeywords;
+    }
+
+    public Set<String> getForbiddenKeywords() {
+        return forbiddenKeywords;
+    }
+
+    public void setForbiddenKeywords(Set<String> forbiddenKeywords) {
+        this.forbiddenKeywords = forbiddenKeywords;
+    }
+
+    public List<RegexPattern> getRegexPatterns() {
+        return regexPatterns;
+    }
+
+    public void setRegexPatterns(List<RegexPattern> regexPatterns) {
+        this.regexPatterns = regexPatterns;
+    }
+
+    public Set<String> getDeclaredBehaviors() {
+        return declaredBehaviors;
+    }
+
+    public void setDeclaredBehaviors(Set<String> declaredBehaviors) {
+        this.declaredBehaviors = declaredBehaviors;
+    }
+
+    public boolean isHasError() {
+        return hasError;
+    }
+
+    public void setHasError(boolean hasError) {
+        this.hasError = hasError;
+    }
 }

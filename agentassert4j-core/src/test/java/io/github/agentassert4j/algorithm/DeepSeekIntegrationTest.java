@@ -3,8 +3,6 @@ package io.github.agentassert4j.algorithm;
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.result.ComparisonResult;
-import io.github.agentassert4j.result.StatisticalVerdict;
-import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.OpenAiCompatibleClient;
@@ -18,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * DeepSeek 全链路集成测试 — 覆盖所有核心算法 + 完整生命周期。
@@ -43,17 +41,9 @@ import static org.junit.jupiter.api.Assumptions.*;
 class DeepSeekIntegrationTest {
 
     private static final String ENDPOINT = "https://api.deepseek.com";
-    private static LlmClient client;
-
-    @BeforeAll
-    static void setUp() {
-        String apiKey = System.getProperty("deepseek.api.key");
-        assumeTrue(apiKey != null && !apiKey.isBlank(),
-                "跳过：未提供 -Ddeepseek.api.key");
-        client = new OpenAiCompatibleClient(ENDPOINT, apiKey, "deepseek-chat");
-    }
-
-    /** 一个简单的 get_weather 工具定义 */
+    /**
+     * 一个简单的 get_weather 工具定义
+     */
     private static final String WEATHER_TOOL = "{\"type\":\"function\",\"function\":{"
             + "\"name\":\"get_weather\","
             + "\"description\":\"获取指定城市的天气信息\","
@@ -64,8 +54,9 @@ class DeepSeekIntegrationTest {
             + "},"
             + "\"required\":[\"city\"]"
             + "}}}";
-
-    /** 一个 search_orders 工具定义 */
+    /**
+     * 一个 search_orders 工具定义
+     */
     private static final String SEARCH_TOOL = "{\"type\":\"function\",\"function\":{"
             + "\"name\":\"search_orders\","
             + "\"description\":\"搜索订单\","
@@ -77,6 +68,95 @@ class DeepSeekIntegrationTest {
             + "},"
             + "\"required\":[\"keyword\"]"
             + "}}}";
+    private static LlmClient client;
+
+    @BeforeAll
+    static void setUp() {
+        String apiKey = System.getProperty("deepseek.api.key");
+        assumeTrue(apiKey != null && !apiKey.isBlank(),
+                "跳过：未提供 -Ddeepseek.api.key");
+        client = new OpenAiCompatibleClient(ENDPOINT, apiKey, "deepseek-chat");
+    }
+
+    private LlmResponse callLlm(String systemPrompt, String userInput) throws Exception {
+        LlmRequest request = new LlmRequest();
+        request.setSystemPrompt(systemPrompt);
+        request.setUserInput(userInput);
+        request.setTemperature(0.0);
+        return client.chat(request, 30000);
+    }
+
+    /**
+     * 从 LlmResponse 构建纯文本 InteractionRecord
+     */
+    private InteractionRecord responseToRecord(LlmResponse response) {
+        return responseToRecord(response, null);
+    }
+
+    /**
+     * 从 LlmResponse 构建 InteractionRecord（支持工具调用）
+     */
+    private InteractionRecord responseToRecord(LlmResponse response, LlmRequest request) {
+        InteractionRecord r = new InteractionRecord();
+        r.setRecordId(java.util.UUID.randomUUID().toString());
+        r.setTimestamp(System.currentTimeMillis());
+        r.setUserInput(request != null ? request.getUserInput() : "test");
+        r.setTurnIndex(0);
+        r.setModelResponse(response.getContent());
+        r.setInputTokens(response.getInputTokens());
+        r.setOutputTokens(response.getOutputTokens());
+        r.setLatencyMs(response.getLatencyMs());
+
+        List<ToolCall> toolCalls = new ArrayList<>();
+        if (response.getToolCalls() != null) {
+            for (ToolCallResult tcr : response.getToolCalls()) {
+                ToolCall tc = new ToolCall();
+                tc.setToolName(tcr.getToolName());
+                tc.setToolCallId(tcr.getToolCallId());
+                tc.setArguments(tcr.getArguments());
+                tc.setSuccess(true);
+                toolCalls.add(tc);
+            }
+        }
+        r.setToolCalls(toolCalls);
+        r.setHasToolCalls(!toolCalls.isEmpty());
+        return r;
+    }
+
+    private InteractionRecord makeTextBaseline(String recordId, String userInput, String baselineResponse) {
+        InteractionRecord r = new InteractionRecord();
+        r.setRecordId(recordId);
+        r.setSkillId("integration-skill");
+        r.setTemplateHash("fake-hash");
+        r.setUserInput(userInput);
+        r.setTurnIndex(0);
+        r.setSessionId("session-integration");
+        r.setModelResponse(baselineResponse);
+        r.setToolCalls(new ArrayList<>());
+        r.setHasToolCalls(false);
+        return r;
+    }
+
+    private InteractionRecord makeToolCallBaseline(String recordId, String userInput,
+                                                   String toolName, Map<String, Object> args) {
+        InteractionRecord r = new InteractionRecord();
+        r.setRecordId(recordId);
+        r.setSkillId("integration-skill");
+        r.setTemplateHash("fake-hash");
+        r.setUserInput(userInput);
+        r.setTurnIndex(0);
+        r.setSessionId("session-integration");
+        r.setModelResponse(null);
+
+        ToolCall tc = new ToolCall();
+        tc.setToolName(toolName);
+        tc.setToolCallId("call_baseline");
+        tc.setArguments(args);
+        tc.setSuccess(true);
+        r.setToolCalls(List.of(tc));
+        r.setHasToolCalls(true);
+        return r;
+    }
 
     @Nested
     @DisplayName("1. Client 基础连通性")
@@ -892,81 +972,5 @@ class DeepSeekIntegrationTest {
             System.out.println("  Latency: " + result.getTotalLatencyMs() + "ms");
             System.out.println("  Cost: $" + String.format("%.4f", result.getEstimatedCost()));
         }
-    }
-
-    private LlmResponse callLlm(String systemPrompt, String userInput) throws Exception {
-        LlmRequest request = new LlmRequest();
-        request.setSystemPrompt(systemPrompt);
-        request.setUserInput(userInput);
-        request.setTemperature(0.0);
-        return client.chat(request, 30000);
-    }
-
-    /** 从 LlmResponse 构建纯文本 InteractionRecord */
-    private InteractionRecord responseToRecord(LlmResponse response) {
-        return responseToRecord(response, null);
-    }
-
-    /** 从 LlmResponse 构建 InteractionRecord（支持工具调用） */
-    private InteractionRecord responseToRecord(LlmResponse response, LlmRequest request) {
-        InteractionRecord r = new InteractionRecord();
-        r.setRecordId(java.util.UUID.randomUUID().toString());
-        r.setTimestamp(System.currentTimeMillis());
-        r.setUserInput(request != null ? request.getUserInput() : "test");
-        r.setTurnIndex(0);
-        r.setModelResponse(response.getContent());
-        r.setInputTokens(response.getInputTokens());
-        r.setOutputTokens(response.getOutputTokens());
-        r.setLatencyMs(response.getLatencyMs());
-
-        List<ToolCall> toolCalls = new ArrayList<>();
-        if (response.getToolCalls() != null) {
-            for (ToolCallResult tcr : response.getToolCalls()) {
-                ToolCall tc = new ToolCall();
-                tc.setToolName(tcr.getToolName());
-                tc.setToolCallId(tcr.getToolCallId());
-                tc.setArguments(tcr.getArguments());
-                tc.setSuccess(true);
-                toolCalls.add(tc);
-            }
-        }
-        r.setToolCalls(toolCalls);
-        r.setHasToolCalls(!toolCalls.isEmpty());
-        return r;
-    }
-
-    private InteractionRecord makeTextBaseline(String recordId, String userInput, String baselineResponse) {
-        InteractionRecord r = new InteractionRecord();
-        r.setRecordId(recordId);
-        r.setSkillId("integration-skill");
-        r.setTemplateHash("fake-hash");
-        r.setUserInput(userInput);
-        r.setTurnIndex(0);
-        r.setSessionId("session-integration");
-        r.setModelResponse(baselineResponse);
-        r.setToolCalls(new ArrayList<>());
-        r.setHasToolCalls(false);
-        return r;
-    }
-
-    private InteractionRecord makeToolCallBaseline(String recordId, String userInput,
-                                                    String toolName, Map<String, Object> args) {
-        InteractionRecord r = new InteractionRecord();
-        r.setRecordId(recordId);
-        r.setSkillId("integration-skill");
-        r.setTemplateHash("fake-hash");
-        r.setUserInput(userInput);
-        r.setTurnIndex(0);
-        r.setSessionId("session-integration");
-        r.setModelResponse(null);
-
-        ToolCall tc = new ToolCall();
-        tc.setToolName(toolName);
-        tc.setToolCallId("call_baseline");
-        tc.setArguments(args);
-        tc.setSuccess(true);
-        r.setToolCalls(List.of(tc));
-        r.setHasToolCalls(true);
-        return r;
     }
 }

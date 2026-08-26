@@ -30,13 +30,17 @@ class InMemoryStorageRepository implements StorageRepository {
     }
 
     @Override
-    public String type() { return "in-memory"; }
+    public String type() {
+        return "in-memory";
+    }
 
     @Override
-    public void initialize() {}
+    public void initialize() {
+    }
 
     @Override
-    public void close() {}
+    public void close() {
+    }
 
     @Override
     public void saveInteraction(InteractionRecord r) {
@@ -55,45 +59,69 @@ class InMemoryStorageRepository implements StorageRepository {
     }
 
     @Override
-    public List<InteractionRecord> findBySkillId(String skillId) { return List.of(); }
+    public List<InteractionRecord> findBySkillId(String skillId) {
+        return List.of();
+    }
 
     @Override
-    public List<InteractionRecord> findByTemplateHash(String hash) { return List.of(); }
+    public List<InteractionRecord> findByTemplateHash(String hash) {
+        return List.of();
+    }
 
     @Override
-    public Set<String> findSkillIdsByTemplateHash(String hash) { return Set.of(); }
+    public Set<String> findSkillIdsByTemplateHash(String hash) {
+        return Set.of();
+    }
 
     @Override
-    public List<InteractionRecord> findBySessionId(String sessionId) { return List.of(); }
+    public List<InteractionRecord> findBySessionId(String sessionId) {
+        return List.of();
+    }
 
     @Override
-    public List<String> findAllSessionIds() { return List.of(); }
+    public List<String> findAllSessionIds() {
+        return List.of();
+    }
 
     @Override
-    public void saveSkillProfile(SkillProfile p) {}
+    public void saveSkillProfile(SkillProfile p) {
+    }
 
     @Override
-    public SkillProfile findSkillByGroupKey(String key) { return null; }
+    public SkillProfile findSkillByGroupKey(String key) {
+        return null;
+    }
 
     @Override
-    public List<SkillProfile> findAllSkills() { return List.of(); }
+    public List<SkillProfile> findAllSkills() {
+        return List.of();
+    }
 
     @Override
-    public void saveTemplateText(String hash, String templateText) {}
+    public void saveTemplateText(String hash, String templateText) {
+    }
 
     @Override
-    public String findTemplateText(String hash) { return null; }
+    public String findTemplateText(String hash) {
+        return null;
+    }
 
     @Override
-    public void saveGraph(String graphJson) {}
+    public void saveGraph(String graphJson) {
+    }
 
     @Override
-    public String loadGraph() { return null; }
+    public String loadGraph() {
+        return null;
+    }
 
     @Override
-    public void archiveBaseline(String skillId, DeterministicFingerprint fingerprint, String versionTag) {}
+    public void archiveBaseline(String skillId, DeterministicFingerprint fingerprint, String versionTag) {
+    }
 
     @Override
-    public ArchivedBaseline findArchivedBaseline(String skillId, String versionTag) { return null; }
+    public ArchivedBaseline findArchivedBaseline(String skillId, String versionTag) {
+        return null;
+    }
 
 }

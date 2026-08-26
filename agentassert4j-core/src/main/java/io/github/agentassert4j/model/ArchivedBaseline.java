@@ -10,15 +10,35 @@ public class ArchivedBaseline {
     private String versionTag;
     private long archivedAt;
 
-    public String getSkillId() { return skillId; }
-    public void setSkillId(String skillId) { this.skillId = skillId; }
+    public String getSkillId() {
+        return skillId;
+    }
 
-    public DeterministicFingerprint getFingerprint() { return fingerprint; }
-    public void setFingerprint(DeterministicFingerprint fingerprint) { this.fingerprint = fingerprint; }
+    public void setSkillId(String skillId) {
+        this.skillId = skillId;
+    }
 
-    public String getVersionTag() { return versionTag; }
-    public void setVersionTag(String versionTag) { this.versionTag = versionTag; }
+    public DeterministicFingerprint getFingerprint() {
+        return fingerprint;
+    }
 
-    public long getArchivedAt() { return archivedAt; }
-    public void setArchivedAt(long archivedAt) { this.archivedAt = archivedAt; }
+    public void setFingerprint(DeterministicFingerprint fingerprint) {
+        this.fingerprint = fingerprint;
+    }
+
+    public String getVersionTag() {
+        return versionTag;
+    }
+
+    public void setVersionTag(String versionTag) {
+        this.versionTag = versionTag;
+    }
+
+    public long getArchivedAt() {
+        return archivedAt;
+    }
+
+    public void setArchivedAt(long archivedAt) {
+        this.archivedAt = archivedAt;
+    }
 }

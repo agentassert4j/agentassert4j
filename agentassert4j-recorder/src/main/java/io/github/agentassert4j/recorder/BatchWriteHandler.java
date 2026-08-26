@@ -33,11 +33,17 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
     private final int maxBufferSize;
     private final List<InteractionRecord> buffer;
 
-    /** 丢弃计数（RingBuffer 满或 buffer 超限） */
+    /**
+     * 丢弃计数（RingBuffer 满或 buffer 超限）
+     */
     private final AtomicLong droppedCount = new AtomicLong(0);
-    /** 写入失败计数 */
+    /**
+     * 写入失败计数
+     */
     private final AtomicLong failedCount = new AtomicLong(0);
-    /** 成功写入总数 */
+    /**
+     * 成功写入总数
+     */
     private final AtomicLong writtenCount = new AtomicLong(0);
 
     private ScheduledExecutorService flushScheduler;

@@ -20,20 +20,21 @@ public final class BehaviorChecker {
     // 内置常用 behavior
     private static final Map<String, BiFunction<DeterministicFingerprint, String, Boolean>>
             BUILTINS = Map.of(
-            "mustUseChinese",     (fp, out) -> out != null && out.matches(".*[\\u4e00-\\u9fa5].*"),
-            "mustUseEnglish",     (fp, out) -> out != null && out.matches(".*[a-zA-Z].*") && !out.matches(".*[\\u4e00-\\u9fa5].*"),
+            "mustUseChinese", (fp, out) -> out != null && out.matches(".*[\\u4e00-\\u9fa5].*"),
+            "mustUseEnglish", (fp, out) -> out != null && out.matches(".*[a-zA-Z].*") && !out.matches(".*[\\u4e00-\\u9fa5].*"),
             "returnsEmptyOnError", (fp, out) -> !fp.isHasError() || out == null || out.trim().isEmpty() || out.contains("[]"),
             // TODO: returnsEmptyOnError 中 out.contains("[]") 判断过于宽泛，
             //       如 {"data":[],"message":"成功"} 含有 [] 但非错误输出会被误判。
             //       待后续优化为使用 RecursiveJsonParser.parse() 解析后检查是否为空数组/空对象
-            "returnsErrorCode",   (fp, out) -> fp.isHasError(),
-            "noError",            (fp, out) -> !fp.isHasError(),
-            "jsonOutput",         (fp, out) -> out != null && (out.trim().startsWith("{") || out.trim().startsWith("[")),
-            "nonEmptyOutput",     (fp, out) -> out != null && !out.trim().isEmpty(),
-            "containsCjk",        (fp, out) -> out != null && out.matches(".*[\\u4e00-\\u9fa5\\u3040-\\u309f\\u30a0-\\u30ff].*")
+            "returnsErrorCode", (fp, out) -> fp.isHasError(),
+            "noError", (fp, out) -> !fp.isHasError(),
+            "jsonOutput", (fp, out) -> out != null && (out.trim().startsWith("{") || out.trim().startsWith("[")),
+            "nonEmptyOutput", (fp, out) -> out != null && !out.trim().isEmpty(),
+            "containsCjk", (fp, out) -> out != null && out.matches(".*[\\u4e00-\\u9fa5\\u3040-\\u309f\\u30a0-\\u30ff].*")
     );
 
-    private BehaviorChecker() {}
+    private BehaviorChecker() {
+    }
 
     /**
      * 校验单个 behavior。

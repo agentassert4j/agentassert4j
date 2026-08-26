@@ -13,18 +13,28 @@ import java.util.Set;
  */
 public interface InteractionQueryStore {
 
-    /** 按 Skill 查询该 Skill 的全部交互记录 */
+    /**
+     * 按 Skill 查询该 Skill 的全部交互记录
+     */
     List<InteractionRecord> findBySkillId(String skillId);
 
-    /** 按模板 hash 查询使用该模板的全部交互记录 */
+    /**
+     * 按模板 hash 查询使用该模板的全部交互记录
+     */
     List<InteractionRecord> findByTemplateHash(String hash);
 
-    /** 影响分析核心查询：通过模板 hash 反查关联的 Skill */
+    /**
+     * 影响分析核心查询：通过模板 hash 反查关联的 Skill
+     */
     Set<String> findSkillIdsByTemplateHash(String hash);
 
-    /** 按 session 查询（依赖链重建用），返回按确定性排序键有序 */
+    /**
+     * 按 session 查询（依赖链重建用），返回按确定性排序键有序
+     */
     List<InteractionRecord> findBySessionId(String sessionId);
 
-    /** 获取所有 session ID（rebuildGraph 使用） */
+    /**
+     * 获取所有 session ID（rebuildGraph 使用）
+     */
     List<String> findAllSessionIds();
 }

@@ -13,11 +13,13 @@ import java.util.Map;
  */
 public final class CostEstimator {
 
-    private CostEstimator() {}
-
-    /** 按模型的每次调用成本估算（美元/次） */
+    /**
+     * 按模型的每次调用成本估算（美元/次）
+     */
     private static final Map<String, Double> MODEL_COST;
-    /** 未知模型的默认值 */
+    /**
+     * 未知模型的默认值
+     */
     private static final double DEFAULT_COST_PER_CALL = 0.003;
 
     static {
@@ -30,6 +32,9 @@ public final class CostEstimator {
         map.put("qwen-plus", 0.002);
         map.put("qwen-turbo", 0.0005);
         MODEL_COST = Map.copyOf(map);
+    }
+
+    private CostEstimator() {
     }
 
     /**
@@ -84,7 +89,7 @@ public final class CostEstimator {
      * @return 预估字符串，如 "预估 5 用例 x 10 次 = 50 次 API 调用，约 $0.2000（模型：gpt-4o）"
      */
     public static String estimateStatistical(List<InteractionRecord> testCases,
-                                              String model, int sampleCount) {
+                                             String model, int sampleCount) {
         int totalCalls = testCases.stream()
                 .mapToInt(r -> r.getTurnIndex() + 1)
                 .sum();

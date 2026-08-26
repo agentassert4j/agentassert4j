@@ -16,15 +16,35 @@ public class DependencyGraph {
     private int nodeCount;
     private int edgeCount;
 
-    public String getGraphId() { return graphId; }
-    public void setGraphId(String graphId) { this.graphId = graphId; }
+    public String getGraphId() {
+        return graphId;
+    }
 
-    public long getBuiltAt() { return builtAt; }
-    public void setBuiltAt(long builtAt) { this.builtAt = builtAt; }
+    public void setGraphId(String graphId) {
+        this.graphId = graphId;
+    }
 
-    public int getNodeCount() { return nodeCount; }
-    public void setNodeCount(int nodeCount) { this.nodeCount = nodeCount; }
+    public long getBuiltAt() {
+        return builtAt;
+    }
 
-    public int getEdgeCount() { return edgeCount; }
-    public void setEdgeCount(int edgeCount) { this.edgeCount = edgeCount; }
+    public void setBuiltAt(long builtAt) {
+        this.builtAt = builtAt;
+    }
+
+    public int getNodeCount() {
+        return nodeCount;
+    }
+
+    public void setNodeCount(int nodeCount) {
+        this.nodeCount = nodeCount;
+    }
+
+    public int getEdgeCount() {
+        return edgeCount;
+    }
+
+    public void setEdgeCount(int edgeCount) {
+        this.edgeCount = edgeCount;
+    }
 }

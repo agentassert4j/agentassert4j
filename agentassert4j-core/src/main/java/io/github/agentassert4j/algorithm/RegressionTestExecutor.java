@@ -1,16 +1,8 @@
 package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.config.TestExecutionConfig;
-import io.github.agentassert4j.model.DeterministicFingerprint;
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.LlmRequest;
-import io.github.agentassert4j.model.LlmResponse;
-import io.github.agentassert4j.model.RegressionTestResult;
-import io.github.agentassert4j.model.TestResultStatus;
-import io.github.agentassert4j.model.ToolCall;
-import io.github.agentassert4j.model.ToolCallResult;
+import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.result.ComparisonResult;
-import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.LlmTimeoutException;
@@ -47,8 +39,8 @@ public class RegressionTestExecutor {
      * @param baselineManager 基线管理器（可选，传 null 跳过基线操作）
      */
     public RegressionTestExecutor(LlmClient llmClient,
-                                   DeterministicComparator comparator,
-                                   BaselineManager baselineManager) {
+                                  DeterministicComparator comparator,
+                                  BaselineManager baselineManager) {
         this.llmClient = llmClient;
         this.comparator = comparator;
         this.baselineManager = baselineManager;
@@ -57,14 +49,14 @@ public class RegressionTestExecutor {
     /**
      * 执行单次回归测试。
      *
-     * @param baseline       历史交互（基线）
+     * @param baseline        历史交互（基线）
      * @param newSystemPrompt 新 System Prompt
-     * @param config         执行配置
+     * @param config          执行配置
      * @return 回归测试结果
      */
     public RegressionTestResult execute(InteractionRecord baseline,
-                                         String newSystemPrompt,
-                                         TestExecutionConfig config) {
+                                        String newSystemPrompt,
+                                        TestExecutionConfig config) {
 
         // dryRun 模式：不调 LLM
         if (config.isDryRun()) {
@@ -120,8 +112,8 @@ public class RegressionTestExecutor {
      * </ul>
      */
     LlmRequest buildReplayRequest(InteractionRecord baseline,
-                                   String newSystemPrompt,
-                                   TestExecutionConfig config) {
+                                  String newSystemPrompt,
+                                  TestExecutionConfig config) {
         LlmRequest request = new LlmRequest();
 
         // 替换 System Prompt
@@ -153,8 +145,8 @@ public class RegressionTestExecutor {
      * 从 LLM 响应构建当前交互记录（不持久化，仅用于指纹提取和对比）。
      */
     InteractionRecord buildCurrentRecord(InteractionRecord baseline,
-                                          LlmResponse response,
-                                          String newPrompt) {
+                                         LlmResponse response,
+                                         String newPrompt) {
         InteractionRecord current = new InteractionRecord();
         current.setRecordId(UUID.randomUUID().toString());
         current.setTimestamp(System.currentTimeMillis());

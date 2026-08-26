@@ -1,13 +1,6 @@
 package io.github.agentassert4j.util;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * 文本差异工具 — 用于 Prompt 文本对比和字段路径对比。
@@ -15,7 +8,8 @@ import java.util.Set;
  */
 public final class TextDiffUtils {
 
-    private TextDiffUtils() {}
+    private TextDiffUtils() {
+    }
 
     /**
      * 对比两个字符串，返回人类可读的差异摘要。

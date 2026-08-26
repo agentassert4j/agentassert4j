@@ -3,13 +3,7 @@ package io.github.agentassert4j.recorder;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.ToolCall;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * 配置式数据脱敏器 — 在 InteractionRecord 写入存储前执行脱敏。
@@ -31,7 +25,9 @@ public class DataSanitizer {
     private final boolean sanitizeUserInput;
     private final boolean sanitizeModelResponse;
 
-    /** 小写化的敏感字段集合，用于忽略大小写匹配 */
+    /**
+     * 小写化的敏感字段集合，用于忽略大小写匹配
+     */
     private final Set<String> sensitiveFieldsLower;
 
     /**

@@ -10,25 +10,38 @@ import io.github.agentassert4j.result.Verdict;
  */
 public class SampleResult {
 
-    /** 采样序号（从 1 开始） */
+    /**
+     * 采样序号（从 1 开始）
+     */
     private int sampleIndex;
 
-    /** 该次采样的 Verdict */
+    /**
+     * 该次采样的 Verdict
+     */
     private Verdict verdict;
 
-    /** 该次采样的加权分 */
+    /**
+     * 该次采样的加权分
+     */
     private double score;
 
-    /** 差异摘要（仅 Verdict != PASS 时有值） */
+    /**
+     * 差异摘要（仅 Verdict != PASS 时有值）
+     */
     private String diffSummary;
 
-    /** 执行耗时（毫秒） */
+    /**
+     * 执行耗时（毫秒）
+     */
     private long latencyMs;
 
-    /** LLM API 错误信息（仅异常时有值） */
+    /**
+     * LLM API 错误信息（仅异常时有值）
+     */
     private String errorMessage;
 
-    public SampleResult() {}
+    public SampleResult() {
+    }
 
     public SampleResult(int sampleIndex, Verdict verdict, double score,
                         String diffSummary, long latencyMs) {
@@ -39,21 +52,51 @@ public class SampleResult {
         this.latencyMs = latencyMs;
     }
 
-    public int getSampleIndex() { return sampleIndex; }
-    public void setSampleIndex(int sampleIndex) { this.sampleIndex = sampleIndex; }
+    public int getSampleIndex() {
+        return sampleIndex;
+    }
 
-    public Verdict getVerdict() { return verdict; }
-    public void setVerdict(Verdict verdict) { this.verdict = verdict; }
+    public void setSampleIndex(int sampleIndex) {
+        this.sampleIndex = sampleIndex;
+    }
 
-    public double getScore() { return score; }
-    public void setScore(double score) { this.score = score; }
+    public Verdict getVerdict() {
+        return verdict;
+    }
 
-    public String getDiffSummary() { return diffSummary; }
-    public void setDiffSummary(String diffSummary) { this.diffSummary = diffSummary; }
+    public void setVerdict(Verdict verdict) {
+        this.verdict = verdict;
+    }
 
-    public long getLatencyMs() { return latencyMs; }
-    public void setLatencyMs(long latencyMs) { this.latencyMs = latencyMs; }
+    public double getScore() {
+        return score;
+    }
 
-    public String getErrorMessage() { return errorMessage; }
-    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+    public void setScore(double score) {
+        this.score = score;
+    }
+
+    public String getDiffSummary() {
+        return diffSummary;
+    }
+
+    public void setDiffSummary(String diffSummary) {
+        this.diffSummary = diffSummary;
+    }
+
+    public long getLatencyMs() {
+        return latencyMs;
+    }
+
+    public void setLatencyMs(long latencyMs) {
+        this.latencyMs = latencyMs;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
+    }
 }

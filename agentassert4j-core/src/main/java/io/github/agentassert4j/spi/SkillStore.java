@@ -9,12 +9,18 @@ import java.util.List;
  */
 public interface SkillStore {
 
-    /** 保存/更新 Skill 画像 */
+    /**
+     * 保存/更新 Skill 画像
+     */
     void saveSkillProfile(SkillProfile p);
 
-    /** 按确定性分组键查询画像 */
+    /**
+     * 按确定性分组键查询画像
+     */
     SkillProfile findSkillByGroupKey(String key);
 
-    /** 全量画像（冷启动检测用） */
+    /**
+     * 全量画像（冷启动检测用）
+     */
     List<SkillProfile> findAllSkills();
 }

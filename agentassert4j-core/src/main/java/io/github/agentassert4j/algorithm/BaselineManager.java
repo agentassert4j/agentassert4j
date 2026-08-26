@@ -1,10 +1,6 @@
 package io.github.agentassert4j.algorithm;
 
-import io.github.agentassert4j.model.ArchivedBaseline;
-import io.github.agentassert4j.model.BaselineStatus;
-import io.github.agentassert4j.model.DeterministicFingerprint;
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.SkillProfile;
+import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.spi.StorageRepository;
 
 /**
@@ -104,7 +100,7 @@ public class BaselineManager {
     /**
      * 回滚到指定版本的归档基线。
      *
-     * @param groupKey    Skill 的分组键
+     * @param groupKey   Skill 的分组键
      * @param versionTag 目标版本标签
      * @throws IllegalStateException 无归档基线时抛出
      */
@@ -112,7 +108,7 @@ public class BaselineManager {
         ArchivedBaseline archived = repository.findArchivedBaseline(groupKey, versionTag);
         if (archived == null) {
             throw new IllegalStateException(
-                "No archived baseline found for skill: " + groupKey + ", version: " + versionTag);
+                    "No archived baseline found for skill: " + groupKey + ", version: " + versionTag);
         }
 
         SkillProfile profile = repository.findSkillByGroupKey(groupKey);

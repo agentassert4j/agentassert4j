@@ -12,12 +12,18 @@ package io.github.agentassert4j.result;
  */
 public enum StatisticalVerdict {
 
-    /** 稳定：行为高度一致，PASS 率达标。对应单次模式的 PASS。 */
+    /**
+     * 稳定：行为高度一致，PASS 率达标。对应单次模式的 PASS。
+     */
     STABLE,
 
-    /** 不稳定：行为存在波动，但未出现严重退化。对应单次模式的 DIFF。 */
+    /**
+     * 不稳定：行为存在波动，但未出现严重退化。对应单次模式的 DIFF。
+     */
     UNSTABLE,
 
-    /** 脆弱：存在严重退化风险，REGRESSION 比例超标。对应单次模式的 REGRESSION。 */
+    /**
+     * 脆弱：存在严重退化风险，REGRESSION 比例超标。对应单次模式的 REGRESSION。
+     */
     FLAKY
 }

@@ -12,7 +12,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +29,10 @@ import java.util.Map;
  */
 public class OpenAiCompatibleClient implements LlmClient {
 
+    /**
+     * 默认重试次数
+     */
+    private static final int DEFAULT_MAX_RETRIES = 2;
     private final String endpoint;
     private final String apiKey;
     private final String defaultModel;
@@ -62,8 +65,25 @@ public class OpenAiCompatibleClient implements LlmClient {
         this.httpClient = httpClient;
     }
 
-    /** 默认重试次数 */
-    private static final int DEFAULT_MAX_RETRIES = 2;
+    /**
+     * finish_reason 归一为固定枚举：stop/tool_calls/max_tokens/content_filter/error/other。
+     * OpenAI 方言值 tool_calls/function_call → tool_calls；未知值归 other（TEXT 枚举加值零迁移）。
+     */
+    static String normalizeFinishReason(String raw) {
+        if (raw == null || raw.isEmpty()) return null;
+        return switch (raw) {
+            case "stop" -> "stop";
+            case "tool_calls", "function_call" -> "tool_calls";
+            case "max_tokens", "length" -> "max_tokens";
+            case "content_filter" -> "content_filter";
+            default -> "other";
+        };
+    }
+
+    private static String normalizeEndpoint(String endpoint) {
+        if (endpoint == null) return "https://api.openai.com";
+        return endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
+    }
 
     @Override
     public LlmResponse chat(LlmRequest request, long timeoutMs)
@@ -317,21 +337,6 @@ public class OpenAiCompatibleClient implements LlmClient {
     }
 
     /**
-     * finish_reason 归一为固定枚举：stop/tool_calls/max_tokens/content_filter/error/other。
-     * OpenAI 方言值 tool_calls/function_call → tool_calls；未知值归 other（TEXT 枚举加值零迁移）。
-     */
-    static String normalizeFinishReason(String raw) {
-        if (raw == null || raw.isEmpty()) return null;
-        return switch (raw) {
-            case "stop" -> "stop";
-            case "tool_calls", "function_call" -> "tool_calls";
-            case "max_tokens", "length" -> "max_tokens";
-            case "content_filter" -> "content_filter";
-            default -> "other";
-        };
-    }
-
-    /**
      * 从 JSON 中提取 tool_calls 数组。
      * 格式：[{"id":"...","type":"function","function":{"name":"...","arguments":"{...}"}}]
      */
@@ -575,23 +580,37 @@ public class OpenAiCompatibleClient implements LlmClient {
             if (c == '\\' && i + 1 < s.length()) {
                 char next = s.charAt(i + 1);
                 switch (next) {
-                    case 'n': sb.append('\n'); i++; break;
-                    case 'r': sb.append('\r'); i++; break;
-                    case 't': sb.append('\t'); i++; break;
-                    case '"': sb.append('"'); i++; break;
-                    case '\\': sb.append('\\'); i++; break;
-                    case '/': sb.append('/'); i++; break;
-                    default: sb.append(c);
+                    case 'n':
+                        sb.append('\n');
+                        i++;
+                        break;
+                    case 'r':
+                        sb.append('\r');
+                        i++;
+                        break;
+                    case 't':
+                        sb.append('\t');
+                        i++;
+                        break;
+                    case '"':
+                        sb.append('"');
+                        i++;
+                        break;
+                    case '\\':
+                        sb.append('\\');
+                        i++;
+                        break;
+                    case '/':
+                        sb.append('/');
+                        i++;
+                        break;
+                    default:
+                        sb.append(c);
                 }
             } else {
                 sb.append(c);
             }
         }
         return sb.toString();
-    }
-
-    private static String normalizeEndpoint(String endpoint) {
-        if (endpoint == null) return "https://api.openai.com";
-        return endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
     }
 }

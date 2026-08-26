@@ -2,13 +2,11 @@ package io.github.agentassert4j.spi;
 
 import io.github.agentassert4j.model.LlmRequest;
 import io.github.agentassert4j.model.LlmResponse;
-import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.model.ToolCallResult;
-
+import io.github.agentassert4j.model.TurnContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.net.http.HttpClient;
 import java.util.List;
 import java.util.Map;
 

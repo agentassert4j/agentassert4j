@@ -3,13 +3,7 @@ package io.github.agentassert4j.config;
 import io.github.agentassert4j.model.RegexPattern;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * 声明式规则配置 — 从 agentassert4j-rules.json 加载。
@@ -38,29 +32,12 @@ import java.util.Set;
  */
 public class SkillRulesConfig {
 
-    /** skillId → SkillRule 映射 */
+    /**
+     * skillId → SkillRule 映射
+     */
     private final Map<String, SkillRule> rules = new HashMap<>();
 
-    public SkillRulesConfig() {}
-
-    /**
-     * 获取指定 Skill 的规则声明。无匹配时返回空规则（而非 null）。
-     *
-     * @param skillId Skill 标识
-     * @return 规则声明（永不为 null）
-     */
-    public SkillRule getRulesForSkill(String skillId) {
-        return rules.getOrDefault(skillId, SkillRule.EMPTY);
-    }
-
-    /** 获取所有已声明的 Skill ID */
-    public Set<String> getDeclaredSkillIds() {
-        return Collections.unmodifiableSet(rules.keySet());
-    }
-
-    /** 是否存在任何规则声明 */
-    public boolean hasRules() {
-        return !rules.isEmpty();
+    public SkillRulesConfig() {
     }
 
     /**
@@ -86,10 +63,34 @@ public class SkillRulesConfig {
             String skillId = entry.getKey();
             if (entry.getValue() instanceof Map) {
                 config.rules.put(skillId,
-                    SkillRule.fromJson((Map<String, Object>) entry.getValue()));
+                        SkillRule.fromJson((Map<String, Object>) entry.getValue()));
             }
         }
         return config;
+    }
+
+    /**
+     * 获取指定 Skill 的规则声明。无匹配时返回空规则（而非 null）。
+     *
+     * @param skillId Skill 标识
+     * @return 规则声明（永不为 null）
+     */
+    public SkillRule getRulesForSkill(String skillId) {
+        return rules.getOrDefault(skillId, SkillRule.EMPTY);
+    }
+
+    /**
+     * 获取所有已声明的 Skill ID
+     */
+    public Set<String> getDeclaredSkillIds() {
+        return Collections.unmodifiableSet(rules.keySet());
+    }
+
+    /**
+     * 是否存在任何规则声明
+     */
+    public boolean hasRules() {
+        return !rules.isEmpty();
     }
 
     void addRule(String skillId, SkillRule rule) {
@@ -101,7 +102,9 @@ public class SkillRulesConfig {
      */
     public static class SkillRule {
 
-        /** 空规则（无任何声明） */
+        /**
+         * 空规则（无任何声明）
+         */
         static final SkillRule EMPTY = new SkillRule();
 
         private Set<String> requiredKeywords = Collections.emptySet();
@@ -109,7 +112,8 @@ public class SkillRulesConfig {
         private List<RegexPattern> regexPatterns = Collections.emptyList();
         private Set<String> behaviors = Collections.emptySet();
 
-        public SkillRule() {}
+        public SkillRule() {
+        }
 
         @SuppressWarnings("unchecked")
         static SkillRule fromJson(Map<String, Object> map) {
@@ -143,26 +147,6 @@ public class SkillRulesConfig {
             return rule;
         }
 
-        public Set<String> getRequiredKeywords() { return requiredKeywords; }
-        public void setRequiredKeywords(Set<String> requiredKeywords) {
-            this.requiredKeywords = requiredKeywords != null ? requiredKeywords : Collections.emptySet();
-        }
-
-        public Set<String> getForbiddenKeywords() { return forbiddenKeywords; }
-        public void setForbiddenKeywords(Set<String> forbiddenKeywords) {
-            this.forbiddenKeywords = forbiddenKeywords != null ? forbiddenKeywords : Collections.emptySet();
-        }
-
-        public List<RegexPattern> getRegexPatterns() { return regexPatterns; }
-        public void setRegexPatterns(List<RegexPattern> regexPatterns) {
-            this.regexPatterns = regexPatterns != null ? regexPatterns : Collections.emptyList();
-        }
-
-        public Set<String> getBehaviors() { return behaviors; }
-        public void setBehaviors(Set<String> behaviors) {
-            this.behaviors = behaviors != null ? behaviors : Collections.emptySet();
-        }
-
         private static Set<String> toStringSet(List<?> list) {
             Set<String> set = new LinkedHashSet<>();
             for (Object item : list) {
@@ -185,6 +169,38 @@ public class SkillRulesConfig {
                 }
             }
             return Collections.unmodifiableList(patterns);
+        }
+
+        public Set<String> getRequiredKeywords() {
+            return requiredKeywords;
+        }
+
+        public void setRequiredKeywords(Set<String> requiredKeywords) {
+            this.requiredKeywords = requiredKeywords != null ? requiredKeywords : Collections.emptySet();
+        }
+
+        public Set<String> getForbiddenKeywords() {
+            return forbiddenKeywords;
+        }
+
+        public void setForbiddenKeywords(Set<String> forbiddenKeywords) {
+            this.forbiddenKeywords = forbiddenKeywords != null ? forbiddenKeywords : Collections.emptySet();
+        }
+
+        public List<RegexPattern> getRegexPatterns() {
+            return regexPatterns;
+        }
+
+        public void setRegexPatterns(List<RegexPattern> regexPatterns) {
+            this.regexPatterns = regexPatterns != null ? regexPatterns : Collections.emptyList();
+        }
+
+        public Set<String> getBehaviors() {
+            return behaviors;
+        }
+
+        public void setBehaviors(Set<String> behaviors) {
+            this.behaviors = behaviors != null ? behaviors : Collections.emptySet();
         }
     }
 }

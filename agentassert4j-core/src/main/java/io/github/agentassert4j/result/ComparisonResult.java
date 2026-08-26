@@ -20,36 +20,91 @@ public class ComparisonResult {
     private Verdict verdict;
     private String summary;
 
-    public boolean isToolCallMatch() { return toolCallMatch; }
-    public void setToolCallMatch(boolean toolCallMatch) { this.toolCallMatch = toolCallMatch; }
+    public boolean isToolCallMatch() {
+        return toolCallMatch;
+    }
 
-    public boolean isParamTypeMatch() { return paramTypeMatch; }
-    public void setParamTypeMatch(boolean paramTypeMatch) { this.paramTypeMatch = paramTypeMatch; }
+    public void setToolCallMatch(boolean toolCallMatch) {
+        this.toolCallMatch = toolCallMatch;
+    }
 
-    public Set<String> getAddedFields() { return addedFields; }
-    public void setAddedFields(Set<String> addedFields) { this.addedFields = addedFields; }
+    public boolean isParamTypeMatch() {
+        return paramTypeMatch;
+    }
 
-    public Set<String> getRemovedFields() { return removedFields; }
-    public void setRemovedFields(Set<String> removedFields) { this.removedFields = removedFields; }
+    public void setParamTypeMatch(boolean paramTypeMatch) {
+        this.paramTypeMatch = paramTypeMatch;
+    }
 
-    public boolean isFieldTypeMatch() { return fieldTypeMatch; }
-    public void setFieldTypeMatch(boolean fieldTypeMatch) { this.fieldTypeMatch = fieldTypeMatch; }
+    public Set<String> getAddedFields() {
+        return addedFields;
+    }
 
-    public boolean isKeywordMatch() { return keywordMatch; }
-    public void setKeywordMatch(boolean keywordMatch) { this.keywordMatch = keywordMatch; }
+    public void setAddedFields(Set<String> addedFields) {
+        this.addedFields = addedFields;
+    }
 
-    public boolean isRegexMatch() { return regexMatch; }
-    public void setRegexMatch(boolean regexMatch) { this.regexMatch = regexMatch; }
+    public Set<String> getRemovedFields() {
+        return removedFields;
+    }
 
-    public boolean isBehaviorMatch() { return behaviorMatch; }
-    public void setBehaviorMatch(boolean behaviorMatch) { this.behaviorMatch = behaviorMatch; }
+    public void setRemovedFields(Set<String> removedFields) {
+        this.removedFields = removedFields;
+    }
 
-    public double getScore() { return score; }
-    public void setScore(double score) { this.score = score; }
+    public boolean isFieldTypeMatch() {
+        return fieldTypeMatch;
+    }
 
-    public Verdict getVerdict() { return verdict; }
-    public void setVerdict(Verdict verdict) { this.verdict = verdict; }
+    public void setFieldTypeMatch(boolean fieldTypeMatch) {
+        this.fieldTypeMatch = fieldTypeMatch;
+    }
 
-    public String getSummary() { return summary; }
-    public void setSummary(String summary) { this.summary = summary; }
+    public boolean isKeywordMatch() {
+        return keywordMatch;
+    }
+
+    public void setKeywordMatch(boolean keywordMatch) {
+        this.keywordMatch = keywordMatch;
+    }
+
+    public boolean isRegexMatch() {
+        return regexMatch;
+    }
+
+    public void setRegexMatch(boolean regexMatch) {
+        this.regexMatch = regexMatch;
+    }
+
+    public boolean isBehaviorMatch() {
+        return behaviorMatch;
+    }
+
+    public void setBehaviorMatch(boolean behaviorMatch) {
+        this.behaviorMatch = behaviorMatch;
+    }
+
+    public double getScore() {
+        return score;
+    }
+
+    public void setScore(double score) {
+        this.score = score;
+    }
+
+    public Verdict getVerdict() {
+        return verdict;
+    }
+
+    public void setVerdict(Verdict verdict) {
+        this.verdict = verdict;
+    }
+
+    public String getSummary() {
+        return summary;
+    }
+
+    public void setSummary(String summary) {
+        this.summary = summary;
+    }
 }

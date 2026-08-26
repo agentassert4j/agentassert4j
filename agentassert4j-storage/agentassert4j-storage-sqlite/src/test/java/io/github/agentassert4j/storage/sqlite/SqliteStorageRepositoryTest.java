@@ -1,26 +1,15 @@
 package io.github.agentassert4j.storage.sqlite;
 
+import io.github.agentassert4j.model.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import io.github.agentassert4j.model.ArchivedBaseline;
-import io.github.agentassert4j.model.BaselineStatus;
-import io.github.agentassert4j.model.DeterministicFingerprint;
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.SkillProfile;
-import io.github.agentassert4j.model.SkillType;
-import io.github.agentassert4j.model.ToolCall;
-import io.github.agentassert4j.model.TurnContext;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 

@@ -7,7 +7,6 @@ import java.util.HexFormat;
 
 /**
  * SHA-256 哈希工具 — ThreadLocal 复用 MessageDigest 实例。
- * 
  */
 public final class HashUtil {
 
@@ -20,7 +19,8 @@ public final class HashUtil {
                 }
             });
 
-    private HashUtil() {}
+    private HashUtil() {
+    }
 
     /**
      * 计算输入字符串的 SHA-256 哈希，返回小写十六进制字符串。

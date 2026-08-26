@@ -4,17 +4,7 @@ import io.github.agentassert4j.model.Confidence;
 import io.github.agentassert4j.model.GraphEdge;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * 内存依赖图谱 — 纯内存邻接表 + JSON 持久化。
@@ -31,10 +21,54 @@ import java.util.Set;
  */
 public class InMemoryDependencyGraph {
 
-    /** 正向邻接表：source → (target → edge) */
+    /**
+     * 正向邻接表：source → (target → edge)
+     */
     private final Map<String, Map<String, GraphEdge>> outEdges = new HashMap<>();
-    /** 反向邻接表：target → Set<source> */
+    /**
+     * 反向邻接表：target → Set<source>
+     */
     private final Map<String, Set<String>> inEdges = new HashMap<>();
+
+    /**
+     * 从 JSON 字符串反序列化图谱。
+     */
+    @SuppressWarnings("unchecked")
+    public static InMemoryDependencyGraph fromJson(String json) {
+        InMemoryDependencyGraph graph = new InMemoryDependencyGraph();
+        if (json == null || json.isBlank()) return graph;
+
+        Object parsed = RecursiveJsonParser.parse(json);
+        if (!(parsed instanceof Map)) return graph;
+
+        Map<String, Object> root = (Map<String, Object>) parsed;
+        Object edgesObj = root.get("edges");
+        if (!(edgesObj instanceof List)) return graph;
+
+        List<Object> edgesList = (List<Object>) edgesObj;
+        for (Object edgeObj : edgesList) {
+            if (!(edgeObj instanceof Map)) continue;
+            Map<String, Object> edgeMap = (Map<String, Object>) edgeObj;
+            String src = String.valueOf(edgeMap.get("source"));
+            String tgt = String.valueOf(edgeMap.get("target"));
+            String confStr = String.valueOf(edgeMap.get("confidence"));
+            Confidence conf;
+            try {
+                conf = Confidence.valueOf(confStr);
+            } catch (IllegalArgumentException e) {
+                conf = Confidence.HIGH;
+            }
+            List<String> through = new ArrayList<>();
+            Object throughObj = edgeMap.get("throughNodes");
+            if (throughObj instanceof List) {
+                for (Object t : (List<?>) throughObj) {
+                    if (t != null) through.add(String.valueOf(t));
+                }
+            }
+            graph.addEdge(src, tgt, conf, through);
+        }
+        return graph;
+    }
 
     /**
      * 添加一条边（默认 HIGH 置信度）。
@@ -140,19 +174,25 @@ public class InMemoryDependencyGraph {
         black.add(node);
     }
 
-    /** 获取直接后继节点 */
+    /**
+     * 获取直接后继节点
+     */
     public Set<String> getSuccessors(String node) {
         Map<String, GraphEdge> succs = outEdges.get(node);
         return succs != null ? Collections.unmodifiableSet(succs.keySet()) : Collections.emptySet();
     }
 
-    /** 获取直接前驱节点 */
+    /**
+     * 获取直接前驱节点
+     */
     public Set<String> getPredecessors(String node) {
         Set<String> preds = inEdges.get(node);
         return preds != null ? Collections.unmodifiableSet(preds) : Collections.emptySet();
     }
 
-    /** 获取所有节点 */
+    /**
+     * 获取所有节点
+     */
     public Set<String> getAllNodes() {
         Set<String> nodes = new HashSet<>(outEdges.keySet());
         for (Map<String, GraphEdge> targets : outEdges.values()) {
@@ -163,7 +203,9 @@ public class InMemoryDependencyGraph {
         return nodes;
     }
 
-    /** 获取所有边 */
+    /**
+     * 获取所有边
+     */
     public List<GraphEdge> getAllEdges() {
         List<GraphEdge> edges = new ArrayList<>();
         for (Map<String, GraphEdge> targets : outEdges.values()) {
@@ -172,12 +214,16 @@ public class InMemoryDependencyGraph {
         return edges;
     }
 
-    /** 获取节点数 */
+    /**
+     * 获取节点数
+     */
     public int nodeCount() {
         return getAllNodes().size();
     }
 
-    /** 获取边数 */
+    /**
+     * 获取边数
+     */
     public int edgeCount() {
         return getAllEdges().size();
     }
@@ -277,9 +323,6 @@ public class InMemoryDependencyGraph {
         return result;
     }
 
-    /** 搜索方向 */
-    private enum Direction { UP, DOWN }
-
     /**
      * 将图谱序列化为 JSON 字符串。
      * 使用 RecursiveJsonParser.serialize() 辅助。
@@ -307,42 +350,7 @@ public class InMemoryDependencyGraph {
     }
 
     /**
-     * 从 JSON 字符串反序列化图谱。
+     * 搜索方向
      */
-    @SuppressWarnings("unchecked")
-    public static InMemoryDependencyGraph fromJson(String json) {
-        InMemoryDependencyGraph graph = new InMemoryDependencyGraph();
-        if (json == null || json.isBlank()) return graph;
-
-        Object parsed = RecursiveJsonParser.parse(json);
-        if (!(parsed instanceof Map)) return graph;
-
-        Map<String, Object> root = (Map<String, Object>) parsed;
-        Object edgesObj = root.get("edges");
-        if (!(edgesObj instanceof List)) return graph;
-
-        List<Object> edgesList = (List<Object>) edgesObj;
-        for (Object edgeObj : edgesList) {
-            if (!(edgeObj instanceof Map)) continue;
-            Map<String, Object> edgeMap = (Map<String, Object>) edgeObj;
-            String src = String.valueOf(edgeMap.get("source"));
-            String tgt = String.valueOf(edgeMap.get("target"));
-            String confStr = String.valueOf(edgeMap.get("confidence"));
-            Confidence conf;
-            try {
-                conf = Confidence.valueOf(confStr);
-            } catch (IllegalArgumentException e) {
-                conf = Confidence.HIGH;
-            }
-            List<String> through = new ArrayList<>();
-            Object throughObj = edgeMap.get("throughNodes");
-            if (throughObj instanceof List) {
-                for (Object t : (List<?>) throughObj) {
-                    if (t != null) through.add(String.valueOf(t));
-                }
-            }
-            graph.addEdge(src, tgt, conf, through);
-        }
-        return graph;
-    }
+    private enum Direction {UP, DOWN}
 }

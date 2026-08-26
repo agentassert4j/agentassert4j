@@ -3,16 +3,10 @@ package io.github.agentassert4j.algorithm;
 import io.github.agentassert4j.config.SkillRulesConfig;
 import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.RegexPattern;
 import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -22,7 +16,8 @@ import java.util.stream.Collectors;
  */
 public final class FingerprintExtractor {
 
-    private FingerprintExtractor() {}
+    private FingerprintExtractor() {
+    }
 
     /**
      * 从交互记录中提取确定性行为指纹。
@@ -63,8 +58,8 @@ public final class FingerprintExtractor {
      * @return 四维度确定性指纹
      */
     public static DeterministicFingerprint extract(InteractionRecord record,
-                                                    SkillRulesConfig rules,
-                                                    String skillId) {
+                                                   SkillRulesConfig rules,
+                                                   String skillId) {
         DeterministicFingerprint fp = extract(record);
         if (rules == null || skillId == null) {
             return fp;

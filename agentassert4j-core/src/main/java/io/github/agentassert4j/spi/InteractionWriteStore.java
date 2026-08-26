@@ -12,9 +12,13 @@ import java.util.List;
  */
 public interface InteractionWriteStore {
 
-    /** 写入单条交互记录（record_id 冲突时静默跳过） */
+    /**
+     * 写入单条交互记录（record_id 冲突时静默跳过）
+     */
     void saveInteraction(InteractionRecord r);
 
-    /** 批量写入（实现方可做事务优化；语义等价于逐条 saveInteraction） */
+    /**
+     * 批量写入（实现方可做事务优化；语义等价于逐条 saveInteraction）
+     */
     void saveInteractions(List<InteractionRecord> records);
 }

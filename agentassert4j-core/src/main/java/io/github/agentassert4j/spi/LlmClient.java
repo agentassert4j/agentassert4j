@@ -21,11 +21,15 @@ public interface LlmClient {
      * @throws LlmApiException     API 错误
      */
     LlmResponse chat(LlmRequest request, long timeoutMs)
-        throws LlmTimeoutException, LlmApiException;
+            throws LlmTimeoutException, LlmApiException;
 
-    /** 客户端名称 */
+    /**
+     * 客户端名称
+     */
     String name();
 
-    /** 健康检查 */
+    /**
+     * 健康检查
+     */
     boolean isAvailable();
 }

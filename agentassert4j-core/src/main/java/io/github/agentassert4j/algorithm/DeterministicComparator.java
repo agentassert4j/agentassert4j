@@ -25,13 +25,12 @@ import java.util.stream.Collectors;
  */
 public class DeterministicComparator {
 
-    private final ComparatorConfig config;
-
     // 自动触发 REGRESSION 的字段名（无论用户是否配置为可忽略）
     private static final Set<String> AUTO_REGRESSION_FIELDS = Set.of(
             "error", "errormessage", "error_code", "errorcode", "err", "exception",
             "error_msg", "errormsg", "fail_reason", "failreason"
     );
+    private final ComparatorConfig config;
 
     public DeterministicComparator() {
         this(ComparatorConfig.defaults());
@@ -50,8 +49,8 @@ public class DeterministicComparator {
      * @return 对比结果（含评分、判定、差异详情）
      */
     public ComparisonResult compare(DeterministicFingerprint baseline,
-                                     DeterministicFingerprint current,
-                                     String currentOutput) {
+                                    DeterministicFingerprint current,
+                                    String currentOutput) {
         String output = currentOutput != null ? currentOutput : "";
         ComparisonResult r = new ComparisonResult();
 
@@ -120,11 +119,20 @@ public class DeterministicComparator {
         // === 动态权重分配 ===
         double w1 = 0.40, w2 = 0.25, w3 = 0.20, w4 = 0.15;
         if (!hasDeclaredRules && !hasDeclaredBehaviors) {
-            w1 = 0.60; w2 = 0.40; w3 = 0; w4 = 0;
+            w1 = 0.60;
+            w2 = 0.40;
+            w3 = 0;
+            w4 = 0;
         } else if (!hasDeclaredRules) {
-            w1 = 0.50; w2 = 0.30; w3 = 0; w4 = 0.20;
+            w1 = 0.50;
+            w2 = 0.30;
+            w3 = 0;
+            w4 = 0.20;
         } else if (!hasDeclaredBehaviors) {
-            w1 = 0.48; w2 = 0.30; w3 = 0.22; w4 = 0;
+            w1 = 0.48;
+            w2 = 0.30;
+            w3 = 0.22;
+            w4 = 0;
         }
 
         // === 加权综合评分 ===
@@ -158,8 +166,8 @@ public class DeterministicComparator {
     }
 
     private double computeDimension2(DeterministicFingerprint baseline,
-                                      DeterministicFingerprint current,
-                                      Set<String> removed, boolean typeOk) {
+                                     DeterministicFingerprint current,
+                                     Set<String> removed, boolean typeOk) {
         String bType = baseline.getOutputContentType();
         String cType = current.getOutputContentType();
 

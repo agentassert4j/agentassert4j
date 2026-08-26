@@ -5,11 +5,7 @@ import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * 增量测试筛选 — 数据驱动的变更影响分析。
@@ -30,10 +26,14 @@ import java.util.Set;
  */
 public class ImpactAnalyzer {
 
-    /** 全局/局部 Prompt 阈值：共享 Skill >= 此值视为全局 Prompt，启用采样 */
+    /**
+     * 全局/局部 Prompt 阈值：共享 Skill >= 此值视为全局 Prompt，启用采样
+     */
     static final int GLOBAL_PROMPT_THRESHOLD = 10;
 
-    /** 全局 Prompt 时每个 Skill 采样的最大用例数 */
+    /**
+     * 全局 Prompt 时每个 Skill 采样的最大用例数
+     */
     static final int GLOBAL_SAMPLE_PER_SKILL = 3;
 
     private final StorageRepository repository;
@@ -49,7 +49,7 @@ public class ImpactAnalyzer {
      *
      * @param oldPromptHash 变更前的 System Prompt SHA-256 hash
      * @param newPromptHash 变更后的 System Prompt SHA-256 hash
-     *                      TODO: [预留参数] 当前未使用，未来可能用于查询新增 Skill（新 hash 关联但旧 hash 不关联的 Skill）
+     *                                           TODO: [预留参数] 当前未使用，未来可能用于查询新增 Skill（新 hash 关联但旧 hash 不关联的 Skill）
      * @return 分析结果（含冷启动提示 / 受影响 Skill + 测试用例）
      */
     public AnalysisResult analyzeChange(String oldPromptHash, String newPromptHash) {
@@ -61,10 +61,10 @@ public class ImpactAnalyzer {
             List<SkillProfile> allSkills = repository.findAllSkills();
             if (allSkills.isEmpty()) {
                 return AnalysisResult.noBaseline(
-                    "未录制到任何交互数据。请先运行 Agent 积累交互数据，框架将自动建立基线。");
+                        "未录制到任何交互数据。请先运行 Agent 积累交互数据，框架将自动建立基线。");
             } else {
                 return AnalysisResult.noBaseline(
-                    "未找到使用此 Prompt hash 的 Skill。可能是新 Prompt 或 hash 不匹配。");
+                        "未找到使用此 Prompt hash 的 Skill。可能是新 Prompt 或 hash 不匹配。");
             }
         }
 
@@ -86,7 +86,7 @@ public class ImpactAnalyzer {
      * 局部 Prompt（1-9 Skill）：全部测试。
      */
     private List<InteractionRecord> selectTestCases(Set<String> directSkills,
-                                                     Set<String> allAffectedSkills) {
+                                                    Set<String> allAffectedSkills) {
         List<InteractionRecord> testCases = new ArrayList<>();
 
         if (directSkills.size() >= GLOBAL_PROMPT_THRESHOLD) {

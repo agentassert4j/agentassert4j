@@ -10,10 +10,16 @@ package io.github.agentassert4j.model;
  * </pre>
  */
 public enum BaselineStatus {
-    /** 当前基线 */
+    /**
+     * 当前基线
+     */
     BASELINE,
-    /** 候选（等待开发者裁决） */
+    /**
+     * 候选（等待开发者裁决）
+     */
     CANDIDATE,
-    /** 已归档（approve 时旧基线移入归档） */
+    /**
+     * 已归档（approve 时旧基线移入归档）
+     */
     ARCHIVED
 }

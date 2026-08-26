@@ -11,12 +11,27 @@ public class ToolCallResult {
     private String toolName;
     private Map<String, Object> arguments;
 
-    public String getToolCallId() { return toolCallId; }
-    public void setToolCallId(String toolCallId) { this.toolCallId = toolCallId; }
+    public String getToolCallId() {
+        return toolCallId;
+    }
 
-    public String getToolName() { return toolName; }
-    public void setToolName(String toolName) { this.toolName = toolName; }
+    public void setToolCallId(String toolCallId) {
+        this.toolCallId = toolCallId;
+    }
 
-    public Map<String, Object> getArguments() { return arguments; }
-    public void setArguments(Map<String, Object> arguments) { this.arguments = arguments; }
+    public String getToolName() {
+        return toolName;
+    }
+
+    public void setToolName(String toolName) {
+        this.toolName = toolName;
+    }
+
+    public Map<String, Object> getArguments() {
+        return arguments;
+    }
+
+    public void setArguments(Map<String, Object> arguments) {
+        this.arguments = arguments;
+    }
 }

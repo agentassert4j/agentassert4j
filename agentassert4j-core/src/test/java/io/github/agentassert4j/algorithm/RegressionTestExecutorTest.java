@@ -1,22 +1,17 @@
 package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.config.TestExecutionConfig;
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.LlmRequest;
-import io.github.agentassert4j.model.LlmResponse;
-import io.github.agentassert4j.model.RegressionTestResult;
-import io.github.agentassert4j.model.TestResultStatus;
-import io.github.agentassert4j.model.ToolCall;
-import io.github.agentassert4j.model.ToolCallResult;
-import io.github.agentassert4j.model.TurnContext;
-
+import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.LlmTimeoutException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -266,9 +261,13 @@ class RegressionTestExecutorTest {
         }
 
         @Override
-        public String name() { return "stub"; }
+        public String name() {
+            return "stub";
+        }
 
         @Override
-        public boolean isAvailable() { return true; }
+        public boolean isAvailable() {
+            return true;
+        }
     }
 }

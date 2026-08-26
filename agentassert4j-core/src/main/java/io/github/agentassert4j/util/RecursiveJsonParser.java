@@ -1,11 +1,6 @@
 package io.github.agentassert4j.util;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 
 /**
  * 递归下降 JSON 解析器，RFC 8259 兼容。
@@ -23,7 +18,8 @@ import java.util.TreeSet;
  */
 public final class RecursiveJsonParser {
 
-    private RecursiveJsonParser() {}
+    private RecursiveJsonParser() {
+    }
 
     /**
      * 解析 JSON 字符串，返回标准 Java 类型。
@@ -221,13 +217,27 @@ public final class RecursiveJsonParser {
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             switch (c) {
-                case '"':  sb.append("\\\""); break;
-                case '\\': sb.append("\\\\"); break;
-                case '\b': sb.append("\\b"); break;
-                case '\f': sb.append("\\f"); break;
-                case '\n': sb.append("\\n"); break;
-                case '\r': sb.append("\\r"); break;
-                case '\t': sb.append("\\t"); break;
+                case '"':
+                    sb.append("\\\"");
+                    break;
+                case '\\':
+                    sb.append("\\\\");
+                    break;
+                case '\b':
+                    sb.append("\\b");
+                    break;
+                case '\f':
+                    sb.append("\\f");
+                    break;
+                case '\n':
+                    sb.append("\\n");
+                    break;
+                case '\r':
+                    sb.append("\\r");
+                    break;
+                case '\t':
+                    sb.append("\\t");
+                    break;
                 default:
                     if (c < 0x20) {
                         sb.append("\\u").append(String.format("%04x", (int) c));
@@ -255,11 +265,17 @@ public final class RecursiveJsonParser {
             if (pos >= len) throw new ParseException("Unexpected end");
             char c = input.charAt(pos);
             switch (c) {
-                case '{': return parseObject();
-                case '[': return parseArray();
-                case '"': return parseString();
-                case 't': case 'f': return parseBoolean();
-                case 'n': return parseNull();
+                case '{':
+                    return parseObject();
+                case '[':
+                    return parseArray();
+                case '"':
+                    return parseString();
+                case 't':
+                case 'f':
+                    return parseBoolean();
+                case 'n':
+                    return parseNull();
                 default:
                     if (c == '-' || (c >= '0' && c <= '9')) {
                         return parseNumber();
@@ -335,14 +351,30 @@ public final class RecursiveJsonParser {
                     if (pos >= len) throw new ParseException("Unexpected end in string escape");
                     char esc = input.charAt(pos++);
                     switch (esc) {
-                        case '"':  sb.append('"'); break;
-                        case '\\': sb.append('\\'); break;
-                        case '/':  sb.append('/'); break;
-                        case 'b':  sb.append('\b'); break;
-                        case 'f':  sb.append('\f'); break;
-                        case 'n':  sb.append('\n'); break;
-                        case 'r':  sb.append('\r'); break;
-                        case 't':  sb.append('\t'); break;
+                        case '"':
+                            sb.append('"');
+                            break;
+                        case '\\':
+                            sb.append('\\');
+                            break;
+                        case '/':
+                            sb.append('/');
+                            break;
+                        case 'b':
+                            sb.append('\b');
+                            break;
+                        case 'f':
+                            sb.append('\f');
+                            break;
+                        case 'n':
+                            sb.append('\n');
+                            break;
+                        case 'r':
+                            sb.append('\r');
+                            break;
+                        case 't':
+                            sb.append('\t');
+                            break;
                         case 'u':
                             if (pos + 4 > len) throw new ParseException("Invalid unicode escape");
                             String hex = input.substring(pos, pos + 4);

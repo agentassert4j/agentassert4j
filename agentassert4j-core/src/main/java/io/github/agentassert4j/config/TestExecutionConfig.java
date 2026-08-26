@@ -24,9 +24,12 @@ public class TestExecutionConfig {
     private boolean dryRun = false;
     private String model;
 
-    public TestExecutionConfig() {}
+    public TestExecutionConfig() {
+    }
 
-    /** 返回带安全默认值的配置 */
+    /**
+     * 返回带安全默认值的配置
+     */
     public static TestExecutionConfig defaults() {
         return new TestExecutionConfig();
     }
@@ -72,21 +75,51 @@ public class TestExecutionConfig {
         return this;
     }
 
-    public int getMaxTestCases() { return maxTestCases; }
-    public void setMaxTestCases(int maxTestCases) { this.maxTestCases = maxTestCases; }
+    public int getMaxTestCases() {
+        return maxTestCases;
+    }
 
-    public long getTimeoutMs() { return timeoutMs; }
-    public void setTimeoutMs(long timeoutMs) { this.timeoutMs = timeoutMs; }
+    public void setMaxTestCases(int maxTestCases) {
+        this.maxTestCases = maxTestCases;
+    }
 
-    public int getMaxRetries() { return maxRetries; }
-    public void setMaxRetries(int maxRetries) { this.maxRetries = maxRetries; }
+    public long getTimeoutMs() {
+        return timeoutMs;
+    }
 
-    public double getTemperature() { return temperature; }
-    public void setTemperature(double temperature) { this.temperature = temperature; }
+    public void setTimeoutMs(long timeoutMs) {
+        this.timeoutMs = timeoutMs;
+    }
 
-    public boolean isDryRun() { return dryRun; }
-    public void setDryRun(boolean dryRun) { this.dryRun = dryRun; }
+    public int getMaxRetries() {
+        return maxRetries;
+    }
 
-    public String getModel() { return model; }
-    public void setModel(String model) { this.model = model; }
+    public void setMaxRetries(int maxRetries) {
+        this.maxRetries = maxRetries;
+    }
+
+    public double getTemperature() {
+        return temperature;
+    }
+
+    public void setTemperature(double temperature) {
+        this.temperature = temperature;
+    }
+
+    public boolean isDryRun() {
+        return dryRun;
+    }
+
+    public void setDryRun(boolean dryRun) {
+        this.dryRun = dryRun;
+    }
+
+    public String getModel() {
+        return model;
+    }
+
+    public void setModel(String model) {
+        this.model = model;
+    }
 }

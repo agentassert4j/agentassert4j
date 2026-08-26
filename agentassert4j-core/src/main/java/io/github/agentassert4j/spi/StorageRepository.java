@@ -18,10 +18,14 @@ public interface StorageRepository extends
         GraphStore,
         BaselineArchiveStore {
 
-    /** 存储后端类型标识（如 "sqlite"） */
+    /**
+     * 存储后端类型标识（如 "sqlite"）
+     */
     String type();
 
-    /** 初始化（建表/迁移）；失败抛运行时异常且不得泄漏资源 */
+    /**
+     * 初始化（建表/迁移）；失败抛运行时异常且不得泄漏资源
+     */
     void initialize();
 
     void close();

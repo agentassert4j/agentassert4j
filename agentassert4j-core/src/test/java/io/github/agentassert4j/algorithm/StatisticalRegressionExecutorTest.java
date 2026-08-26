@@ -1,8 +1,6 @@
 package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.model.*;
-import io.github.agentassert4j.result.StatisticalVerdict;
-import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.LlmTimeoutException;
@@ -11,7 +9,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StatisticalRegressionExecutorTest {
 
@@ -204,9 +203,13 @@ class StatisticalRegressionExecutorTest {
         }
 
         @Override
-        public String name() { return "gpt-4o"; }
+        public String name() {
+            return "gpt-4o";
+        }
 
         @Override
-        public boolean isAvailable() { return true; }
+        public boolean isAvailable() {
+            return true;
+        }
     }
 }

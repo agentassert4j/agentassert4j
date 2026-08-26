@@ -11,21 +11,37 @@ import java.util.List;
  */
 public final class RecorderConfig {
 
-    /** 批量写入阈值：buffer 达到此数量触发 flush */
+    /**
+     * 批量写入阈值：buffer 达到此数量触发 flush
+     */
     private final int batchSize;
-    /** 定时 flush 间隔（毫秒），0 表示禁用定时 flush */
+    /**
+     * 定时 flush 间隔（毫秒），0 表示禁用定时 flush
+     */
     private final long flushIntervalMs;
-    /** buffer 上限，防止 OOM。超限后新记录丢弃 */
+    /**
+     * buffer 上限，防止 OOM。超限后新记录丢弃
+     */
     private final int maxBufferSize;
-    /** Disruptor RingBuffer 大小（必须是 2 的幂） */
+    /**
+     * Disruptor RingBuffer 大小（必须是 2 的幂）
+     */
     private final int ringBufferSize;
-    /** 敏感字段名称列表（忽略大小写匹配） */
+    /**
+     * 敏感字段名称列表（忽略大小写匹配）
+     */
     private final List<String> sensitiveFields;
-    /** 脱敏策略 */
+    /**
+     * 脱敏策略
+     */
     private final SanitizeStrategy sanitizeStrategy;
-    /** 是否脱敏 userInput（默认 false，因为影响回归重放） */
+    /**
+     * 是否脱敏 userInput（默认 false，因为影响回归重放）
+     */
     private final boolean sanitizeUserInput;
-    /** 是否脱敏 modelResponse（默认 false） */
+    /**
+     * 是否脱敏 modelResponse（默认 false）
+     */
     private final boolean sanitizeModelResponse;
 
     private RecorderConfig(Builder builder) {
@@ -38,15 +54,6 @@ public final class RecorderConfig {
         this.sanitizeUserInput = builder.sanitizeUserInput;
         this.sanitizeModelResponse = builder.sanitizeModelResponse;
     }
-
-    public int getBatchSize() { return batchSize; }
-    public long getFlushIntervalMs() { return flushIntervalMs; }
-    public int getMaxBufferSize() { return maxBufferSize; }
-    public int getRingBufferSize() { return ringBufferSize; }
-    public List<String> getSensitiveFields() { return sensitiveFields; }
-    public SanitizeStrategy getSanitizeStrategy() { return sanitizeStrategy; }
-    public boolean isSanitizeUserInput() { return sanitizeUserInput; }
-    public boolean isSanitizeModelResponse() { return sanitizeModelResponse; }
 
     /**
      * 返回默认配置：
@@ -61,6 +68,38 @@ public final class RecorderConfig {
         return new Builder();
     }
 
+    public int getBatchSize() {
+        return batchSize;
+    }
+
+    public long getFlushIntervalMs() {
+        return flushIntervalMs;
+    }
+
+    public int getMaxBufferSize() {
+        return maxBufferSize;
+    }
+
+    public int getRingBufferSize() {
+        return ringBufferSize;
+    }
+
+    public List<String> getSensitiveFields() {
+        return sensitiveFields;
+    }
+
+    public SanitizeStrategy getSanitizeStrategy() {
+        return sanitizeStrategy;
+    }
+
+    public boolean isSanitizeUserInput() {
+        return sanitizeUserInput;
+    }
+
+    public boolean isSanitizeModelResponse() {
+        return sanitizeModelResponse;
+    }
+
     public static final class Builder {
         private int batchSize = 100;
         private long flushIntervalMs = 5000;
@@ -71,7 +110,8 @@ public final class RecorderConfig {
         private boolean sanitizeUserInput = false;
         private boolean sanitizeModelResponse = false;
 
-        private Builder() {}
+        private Builder() {
+        }
 
         public Builder batchSize(int batchSize) {
             this.batchSize = batchSize;

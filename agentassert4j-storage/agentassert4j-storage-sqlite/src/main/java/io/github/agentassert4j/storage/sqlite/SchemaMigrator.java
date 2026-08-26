@@ -13,9 +13,12 @@ import java.sql.Statement;
  */
 final class SchemaMigrator {
 
-    private SchemaMigrator() {}
+    private SchemaMigrator() {
+    }
 
-    /** 将库迁移到当前契约版本；幂等 */
+    /**
+     * 将库迁移到当前契约版本；幂等
+     */
     static void migrate(Connection connection) throws SQLException {
         int current = readUserVersion(connection);
 

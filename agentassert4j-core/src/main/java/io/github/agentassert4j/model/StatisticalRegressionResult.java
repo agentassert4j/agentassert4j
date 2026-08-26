@@ -3,11 +3,7 @@ package io.github.agentassert4j.model;
 import io.github.agentassert4j.result.StatisticalVerdict;
 import io.github.agentassert4j.result.Verdict;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 统计回归测试结果 — 对同一基线执行 N 次重放后的聚合结果。
@@ -25,46 +21,68 @@ public class StatisticalRegressionResult {
     private String baselineRecordId;
     private String skillId;
 
-    /** 所有采样结果（不可变） */
+    /**
+     * 所有采样结果（不可变）
+     */
     private List<SampleResult> samples = new ArrayList<>();
 
-    /** 实际采样次数 */
+    /**
+     * 实际采样次数
+     */
     private int actualSampleCount;
 
-    /** 各 Verdict 的次数统计（不可变） */
+    /**
+     * 各 Verdict 的次数统计（不可变）
+     */
     private Map<Verdict, Integer> verdictCounts = new LinkedHashMap<>();
 
-    /** 各 Verdict 的比率（不可变） */
+    /**
+     * 各 Verdict 的比率（不可变）
+     */
     private Map<Verdict, Double> verdictRates = new LinkedHashMap<>();
 
-    /** 综合统计判定 */
+    /**
+     * 综合统计判定
+     */
     private StatisticalVerdict statisticalVerdict;
 
-    /** score 均值 */
+    /**
+     * score 均值
+     */
     private double averageScore;
 
-    /** score 标准差 */
+    /**
+     * score 标准差
+     */
     private double scoreStdDev;
 
-    /** score 最小值 */
+    /**
+     * score 最小值
+     */
     private double minScore;
 
-    /** 差异模式摘要：最频繁出现的差异类型 */
+    /**
+     * 差异模式摘要：最频繁出现的差异类型
+     */
     private List<String> frequentDiffPatterns = new ArrayList<>();
 
-    /** 总耗时（毫秒） */
+    /**
+     * 总耗时（毫秒）
+     */
     private long totalLatencyMs;
 
-    /** 总 API 费用估算（美元） */
+    /**
+     * 总 API 费用估算（美元）
+     */
     private double estimatedCost;
 
     /**
      * 从采样结果列表聚合统计。
      *
-     * @param baselineRecordId 基线记录 ID
-     * @param skillId          Skill ID
-     * @param samples          采样结果列表
-     * @param passThreshold    PASS 一致率阈值
+     * @param baselineRecordId    基线记录 ID
+     * @param skillId             Skill ID
+     * @param samples             采样结果列表
+     * @param passThreshold       PASS 一致率阈值
      * @param regressionTolerance REGRESSION 比例上限
      * @return 聚合统计结果
      */
@@ -150,31 +168,75 @@ public class StatisticalRegressionResult {
         return result;
     }
 
-    public String getBaselineRecordId() { return baselineRecordId; }
-    public void setBaselineRecordId(String id) { this.baselineRecordId = id; }
+    public String getBaselineRecordId() {
+        return baselineRecordId;
+    }
 
-    public String getSkillId() { return skillId; }
-    public void setSkillId(String skillId) { this.skillId = skillId; }
+    public void setBaselineRecordId(String id) {
+        this.baselineRecordId = id;
+    }
 
-    public List<SampleResult> getSamples() { return samples; }
+    public String getSkillId() {
+        return skillId;
+    }
 
-    public int getActualSampleCount() { return actualSampleCount; }
-    public void setActualSampleCount(int n) { this.actualSampleCount = n; }
+    public void setSkillId(String skillId) {
+        this.skillId = skillId;
+    }
 
-    public Map<Verdict, Integer> getVerdictCounts() { return verdictCounts; }
-    public Map<Verdict, Double> getVerdictRates() { return verdictRates; }
+    public List<SampleResult> getSamples() {
+        return samples;
+    }
 
-    public StatisticalVerdict getStatisticalVerdict() { return statisticalVerdict; }
+    public int getActualSampleCount() {
+        return actualSampleCount;
+    }
 
-    public double getAverageScore() { return averageScore; }
-    public double getScoreStdDev() { return scoreStdDev; }
-    public double getMinScore() { return minScore; }
+    public void setActualSampleCount(int n) {
+        this.actualSampleCount = n;
+    }
 
-    public List<String> getFrequentDiffPatterns() { return frequentDiffPatterns; }
+    public Map<Verdict, Integer> getVerdictCounts() {
+        return verdictCounts;
+    }
 
-    public long getTotalLatencyMs() { return totalLatencyMs; }
-    public void setTotalLatencyMs(long ms) { this.totalLatencyMs = ms; }
+    public Map<Verdict, Double> getVerdictRates() {
+        return verdictRates;
+    }
 
-    public double getEstimatedCost() { return estimatedCost; }
-    public void setEstimatedCost(double cost) { this.estimatedCost = cost; }
+    public StatisticalVerdict getStatisticalVerdict() {
+        return statisticalVerdict;
+    }
+
+    public double getAverageScore() {
+        return averageScore;
+    }
+
+    public double getScoreStdDev() {
+        return scoreStdDev;
+    }
+
+    public double getMinScore() {
+        return minScore;
+    }
+
+    public List<String> getFrequentDiffPatterns() {
+        return frequentDiffPatterns;
+    }
+
+    public long getTotalLatencyMs() {
+        return totalLatencyMs;
+    }
+
+    public void setTotalLatencyMs(long ms) {
+        this.totalLatencyMs = ms;
+    }
+
+    public double getEstimatedCost() {
+        return estimatedCost;
+    }
+
+    public void setEstimatedCost(double cost) {
+        this.estimatedCost = cost;
+    }
 }

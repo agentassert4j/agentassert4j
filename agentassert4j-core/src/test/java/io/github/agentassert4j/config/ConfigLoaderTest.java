@@ -78,8 +78,8 @@ class ConfigLoaderTest {
         @DisplayName("JSON 内的环境变量替换")
         void jsonWithEnvVars() {
             String json = """
-                {"llm": {"apiKey": "${AGENTASSERT_NONEXISTENT_KEY}", "model": "gpt-4o"}}
-                """;
+                    {"llm": {"apiKey": "${AGENTASSERT_NONEXISTENT_KEY}", "model": "gpt-4o"}}
+                    """;
             String result = ConfigLoader.resolveEnvVars(json);
             assertEquals("gpt-4o", result.contains("gpt-4o") ? "gpt-4o" : "fail");
             assertTrue(result.contains("\"apiKey\": \"\""));
@@ -146,8 +146,8 @@ class ConfigLoaderTest {
             Path tempFile = Files.createTempFile("agentassert4j-test", ".json");
             try {
                 String content = """
-                    {"storage": {"type": "mysql", "url": "jdbc:mysql://test/db"}}
-                    """;
+                        {"storage": {"type": "mysql", "url": "jdbc:mysql://test/db"}}
+                        """;
                 Files.writeString(tempFile, content, StandardCharsets.UTF_8);
                 System.setProperty(ConfigLoader.CONFIG_PATH_PROPERTY, tempFile.toString());
 
@@ -165,8 +165,8 @@ class ConfigLoaderTest {
             Path tempFile = Files.createTempFile("agentassert4j-test", ".json");
             try {
                 String content = """
-                    {"llm": {"apiKey": "${AGENTASSERT_NONEXISTENT_KEY}", "model": "gpt-4o"}}
-                    """;
+                        {"llm": {"apiKey": "${AGENTASSERT_NONEXISTENT_KEY}", "model": "gpt-4o"}}
+                        """;
                 Files.writeString(tempFile, content, StandardCharsets.UTF_8);
                 System.setProperty(ConfigLoader.CONFIG_PATH_PROPERTY, tempFile.toString());
 
@@ -197,8 +197,8 @@ class ConfigLoaderTest {
             Path tempFile = Files.createTempFile("agentassert4j-rules", ".json");
             try {
                 String content = """
-                    {"skills":{"queryOrder":{"requiredKeywords":["订单号"]}}}
-                    """;
+                        {"skills":{"queryOrder":{"requiredKeywords":["订单号"]}}}
+                        """;
                 Files.writeString(tempFile, content, StandardCharsets.UTF_8);
                 System.setProperty(ConfigLoader.RULES_PATH_PROPERTY, tempFile.toString());
 

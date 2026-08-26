@@ -1,26 +1,10 @@
 package io.github.agentassert4j.storage.sqlite;
 
+import io.github.agentassert4j.model.*;
+
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import io.github.agentassert4j.model.ArchivedBaseline;
-import io.github.agentassert4j.model.BaselineStatus;
-import io.github.agentassert4j.model.Confidence;
-import io.github.agentassert4j.model.DeterministicFingerprint;
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.RegexPattern;
-import io.github.agentassert4j.model.SkillProfile;
-import io.github.agentassert4j.model.SkillType;
-import io.github.agentassert4j.model.ToolCall;
-import io.github.agentassert4j.model.TurnContext;
+import java.util.*;
 
 /**
  * JSON 序列化工具 — 手写简易实现，零外部依赖。
@@ -34,103 +18,66 @@ import io.github.agentassert4j.model.TurnContext;
  */
 final class JsonMapper {
 
-    private JsonMapper() {}
+    private JsonMapper() {
+    }
 
     static String toJson(InteractionRecord r) {
         StringBuilder sb = new StringBuilder(512);
         sb.append("{");
         stringField(sb, "recordId", r.getRecordId());
-        sb.append(","); longField(sb, "timestamp", r.getTimestamp());
-        sb.append(","); longField(sb, "seq", r.getSeq());
-        sb.append(","); stringField(sb, "templateHash", r.getTemplateHash());
-        sb.append(","); stringField(sb, "userInput", r.getUserInput());
-        sb.append(","); intField(sb, "turnIndex", r.getTurnIndex());
-        sb.append(","); stringField(sb, "modelResponse", r.getModelResponse());
-        sb.append(","); boolField(sb, "hasToolCalls", r.isHasToolCalls());
-        sb.append(","); longField(sb, "latencyMs", r.getLatencyMs());
-        sb.append(","); stringField(sb, "sessionId", r.getSessionId());
-        sb.append(","); stringField(sb, "skillId", r.getSkillId());
-        sb.append(","); boolField(sb, "multimodalInput", r.isMultimodalInput());
-        sb.append(","); stringField(sb, "multimodalContent", r.getMultimodalContent());
+        sb.append(",");
+        longField(sb, "timestamp", r.getTimestamp());
+        sb.append(",");
+        longField(sb, "seq", r.getSeq());
+        sb.append(",");
+        stringField(sb, "templateHash", r.getTemplateHash());
+        sb.append(",");
+        stringField(sb, "userInput", r.getUserInput());
+        sb.append(",");
+        intField(sb, "turnIndex", r.getTurnIndex());
+        sb.append(",");
+        stringField(sb, "modelResponse", r.getModelResponse());
+        sb.append(",");
+        boolField(sb, "hasToolCalls", r.isHasToolCalls());
+        sb.append(",");
+        longField(sb, "latencyMs", r.getLatencyMs());
+        sb.append(",");
+        stringField(sb, "sessionId", r.getSessionId());
+        sb.append(",");
+        stringField(sb, "skillId", r.getSkillId());
+        sb.append(",");
+        boolField(sb, "multimodalInput", r.isMultimodalInput());
+        sb.append(",");
+        stringField(sb, "multimodalContent", r.getMultimodalContent());
         sb.append(",\"toolCalls\":").append(toJsonArray(r.getToolCalls(), JsonMapper::toJson));
         sb.append(",\"previousTurns\":").append(toJsonArray(r.getPreviousTurns(), JsonMapper::toJson));
         sb.append("}");
         return sb.toString();
     }
 
-    static InteractionRecord fromJsonToRecord(String json) {
-        if (json == null || json.isEmpty()) return new InteractionRecord();
-        InteractionRecord r = new InteractionRecord();
-        r.setRecordId(getString(json, "recordId"));
-        r.setTimestamp(getLong(json, "timestamp"));
-        r.setSeq(getLong(json, "seq"));
-        r.setTemplateHash(getString(json, "templateHash"));
-        r.setUserInput(getString(json, "userInput"));
-        r.setTurnIndex(getInt(json, "turnIndex"));
-        r.setModelResponse(getString(json, "modelResponse"));
-        r.setHasToolCalls(getBool(json, "hasToolCalls"));
-        r.setLatencyMs(getLong(json, "latencyMs"));
-        r.setSessionId(getString(json, "sessionId"));
-        r.setSkillId(getString(json, "skillId"));
-        r.setMultimodalInput(getBool(json, "multimodalInput"));
-        r.setMultimodalContent(getString(json, "multimodalContent"));
-        r.setToolCalls(parseToolCalls(json));
-        r.setPreviousTurns(parseTurnContexts(json));
-        return r;
-    }
+
 
     private static String toJson(ToolCall tc) {
         StringBuilder sb = new StringBuilder(128);
         sb.append("{");
         stringField(sb, "toolName", tc.getToolName());
-        sb.append(","); stringField(sb, "toolCallId", tc.getToolCallId());
-        sb.append(","); boolField(sb, "success", tc.isSuccess());
-        sb.append(","); stringField(sb, "result", tc.getResult());
+        sb.append(",");
+        stringField(sb, "toolCallId", tc.getToolCallId());
+        sb.append(",");
+        boolField(sb, "success", tc.isSuccess());
+        sb.append(",");
+        stringField(sb, "result", tc.getResult());
         sb.append(",\"arguments\":").append(mapToStringObject(tc.getArguments()));
         sb.append(",\"argTypes\":").append(mapToStringString(tc.getArgTypes()));
         sb.append("}");
         return sb.toString();
     }
 
-    private static List<ToolCall> parseToolCalls(String json) {
-        String arr = extractArray(json, "toolCalls");
-        if (arr == null) return new ArrayList<>();
-        List<String> items = splitArrayItems(arr);
-        List<ToolCall> result = new ArrayList<>();
-        for (String item : items) {
-            ToolCall tc = new ToolCall();
-            tc.setToolName(getString(item, "toolName"));
-            tc.setToolCallId(getString(item, "toolCallId"));
-            tc.setSuccess(getBool(item, "success"));
-            tc.setResult(getString(item, "result"));
-            tc.setArguments(stringObjectMapFromString(extractObject(item, "arguments")));
-            tc.setArgTypes(stringStringMapFromString(extractObject(item, "argTypes")));
-            result.add(tc);
-        }
-        return result;
-    }
-
     private static String toJson(TurnContext tc) {
         return "{\"role\":\"" + escape(tc.getRole()) + "\"," +
-               "\"content\":\"" + escape(tc.getContent()) + "\"," +
-               "\"toolCallId\":" + (tc.getToolCallId() != null ? "\"" + escape(tc.getToolCallId()) + "\"" : "null") + "," +
-               "\"toolName\":" + (tc.getToolName() != null ? "\"" + escape(tc.getToolName()) + "\"" : "null") + "}";
-    }
-
-    private static List<TurnContext> parseTurnContexts(String json) {
-        String arr = extractArray(json, "previousTurns");
-        if (arr == null) return new ArrayList<>();
-        List<String> items = splitArrayItems(arr);
-        List<TurnContext> result = new ArrayList<>();
-        for (String item : items) {
-            TurnContext tc = new TurnContext();
-            tc.setRole(getString(item, "role"));
-            tc.setContent(getString(item, "content"));
-            tc.setToolCallId(getNullableString(item, "toolCallId"));
-            tc.setToolName(getNullableString(item, "toolName"));
-            result.add(tc);
-        }
-        return result;
+                "\"content\":\"" + escape(tc.getContent()) + "\"," +
+                "\"toolCallId\":" + (tc.getToolCallId() != null ? "\"" + escape(tc.getToolCallId()) + "\"" : "null") + "," +
+                "\"toolName\":" + (tc.getToolName() != null ? "\"" + escape(tc.getToolName()) + "\"" : "null") + "}";
     }
 
     static String toJson(DeterministicFingerprint fp) {
@@ -140,15 +87,18 @@ final class JsonMapper {
         sb.append("\"toolCallSet\":").append(setToArray(fp.getToolCallSet()));
         sb.append(",\"toolParamTypes\":").append(mapToStringString(fp.getToolParamTypes()));
         sb.append(",\"toolParamRequired\":").append(mapToBoolValues(fp.getToolParamRequired()));
-        sb.append(","); stringField(sb, "outputContentType", fp.getOutputContentType());
+        sb.append(",");
+        stringField(sb, "outputContentType", fp.getOutputContentType());
         sb.append(",\"outputFieldPaths\":").append(setToArray(fp.getOutputFieldPaths()));
         sb.append(",\"outputFieldTypeMap\":").append(mapToStringString(fp.getOutputFieldTypeMap()));
-        sb.append(","); intField(sb, "textLengthMagnitude", fp.getTextLengthMagnitude());
+        sb.append(",");
+        intField(sb, "textLengthMagnitude", fp.getTextLengthMagnitude());
         sb.append(",\"requiredKeywords\":").append(setToArray(fp.getRequiredKeywords()));
         sb.append(",\"forbiddenKeywords\":").append(setToArray(fp.getForbiddenKeywords()));
         sb.append(",\"regexPatterns\":").append(regexPatternsToArray(fp.getRegexPatterns()));
         sb.append(",\"declaredBehaviors\":").append(setToArray(fp.getDeclaredBehaviors()));
-        sb.append(","); boolField(sb, "hasError", fp.isHasError());
+        sb.append(",");
+        boolField(sb, "hasError", fp.isHasError());
         sb.append("}");
         return sb.toString();
     }
@@ -335,7 +285,10 @@ final class JsonMapper {
         start += pattern.length();
         int end = start;
         while (end < json.length()) {
-            if (json.charAt(end) == '\\' && end + 1 < json.length()) { end += 2; continue; }
+            if (json.charAt(end) == '\\' && end + 1 < json.length()) {
+                end += 2;
+                continue;
+            }
             if (json.charAt(end) == '"') break;
             end++;
         }
@@ -352,7 +305,10 @@ final class JsonMapper {
             start++;
             int end = start;
             while (end < json.length()) {
-                if (json.charAt(end) == '\\' && end + 1 < json.length()) { end += 2; continue; }
+                if (json.charAt(end) == '\\' && end + 1 < json.length()) {
+                    end += 2;
+                    continue;
+                }
                 if (json.charAt(end) == '"') break;
                 end++;
             }
@@ -368,7 +324,11 @@ final class JsonMapper {
         start += pattern.length();
         int end = start;
         while (end < json.length() && (Character.isDigit(json.charAt(end)) || json.charAt(end) == '-')) end++;
-        try { return Integer.parseInt(json.substring(start, end)); } catch (NumberFormatException e) { return 0; }
+        try {
+            return Integer.parseInt(json.substring(start, end));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     private static long getLong(String json, String key) {
@@ -378,7 +338,11 @@ final class JsonMapper {
         start += pattern.length();
         int end = start;
         while (end < json.length() && (Character.isDigit(json.charAt(end)) || json.charAt(end) == '-')) end++;
-        try { return Long.parseLong(json.substring(start, end)); } catch (NumberFormatException e) { return 0L; }
+        try {
+            return Long.parseLong(json.substring(start, end));
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
     }
 
     private static boolean getBool(String json, String key) {
@@ -401,7 +365,13 @@ final class JsonMapper {
             char c = json.charAt(end);
             if (c == '[') depth++;
             else if (c == ']') depth--;
-            else if (c == '"') { end++; while (end < json.length() && json.charAt(end) != '"') { if (json.charAt(end) == '\\') end++; end++; } }
+            else if (c == '"') {
+                end++;
+                while (end < json.length() && json.charAt(end) != '"') {
+                    if (json.charAt(end) == '\\') end++;
+                    end++;
+                }
+            }
             end++;
         }
         return json.substring(start + 1, end - 1);
@@ -419,7 +389,13 @@ final class JsonMapper {
             char c = json.charAt(end);
             if (c == '{') depth++;
             else if (c == '}') depth--;
-            else if (c == '"') { end++; while (end < json.length() && json.charAt(end) != '"') { if (json.charAt(end) == '\\') end++; end++; } }
+            else if (c == '"') {
+                end++;
+                while (end < json.length() && json.charAt(end) != '"') {
+                    if (json.charAt(end) == '\\') end++;
+                    end++;
+                }
+            }
             end++;
         }
         return json.substring(start + 1, end - 1);
@@ -433,8 +409,14 @@ final class JsonMapper {
         boolean inString = false;
         for (int i = 0; i < arrayContent.length(); i++) {
             char c = arrayContent.charAt(i);
-            if (c == '\\' && inString) { i++; continue; }
-            if (c == '"') { inString = !inString; continue; }
+            if (c == '\\' && inString) {
+                i++;
+                continue;
+            }
+            if (c == '"') {
+                inString = !inString;
+                continue;
+            }
             if (inString) continue;
             if (c == '{' || c == '[') depth++;
             else if (c == '}' || c == ']') depth--;
@@ -475,7 +457,8 @@ final class JsonMapper {
             if (keyStart < 0) break;
             int keyEnd = objectContent.indexOf('"', keyStart + 1);
             // 处理转义
-            while (keyEnd > 0 && objectContent.charAt(keyEnd - 1) == '\\') keyEnd = objectContent.indexOf('"', keyEnd + 1);
+            while (keyEnd > 0 && objectContent.charAt(keyEnd - 1) == '\\')
+                keyEnd = objectContent.indexOf('"', keyEnd + 1);
             if (keyEnd < 0) break;
             String mapKey = unescape(objectContent.substring(keyStart + 1, keyEnd));
 
@@ -490,7 +473,10 @@ final class JsonMapper {
             if (objectContent.charAt(valStart) == '"') {
                 int valEnd = valStart + 1;
                 while (valEnd < objectContent.length()) {
-                    if (objectContent.charAt(valEnd) == '\\' && valEnd + 1 < objectContent.length()) { valEnd += 2; continue; }
+                    if (objectContent.charAt(valEnd) == '\\' && valEnd + 1 < objectContent.length()) {
+                        valEnd += 2;
+                        continue;
+                    }
                     if (objectContent.charAt(valEnd) == '"') break;
                     valEnd++;
                 }
@@ -498,7 +484,8 @@ final class JsonMapper {
                 i = valEnd + 1;
             } else {
                 int valEnd = valStart;
-                while (valEnd < objectContent.length() && objectContent.charAt(valEnd) != ',' && objectContent.charAt(valEnd) != '}') valEnd++;
+                while (valEnd < objectContent.length() && objectContent.charAt(valEnd) != ',' && objectContent.charAt(valEnd) != '}')
+                    valEnd++;
                 mapVal = objectContent.substring(valStart, valEnd).trim();
                 i = valEnd;
             }
@@ -515,7 +502,8 @@ final class JsonMapper {
             int keyStart = objectContent.indexOf('"', i);
             if (keyStart < 0) break;
             int keyEnd = objectContent.indexOf('"', keyStart + 1);
-            while (keyEnd > 0 && objectContent.charAt(keyEnd - 1) == '\\') keyEnd = objectContent.indexOf('"', keyEnd + 1);
+            while (keyEnd > 0 && objectContent.charAt(keyEnd - 1) == '\\')
+                keyEnd = objectContent.indexOf('"', keyEnd + 1);
             if (keyEnd < 0) break;
             String mapKey = unescape(objectContent.substring(keyStart + 1, keyEnd));
             int colon = objectContent.indexOf(':', keyEnd + 1);
@@ -530,21 +518,4 @@ final class JsonMapper {
         return map;
     }
 
-    private static Map<String, Object> stringObjectMapFromString(String objectContent) {
-        // TODO: [简化实现] Map<String, Object> 的反序列化是简化版本，仅支持 String/Boolean/Long，
-        //       不支持嵌套对象或 Double。待重构为 RecursiveJsonParser 后自动支持完整类型推断
-        Map<String, Object> map = new LinkedHashMap<>();
-        Map<String, String> stringMap = stringStringMapFromString(objectContent);
-        for (Map.Entry<String, String> e : stringMap.entrySet()) {
-            String v = e.getValue();
-            if ("null".equals(v)) map.put(e.getKey(), null);
-            else if ("true".equals(v)) map.put(e.getKey(), Boolean.TRUE);
-            else if ("false".equals(v)) map.put(e.getKey(), Boolean.FALSE);
-            else {
-                try { map.put(e.getKey(), Long.parseLong(v)); }
-                catch (NumberFormatException ex) { map.put(e.getKey(), v); }
-            }
-        }
-        return map;
-    }
 }
