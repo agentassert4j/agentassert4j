@@ -44,12 +44,15 @@ public final class CostEstimator {
     /**
      * 成本预估（单次模式）。
      *
+     * <p>重放一条交互记录恰好发起一次 LLM 调用：多轮上下文（previousTurns）
+     * 作为请求的一部分携带，不产生额外调用。</p>
+     *
      * @param testCases 待测用例列表
      * @param model     模型名称
      * @return 预估字符串，如 "预估 12 次 API 调用，约 $0.0480（模型：gpt-4o）"
      */
     public static String estimate(List<InteractionRecord> testCases, String model) {
-        int totalCalls = testCases.stream().mapToInt(r -> r.getTurnIndex() + 1).sum();
+        int totalCalls = testCases.size();
         double costPerCall = getCostPerCall(model);
         double estimatedCost = totalCalls * costPerCall;
         return String.format("预估 %d 次 API 调用，约 $%.4f（模型：%s）", totalCalls, estimatedCost, model);
@@ -82,7 +85,7 @@ public final class CostEstimator {
     }
 
     /**
-     * 统计模式成本预估。
+     * 统计模式成本预估 — 每条用例重放 sampleCount 次，每次一条恰好一次调用。
      *
      * @param testCases   待测用例列表
      * @param model       模型名称
@@ -90,8 +93,7 @@ public final class CostEstimator {
      * @return 预估字符串，如 "预估 5 用例 x 10 次 = 50 次 API 调用，约 $0.2000（模型：gpt-4o）"
      */
     public static String estimateStatistical(List<InteractionRecord> testCases, String model, int sampleCount) {
-        int totalCalls = testCases.stream().mapToInt(r -> r.getTurnIndex() + 1).sum();
-        int totalSamples = totalCalls * sampleCount;
+        int totalSamples = testCases.size() * sampleCount;
         double costPerCall = getCostPerCall(model);
         double estimatedCost = totalSamples * costPerCall;
         return String.format("预估 %d 用例 x %d 次 = %d 次 API 调用，约 $%.4f（模型：%s）", testCases.size(), sampleCount, totalSamples, estimatedCost, model);

@@ -85,9 +85,7 @@ class StatisticalTestConfigTest {
     @Test
     void defaults_allFieldsCorrect() {
         StatisticalTestConfig c = StatisticalTestConfig.defaults();
-        assertEquals(50, c.getMaxTestCases());
         assertEquals(30000, c.getTimeoutMs());
-        assertEquals(2, c.getMaxRetries());
         assertEquals(0.0, c.getTemperature());
         assertFalse(c.isDryRun());
         assertNull(c.getModel());

@@ -115,7 +115,7 @@ io.github.agentassert4j/
 ├── algorithm/  纯算法（SkillGrouper, FingerprintExtractor, Comparator 等）
 ├── result/     判定结果模型（ComparisonResult, Verdict, DiffClassification）
 ├── util/       纯 Java 工具（HashUtil, RecursiveJsonParser, TextDiffUtils）
-└── config/     配置加载（agentassert4j.yml 解析）
+└── config/     配置加载（agentassert4j.json / agentassert4j-rules.json 解析）
 ```
 
 ---
@@ -143,7 +143,7 @@ io.github.agentassert4j/
 |----|---------------------------|--------------------------------------------------|
 | L1 | core                      | 防御性校验：null 输入返回安全默认值，解析失败退化为空集合，从不中断流程           |
 | L2 | recorder                  | 异步容错：RingBuffer 满则丢弃、批量写入失败记计数器不重试、DB 连接失败本地文件备份 |
-| L3 | 接入层（sdk-spring / starter） | 连接健壮性：上游超时透传错误、非标准格式尽力提取、版本不兼容静默退出               |
+| L3 | 接入层（sdk-spring-ai1 / spring-boot3-starter） | 连接健壮性：上游超时透传错误、非标准格式尽力提取、版本不兼容静默退出               |
 
 **通用规则**：框架的任何故障都不应影响 Agent 主流程。宁可丢失录制数据，不可阻塞业务请求。
 

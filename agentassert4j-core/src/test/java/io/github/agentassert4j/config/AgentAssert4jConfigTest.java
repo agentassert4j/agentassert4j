@@ -31,13 +31,10 @@ class AgentAssert4jConfigTest {
         }
 
         @Test
-        @DisplayName("Storage 默认 sqlite")
+        @DisplayName("Storage 默认 SQLite 单文件路径")
         void storageDefaults() {
             AgentAssert4jConfig.StorageConfig s = AgentAssert4jConfig.defaults().getStorage();
-            assertEquals("sqlite", s.getType());
             assertNotNull(s.getUrl());
-            assertNull(s.getUsername());
-            assertNull(s.getPassword());
         }
 
         @Test
@@ -84,7 +81,7 @@ class AgentAssert4jConfigTest {
         void fullJson() {
             String json = """
                     {
-                      "storage": {"type": "mysql", "url": "jdbc:mysql://localhost/db"},
+                      "storage": {"url": "/data/agentassert4j.db"},
                       "recorder": {"batchSize": 200, "flushIntervalMs": 10000},
                       "regression": {"ignorableFields": ["debugInfo", "timestamp"]},
                       "llm": {"apiKey": "sk-test", "endpoint": "https://api.deepseek.com", "model": "deepseek-chat", "timeoutMs": 60000},
@@ -94,8 +91,7 @@ class AgentAssert4jConfigTest {
 
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
 
-            assertEquals("mysql", config.getStorage().getType());
-            assertEquals("jdbc:mysql://localhost/db", config.getStorage().getUrl());
+            assertEquals("/data/agentassert4j.db", config.getStorage().getUrl());
             assertEquals(200, config.getRecorder().getBatchSize());
             assertEquals(10000, config.getRecorder().getFlushIntervalMs());
             assertEquals(2, config.getRegression().getIgnorableFields().size());
@@ -110,12 +106,12 @@ class AgentAssert4jConfigTest {
         @DisplayName("部分 JSON — 缺失字段使用默认值")
         void partialJson_usesDefaults() {
             String json = """
-                    {"storage": {"type": "postgresql"}}
+                    {"storage": {"url": "/custom/path.db"}}
                     """;
 
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
 
-            assertEquals("postgresql", config.getStorage().getType());
+            assertEquals("/custom/path.db", config.getStorage().getUrl());
             // 其他字段使用默认值
             assertEquals(100, config.getRecorder().getBatchSize());
             assertEquals("gpt-4o", config.getLlm().getModel());
@@ -125,21 +121,21 @@ class AgentAssert4jConfigTest {
         @DisplayName("null 输入 → 默认配置")
         void nullInput_defaults() {
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(null);
-            assertEquals("sqlite", config.getStorage().getType());
+            assertNotNull(config.getStorage().getUrl());
         }
 
         @Test
         @DisplayName("空字符串 → 默认配置")
         void blankInput_defaults() {
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson("   ");
-            assertEquals("sqlite", config.getStorage().getType());
+            assertNotNull(config.getStorage().getUrl());
         }
 
         @Test
         @DisplayName("非 JSON 输入 → 默认配置（退化不中断）")
         void invalidJson_defaults() {
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson("not json at all");
-            assertEquals("sqlite", config.getStorage().getType());
+            assertNotNull(config.getStorage().getUrl());
         }
 
         @Test

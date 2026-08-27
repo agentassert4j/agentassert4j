@@ -36,6 +36,14 @@ public class RegressionTestResult {
         return r;
     }
 
+    public static RegressionTestResult error(String recordId, String msg) {
+        RegressionTestResult r = new RegressionTestResult();
+        r.baselineRecordId = recordId;
+        r.status = TestResultStatus.ERROR;
+        r.errorMessage = msg;
+        return r;
+    }
+
     public String getBaselineRecordId() {
         return baselineRecordId;
     }

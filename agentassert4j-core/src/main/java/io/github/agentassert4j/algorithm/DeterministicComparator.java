@@ -57,7 +57,7 @@ public class DeterministicComparator {
         double d1 = (toolMatch ? 0.7 : 0.0) + (paramMatch ? 0.3 : 0.0);
 
         // === 维度 2：输出结构（25%）===
-        // H10 修复：自动回归检测需要"未过滤"集合——用户把 error 配置为可忽略时，
+        // 自动回归检测使用"未过滤"字段集：用户把 error 配置为可忽略时，
         // 过滤后的 added 集合不再含 error，会静默击穿下方不变量。故先存原始集合。
         Set<String> bFieldsRaw = baseline.getOutputFieldPaths();
         Set<String> cFieldsRaw = current.getOutputFieldPaths();

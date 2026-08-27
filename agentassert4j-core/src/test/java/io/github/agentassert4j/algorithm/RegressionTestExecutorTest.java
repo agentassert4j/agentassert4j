@@ -1,12 +1,16 @@
 package io.github.agentassert4j.algorithm;
 
+import io.github.agentassert4j.config.SkillRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.*;
+import io.github.agentassert4j.result.ComparisonResult;
 import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.LlmTimeoutException;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -253,6 +257,158 @@ class RegressionTestExecutorTest {
         RegressionTestResult result = executor.execute(baseline, "new prompt", TestExecutionConfig.defaults());
 
         assertNotNull(result.getComparison());
+    }
+
+    @Nested
+    @DisplayName("重放上下文保真")
+    class ReplayContext {
+
+        @Test
+        @DisplayName("tool 轮次的 toolCallId/toolName 完整复制到重放请求")
+        void buildReplayRequest_preservesToolTurnIdentity() {
+            InteractionRecord baseline = makeBaseline("hash", "input");
+            baseline.setTurnIndex(1);
+            TurnContext toolTurn = new TurnContext("tool", "result1");
+            toolTurn.setToolCallId("call_abc");
+            toolTurn.setToolName("queryOrder");
+            baseline.setPreviousTurns(List.of(toolTurn));
+
+            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", TestExecutionConfig.defaults());
+
+            TurnContext copied = request.getPreviousTurns().get(0);
+            assertEquals("call_abc", copied.getToolCallId(), "toolCallId 是 tool 消息与调用决策的关联键，重放不得丢弃");
+            assertEquals("queryOrder", copied.getToolName());
+        }
+
+        @Test
+        @DisplayName("轮次副本与基线隔离——修改副本不影响基线")
+        void buildReplayRequest_turnCopiesAreIsolated() {
+            InteractionRecord baseline = makeBaseline("hash", "input");
+            baseline.setTurnIndex(1);
+            baseline.setPreviousTurns(List.of(new TurnContext("user", "q1")));
+
+            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", TestExecutionConfig.defaults());
+
+            request.getPreviousTurns().get(0).setContent("mutated");
+            assertEquals("q1", baseline.getPreviousTurns().get(0).getContent());
+        }
+    }
+
+    @Nested
+    @DisplayName("声明式规则接入重放")
+    class RulesEnforcement {
+
+        @Test
+        @DisplayName("requiredKeywords 缺失 → keywordMatch=false 且判定非 PASS")
+        void requiredKeywordMissing_failsComparison() {
+            SkillRulesConfig rules = SkillRulesConfig.fromJson(
+                    "{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
+            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
+            stubClient.response = makeTextResponse("回答里没有关键词");
+
+            RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
+
+            assertFalse(result.getComparison().isKeywordMatch());
+            assertNotEquals(Verdict.PASS, result.getComparison().getVerdict());
+        }
+
+        @Test
+        @DisplayName("requiredKeywords 命中 → 判定不受影响")
+        void requiredKeywordPresent_staysPass() {
+            SkillRulesConfig rules = SkillRulesConfig.fromJson(
+                    "{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
+            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
+            // 基线与重放输出完全同形（含关键词）→ PASS
+            InteractionRecord baseline = makeBaseline("hash", "input");
+            baseline.setModelResponse("订单已创建");
+            stubClient.response = makeTextResponse("订单已创建");
+
+            RegressionTestResult result = wired.execute(baseline, "prompt", TestExecutionConfig.defaults());
+
+            assertTrue(result.getComparison().isKeywordMatch());
+            assertEquals(Verdict.PASS, result.getComparison().getVerdict());
+        }
+
+        @Test
+        @DisplayName("forbiddenKeywords 出现 → keywordMatch=false")
+        void forbiddenKeywordPresent_failsComparison() {
+            SkillRulesConfig rules = SkillRulesConfig.fromJson(
+                    "{\"skills\":{\"skill-1\":{\"forbiddenKeywords\":[\"密码\"]}}}");
+            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
+            stubClient.response = makeTextResponse("请提供密码");
+
+            RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
+
+            assertFalse(result.getComparison().isKeywordMatch());
+        }
+
+        @Test
+        @DisplayName("behaviors 约束不满足 → behaviorMatch=false")
+        void declaredBehaviorViolated_failsComparison() {
+            SkillRulesConfig rules = SkillRulesConfig.fromJson(
+                    "{\"skills\":{\"skill-1\":{\"behaviors\":[\"mustUseChinese\"]}}}");
+            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
+            stubClient.response = makeTextResponse("english only answer");
+
+            RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
+
+            assertFalse(result.getComparison().isBehaviorMatch());
+        }
+
+        @Test
+        @DisplayName("规则声明给其他 skill → 本 skill 不受影响")
+        void rulesForOtherSkill_notApplied() {
+            SkillRulesConfig rules = SkillRulesConfig.fromJson(
+                    "{\"skills\":{\"other-skill\":{\"requiredKeywords\":[\"订单\"]}}}");
+            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
+            InteractionRecord baseline = makeBaseline("hash", "input");
+            baseline.setModelResponse("same answer");
+            stubClient.response = makeTextResponse("same answer");
+
+            RegressionTestResult result = wired.execute(baseline, "prompt", TestExecutionConfig.defaults());
+
+            assertTrue(result.getComparison().isKeywordMatch());
+            assertEquals(Verdict.PASS, result.getComparison().getVerdict());
+        }
+    }
+
+    @Nested
+    @DisplayName("后处理异常隔离")
+    class ErrorIsolation {
+
+        @Test
+        @DisplayName("对比阶段抛 RuntimeException → 转为 ERROR 结果，不向调用方逃逸")
+        void comparatorThrows_returnsErrorResult() {
+            RegressionTestExecutor wired = new RegressionTestExecutor(
+                    stubClient, new ThrowingComparator(), null);
+            stubClient.response = makeTextResponse("hello");
+
+            RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
+
+            assertEquals(TestResultStatus.ERROR, result.getStatus());
+            assertEquals("rec-1", result.getBaselineRecordId());
+            assertNotNull(result.getErrorMessage());
+        }
+
+        @Test
+        @DisplayName("LLM 调用失败仍走原异常映射（TIMEOUT），与 ERROR 互不混淆")
+        void timeoutStillMappedBeforePostProcessing() {
+            stubClient.throwTimeout = true;
+
+            RegressionTestResult result = executor.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
+
+            assertEquals(TestResultStatus.TIMEOUT, result.getStatus());
+        }
+    }
+
+    /**
+     * 对比阶段必然抛异常的桩——验证处理失败的隔离边界。
+     */
+    static class ThrowingComparator extends DeterministicComparator {
+        @Override
+        public ComparisonResult compare(DeterministicFingerprint baseline, DeterministicFingerprint current, String currentOutput) {
+            throw new IllegalStateException("boom from comparator");
+        }
     }
 
     private InteractionRecord makeBaseline(String promptHash, String userInput) {

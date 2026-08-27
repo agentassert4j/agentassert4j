@@ -10,5 +10,9 @@ public enum TestResultStatus {
     SUCCESS,
     TIMEOUT,
     API_ERROR,
+    /**
+     * LLM 调用成功后的处理阶段（指纹提取/对比/候选落库）失败
+     */
+    ERROR,
     SKIP
 }

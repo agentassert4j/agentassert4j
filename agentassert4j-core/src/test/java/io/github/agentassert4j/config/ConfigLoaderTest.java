@@ -140,7 +140,7 @@ class ConfigLoaderTest {
         void noConfigFile_defaults() {
             System.setProperty(ConfigLoader.CONFIG_PATH_PROPERTY, "/nonexistent/path.json");
             AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
-            assertEquals("sqlite", config.getStorage().getType());
+            assertNotNull(config.getStorage().getUrl());
         }
 
         @Test
@@ -149,14 +149,13 @@ class ConfigLoaderTest {
             Path tempFile = Files.createTempFile("agentassert4j-test", ".json");
             try {
                 String content = """
-                        {"storage": {"type": "mysql", "url": "jdbc:mysql://test/db"}}
+                        {"storage": {"url": "/from/system/property.db"}}
                         """;
                 Files.writeString(tempFile, content, StandardCharsets.UTF_8);
                 System.setProperty(ConfigLoader.CONFIG_PATH_PROPERTY, tempFile.toString());
 
                 AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
-                assertEquals("mysql", config.getStorage().getType());
-                assertEquals("jdbc:mysql://test/db", config.getStorage().getUrl());
+                assertEquals("/from/system/property.db", config.getStorage().getUrl());
             } finally {
                 Files.deleteIfExists(tempFile);
             }

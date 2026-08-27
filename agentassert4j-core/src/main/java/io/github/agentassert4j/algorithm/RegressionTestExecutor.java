@@ -1,5 +1,6 @@
 package io.github.agentassert4j.algorithm;
 
+import io.github.agentassert4j.config.SkillRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.result.ComparisonResult;
@@ -38,6 +39,7 @@ public class RegressionTestExecutor {
     private final LlmClient llmClient;
     private final DeterministicComparator comparator;
     private final BaselineManager baselineManager;
+    private final SkillRulesConfig rules;
 
     /**
      * 完整构造器。
@@ -45,11 +47,18 @@ public class RegressionTestExecutor {
      * @param llmClient       LLM 客户端
      * @param comparator      确定性对比器
      * @param baselineManager 基线管理器：对比结果非 PASS 时把候选指纹落库供 approve/reject 裁决（传 null 跳过）
+     * @param rules           声明式规则配置：维度 3-4（内容规则/约束行为）按 skillId 查找注入（传 null 跳过规则判定）
      */
-    public RegressionTestExecutor(LlmClient llmClient, DeterministicComparator comparator, BaselineManager baselineManager) {
+    public RegressionTestExecutor(LlmClient llmClient, DeterministicComparator comparator,
+                                  BaselineManager baselineManager, SkillRulesConfig rules) {
         this.llmClient = llmClient;
         this.comparator = comparator;
         this.baselineManager = baselineManager;
+        this.rules = rules;
+    }
+
+    public RegressionTestExecutor(LlmClient llmClient, DeterministicComparator comparator, BaselineManager baselineManager) {
+        this(llmClient, comparator, baselineManager, null);
     }
 
     /**
@@ -84,33 +93,37 @@ public class RegressionTestExecutor {
             return RegressionTestResult.apiError(baseline.getRecordId(), e.getMessage());
         }
 
-        // 3. 构建当前交互记录
-        InteractionRecord current = buildCurrentRecord(baseline, response, newSystemPrompt);
+        // 3-7. LLM 调用成功后的处理（指纹提取/对比/候选落库/结果封装）。
+        //    任何处理失败转为 ERROR 结果，不向批量调用方逃逸——批量回归不允许单条记录中断整体
+        try {
+            InteractionRecord current = buildCurrentRecord(baseline, response, newSystemPrompt);
 
-        // 4. 提取指纹（FingerprintExtractor 是静态工具类）
-        DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline);
-        DeterministicFingerprint currentFp = FingerprintExtractor.extract(current);
+            DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline, rules, baseline.getSkillId());
+            DeterministicFingerprint currentFp = FingerprintExtractor.extract(current, rules, current.getSkillId());
 
-        // 5. 对比
-        ComparisonResult comparison = comparator.compare(baselineFp, currentFp, response.getContent());
+            ComparisonResult comparison = comparator.compare(baselineFp, currentFp, response.getContent());
 
-        // 6. 候选落库：与基线存在差异的新指纹进入待裁决状态（PASS 指纹相同，无可裁决对象）。
-        //    落库失败不中断批量回归——报告仍完整，仅 approve 不可用，SEVERE 留痕
-        if (baselineManager != null && comparison.getVerdict() != Verdict.PASS) {
-            try {
-                baselineManager.recordCandidate(baseline, currentFp);
-            } catch (RuntimeException e) {
-                LOG.log(Level.SEVERE, "Failed to persist candidate fingerprint for " + baseline.getRecordId(), e);
+            // 候选落库：与基线存在差异的新指纹进入待裁决状态（PASS 指纹相同，无可裁决对象）。
+            // 落库失败不中断批量回归——报告仍完整，仅 approve 不可用，SEVERE 留痕
+            if (baselineManager != null && comparison.getVerdict() != Verdict.PASS) {
+                try {
+                    baselineManager.recordCandidate(baseline, currentFp);
+                } catch (RuntimeException e) {
+                    LOG.log(Level.SEVERE, "Failed to persist candidate fingerprint for " + baseline.getRecordId(), e);
+                }
             }
-        }
 
-        // 7. 封装结果
-        RegressionTestResult result = new RegressionTestResult();
-        result.setBaselineRecordId(baseline.getRecordId());
-        result.setSkillId(baseline.getSkillId());
-        result.setComparison(comparison);
-        result.setCandidateFingerprint(currentFp);
-        return result;
+            RegressionTestResult result = new RegressionTestResult();
+            result.setBaselineRecordId(baseline.getRecordId());
+            result.setSkillId(baseline.getSkillId());
+            result.setComparison(comparison);
+            result.setCandidateFingerprint(currentFp);
+            return result;
+        } catch (RuntimeException e) {
+            LOG.log(Level.SEVERE, "Post-processing failed for " + baseline.getRecordId(), e);
+            return RegressionTestResult.error(baseline.getRecordId(),
+                    e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+        }
     }
 
     /**
@@ -136,10 +149,11 @@ public class RegressionTestExecutor {
         // 多模态原样复用
         request.setMultimodalInput(baseline.isMultimodalInput());
 
-        // 多轮对话：注入前序轮次
+        // 多轮对话：注入前序轮次（完整复制——tool 角色的 toolCallId/toolName
+        // 是重放请求与原对话对齐的关联键，丢弃会导致服务端拒绝整个请求）
         if (baseline.getTurnIndex() > 0 && baseline.getPreviousTurns() != null) {
             for (TurnContext turn : baseline.getPreviousTurns()) {
-                request.addTurn(turn.getRole(), turn.getContent());
+                request.addTurn(copyTurn(turn));
             }
         }
 
@@ -159,6 +173,7 @@ public class RegressionTestExecutor {
         InteractionRecord current = new InteractionRecord();
         current.setRecordId(UUID.randomUUID().toString());
         current.setTimestamp(System.currentTimeMillis());
+        current.setSkillId(baseline.getSkillId());
         current.setTemplateHash(HashUtil.sha256(newPrompt));
         current.setUserInput(baseline.getUserInput());
         current.setTurnIndex(baseline.getTurnIndex());
@@ -193,6 +208,13 @@ public class RegressionTestExecutor {
         current.setMultimodalContent(baseline.getMultimodalContent());
 
         return current;
+    }
+
+    private static TurnContext copyTurn(TurnContext turn) {
+        TurnContext copy = new TurnContext(turn.getRole(), turn.getContent());
+        copy.setToolCallId(turn.getToolCallId());
+        copy.setToolName(turn.getToolName());
+        return copy;
     }
 
     private ToolCall toolCallResultToToolCall(ToolCallResult tc) {

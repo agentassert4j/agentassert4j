@@ -4,9 +4,15 @@ import io.github.agentassert4j.model.LlmRequest;
 import io.github.agentassert4j.model.LlmResponse;
 import io.github.agentassert4j.model.ToolCallResult;
 import io.github.agentassert4j.model.TurnContext;
+import io.github.agentassert4j.spi.LlmTimeoutException;
+import io.github.agentassert4j.util.RecursiveJsonParser;
+import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Map;
 
@@ -263,5 +269,110 @@ class OpenAiCompatibleClientTest {
         assertEquals("content_filter", OpenAiCompatibleClient.normalizeFinishReason("content_filter"));
         assertEquals("other", OpenAiCompatibleClient.normalizeFinishReason("weird_new_reason"));
         assertNull(OpenAiCompatibleClient.normalizeFinishReason(null));
+    }
+
+    @Nested
+    @DisplayName("超时契约")
+    class TimeoutContract {
+
+        @Test
+        @DisplayName("读取超时 → 立即抛 LlmTimeoutException，不重试")
+        void chat_readTimeout_throwsLlmTimeoutWithoutRetry() throws Exception {
+            HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            server.createContext("/v1/chat/completions", exchange -> {
+                try {
+                    // 远超客户端 readTimeout，触发读取超时（stop 会等在途 handler，不宜睡太久）
+                    Thread.sleep(3000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            server.start();
+            try {
+                OpenAiCompatibleClient c = new OpenAiCompatibleClient(
+                        "http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 2);
+                LlmRequest request = new LlmRequest();
+                request.setUserInput("hi");
+
+                long start = System.currentTimeMillis();
+                assertThrows(LlmTimeoutException.class, () -> c.chat(request, 500));
+                long elapsed = System.currentTimeMillis() - start;
+
+                // 超时不得重试：单次尝试后立即抛出（余量覆盖调度抖动）
+                assertTrue(elapsed < 2000, "超时应立即抛出不重试，实际耗时 " + elapsed + "ms");
+            } finally {
+                server.stop(0);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("tool 角色消息序列化")
+    class ToolRoleMessages {
+
+        @Test
+        @DisplayName("tool 轮次携带 tool_call_id")
+        void buildRequestBody_toolTurn_carriesToolCallId() {
+            TurnContext toolTurn = new TurnContext("tool", "result1");
+            toolTurn.setToolCallId("call_abc");
+            LlmRequest request = new LlmRequest();
+            request.setUserInput("next");
+            request.addTurn(toolTurn);
+
+            String body = client.buildRequestBody(request, "gpt-4o");
+
+            assertTrue(body.contains("\"role\":\"tool\""));
+            assertTrue(body.contains("\"tool_call_id\":\"call_abc\""),
+                    "tool 消息缺 tool_call_id 会被服务端以 400 拒绝");
+        }
+
+        @Test
+        @DisplayName("非 tool 轮次不带 tool_call_id 字段")
+        void buildRequestBody_userTurn_hasNoToolCallId() {
+            LlmRequest request = new LlmRequest();
+            request.setUserInput("next");
+            request.addTurn("user", "q1");
+
+            String body = client.buildRequestBody(request, "gpt-4o");
+
+            assertFalse(body.contains("tool_call_id"));
+        }
+    }
+
+    @Nested
+    @DisplayName("控制字符转义")
+    class ControlCharEscaping {
+
+        @Test
+        @DisplayName("用户输入携带原始控制字符 → 请求体仍是合法 JSON")
+        void buildRequestBody_controlChars_stillValidJson() {
+            LlmRequest request = new LlmRequest();
+            request.setUserInput("beep\u0007bell\u0000nul\u001fend\f");
+
+            String body = client.buildRequestBody(request, "gpt-4o");
+
+            Object parsed = RecursiveJsonParser.parse(body);
+            assertInstanceOf(Map.class, parsed, "请求体必须是可解析的合法 JSON");
+            assertTrue(body.contains("\\u0007"), "0x07 必须转义为 \\u0007");
+            assertTrue(body.contains("\\f"), "0x0C 使用短转义 \\f");
+        }
+
+        @Test
+        @DisplayName("控制字符转义可往返——解析后内容不变")
+        void buildRequestBody_controlChars_roundTrip() {
+            String hostile = "a\u0001b\u001fc\u00bd";
+            LlmRequest request = new LlmRequest();
+            request.setUserInput(hostile);
+
+            String body = client.buildRequestBody(request, "gpt-4o");
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parsed = (Map<String, Object>) RecursiveJsonParser.parse(body);
+            @SuppressWarnings("unchecked")
+            List<Object> messages = (List<Object>) parsed.get("messages");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> userMessage = (Map<String, Object>) messages.get(messages.size() - 1);
+            assertEquals(hostile, userMessage.get("content"), "转义后解析必须还原原始内容");
+        }
     }
 }

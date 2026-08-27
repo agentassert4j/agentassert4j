@@ -14,6 +14,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -44,6 +45,18 @@ public class OpenAiCompatibleClient implements LlmClient {
     private final String endpoint;
     private final String apiKey;
     private final String defaultModel;
+    private final int maxRetries;
+
+    /**
+     * 构造客户端（默认重试 2 次）。
+     *
+     * @param endpoint     API 端点，如 "https://api.openai.com"
+     * @param apiKey       API Key
+     * @param defaultModel 默认模型，如 "gpt-4o"
+     */
+    public OpenAiCompatibleClient(String endpoint, String apiKey, String defaultModel) {
+        this(endpoint, apiKey, defaultModel, DEFAULT_MAX_RETRIES);
+    }
 
     /**
      * 构造客户端。
@@ -51,11 +64,13 @@ public class OpenAiCompatibleClient implements LlmClient {
      * @param endpoint     API 端点，如 "https://api.openai.com"
      * @param apiKey       API Key
      * @param defaultModel 默认模型，如 "gpt-4o"
+     * @param maxRetries   传输层失败（429/5xx/连接被拒）的最大重试次数，负数按 0 处理
      */
-    public OpenAiCompatibleClient(String endpoint, String apiKey, String defaultModel) {
+    public OpenAiCompatibleClient(String endpoint, String apiKey, String defaultModel, int maxRetries) {
         this.endpoint = normalizeEndpoint(endpoint);
         this.apiKey = apiKey;
         this.defaultModel = defaultModel;
+        this.maxRetries = Math.max(0, maxRetries);
     }
 
     /**
@@ -94,7 +109,7 @@ public class OpenAiCompatibleClient implements LlmClient {
         Exception lastException = null;
         long startNanos = System.nanoTime();
 
-        for (int attempt = 0; attempt <= DEFAULT_MAX_RETRIES; attempt++) {
+        for (int attempt = 0; attempt <= maxRetries; attempt++) {
             if (attempt > 0) {
                 // 指数退避：1s, 2s, 4s ...
                 try {
@@ -131,6 +146,9 @@ public class OpenAiCompatibleClient implements LlmClient {
                 // 不可重试的客户端错误
                 throw new LlmApiException("HTTP " + statusCode + ": " + responseBody);
 
+            } catch (SocketTimeoutException e) {
+                // 单次尝试的超时预算已耗尽：立即判超时，不重试
+                throw new LlmTimeoutException("LLM call timed out after " + timeoutMs + "ms", e);
             } catch (IOException e) {
                 if (e instanceof ConnectException) {
                     lastException = new LlmApiException("Connection failed: " + e.getMessage(), e);
@@ -158,8 +176,7 @@ public class OpenAiCompatibleClient implements LlmClient {
     private HttpURLConnection openChatConnection(long timeoutMs) throws IOException {
         URL url = new URL(endpoint + "/v1/chat/completions");
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        // TODO: [超时语义简化] HttpURLConnection 仅有连接/读取两个独立超时，暂以同一 timeoutMs
-        //  兼代单请求总预算，待 CLI 超时契约实现时统一语义并区分 LlmTimeoutException
+        // 单次尝试预算：连接与读取各自以 timeoutMs 为上限（总耗时另含重试与退避等待）
         conn.setConnectTimeout((int) Math.min(timeoutMs, Integer.MAX_VALUE));
         conn.setReadTimeout((int) Math.min(timeoutMs, Integer.MAX_VALUE));
         conn.setRequestMethod("POST");
@@ -246,9 +263,13 @@ public class OpenAiCompatibleClient implements LlmClient {
             for (TurnContext turn : request.getPreviousTurns()) {
                 if (!first) sb.append(",");
                 String role = turn.getRole();
-                // OpenAI 不支持 role="tool" 在 messages 中，统一用 user/assistant
-                // 但实际上 OpenAI 2024+ 已支持 tool role
-                sb.append("{\"role\":\"").append(escapeJson(role)).append("\",\"content\":\"").append(escapeJson(turn.getContent())).append("\"}");
+                sb.append("{\"role\":\"").append(escapeJson(role)).append("\"");
+                // tool 角色消息必须携带 tool_call_id 才能关联到前序 assistant 的调用决策，
+                // 缺失时服务端以 400 拒绝整个请求
+                if ("tool".equals(role) && turn.getToolCallId() != null) {
+                    sb.append(",\"tool_call_id\":\"").append(escapeJson(turn.getToolCallId())).append("\"");
+                }
+                sb.append(",\"content\":\"").append(escapeJson(turn.getContent())).append("\"}");
                 first = false;
             }
         }
@@ -575,9 +596,46 @@ public class OpenAiCompatibleClient implements LlmClient {
         return -1;
     }
 
-    private String escapeJson(String s) {
+    /**
+     * JSON 字符串转义。除常见短转义外，所有 &lt;0x20 控制字符按 JSON 规范
+     * 强制转义为 \\uXXXX——用户输入携带原始控制字符时请求体必须仍是合法 JSON。
+     */
+    private static String escapeJson(String s) {
         if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+        StringBuilder sb = new StringBuilder(s.length() + 16);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '\\':
+                    sb.append("\\\\");
+                    break;
+                case '"':
+                    sb.append("\\\"");
+                    break;
+                case '\n':
+                    sb.append("\\n");
+                    break;
+                case '\r':
+                    sb.append("\\r");
+                    break;
+                case '\t':
+                    sb.append("\\t");
+                    break;
+                case '\b':
+                    sb.append("\\b");
+                    break;
+                case '\f':
+                    sb.append("\\f");
+                    break;
+                default:
+                    if (c < 0x20) {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+            }
+        }
+        return sb.toString();
     }
 
     private String unescapeJson(String s) {

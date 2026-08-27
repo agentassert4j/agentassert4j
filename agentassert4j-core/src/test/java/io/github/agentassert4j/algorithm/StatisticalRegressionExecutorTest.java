@@ -1,10 +1,14 @@
 package io.github.agentassert4j.algorithm;
 
+import io.github.agentassert4j.config.SkillRulesConfig;
 import io.github.agentassert4j.model.*;
+import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.LlmTimeoutException;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.util.*;
@@ -147,6 +151,49 @@ class StatisticalRegressionExecutorTest {
         StatisticalRegressionResult result = executor.execute(makeBaseline(), "prompt", config);
 
         assertEquals(0, stubClient.callCount);
+    }
+
+    @Nested
+    @DisplayName("声明式规则透传")
+    class RulesPassthrough {
+
+        @Test
+        @DisplayName("规则经构造器传入 → 每次采样都按 skillId 应用规则")
+        void rulesApplied_toEverySample() {
+            SkillRulesConfig rules = SkillRulesConfig.fromJson(
+                    "{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
+            StatisticalRegressionExecutor wired =
+                    new StatisticalRegressionExecutor(stubClient, new DeterministicComparator(), rules);
+            StatisticalTestConfig config = new StatisticalTestConfig();
+            config.setSampleCount(3);
+
+            // 桩响应 "response text" 不含 "订单" → 每次采样都因规则非 PASS
+            StatisticalRegressionResult result = wired.execute(makeBaseline(), "prompt", config);
+
+            assertEquals(3, result.getActualSampleCount());
+            assertTrue(result.getSamples().stream().allMatch(s -> s.getVerdict() != Verdict.PASS),
+                    "规则必须作用于全部采样，而非只有第一次");
+        }
+    }
+
+    @Nested
+    @DisplayName("处理失败隔离")
+    class ErrorIsolation {
+
+        @Test
+        @DisplayName("对比阶段抛异常 → 每次采样转为错误样本，批量不中断")
+        void processingError_isolatedPerSample() {
+            StatisticalRegressionExecutor wired = new StatisticalRegressionExecutor(
+                    stubClient, new RegressionTestExecutorTest.ThrowingComparator());
+            StatisticalTestConfig config = new StatisticalTestConfig();
+            config.setSampleCount(3);
+
+            StatisticalRegressionResult result = wired.execute(makeBaseline(), "prompt", config);
+
+            assertEquals(3, result.getActualSampleCount());
+            assertTrue(result.getSamples().stream()
+                    .allMatch(s -> s.getErrorMessage() != null && s.getErrorMessage().contains("Processing error")));
+        }
     }
 
     private InteractionRecord makeBaseline() {

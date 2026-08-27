@@ -15,19 +15,9 @@ package io.github.agentassert4j.model;
 public class StatisticalTestConfig {
 
     /**
-     * 单次测试用例上限
-     */
-    private int maxTestCases = 50;
-
-    /**
      * 单次 LLM 调用超时（毫秒）
      */
     private long timeoutMs = 30000;
-
-    /**
-     * API 失败重试次数
-     */
-    private int maxRetries = 2;
 
     /**
      * LLM 采样温度
@@ -88,9 +78,7 @@ public class StatisticalTestConfig {
      * 越界参数自动修正，不抛异常（退化不中断）。
      */
     public void validate() {
-        maxTestCases = Math.max(1, Math.min(200, maxTestCases));
         timeoutMs = Math.max(1000, timeoutMs);
-        maxRetries = Math.max(0, Math.min(5, maxRetries));
         temperature = Math.max(0.0, Math.min(2.0, temperature));
         sampleCount = Math.max(1, Math.min(100, sampleCount));
         passThreshold = Math.max(0.01, Math.min(1.0, passThreshold));
@@ -99,28 +87,12 @@ public class StatisticalTestConfig {
         maxCostPerCase = Math.max(0.01, maxCostPerCase);
     }
 
-    public int getMaxTestCases() {
-        return maxTestCases;
-    }
-
-    public void setMaxTestCases(int maxTestCases) {
-        this.maxTestCases = maxTestCases;
-    }
-
     public long getTimeoutMs() {
         return timeoutMs;
     }
 
     public void setTimeoutMs(long timeoutMs) {
         this.timeoutMs = timeoutMs;
-    }
-
-    public int getMaxRetries() {
-        return maxRetries;
-    }
-
-    public void setMaxRetries(int maxRetries) {
-        this.maxRetries = maxRetries;
     }
 
     public double getTemperature() {

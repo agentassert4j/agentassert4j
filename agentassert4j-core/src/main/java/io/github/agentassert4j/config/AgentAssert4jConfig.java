@@ -18,7 +18,7 @@ import java.util.Map;
  * <h3>配置文件格式示例（agentassert4j.json）</h3>
  * <pre>
  * {
- *   "storage": { "type": "sqlite", "url": "~/.agentassert4j/agentassert4j.db" },
+ *   "storage": { "url": "~/.agentassert4j/agentassert4j.db" },
  *   "recorder": { "batchSize": 100, "flushIntervalMs": 5000 },
  *   "regression": { "ignorableFields": ["debugInfo", "timestamp"] },
  *   "llm": { "apiKey": "${AGENTASSERT_API_KEY}", "endpoint": "...", "model": "gpt-4o" },
@@ -152,43 +152,19 @@ public class AgentAssert4jConfig {
     }
 
     /**
-     * 存储配置。
+     * 存储配置 — v1 唯一后端为 SQLite 单文件。
      */
     public static class StorageConfig {
         /**
-         * 存储类型：sqlite / mysql / postgresql
-         */
-        private String type = "sqlite";
-        /**
-         * 存储路径或 JDBC URL
+         * 存储文件路径
          */
         private String url = "~/.agentassert4j/agentassert4j.db";
-        /**
-         * 数据库用户名（MySQL/PG）
-         */
-        private String username;
-        /**
-         * 数据库密码（MySQL/PG）
-         */
-        private String password;
 
-        @SuppressWarnings("unchecked")
         static StorageConfig fromJson(Map<String, Object> map, StorageConfig defaults) {
             if (map == null) return defaults;
             StorageConfig c = new StorageConfig();
-            c.type = getString(map, "type", defaults.type);
             c.url = getString(map, "url", defaults.url);
-            c.username = getString(map, "username", defaults.username);
-            c.password = getString(map, "password", defaults.password);
             return c;
-        }
-
-        public String getType() {
-            return type;
-        }
-
-        public void setType(String type) {
-            this.type = type;
         }
 
         public String getUrl() {
@@ -197,22 +173,6 @@ public class AgentAssert4jConfig {
 
         public void setUrl(String url) {
             this.url = url;
-        }
-
-        public String getUsername() {
-            return username;
-        }
-
-        public void setUsername(String username) {
-            this.username = username;
-        }
-
-        public String getPassword() {
-            return password;
-        }
-
-        public void setPassword(String password) {
-            this.password = password;
         }
     }
 

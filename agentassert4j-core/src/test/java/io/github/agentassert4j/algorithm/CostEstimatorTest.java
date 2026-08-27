@@ -33,15 +33,16 @@ class CostEstimatorTest {
     }
 
     @Test
-    void estimate_multipleCasesWithTurns() {
+    void estimate_multiTurnRecord_countsAsSingleCall() {
+        // 重放一条记录恰好一次调用：多轮上下文在同一次请求内携带
         List<InteractionRecord> cases = List.of(
-                makeRecord(0),  // 1 call
-                makeRecord(2)   // 3 calls
+                makeRecord(0),
+                makeRecord(2)
         );
         String result = CostEstimator.estimate(cases, "gpt-4o");
 
-        assertTrue(result.contains("预估 4 次 API 调用"));
-        assertTrue(result.contains("$0.0160"));
+        assertTrue(result.contains("预估 2 次 API 调用"));
+        assertTrue(result.contains("$0.0080"));
     }
 
     @Test
@@ -113,13 +114,13 @@ class CostEstimatorTest {
     }
 
     @Test
-    void estimateStatistical_withTurns() {
-        List<InteractionRecord> cases = List.of(makeRecord(1));  // turnIndex=1 → 2 calls
+    void estimateStatistical_multiTurnRecord_countsAsSingleCall() {
+        List<InteractionRecord> cases = List.of(makeRecord(1));
         String result = CostEstimator.estimateStatistical(cases, "deepseek-chat", 5);
 
-        // 2 calls x 5 samples = 10 total
-        assertTrue(result.contains("预估 1 用例 x 5 次 = 10 次 API 调用"));
-        assertTrue(result.contains("$0.0100"));
+        // 1 用例 x 5 采样 = 5 次调用（轮次不放大调用数）
+        assertTrue(result.contains("预估 1 用例 x 5 次 = 5 次 API 调用"));
+        assertTrue(result.contains("$0.0050"));
     }
 
     @Test

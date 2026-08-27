@@ -1,5 +1,7 @@
 package io.github.agentassert4j.algorithm;
 
+import io.github.agentassert4j.config.SkillRulesConfig;
+import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.LlmClient;
@@ -13,7 +15,7 @@ import java.util.List;
  *
  * <p>设计原则：</p>
  * <ul>
- *   <li>向后兼容：sampleCount=1 时行为与 RegressionTestExecutor 完全等价</li>
+ *   <li>单次等价：sampleCount=1 时行为与 RegressionTestExecutor 完全等价</li>
  *   <li>成本安全：maxCostPerCase 硬限制，超出自动截断采样</li>
  *   <li>退化不中断：任何一次 LLM 调用失败不影响其余采样</li>
  * </ul>
@@ -33,8 +35,19 @@ public class StatisticalRegressionExecutor {
      * @param comparator 确定性对比器
      */
     public StatisticalRegressionExecutor(LlmClient llmClient, DeterministicComparator comparator) {
+        this(llmClient, comparator, null);
+    }
+
+    /**
+     * 构造器（带声明式规则）。
+     *
+     * @param llmClient  LLM 客户端
+     * @param comparator 确定性对比器
+     * @param rules      声明式规则配置，传入后每次采样都按 skillId 注入维度 3-4 规则（null 跳过）
+     */
+    public StatisticalRegressionExecutor(LlmClient llmClient, DeterministicComparator comparator, SkillRulesConfig rules) {
         this.llmClient = llmClient;
-        this.singleExecutor = new RegressionTestExecutor(llmClient, comparator, null);
+        this.singleExecutor = new RegressionTestExecutor(llmClient, comparator, null, rules);
     }
 
     /**
@@ -119,6 +132,14 @@ public class StatisticalRegressionExecutor {
                 sr.setLatencyMs(latency);
                 return sr;
             }
+            if (single.getStatus() == TestResultStatus.ERROR) {
+                SampleResult sr = new SampleResult();
+                sr.setSampleIndex(sampleIndex);
+                sr.setScore(0.0);
+                sr.setErrorMessage("Processing error: " + single.getErrorMessage());
+                sr.setLatencyMs(latency);
+                return sr;
+            }
             if (single.getStatus() == TestResultStatus.SKIP) {
                 SampleResult sr = new SampleResult();
                 sr.setSampleIndex(sampleIndex);
@@ -192,7 +213,7 @@ public class StatisticalRegressionExecutor {
     }
 
     /**
-     * 单次模式包装 — 向后兼容。
+     * 单次模式包装 — 与 RegressionTestExecutor 单次执行等价。
      */
     private StatisticalRegressionResult executeSingleAsStatistical(InteractionRecord baseline, String newSystemPrompt, StatisticalTestConfig config) {
 
@@ -207,7 +228,7 @@ public class StatisticalRegressionExecutor {
     /**
      * StatisticalTestConfig → TestExecutionConfig 转换。
      */
-    private io.github.agentassert4j.config.TestExecutionConfig toTestExecutionConfig(StatisticalTestConfig config) {
-        return new io.github.agentassert4j.config.TestExecutionConfig().maxTestCases(config.getMaxTestCases()).timeoutMs(config.getTimeoutMs()).maxRetries(config.getMaxRetries()).temperature(config.getTemperature()).dryRun(config.isDryRun()).model(config.getModel());
+    private TestExecutionConfig toTestExecutionConfig(StatisticalTestConfig config) {
+        return new TestExecutionConfig().timeoutMs(config.getTimeoutMs()).temperature(config.getTemperature()).dryRun(config.isDryRun()).model(config.getModel());
     }
 }

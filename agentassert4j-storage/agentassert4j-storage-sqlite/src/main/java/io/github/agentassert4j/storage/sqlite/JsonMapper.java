@@ -39,8 +39,6 @@ final class JsonMapper {
     private JsonMapper() {
     }
 
-    // ===== interactions 表的 JSON 列 =====
-
     static String toolCallsToJson(List<ToolCall> list) {
         if (list == null || list.isEmpty()) {
             return "[]";
@@ -105,8 +103,6 @@ final class JsonMapper {
         return result;
     }
 
-    // ===== skill_profiles / archived_baselines 表的指纹列 =====
-
     /**
      * 指纹序列化；null 指纹写 "{}"（fingerprint 列有 NOT NULL 约束，
      * 读侧把 "{}" 映射回 null）。
@@ -156,8 +152,6 @@ final class JsonMapper {
         return fp;
     }
 
-    // ===== ResultSet 行映射 =====
-
     static SkillProfile toSkillProfile(ResultSet rs) throws SQLException {
         SkillProfile p = new SkillProfile();
         p.setSkillId(rs.getString("skill_id"));
@@ -188,8 +182,6 @@ final class JsonMapper {
         ab.setArchivedAt(rs.getLong("archived_at"));
         return ab;
     }
-
-    // ===== 标准类型与模型间的私有搬运 =====
 
     private static Map<String, Object> toolCallToMap(ToolCall tc) {
         Map<String, Object> m = new LinkedHashMap<>();

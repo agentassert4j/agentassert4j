@@ -81,6 +81,15 @@ public class LlmRequest {
         previousTurns.add(new TurnContext(role, content));
     }
 
+    /**
+     * 追加一个完整的前序轮次（保留 toolCallId/toolName——tool 角色消息的关联键）。
+     */
+    public void addTurn(TurnContext turn) {
+        if (turn == null) return;
+        if (previousTurns == null) previousTurns = new ArrayList<>();
+        previousTurns.add(turn);
+    }
+
     public List<String> getToolDefinitions() {
         return toolDefinitions;
     }
