@@ -73,7 +73,7 @@ agentassert4j/
 └── agentassert4j-sdk/                         ← 聚合 POM (packaging=pom)
     ├── agentassert4j-sdk-spring-ai1/          ← core + recorder + Spring AI 1.x（Boot 3.4/3.5 线）
     ├── agentassert4j-sdk-spring-ai2/          ← core + recorder + Spring AI 2.x（Boot 4 线，两代坐标同名互斥必分模块）
-    └── agentassert4j-spring-boot3-starter/    ← 聚合 core + sdk-spring-ai1 + storage-sqlite + 自动装配（待实现）
+    └── agentassert4j-spring-boot3-starter/    ← core + recorder + sdk-spring-ai1 + storage-sqlite + Boot 3 自动装配（Boot 版本由用户自带，starter 不锁定）
 ```
 
 > **裁剪说明**：曾存在的空壳模块（proxy / agent / dashboard / embedding / storage-mysql / storage-pg / sdk-lang / bom）已于
