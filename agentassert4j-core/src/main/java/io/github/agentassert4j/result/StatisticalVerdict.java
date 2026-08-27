@@ -8,6 +8,8 @@ package io.github.agentassert4j.result;
  *   <li>STABLE：PASS 率 >= passThreshold，且 REGRESSION 率 <= regressionTolerance</li>
  *   <li>UNSTABLE：PASS 率 < passThreshold，但 REGRESSION 率 <= regressionTolerance</li>
  *   <li>FLAKY：REGRESSION 率 > regressionTolerance（存在严重退化风险）</li>
+ *   <li>INSUFFICIENT_SAMPLES：无可用判定样本（零采样或全部为基础设施错误）——
+ *       无样本在数学上不可判定，绝不能默认稳定放行</li>
  * </ul>
  *
  * @author axy-yxa
@@ -28,5 +30,10 @@ public enum StatisticalVerdict {
     /**
      * 脆弱：存在严重退化风险，REGRESSION 比例超标。对应单次模式的 REGRESSION。
      */
-    FLAKY
+    FLAKY,
+
+    /**
+     * 样本不足：无可用判定样本（零采样或全部为超时/API 错误等基础设施错误）。
+     */
+    INSUFFICIENT_SAMPLES
 }

@@ -27,18 +27,47 @@ public final class BehaviorChecker {
 
     static {
         Map<String, BiFunction<DeterministicFingerprint, String, Boolean>> builtins = new LinkedHashMap<>();
-        builtins.put("mustUseChinese", (fp, out) -> out != null && out.matches(".*[\\u4e00-\\u9fa5].*"));
-        builtins.put("mustUseEnglish", (fp, out) -> out != null && out.matches(".*[a-zA-Z].*") && !out.matches(".*[\\u4e00-\\u9fa5].*"));
+        // 语言类判定用码点扫描而非正则：`.` 默认不匹配换行，LLM 输出几乎必然多行，
+        // 正则全串匹配会把多行中文输出误判为不含中文
+        builtins.put("mustUseChinese", (fp, out) -> out != null && containsScript(out, ScriptRange.CJK));
+        builtins.put("mustUseEnglish", (fp, out) -> out != null && containsScript(out, ScriptRange.LATIN) && !containsScript(out, ScriptRange.CJK));
         builtins.put("returnsEmptyOnError", (fp, out) -> !fp.isHasError() || out == null || out.trim().isEmpty() || out.contains("[]"));
-        // TODO: returnsEmptyOnError 中 out.contains("[]") 判断过于宽泛，
-        //       如 {"data":[],"message":"成功"} 含有 [] 但非错误输出会被误判。
-        //       待后续优化为使用 RecursiveJsonParser.parse() 解析后检查是否为空数组/空对象
+        // TODO: [空数组判定宽泛] returnsEmptyOnError 的 out.contains("[]") 会把含空数组字面量的
+        //       正常输出（如 {"data":[],"message":"成功"}）误判为空输出；待改为 RecursiveJsonParser
+        //       解析后按结构判空数组/空对象
         builtins.put("returnsErrorCode", (fp, out) -> fp.isHasError());
         builtins.put("noError", (fp, out) -> !fp.isHasError());
         builtins.put("jsonOutput", (fp, out) -> out != null && (out.trim().startsWith("{") || out.trim().startsWith("[")));
         builtins.put("nonEmptyOutput", (fp, out) -> out != null && !out.trim().isEmpty());
-        builtins.put("containsCjk", (fp, out) -> out != null && out.matches(".*[\\u4e00-\\u9fa5\\u3040-\\u309f\\u30a0-\\u30ff].*"));
+        builtins.put("containsCjk", (fp, out) -> out != null && (containsScript(out, ScriptRange.CJK) || containsScript(out, ScriptRange.KANA)));
         BUILTINS = Collections.unmodifiableMap(builtins);
+    }
+
+    private enum ScriptRange {
+        CJK('\u4e00', '\u9fa5'), KANA('\u3040', '\u30ff'), LATIN('a', 'z');
+
+        final char from;
+        final char to;
+
+        ScriptRange(char from, char to) {
+            this.from = from;
+            this.to = to;
+        }
+    }
+
+    private static boolean containsScript(String text, ScriptRange range) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (range == ScriptRange.LATIN) {
+                // 拉丁字母是 A-Z 与 a-z 两个不连续区间，中间的标点不算英文
+                if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+                    return true;
+                }
+            } else if (c >= range.from && c <= range.to) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private BehaviorChecker() {

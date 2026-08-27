@@ -15,6 +15,7 @@ import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -135,5 +136,23 @@ class RecordingChatModelTest {
         assertEquals("session-7", interceptor.records.get(0).getSessionId());
         assertEquals("refund", interceptor.records.get(0).getSkillId());
         assertTrue(interceptor.records.get(1).getSessionId() == null || interceptor.records.get(1).getSessionId().isEmpty(), "作用域关闭后不再携带会话标注");
+    }
+
+    @Test
+    @DisplayName("异步完成线程上聚合时，会话标注仍来自调用线程")
+    void streamAsyncCompletionKeepsContext() {
+        StubChatModel stub = new StubChatModel();
+        // 模拟真实异步 delegate：完成信号切换到非调用线程，回调线程取不到业务 ThreadLocal
+        stub.nextStream = Flux.just(textResponse("你"), textResponse("好")).publishOn(Schedulers.boundedElastic());
+        CapturingInterceptor interceptor = new CapturingInterceptor();
+        RecordingChatModel model = RecordingChatModel.wrap(stub, interceptor);
+
+        try (RecordingContext ctx = RecordingContext.start("session-async").withSkillId("stream-skill")) {
+            model.stream(new Prompt(List.of(new UserMessage("hi")))).blockLast();
+        }
+
+        assertEquals(1, interceptor.records.size());
+        assertEquals("session-async", interceptor.records.get(0).getSessionId(), "上下文必须在调用线程捕获——聚合回调发生在异步完成信号线程");
+        assertEquals("stream-skill", interceptor.records.get(0).getSkillId());
     }
 }

@@ -349,4 +349,61 @@ class InMemoryDependencyGraphTest {
         Set<String> cycles = g.detectCycles();
         assertTrue(cycles.contains("A"));
     }
+
+    @Test
+    void fromJson_corruptEdges_skippedFailClosed() {
+        // source/target 缺失或空白、confidence 非法的边整条跳过，不造幽灵节点、不默认最高置信度
+        String json = "{\"edges\":[" + "{\"target\":\"B\",\"confidence\":\"HIGH\"},"          // 缺 source
+                + "{\"source\":\"A\",\"confidence\":\"HIGH\"},"          // 缺 target
+                + "{\"source\":\"\",\"target\":\"B\",\"confidence\":\"HIGH\"},"  // 空 source
+                + "{\"source\":\"A\",\"target\":\"B\",\"confidence\":\"BOGUS\"}," // 非法 confidence
+                + "{\"source\":\"A\",\"target\":\"B\",\"confidence\":\"LOW\"}]}";
+
+        InMemoryDependencyGraph g = InMemoryDependencyGraph.fromJson(json);
+
+        assertEquals(1, g.edgeCount(), "只有完整合法的边可入库");
+        assertEquals(2, g.nodeCount());
+        assertTrue(g.getAllEdges().get(0).getConfidence() == Confidence.LOW);
+    }
+
+    @Test
+    void detectCycles_tailOutsideCycle_notMarked() {
+        // 真环仅 B↔C，A 是环外尾部祖先——不得被误标为环节点
+        InMemoryDependencyGraph g = new InMemoryDependencyGraph();
+        g.addEdge("A", "B");
+        g.addEdge("B", "C");
+        g.addEdge("C", "B");
+
+        Set<String> cycles = g.detectCycles();
+
+        assertEquals(new HashSet<>(Arrays.asList("B", "C")), cycles, "环上只有 B 和 C，尾部 A 必须排除");
+    }
+
+    @Test
+    void toJson_reproducibleBytes_sameDataSameSnapshot() {
+        // 快照字节可复现：同数据同插入序两次重建产出完全一致（可 diff、可调试）
+        String first = buildSampleGraphJson();
+        String second = buildSampleGraphJson();
+        assertEquals(first, second);
+    }
+
+    private static String buildSampleGraphJson() {
+        InMemoryDependencyGraph g = new InMemoryDependencyGraph();
+        g.addEdge("queryOrder", "formatOrder", Confidence.HIGH);
+        g.addEdge("queryOrder", "checkStock", Confidence.LOW);
+        g.addEdge("checkStock", "formatOrder", Confidence.HIGH, Arrays.asList("transparentNode"));
+        return g.toJson();
+    }
+
+    @Test
+    void roundtrip_jsonPreservesEdgesAndOrder() {
+        InMemoryDependencyGraph original = new InMemoryDependencyGraph();
+        original.addEdge("a", "b", Confidence.HIGH);
+        original.addEdge("b", "c", Confidence.LOW, Arrays.asList("t"));
+
+        InMemoryDependencyGraph restored = InMemoryDependencyGraph.fromJson(original.toJson());
+
+        assertEquals(original.edgeCount(), restored.edgeCount());
+        assertEquals(original.getAllEdges().stream().map(GraphEdge::getSource).collect(java.util.stream.Collectors.toList()).toString(), restored.getAllEdges().stream().map(GraphEdge::getSource).collect(java.util.stream.Collectors.toList()).toString(), "边插入序在快照往返后保持一致");
+    }
 }

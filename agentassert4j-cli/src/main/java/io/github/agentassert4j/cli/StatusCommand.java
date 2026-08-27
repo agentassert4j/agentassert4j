@@ -1,5 +1,6 @@
 package io.github.agentassert4j.cli;
 
+import io.github.agentassert4j.algorithm.InMemoryDependencyGraph;
 import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 import picocli.CommandLine.Command;
@@ -41,6 +42,7 @@ public class StatusCommand implements Callable<Integer> {
                 System.out.println("  " + tag + ": 已录制但无基线（先执行 baseline）");
             }
             System.out.println("共 " + profiles.size() + " 个基线画像。");
+            printGraphSnapshot(repository);
             return 0;
         } catch (RuntimeException e) {
             System.err.println("status 失败：" + e.getMessage());
@@ -74,5 +76,24 @@ public class StatusCommand implements Callable<Integer> {
             }
         }
         return uncovered;
+    }
+
+    /**
+     * 依赖图快照巡检：快照是最近一次 replay 的分析视图留档（本命令只读不重建，
+     * 看实时图用 graph show）。
+     */
+    private static void printGraphSnapshot(StorageRepository repository) {
+        String json = null;
+        try {
+            json = repository.loadGraph();
+        } catch (RuntimeException e) {
+            // 快照缺席不阻断状态巡检
+        }
+        if (json == null || json.trim().isEmpty()) {
+            System.out.println("依赖图：无快照（执行 replay 后生成；实时视图用 graph show）。");
+            return;
+        }
+        InMemoryDependencyGraph graph = InMemoryDependencyGraph.fromJson(json);
+        System.out.println("依赖图快照：" + graph.nodeCount() + " 节点 / " + graph.edgeCount() + " 边（最近一次 replay 生成；实时视图用 graph show）");
     }
 }

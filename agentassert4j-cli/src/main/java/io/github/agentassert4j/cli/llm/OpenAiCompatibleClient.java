@@ -279,8 +279,10 @@ public class OpenAiCompatibleClient implements LlmClient {
         StringBuilder sb = new StringBuilder(512);
         sb.append("{\"model\":\"").append(escapeJson(model)).append("\"");
 
-        // temperature
-        sb.append(",\"temperature\":").append(request.getTemperature());
+        // temperature——null 表示不携带该成员（推理模型方言：发送 0.0 会被 400 拒绝）
+        if (request.getTemperature() != null) {
+            sb.append(",\"temperature\":").append(request.getTemperature());
+        }
 
         // messages
         StringBuilder messages = new StringBuilder();
@@ -724,6 +726,26 @@ public class OpenAiCompatibleClient implements LlmClient {
                     case '/':
                         sb.append('/');
                         i++;
+                        break;
+                    case 'b':
+                        sb.append('\b');
+                        i++;
+                        break;
+                    case 'f':
+                        sb.append('\f');
+                        i++;
+                        break;
+                    case 'u':
+                        if (i + 5 < s.length()) {
+                            try {
+                                sb.append((char) Integer.parseInt(s.substring(i + 2, i + 6), 16));
+                                i += 5;
+                            } catch (NumberFormatException nfe) {
+                                sb.append(c);
+                            }
+                        } else {
+                            sb.append(c);
+                        }
                         break;
                     default:
                         sb.append(c);

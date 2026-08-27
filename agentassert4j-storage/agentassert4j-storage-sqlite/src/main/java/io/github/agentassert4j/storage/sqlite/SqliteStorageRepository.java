@@ -123,7 +123,7 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public void saveInteraction(InteractionRecord r) {
+    public synchronized void saveInteraction(InteractionRecord r) {
         // INSERT OR IGNORE：interactions 是只追加历史，record_id 冲突（崩溃重放双写）静默跳过
         String sql = "INSERT OR IGNORE INTO interactions" +
                 " (record_id, session_id, timestamp, seq," +
@@ -152,7 +152,7 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setString(i++, r.getModel());
             ps.setString(i++, r.getServedModel());
             ps.setString(i++, r.getEndpoint());
-            ps.setString(i++, r.getSkillId());
+            ps.setString(i++, r.getSkillId() != null ? r.getSkillId() : "");
             ps.setString(i++, r.getGroupKey() != null ? r.getGroupKey() : "");
             ps.setString(i++, r.getUserInput());
             ps.setInt(i++, r.getTurnIndex());
@@ -188,7 +188,7 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public void saveInteractions(List<InteractionRecord> records) {
+    public synchronized void saveInteractions(List<InteractionRecord> records) {
         if (records == null || records.isEmpty()) {
             return;
         }
@@ -226,19 +226,19 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public List<InteractionRecord> findBySkillId(String skillId) {
+    public synchronized List<InteractionRecord> findBySkillId(String skillId) {
         return queryInteractions("SELECT * FROM interactions WHERE skill_id = ?"
                 + " ORDER BY timestamp ASC, seq ASC, record_id ASC", skillId);
     }
 
     @Override
-    public List<InteractionRecord> findByTemplateHash(String hash) {
+    public synchronized List<InteractionRecord> findByTemplateHash(String hash) {
         return queryInteractions("SELECT * FROM interactions WHERE template_hash = ?"
                 + " ORDER BY timestamp ASC, seq ASC, record_id ASC", hash);
     }
 
     @Override
-    public Set<String> findSkillIdsByTemplateHash(String hash) {
+    public synchronized Set<String> findSkillIdsByTemplateHash(String hash) {
         Set<String> result = new HashSet<>();
         String sql = "SELECT DISTINCT skill_id FROM interactions WHERE template_hash = ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -254,13 +254,13 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public List<InteractionRecord> findBySessionId(String sessionId) {
+    public synchronized List<InteractionRecord> findBySessionId(String sessionId) {
         return queryInteractions("SELECT * FROM interactions WHERE session_id = ?"
                 + " ORDER BY timestamp ASC, seq ASC, record_id ASC", sessionId);
     }
 
     @Override
-    public List<String> findAllSessionIds() {
+    public synchronized List<String> findAllSessionIds() {
         List<String> result = new ArrayList<>();
         String sql = "SELECT DISTINCT session_id FROM interactions";
         try (Statement stmt = connection.createStatement();
@@ -274,7 +274,7 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public void saveSkillProfile(SkillProfile p) {
+    public synchronized void saveSkillProfile(SkillProfile p) {
         String sql = "INSERT OR REPLACE INTO skill_profiles" +
                 " (skill_id, group_key, skill_name, skill_type, fingerprint," +
                 "  candidate_fingerprint, baseline_status, version_tag," +
@@ -306,7 +306,7 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public SkillProfile findSkillByGroupKey(String key) {
+    public synchronized SkillProfile findSkillByGroupKey(String key) {
         String sql = "SELECT * FROM skill_profiles WHERE group_key = ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, key);
@@ -321,7 +321,7 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public List<SkillProfile> findAllSkills() {
+    public synchronized List<SkillProfile> findAllSkills() {
         List<SkillProfile> result = new ArrayList<>();
         String sql = "SELECT * FROM skill_profiles";
         try (Statement stmt = connection.createStatement();
@@ -335,7 +335,7 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public void saveTemplateText(String hash, String templateText) {
+    public synchronized void saveTemplateText(String hash, String templateText) {
         String sql = "INSERT OR REPLACE INTO prompt_texts (prompt_hash, prompt_text, created_at) VALUES (?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, hash);
@@ -349,7 +349,7 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public String findTemplateText(String hash) {
+    public synchronized String findTemplateText(String hash) {
         String sql = "SELECT prompt_text FROM prompt_texts WHERE prompt_hash = ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, hash);
@@ -364,7 +364,7 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public void saveGraph(String graphJson) {
+    public synchronized void saveGraph(String graphJson) {
         String sql = "INSERT OR REPLACE INTO graph_snapshot (id, graph_json, updated_at) VALUES ('current',?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, graphJson);
@@ -377,7 +377,7 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public String loadGraph() {
+    public synchronized String loadGraph() {
         String sql = "SELECT graph_json FROM graph_snapshot WHERE id = 'current'";
         try (Statement stmt = connection.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
@@ -390,7 +390,7 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public void archiveBaseline(String skillId, DeterministicFingerprint fingerprint, String versionTag) {
+    public synchronized void archiveBaseline(String skillId, DeterministicFingerprint fingerprint, String versionTag) {
         String sql = "INSERT INTO archived_baselines (skill_id, fingerprint, version_tag, archived_at) VALUES (?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, skillId);
@@ -405,8 +405,8 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public ArchivedBaseline findArchivedBaseline(String skillId, String versionTag) {
-        String sql = "SELECT * FROM archived_baselines WHERE skill_id = ? AND version_tag = ? ORDER BY archived_at DESC LIMIT 1";
+    public synchronized ArchivedBaseline findArchivedBaseline(String skillId, String versionTag) {
+        String sql = "SELECT * FROM archived_baselines WHERE skill_id = ? AND version_tag = ? ORDER BY archived_at DESC, rowid DESC LIMIT 1";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, skillId);
             ps.setString(2, versionTag);

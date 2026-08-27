@@ -262,6 +262,11 @@ public class AgentAssert4jConfig {
          */
         private int timeoutMs = 30000;
         /**
+         * 采样温度（默认 0.0 确定性输出）；显式配置 null 表示请求体不携带该参数
+         * ——OpenAI o 系等推理模型只接受默认温度，发送 0.0 会被 400 拒绝
+         */
+        private Double temperature = 0.0;
+        /**
          * 厂商方言扩展字段——原样注入请求体顶层的 JSON 成员片段（如 DeepSeek V4 系
          * 关闭思考态的 "thinking":{"type":"disabled"}），null/空白表示无扩展。
          * 客户端不做任何按模型名的自动适配，方言差异由使用方经此字段显式声明
@@ -276,6 +281,13 @@ public class AgentAssert4jConfig {
             c.endpoint = getString(map, "endpoint", defaults.endpoint);
             c.model = getString(map, "model", defaults.model);
             c.timeoutMs = getInt(map, "timeoutMs", defaults.timeoutMs);
+            // 显式 "temperature": null 与缺省不同：null=不发送该参数，缺省=默认 0.0
+            if (map.containsKey("temperature")) {
+                Object raw = map.get("temperature");
+                c.temperature = raw instanceof Number ? ((Number) raw).doubleValue() : null;
+            } else {
+                c.temperature = defaults.temperature;
+            }
             c.extraBody = getString(map, "extraBody", defaults.extraBody);
             return c;
         }
@@ -306,6 +318,14 @@ public class AgentAssert4jConfig {
 
         public int getTimeoutMs() {
             return timeoutMs;
+        }
+
+        public Double getTemperature() {
+            return temperature;
+        }
+
+        public void setTemperature(Double temperature) {
+            this.temperature = temperature;
         }
 
         public void setTimeoutMs(int timeoutMs) {

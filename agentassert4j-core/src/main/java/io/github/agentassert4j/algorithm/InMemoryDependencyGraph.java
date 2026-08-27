@@ -26,16 +26,19 @@ import java.util.*;
 public class InMemoryDependencyGraph {
 
     /**
-     * 正向邻接表：source → (target → edge)
+     * 正向邻接表：source → (target → edge)。
+     * 插入序集合保证快照字节可复现——同数据全量重建产出完全相同的 JSON。
      */
-    private final Map<String, Map<String, GraphEdge>> outEdges = new HashMap<>();
+    private final Map<String, Map<String, GraphEdge>> outEdges = new LinkedHashMap<>();
     /**
      * 反向邻接表：target → Set<source>
      */
-    private final Map<String, Set<String>> inEdges = new HashMap<>();
+    private final Map<String, Set<String>> inEdges = new LinkedHashMap<>();
 
     /**
      * 从 JSON 字符串反序列化图谱。
+     * 破坏的边（source/target 缺失或空白、confidence 非法）整条跳过——
+     * 快照是派生数据，坏数据宁可不建边也不能造出幽灵拓扑污染影响集。
      */
     @SuppressWarnings("unchecked")
     public static InMemoryDependencyGraph fromJson(String json) {
@@ -53,14 +56,16 @@ public class InMemoryDependencyGraph {
         for (Object edgeObj : edgesList) {
             if (!(edgeObj instanceof Map)) continue;
             Map<String, Object> edgeMap = (Map<String, Object>) edgeObj;
-            String src = String.valueOf(edgeMap.get("source"));
-            String tgt = String.valueOf(edgeMap.get("target"));
-            String confStr = String.valueOf(edgeMap.get("confidence"));
+            String src = asNonBlank(edgeMap.get("source"));
+            String tgt = asNonBlank(edgeMap.get("target"));
             Confidence conf;
             try {
-                conf = Confidence.valueOf(confStr);
+                conf = Confidence.valueOf(String.valueOf(edgeMap.get("confidence")));
             } catch (IllegalArgumentException e) {
-                conf = Confidence.HIGH;
+                continue;
+            }
+            if (src == null || tgt == null) {
+                continue;
             }
             List<String> through = new ArrayList<>();
             Object throughObj = edgeMap.get("throughNodes");
@@ -72,6 +77,12 @@ public class InMemoryDependencyGraph {
             graph.addEdge(src, tgt, conf, through);
         }
         return graph;
+    }
+
+    private static String asNonBlank(Object value) {
+        if (value == null) return null;
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
     }
 
     /**
@@ -136,43 +147,49 @@ public class InMemoryDependencyGraph {
     }
 
     /**
-     * 环检测 — DFS 三色染色法。
-     * 返回所有参与环的节点集合（空集表示无环）。
+     * 环检测 — DFS 三色染色法 + 显式递归栈。
+     * 返回所有参与环的节点集合（空集表示无环）；环外尾部祖先不在环上，
+     * 只有栈中回边目标到栈顶的区段才是环。
      */
     public Set<String> detectCycles() {
         Set<String> white = new HashSet<>(getAllNodes());
         Set<String> gray = new HashSet<>();
         Set<String> black = new HashSet<>();
-        Set<String> cycleNodes = new HashSet<>();
+        Set<String> cycleNodes = new LinkedHashSet<>();
+        Deque<String> stack = new ArrayDeque<>();
 
         for (String node : getAllNodes()) {
             if (white.contains(node)) {
-                dfsCycle(node, white, gray, black, cycleNodes);
+                dfsCycle(node, white, gray, black, cycleNodes, stack);
             }
         }
         return cycleNodes;
     }
 
-    private void dfsCycle(String node, Set<String> white, Set<String> gray, Set<String> black, Set<String> cycleNodes) {
+    private void dfsCycle(String node, Set<String> white, Set<String> gray, Set<String> black, Set<String> cycleNodes, Deque<String> stack) {
         white.remove(node);
         gray.add(node);
+        stack.push(node);
 
         Map<String, GraphEdge> succs = outEdges.get(node);
         if (succs != null) {
             for (String next : succs.keySet()) {
                 if (gray.contains(next)) {
-                    // 发现环：当前 DFS 栈上所有 gray 节点都在环的路径上
-                    // gray 集合仅包含当前 DFS 递归路径上的节点（不含已完成分支），
-                    // 因此 gray.addAll 只会标记真正的环上节点，不会误标记无关节点
-                    cycleNodes.add(next);
-                    cycleNodes.add(node);
-                    cycleNodes.addAll(gray);
+                    // 回边：环 = 栈顶一路向下到回边目标；更深的栈节点是环外尾部祖先
+                    for (Iterator<String> it = stack.iterator(); it.hasNext(); ) {
+                        String inCycle = it.next();
+                        cycleNodes.add(inCycle);
+                        if (inCycle.equals(next)) {
+                            break;
+                        }
+                    }
                 } else if (white.contains(next)) {
-                    dfsCycle(next, white, gray, black, cycleNodes);
+                    dfsCycle(next, white, gray, black, cycleNodes, stack);
                 }
             }
         }
 
+        stack.pop();
         gray.remove(node);
         black.add(node);
     }
@@ -194,10 +211,10 @@ public class InMemoryDependencyGraph {
     }
 
     /**
-     * 获取所有节点
+     * 获取所有节点（插入序，快照与展示可复现）。
      */
     public Set<String> getAllNodes() {
-        Set<String> nodes = new HashSet<>(outEdges.keySet());
+        Set<String> nodes = new LinkedHashSet<>(outEdges.keySet());
         for (Map<String, GraphEdge> targets : outEdges.values()) {
             nodes.addAll(targets.keySet());
         }
@@ -299,7 +316,7 @@ public class InMemoryDependencyGraph {
      * 沿图向上/向下搜索，跳过被排除的中间节点，找到最近的非排除节点。
      */
     private Set<String> findNonExcludedReachable(String start, Direction dir, Set<String> excluded) {
-        Set<String> result = new HashSet<>();
+        Set<String> result = new LinkedHashSet<>();
         Deque<String> queue = new ArrayDeque<>();
         Set<String> visited = new HashSet<>();
 

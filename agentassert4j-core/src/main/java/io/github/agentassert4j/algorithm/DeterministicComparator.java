@@ -133,7 +133,7 @@ public class DeterministicComparator {
         // 自动回归信号：error 类字段出现（用未过滤集合——无论用户是否配置为可忽略）
         Set<String> rawAdded = new HashSet<>(cFieldsRaw);
         rawAdded.removeAll(bFieldsRaw);
-        boolean addedErrorField = rawAdded.stream().anyMatch(f -> AUTO_REGRESSION_FIELDS.contains(f.contains(".") ? f.substring(f.lastIndexOf('.') + 1).toLowerCase() : f.toLowerCase()));
+        boolean addedErrorField = rawAdded.stream().anyMatch(f -> AUTO_REGRESSION_FIELDS.contains(f.contains(".") ? f.substring(f.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT) : f.toLowerCase(Locale.ROOT)));
 
         if (addedErrorField) {
             r.setVerdict(Verdict.REGRESSION);

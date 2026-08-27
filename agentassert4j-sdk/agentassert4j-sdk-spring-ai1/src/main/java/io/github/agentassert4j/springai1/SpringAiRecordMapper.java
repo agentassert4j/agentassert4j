@@ -17,6 +17,8 @@ import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 
+import java.net.URI;
+import java.net.URL;
 import java.util.*;
 
 /**
@@ -39,15 +41,15 @@ final class SpringAiRecordMapper {
 
     /**
      * 组装一次调用的完整交互记录；response 为 null 时只落请求面字段。
+     * context 由调用方在业务线程捕获传入——异步回调线程的 ThreadLocal 不可达。
      */
-    static InteractionRecord toRecord(Prompt prompt, ChatResponse response, long latencyMs, Long ttftMs) {
+    static InteractionRecord toRecord(Prompt prompt, ChatResponse response, long latencyMs, Long ttftMs, RecordingContext context) {
         InteractionRecord record = new InteractionRecord();
         record.setTimestamp(System.currentTimeMillis());
         record.setRecorderVersion(SDK_VERSION);
         record.setLatencyMs(latencyMs);
         record.setTtftMs(ttftMs);
 
-        RecordingContext context = RecordingContext.currentOrNull();
         if (context != null) {
             record.setSessionId(context.sessionId());
             record.setSkillId(context.skillId());
@@ -140,10 +142,11 @@ final class SpringAiRecordMapper {
             Map<String, Object> url = new LinkedHashMap<>();
             url.put("url", dataToUri(mime, data));
             part.put("image_url", url);
-        } else if (data != null && mime.startsWith("audio/")) {
+        } else if (data instanceof byte[] && mime.startsWith("audio/")) {
+            // input_audio.data 契约是裸 base64——data URI 或 URL 形态会被服务端拒绝
             part.put("type", "input_audio");
             Map<String, Object> audio = new LinkedHashMap<>();
-            audio.put("data", dataToUri(mime, data));
+            audio.put("data", Base64.getEncoder().encodeToString((byte[]) data));
             audio.put("format", mime.substring(mime.indexOf('/') + 1));
             part.put("input_audio", audio);
         } else {
@@ -157,7 +160,7 @@ final class SpringAiRecordMapper {
     }
 
     private static String dataToUri(String mime, Object data) {
-        if (data instanceof java.net.URI || data instanceof java.net.URL) {
+        if (data instanceof URI || data instanceof URL) {
             return data.toString();
         }
         if (data instanceof byte[]) {

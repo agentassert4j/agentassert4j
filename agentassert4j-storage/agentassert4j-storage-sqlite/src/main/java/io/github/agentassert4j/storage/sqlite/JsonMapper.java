@@ -1,25 +1,11 @@
 package io.github.agentassert4j.storage.sqlite;
 
-import io.github.agentassert4j.model.ArchivedBaseline;
-import io.github.agentassert4j.model.DeterministicFingerprint;
-import io.github.agentassert4j.model.RegexPattern;
-import io.github.agentassert4j.model.SkillProfile;
-import io.github.agentassert4j.model.SkillType;
-import io.github.agentassert4j.model.BaselineStatus;
-import io.github.agentassert4j.model.ToolCall;
-import io.github.agentassert4j.model.TurnContext;
+import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.TreeSet;
+import java.util.*;
 
 /**
  * 模型 ↔ SQLite JSON 列 的映射层。
@@ -166,7 +152,7 @@ final class JsonMapper {
         p.setAlgoVersion(rs.getString("algo_version"));
         p.setParamSignature(rs.getString("param_signature"));
         int sampleCount = rs.getInt("sample_count");
-        p.setSampleCount(rs.wasNull() ? null : sampleCount);
+        p.setSampleCount(rs.wasNull() ? 0 : sampleCount);
         p.setApprovedBy(rs.getString("approved_by"));
         long approvedAt = rs.getLong("approved_at");
         p.setApprovedAt(rs.wasNull() ? null : approvedAt);

@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -43,9 +44,15 @@ public class InteractionRecorder implements RecordingInterceptor {
      */
     private final AtomicLong recordedCount = new AtomicLong(0);
     /**
-     * 因 RingBuffer 满而丢弃的记录数
+     * 因 RingBuffer 满而丢弃的记录数（生产侧）
      */
     private final AtomicLong droppedCount = new AtomicLong(0);
+    /**
+     * 消费侧丢弃/写入/失败计数——recorder 级持有，restart 后跨生命周期累计
+     */
+    private final AtomicLong consumerDroppedCount = new AtomicLong(0);
+    private final AtomicLong writtenCount = new AtomicLong(0);
+    private final AtomicLong failedCount = new AtomicLong(0);
     /**
      * 录制进程内单调序号源——透传给每条记录的 seq。
      * 丢弃造成的空洞合法：同会话内 seq 单调即可，(session_id, seq) 为确定性排序键。
@@ -88,7 +95,7 @@ public class InteractionRecorder implements RecordingInterceptor {
             return;
         }
 
-        batchHandler = new BatchWriteHandler(repository, config);
+        batchHandler = new BatchWriteHandler(repository, config, writtenCount, failedCount, consumerDroppedCount);
 
         disruptor = new Disruptor<>(InteractionEvent::new, config.getRingBufferSize(), DaemonThreadFactory.INSTANCE, ProducerType.MULTI, new SleepingWaitStrategy());
 
@@ -107,11 +114,14 @@ public class InteractionRecorder implements RecordingInterceptor {
      * 先执行脱敏，再通过 Disruptor 异步入队（纳秒级，不阻塞）。
      */
     @Override
-    public void intercept(InteractionRecord record) {
+    public synchronized void intercept(InteractionRecord record) {
         if (!started || record == null) {
             return;
         }
 
+        // 与 stop() 互斥：无锁窗口内关停完成会把事件发布进已停摆的
+        // RingBuffer——记录永久滞留且计数不闭合。无竞争锁开销纳秒级，
+        // 相比 tryNext 本身可忽略
         try {
             // TODO: [record_id UUID 兜底] 上游 SDK 未接线前在此兜底生成全局唯一 ID；
             //       INSERT OR IGNORE 的防重放语义依赖其全局唯一性
@@ -186,7 +196,7 @@ public class InteractionRecorder implements RecordingInterceptor {
                 }
 
                 // 关闭 Disruptor
-                disruptor.shutdown(10, java.util.concurrent.TimeUnit.SECONDS);
+                disruptor.shutdown(10, TimeUnit.SECONDS);
             } catch (Exception e) {
                 log.error("Error during InteractionRecorder shutdown: {}", e.getMessage(), e);
             } finally {
@@ -205,15 +215,15 @@ public class InteractionRecorder implements RecordingInterceptor {
      * 两个计数器分属不同线程域，聚合口径以本方法为准。
      */
     public long getDroppedCount() {
-        return droppedCount.get() + (batchHandler != null ? batchHandler.getDroppedCount() : 0);
+        return droppedCount.get() + consumerDroppedCount.get();
     }
 
     public long getWrittenCount() {
-        return batchHandler != null ? batchHandler.getWrittenCount() : 0;
+        return writtenCount.get();
     }
 
     public long getFailedCount() {
-        return batchHandler != null ? batchHandler.getFailedCount() : 0;
+        return failedCount.get();
     }
 
     public boolean isStarted() {

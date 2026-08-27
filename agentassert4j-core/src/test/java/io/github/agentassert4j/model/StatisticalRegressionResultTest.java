@@ -82,11 +82,32 @@ class StatisticalRegressionResultTest {
     }
 
     @Test
-    void aggregate_emptySamples_noException() {
+    void aggregate_emptySamples_insufficientNotStable() {
+        // 原断言钉住的是 fail-open 缺陷（零样本默认稳定会静默放行 CI），随修复改写
         StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", Collections.emptyList(), 0.9, 0.0);
 
-        assertEquals(StatisticalVerdict.STABLE, result.getStatisticalVerdict());
+        assertEquals(StatisticalVerdict.INSUFFICIENT_SAMPLES, result.getStatisticalVerdict());
         assertEquals(0, result.getActualSampleCount());
+    }
+
+    @Test
+    void aggregate_errorSamples_excludedFromRates() {
+        SampleResult timeout = new SampleResult(1, null, 0, "upstream timeout", 50);
+        SampleResult pass = new SampleResult(2, Verdict.PASS, 1.0, null, 50);
+
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", java.util.Arrays.asList(timeout, pass), 0.9, 0.0);
+
+        assertEquals(1, result.getErrorSampleCount(), "超时样本计入错误数");
+        assertEquals(StatisticalVerdict.STABLE, result.getStatisticalVerdict(), "基础设施错误不进分母，单条 PASS 判稳定而非 FLAKY");
+    }
+
+    @Test
+    void aggregate_allErrorSamples_insufficient() {
+        SampleResult timeout = new SampleResult(1, null, 0, "upstream timeout", 50);
+
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", Collections.singletonList(timeout), 0.9, 0.0);
+
+        assertEquals(StatisticalVerdict.INSUFFICIENT_SAMPLES, result.getStatisticalVerdict(), "全部样本为基础设施错误时不可判定，不得按回归计");
     }
 
     @Test
@@ -161,12 +182,15 @@ class StatisticalRegressionResultTest {
     }
 
     @Test
-    void aggregate_nullVerdict_treatedAsRegression() {
-        List<SampleResult> samples = Arrays.asList(new SampleResult(1, Verdict.PASS, 1.0, null, 100), new SampleResult(2, null, 0.0, "error", 100));  // null verdict
+    void aggregate_nullVerdict_treatedAsInfrastructureError() {
+        // 原断言把基础设施错误样本计入 REGRESSION（网络抖动被当成行为回归），随修复改写
+        List<SampleResult> samples = Arrays.asList(new SampleResult(1, Verdict.PASS, 1.0, null, 100), new SampleResult(2, null, 0.0, "error", 100));
 
         StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", samples, 1.0, 0.0);
 
-        assertEquals(1, result.getVerdictCounts().get(Verdict.REGRESSION));
+        assertEquals(0, result.getVerdictCounts().get(Verdict.REGRESSION).intValue(), "基础设施错误不进回归计数");
+        assertEquals(1, result.getErrorSampleCount());
+        assertEquals(StatisticalVerdict.STABLE, result.getStatisticalVerdict());
     }
 
     private List<SampleResult> makeSamples(int count, Verdict verdict, double score) {

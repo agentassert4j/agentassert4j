@@ -7,6 +7,7 @@ import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.util.HashUtil;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -54,7 +55,8 @@ public final class DeterministicSkillGrouper {
             //    LangChain4j 可能提供 "STRING" → 统一小写避免同一 Skill 被多分
             paramSignature = calls.stream().flatMap(tc -> {
                 if (tc.getArgTypes() == null) return Stream.empty();
-                return tc.getArgTypes().entrySet().stream().map(e -> e.getKey().toLowerCase() + ":" + e.getValue().toLowerCase());
+                // 值可能为 null（存储层反序列化的开放面）：按 "null" 归一，杜绝 NPE 击穿 enrich
+                return tc.getArgTypes().entrySet().stream().map(e -> e.getKey().toLowerCase(Locale.ROOT) + ":" + String.valueOf(e.getValue()).toLowerCase(Locale.ROOT));
             }).sorted().collect(Collectors.joining(","));
 
             // 3. 组合键：toolNames[paramSignature]

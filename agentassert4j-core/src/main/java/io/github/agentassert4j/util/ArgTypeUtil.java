@@ -2,6 +2,7 @@ package io.github.agentassert4j.util;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -43,7 +44,7 @@ public final class ArgTypeUtil {
             } else {
                 type = "null";
             }
-            types.put(entry.getKey().toLowerCase(), type);
+            types.put(entry.getKey().toLowerCase(Locale.ROOT), type);
         }
         return types;
     }

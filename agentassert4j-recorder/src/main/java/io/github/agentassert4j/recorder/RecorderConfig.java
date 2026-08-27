@@ -48,11 +48,13 @@ public final class RecorderConfig {
     private final boolean sanitizeModelResponse;
 
     private RecorderConfig(Builder builder) {
-        this.batchSize = builder.batchSize;
+        // 钳位：batchSize/maxBufferSize <= 0（如意图立即刷盘的 0 配置）会让
+        // 超限判断恒真、全部记录走丢弃分支——下限 1 保住配置意图
+        this.batchSize = Math.max(1, builder.batchSize);
         this.flushIntervalMs = builder.flushIntervalMs;
         // 钳位：maxBufferSize < batchSize 时批量阈值永远达不到，超限记录会被
         // 持续丢弃而非攒批刷盘——按较大者执行
-        this.maxBufferSize = Math.max(builder.maxBufferSize, builder.batchSize);
+        this.maxBufferSize = Math.max(Math.max(1, builder.maxBufferSize), this.batchSize);
         this.ringBufferSize = builder.ringBufferSize;
         this.sensitiveFields = Collections.unmodifiableList(new ArrayList<>(builder.sensitiveFields));
         this.sanitizeStrategy = builder.sanitizeStrategy;

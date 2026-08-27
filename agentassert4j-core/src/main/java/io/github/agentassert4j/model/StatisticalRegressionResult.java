@@ -36,6 +36,11 @@ public class StatisticalRegressionResult {
     private int actualSampleCount;
 
     /**
+     * 基础设施错误样本数（超时/API 错误/执行错误/跳过，不参与判定比率）
+     */
+    private int errorSampleCount;
+
+    /**
      * 各 Verdict 的次数统计（不可变）
      */
     private Map<Verdict, Integer> verdictCounts = new LinkedHashMap<>();
@@ -98,11 +103,11 @@ public class StatisticalRegressionResult {
         result.samples = Collections.unmodifiableList(new ArrayList<>(samples));
         result.actualSampleCount = samples.size();
 
-        // 空采样列表
+        // 空采样列表：无样本在数学上不可判定，绝不能默认稳定（CI 会静默放行）
         if (samples.isEmpty()) {
             result.verdictCounts = Collections.emptyMap();
             result.verdictRates = Collections.emptyMap();
-            result.statisticalVerdict = StatisticalVerdict.STABLE;
+            result.statisticalVerdict = StatisticalVerdict.INSUFFICIENT_SAMPLES;
             result.averageScore = 0;
             result.scoreStdDev = 0;
             result.minScore = 0;
@@ -110,14 +115,34 @@ public class StatisticalRegressionResult {
             return result;
         }
 
-        // 1. 统计各 Verdict 次数
+        // 基础设施错误样本（verdict 为 null：超时/API 错误/执行错误/跳过）不参与
+        // 判定比率——网络抖动不是行为回归，混入分母会污染 FLAKY 语义
+        List<SampleResult> judged = new ArrayList<>();
+        for (SampleResult s : samples) {
+            if (s.getVerdict() != null) {
+                judged.add(s);
+            }
+        }
+        result.errorSampleCount = samples.size() - judged.size();
+        if (judged.isEmpty()) {
+            result.verdictCounts = Collections.emptyMap();
+            result.verdictRates = Collections.emptyMap();
+            result.statisticalVerdict = StatisticalVerdict.INSUFFICIENT_SAMPLES;
+            result.averageScore = 0;
+            result.scoreStdDev = 0;
+            result.minScore = 0;
+            result.frequentDiffPatterns = Collections.emptyList();
+            return result;
+        }
+
+        // 1. 统计各 Verdict 次数（仅判定样本）
         Map<Verdict, Integer> counts = new LinkedHashMap<>();
         for (Verdict v : Verdict.values()) counts.put(v, 0);
         double scoreSum = 0;
         double scoreSumSq = 0;
         double min = Double.MAX_VALUE;
-        for (SampleResult s : samples) {
-            Verdict v = s.getVerdict() != null ? s.getVerdict() : Verdict.REGRESSION;
+        for (SampleResult s : judged) {
+            Verdict v = s.getVerdict();
             counts.merge(v, 1, Integer::sum);
             double sc = s.getScore();
             scoreSum += sc;
@@ -127,8 +152,8 @@ public class StatisticalRegressionResult {
         result.verdictCounts = Collections.unmodifiableMap(counts);
         result.minScore = min;
 
-        // 2. 计算各 Verdict 比率
-        int n = samples.size();
+        // 2. 计算各 Verdict 比率（分母为判定样本数）
+        int n = judged.size();
         Map<Verdict, Double> rates = new LinkedHashMap<>();
         for (Map.Entry<Verdict, Integer> e : counts.entrySet()) {
             rates.put(e.getKey(), (double) e.getValue() / n);
@@ -185,6 +210,10 @@ public class StatisticalRegressionResult {
 
     public int getActualSampleCount() {
         return actualSampleCount;
+    }
+
+    public int getErrorSampleCount() {
+        return errorSampleCount;
     }
 
     public void setActualSampleCount(int n) {

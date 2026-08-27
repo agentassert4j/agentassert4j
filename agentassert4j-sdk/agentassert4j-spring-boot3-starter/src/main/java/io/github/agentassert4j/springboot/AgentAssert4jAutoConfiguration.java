@@ -25,6 +25,10 @@ import org.springframework.context.annotation.Bean;
  * <p>退出条件：classpath 无 spring-ai（{@code ConditionalOnClass} 静默退出）或
  * {@code agentassert4j.enabled=false}。</p>
  *
+ * <p><b>启动期失败语义（有意决策）</b>：存储初始化失败会中断宿主应用启动——
+ * 录制框架静默失效比启动失败更危险（使用者以为在录制实际没有）。不接受该
+ * 语义的环境用 {@code agentassert4j.enabled=false} 显式关闭。</p>
+ *
  * <p>版本契约：面向 Spring Boot 3.4+ / Spring AI 1.x；Boot 与 Spring AI 的版本
  * 由用户应用自带，starter 不锁定不传递。</p>
  *

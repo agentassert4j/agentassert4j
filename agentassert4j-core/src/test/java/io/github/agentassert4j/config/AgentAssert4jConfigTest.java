@@ -180,4 +180,23 @@ class AgentAssert4jConfigTest {
             assertTrue(t.getExcludeFromGraph().isEmpty());
         }
     }
+
+    @Test
+    void llmTemperature_threeStates() throws Exception {
+        String apiKeyPair = "\"apiKey\":\"k\"";
+        // 缺省 = 0.0（确定性重放默认）
+        String defaultJson = "{\"llm\":{" + apiKeyPair + "}}";
+        AgentAssert4jConfig.LlmConfig d = AgentAssert4jConfig.fromJson(defaultJson).getLlm();
+        assertEquals(0.0, d.getTemperature(), 1e-9, "缺省保持 0.0 确定性默认");
+
+        // 显式数值覆盖
+        String numberJson = "{\"llm\":{" + apiKeyPair + ",\"temperature\":0.7}}";
+        AgentAssert4jConfig.LlmConfig n = AgentAssert4jConfig.fromJson(numberJson).getLlm();
+        assertEquals(0.7, n.getTemperature(), 1e-9);
+
+        // 显式 null = 不发送该参数（推理模型方言）
+        String nullJson = "{\"llm\":{" + apiKeyPair + ",\"temperature\":null}}";
+        AgentAssert4jConfig.LlmConfig o = AgentAssert4jConfig.fromJson(nullJson).getLlm();
+        assertNull(o.getTemperature(), "显式 null 必须区别于缺省——重放请求省略该成员");
+    }
 }

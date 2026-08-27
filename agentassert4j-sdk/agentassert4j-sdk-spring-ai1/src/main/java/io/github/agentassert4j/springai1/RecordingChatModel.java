@@ -59,17 +59,21 @@ public final class RecordingChatModel implements ChatModel {
     @Override
     public ChatResponse call(Prompt prompt) {
         long start = System.currentTimeMillis();
+        RecordingContext context = RecordingContext.currentOrNull();
         ChatResponse response = delegate.call(prompt);
-        recordQuietly(prompt, response, System.currentTimeMillis() - start, null);
+        recordQuietly(prompt, response, System.currentTimeMillis() - start, null, context);
         return response;
     }
 
     @Override
     public Flux<ChatResponse> stream(Prompt prompt) {
         long start = System.currentTimeMillis();
+        // 会话标注必须在调用线程捕获：聚合回调发生在异步完成信号线程，
+        // 那里取不到业务线程的 ThreadLocal
+        RecordingContext context = RecordingContext.currentOrNull();
         AtomicLong ttft = new AtomicLong(-1);
         Flux<ChatResponse> source = delegate.stream(prompt).doOnNext(chunk -> ttft.compareAndSet(-1, System.currentTimeMillis() - start));
-        return new MessageAggregator().aggregate(source, aggregated -> recordQuietly(prompt, aggregated, System.currentTimeMillis() - start, ttft.get()));
+        return new MessageAggregator().aggregate(source, aggregated -> recordQuietly(prompt, aggregated, System.currentTimeMillis() - start, ttft.get(), context));
     }
 
     @Override
@@ -77,9 +81,9 @@ public final class RecordingChatModel implements ChatModel {
         return delegate.getDefaultOptions();
     }
 
-    private void recordQuietly(Prompt prompt, ChatResponse response, long latencyMs, Long ttftMs) {
+    private void recordQuietly(Prompt prompt, ChatResponse response, long latencyMs, Long ttftMs, RecordingContext context) {
         try {
-            recorder.intercept(SpringAiRecordMapper.toRecord(prompt, response, latencyMs, ttftMs));
+            recorder.intercept(SpringAiRecordMapper.toRecord(prompt, response, latencyMs, ttftMs, context));
         } catch (Exception e) {
             log.warn("旁路录制失败（不影响业务调用）: {}", e.getMessage());
         }

@@ -16,7 +16,10 @@ public class LlmRequest {
     private boolean multimodalInput;
     private List<TurnContext> previousTurns;
     private String model;
-    private double temperature;
+    /**
+     * null 表示请求体不携带该成员（推理模型方言）
+     */
+    private Double temperature;
 
     /**
      * 工具定义列表 — OpenAI tools 格式。
@@ -68,11 +71,11 @@ public class LlmRequest {
         this.model = model;
     }
 
-    public double getTemperature() {
+    public Double getTemperature() {
         return temperature;
     }
 
-    public void setTemperature(double temperature) {
+    public void setTemperature(Double temperature) {
         this.temperature = temperature;
     }
 

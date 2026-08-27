@@ -195,6 +195,8 @@ public class ParameterValueTracer {
      */
     public boolean isMeaningfulValue(String val) {
         if (val == null || val.length() < 3) return false;
+        // 布尔字面量是高噪值：几乎所有工具链都会流经 true/false，建边即假依赖
+        if ("true".equals(val) || "false".equals(val)) return false;
         if (val.matches("-?\\d+(\\.\\d+)?")) return false; // 纯数字排除
         return true;
     }
@@ -206,7 +208,7 @@ public class ParameterValueTracer {
     public String extractPrefix(String fieldName) {
         if (fieldName == null || fieldName.isEmpty()) return "";
         String[] parts = fieldName.split("(?=[A-Z])|_|-");
-        return parts[0].toLowerCase();
+        return parts[0].toLowerCase(Locale.ROOT);
     }
 
     /**

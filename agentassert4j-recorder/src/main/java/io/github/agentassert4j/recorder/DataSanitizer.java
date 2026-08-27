@@ -50,7 +50,7 @@ public class DataSanitizer {
         Set<String> lower = new HashSet<>();
         for (String field : config.getSensitiveFields()) {
             if (field != null) {
-                lower.add(field.toLowerCase());
+                lower.add(field.toLowerCase(Locale.ROOT));
             }
         }
         this.sensitiveFieldsLower = lower;
@@ -69,11 +69,8 @@ public class DataSanitizer {
             return null;
         }
 
-        // 没有敏感字段配置，且不脱敏 userInput/modelResponse，直接返回
-        if (sensitiveFieldsLower.isEmpty() && !sanitizeUserInput && !sanitizeModelResponse) {
-            return original;
-        }
-
+        // 无条件深拷贝：消费线程的 enrich/序列化与上游对原对象的任何后续读写
+        // 之间不得共享可变状态——脱敏配置只决定内容是否改写，不决定是否拷贝
         // 复制原始记录
         InteractionRecord copy = copyRecord(original);
 
@@ -104,27 +101,50 @@ public class DataSanitizer {
      * 调用前必须确保 ToolCall 是深拷贝的副本，不能是原始对象。
      */
     private void sanitizeToolCallInPlace(ToolCall tc) {
-        // 脱敏 arguments（Map<String, Object>）
+        // 脱敏 arguments（Map<String, Object>，任意深度递归——嵌套结构里的
+        // 敏感键是最典型形态，只做顶层匹配等于漏掉主阵地）
         if (tc.getArguments() != null && !sensitiveFieldsLower.isEmpty()) {
-            Map<String, Object> origArgs = tc.getArguments();
-            Map<String, Object> sanitizedArgs = new LinkedHashMap<>();
-            for (Map.Entry<String, Object> entry : origArgs.entrySet()) {
-                if (isSensitiveField(entry.getKey())) {
-                    if (strategy != SanitizeStrategy.DROP) {
-                        sanitizedArgs.put(entry.getKey(), applyStrategy(String.valueOf(entry.getValue())));
-                    }
-                    // DROP 策略：不 put 该键
-                } else {
-                    sanitizedArgs.put(entry.getKey(), entry.getValue());
-                }
-            }
-            tc.setArguments(sanitizedArgs);
+            Object sanitized = sanitizeValueTree(tc.getArguments());
+            tc.setArguments((Map<String, Object>) sanitized);
         }
 
         // 脱敏 result（String，可能包含 JSON）
         if (tc.getResult() != null && !sensitiveFieldsLower.isEmpty()) {
             tc.setResult(sanitizeJsonString(tc.getResult()));
         }
+    }
+
+    /**
+     * 递归脱敏任意值树：Map 按键名匹配（任意深度，DROP 整键删除/MASK 换掩码），
+     * List 逐元素下钻，含 JSON 的字符串走 sanitizeJsonString——与 result 路径
+     * 的防御深度保持一致。
+     */
+    private Object sanitizeValueTree(Object value) {
+        if (value instanceof Map) {
+            Map<String, Object> out = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                String key = String.valueOf(entry.getKey());
+                if (isSensitiveField(key)) {
+                    if (strategy != SanitizeStrategy.DROP) {
+                        out.put(key, applyStrategy(String.valueOf(entry.getValue())));
+                    }
+                } else {
+                    out.put(key, sanitizeValueTree(entry.getValue()));
+                }
+            }
+            return out;
+        }
+        if (value instanceof List) {
+            List<Object> out = new ArrayList<>();
+            for (Object item : (List<?>) value) {
+                out.add(sanitizeValueTree(item));
+            }
+            return out;
+        }
+        if (value instanceof String) {
+            return sanitizeJsonString((String) value);
+        }
+        return value;
     }
 
     /**
@@ -291,14 +311,53 @@ public class DataSanitizer {
     }
 
     /**
-     * 找到非字符串值的结束位置（数字、布尔、null）。
+     * 找到非字符串值的结束位置（数字、布尔、null、对象、数组）。
      */
     private int findNonStringValueEnd(String json, int start) {
+        char first = json.charAt(start);
+        if (first == '{' || first == '[') {
+            return findCompositeValueEnd(json, start, first);
+        }
         int i = start;
         while (i < json.length()) {
             char c = json.charAt(i);
             if (c == ',' || c == '}' || c == ']' || c <= ' ') {
                 break;
+            }
+            i++;
+        }
+        return i;
+    }
+
+    /**
+     * 括号配对扫描界定复合值（对象/数组）的结束位置（返回闭括号之后）。
+     * 内部字符串里的括号不计入配对——在复合值内部第一个分隔符处截断
+     * 会产出错位的非法 JSON。
+     */
+    private int findCompositeValueEnd(String json, int start, char open) {
+        char close = open == '{' ? '}' : ']';
+        int depth = 0;
+        boolean inString = false;
+        int i = start;
+        while (i < json.length()) {
+            char c = json.charAt(i);
+            if (inString) {
+                if (c == '\\') {
+                    i += 2;
+                    continue;
+                }
+                if (c == '"') {
+                    inString = false;
+                }
+            } else if (c == '"') {
+                inString = true;
+            } else if (c == open) {
+                depth++;
+            } else if (c == close) {
+                depth--;
+                if (depth == 0) {
+                    return i + 1;
+                }
             }
             i++;
         }
@@ -360,7 +419,7 @@ public class DataSanitizer {
         if (fieldName == null) {
             return false;
         }
-        return sensitiveFieldsLower.contains(fieldName.toLowerCase());
+        return sensitiveFieldsLower.contains(fieldName.toLowerCase(Locale.ROOT));
     }
 
     /**
@@ -374,7 +433,51 @@ public class DataSanitizer {
      * 深拷贝 InteractionRecord。
      * 必须覆盖全部字段：漏拷贝的字段会在脱敏路径上静默丢失（捕获数据不可重建）。
      */
-    private InteractionRecord copyRecord(InteractionRecord original) {
+    /**
+     * 深拷贝任意值树（Map/List 递归，其余原样——String/Number 不可变）。
+     */
+    private static Object deepCopyValue(Object value) {
+        if (value instanceof Map) {
+            Map<String, Object> out = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                out.put(String.valueOf(entry.getKey()), deepCopyValue(entry.getValue()));
+            }
+            return out;
+        }
+        if (value instanceof List) {
+            List<Object> out = new ArrayList<>();
+            for (Object item : (List<?>) value) {
+                out.add(deepCopyValue(item));
+            }
+            return out;
+        }
+        return value;
+    }
+
+    /**
+     * 指纹深拷贝（全 setter 可变对象，共享引用会让上游事后修改穿透副本）。
+     */
+    private static io.github.agentassert4j.model.DeterministicFingerprint deepCopyFingerprint(io.github.agentassert4j.model.DeterministicFingerprint fp) {
+        if (fp == null) {
+            return null;
+        }
+        io.github.agentassert4j.model.DeterministicFingerprint copy = new io.github.agentassert4j.model.DeterministicFingerprint();
+        copy.setToolCallSet(fp.getToolCallSet() != null ? new LinkedHashSet<>(fp.getToolCallSet()) : null);
+        copy.setToolParamTypes(fp.getToolParamTypes() != null ? new LinkedHashMap<>(fp.getToolParamTypes()) : null);
+        copy.setToolParamRequired(fp.getToolParamRequired() != null ? new LinkedHashMap<>(fp.getToolParamRequired()) : null);
+        copy.setOutputContentType(fp.getOutputContentType());
+        copy.setOutputFieldPaths(fp.getOutputFieldPaths() != null ? new LinkedHashSet<>(fp.getOutputFieldPaths()) : null);
+        copy.setOutputFieldTypeMap(fp.getOutputFieldTypeMap() != null ? new LinkedHashMap<>(fp.getOutputFieldTypeMap()) : null);
+        copy.setTextLengthMagnitude(fp.getTextLengthMagnitude());
+        copy.setRequiredKeywords(fp.getRequiredKeywords() != null ? new LinkedHashSet<>(fp.getRequiredKeywords()) : null);
+        copy.setForbiddenKeywords(fp.getForbiddenKeywords() != null ? new LinkedHashSet<>(fp.getForbiddenKeywords()) : null);
+        copy.setRegexPatterns(fp.getRegexPatterns() != null ? new ArrayList<>(fp.getRegexPatterns()) : null);
+        copy.setDeclaredBehaviors(fp.getDeclaredBehaviors() != null ? new LinkedHashSet<>(fp.getDeclaredBehaviors()) : null);
+        copy.setHasError(fp.isHasError());
+        return copy;
+    }
+
+    InteractionRecord copyRecord(InteractionRecord original) {
         InteractionRecord copy = new InteractionRecord();
         copy.setRecordId(original.getRecordId());
         copy.setTimestamp(original.getTimestamp());
@@ -408,22 +511,25 @@ public class DataSanitizer {
         copy.setSessionId(original.getSessionId());
         copy.setSkillId(original.getSkillId());
         copy.setGroupKey(original.getGroupKey());
-        copy.setFingerprint(original.getFingerprint());
+        copy.setFingerprint(deepCopyFingerprint(original.getFingerprint()));
         copy.setMultimodalInput(original.isMultimodalInput());
         copy.setMultimodalContent(original.getMultimodalContent());
         copy.setMetadata(original.getMetadata());
         copy.setRecorderVersion(original.getRecorderVersion());
 
-        // 深拷贝 toolCalls
+        // 深拷贝 toolCalls（null 元素跳过——与 sanitize 主循环的检查标准一致）
         if (original.getToolCalls() != null) {
             List<ToolCall> callsCopy = new ArrayList<>();
             for (ToolCall tc : original.getToolCalls()) {
+                if (tc == null) {
+                    continue;
+                }
                 ToolCall tcCopy = new ToolCall();
                 tcCopy.setToolName(tc.getToolName());
                 tcCopy.setToolCallId(tc.getToolCallId());
                 tcCopy.setSuccess(tc.isSuccess());
                 tcCopy.setArgTypes(tc.getArgTypes() != null ? new HashMap<>(tc.getArgTypes()) : null);
-                tcCopy.setArguments(tc.getArguments() != null ? new LinkedHashMap<>(tc.getArguments()) : null);
+                tcCopy.setArguments(tc.getArguments() != null ? (Map<String, Object>) deepCopyValue(tc.getArguments()) : null);
                 tcCopy.setResult(tc.getResult());
                 callsCopy.add(tcCopy);
             }

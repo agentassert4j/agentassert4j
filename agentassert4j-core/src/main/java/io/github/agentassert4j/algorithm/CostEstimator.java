@@ -2,10 +2,7 @@ package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.model.InteractionRecord;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 成本预估 — 执行回归测试前估算 API 调用费用。
@@ -69,7 +66,7 @@ public final class CostEstimator {
      */
     public static double estimateCostPerCall(String clientName) {
         if (clientName == null) return DEFAULT_COST_PER_CALL;
-        String lower = clientName.toLowerCase();
+        String lower = clientName.toLowerCase(Locale.ROOT);
 
         // 先匹配长名称
         if (lower.contains("gpt-4o-mini")) return 0.0004;
@@ -104,6 +101,6 @@ public final class CostEstimator {
      */
     private static double getCostPerCall(String model) {
         if (model == null) return DEFAULT_COST_PER_CALL;
-        return MODEL_COST.getOrDefault(model.toLowerCase(), DEFAULT_COST_PER_CALL);
+        return MODEL_COST.getOrDefault(model.toLowerCase(Locale.ROOT), DEFAULT_COST_PER_CALL);
     }
 }

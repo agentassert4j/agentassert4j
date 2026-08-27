@@ -91,13 +91,14 @@ public final class FingerprintExtractor {
         Map<String, String> paramTypes = new HashMap<>();
         for (ToolCall tc : record.getToolCalls()) {
             if (tc.getArgTypes() != null) {
-                tc.getArgTypes().forEach((k, v) -> paramTypes.put(k.toLowerCase(), v.toLowerCase()));
+                tc.getArgTypes().forEach((k, v) -> paramTypes.put(k.toLowerCase(Locale.ROOT), v.toLowerCase(Locale.ROOT)));
             }
         }
         fp.setToolParamTypes(paramTypes);
 
         // toolParamRequired：暂无数据来源，默认全部 false
-        // TODO: 待 SDK 接入层提供 required 信息后填充
+        // TODO: [参数必填集] toolParamRequired 暂无数据来源默认全 false，待接入层
+        //       提供工具 schema 的 required 信息后填充
         Map<String, Boolean> paramRequired = new LinkedHashMap<>();
         for (String key : paramTypes.keySet()) {
             paramRequired.put(key, false);

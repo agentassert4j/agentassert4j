@@ -22,7 +22,11 @@ package io.github.agentassert4j.config;
 public class TestExecutionConfig {
 
     private long timeoutMs = 30000;
-    private double temperature = 0.0;
+    /**
+     * null 表示不发送该参数——部分推理模型（OpenAI o 系）只接受默认采样温度，
+     * 显式发送 0.0 会被服务端 400 拒绝
+     */
+    private Double temperature = 0.0;
     private boolean dryRun = false;
     private String model;
 
@@ -42,7 +46,9 @@ public class TestExecutionConfig {
      */
     public void validate() {
         timeoutMs = Math.max(1000, timeoutMs);
-        temperature = Math.max(0.0, Math.min(2.0, temperature));
+        if (temperature != null) {
+            temperature = Math.max(0.0, Math.min(2.0, temperature));
+        }
     }
 
     public TestExecutionConfig timeoutMs(long timeoutMs) {
@@ -50,7 +56,7 @@ public class TestExecutionConfig {
         return this;
     }
 
-    public TestExecutionConfig temperature(double temperature) {
+    public TestExecutionConfig temperature(Double temperature) {
         this.temperature = temperature;
         return this;
     }
@@ -73,11 +79,11 @@ public class TestExecutionConfig {
         this.timeoutMs = timeoutMs;
     }
 
-    public double getTemperature() {
+    public Double getTemperature() {
         return temperature;
     }
 
-    public void setTemperature(double temperature) {
+    public void setTemperature(Double temperature) {
         this.temperature = temperature;
     }
 

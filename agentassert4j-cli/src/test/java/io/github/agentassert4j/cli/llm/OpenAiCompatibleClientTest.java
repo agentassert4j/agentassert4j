@@ -67,6 +67,43 @@ class OpenAiCompatibleClientTest {
     }
 
     @Test
+    void buildRequestBody_nullTemperature_omitsMember() {
+        LlmRequest request = new LlmRequest();
+        request.setTemperature(null);
+        request.setUserInput("test");
+
+        String body = client.buildRequestBody(request, "gpt-4o");
+
+        assertFalse(body.contains("temperature"), "推理模型方言：null 必须整体省略该成员");
+    }
+
+    @Test
+    void buildRequestBody_unicodeEscapedContent_roundTrips() throws Exception {
+        // ASCII 转义型网关会把非 ASCII 输出为反斜杠+u 十六进制转义——重放侧必须解码回真实字符，
+        // 否则与基线真字符对比产生持续假红
+        LlmRequest request = new LlmRequest();
+        request.setTemperature(0.0);
+        request.setUserInput("你好");
+
+        com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress(0), 0);
+        server.createContext("/", exchange -> {
+            byte[] resp = ("{\"content\":\"\u5317\u4eac\"}").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, resp.length);
+            exchange.getResponseBody().write(resp);
+            exchange.close();
+        });
+        server.start();
+        try {
+            OpenAiCompatibleClient local = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "k", "m", 0, null);
+            LlmResponse response = local.chat(request, 5000);
+            assertEquals("北京", response.getContent(), "Unicode 转义必须解码为真实字符与录制侧对称");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void buildRequestBody_includesPreviousTurns() {
         LlmRequest request = new LlmRequest();
         request.setSystemPrompt("System");

@@ -116,21 +116,24 @@ class DataSanitizerTest {
     }
 
     @Test
-    void sanitize_nullConfig_noException() {
+    void sanitize_nullConfig_returnsDefensiveCopy() {
+        // 原断言（同实例返回）钉住的是跨线程共享可变状态的缺陷，随无条件深拷贝修复改写
         DataSanitizer sanitizer = new DataSanitizer(null);
         InteractionRecord record = createTestRecord();
         InteractionRecord result = sanitizer.sanitize(record);
         assertNotNull(result);
-        // 无敏感字段配置，原样返回
-        assertSame(record, result);
+        assertNotSame(record, result, "无脱敏配置也必须返回防御性拷贝，切断跨线程共享");
+        assertEquals(record.getUserInput(), result.getUserInput());
+        assertEquals(record.getModelResponse(), result.getModelResponse());
     }
 
     @Test
-    void sanitize_noSensitiveFields_returnsSameInstance() {
+    void sanitize_noSensitiveFields_returnsDefensiveCopy() {
         DataSanitizer sanitizer = new DataSanitizer(RecorderConfig.defaults());
         InteractionRecord record = createTestRecord();
         InteractionRecord result = sanitizer.sanitize(record);
-        assertSame(record, result);
+        assertNotSame(record, result, "拷贝不依赖脱敏配置——消费线程 enrich 与上游读写不得共享可变状态");
+        assertEquals(record.getRecordId(), result.getRecordId());
     }
 
     @Test
@@ -375,5 +378,52 @@ class DataSanitizerTest {
         assertFalse(result.contains("secret"));
         assertFalse(result.contains(",}"));
         assertTrue(result.contains("John"));
+    }
+
+    @Test
+    void sanitize_maskStrategy_nestedObjectValue_producesValidJson() {
+        // 审计探针场景：敏感键的值是嵌套对象，旧实现截断在内部第一个分隔符产出非法 JSON
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "redacted"));
+        String json = "{\"redacted\": {\"a\":1}, \"b\":2}";
+
+        String sanitized = sanitizer.sanitizeJsonString(json);
+
+        Object parsed = RecursiveJsonParser.parse(sanitized);
+        assertNotNull(parsed, "脱敏产物必须是可解析的合法 JSON，实际产出：" + sanitized);
+        Map<?, ?> map = (Map<?, ?>) parsed;
+        assertEquals(2, map.size(), "MASK 保留键、值换掩码");
+        assertEquals("***", map.get("redacted"), "复合值整体替换为掩码");
+        assertEquals(2L, ((Number) map.get("b")).longValue());
+    }
+
+    @Test
+    void sanitize_dropStrategy_nestedArrayValue_producesValidJson() {
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.DROP, "redacted"));
+        String json = "{\"ids\": \"x\", \"redacted\": [1,2]}";
+
+        String sanitized = sanitizer.sanitizeJsonString(json);
+
+        Object parsed = RecursiveJsonParser.parse(sanitized);
+        assertNotNull(parsed, "数组值整键 DROP 后必须是合法 JSON，实际产出：" + sanitized);
+        assertEquals("x", ((Map<?, ?>) parsed).get("ids"));
+    }
+
+    @Test
+    void sanitize_nestedArgumentKeys_maskedAtAnyDepth() {
+        // 审计探针场景：结构化工具参数的嵌套敏感键明文通过
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "password"));
+        InteractionRecord record = createTestRecord();
+        Map<String, Object> nested = new LinkedHashMap<>();
+        Map<String, Object> cfg = new LinkedHashMap<>();
+        cfg.put("password", "super-secret");
+        cfg.put("host", "db.local");
+        nested.put("cfg", cfg);
+        record.getToolCalls().get(0).setArguments(nested);
+
+        InteractionRecord result = sanitizer.sanitize(record);
+
+        Map<?, ?> sanitizedCfg = (Map<?, ?>) result.getToolCalls().get(0).getArguments().get("cfg");
+        assertEquals("***", sanitizedCfg.get("password"), "嵌套层级的敏感键必须脱敏");
+        assertEquals("db.local", sanitizedCfg.get("host"));
     }
 }

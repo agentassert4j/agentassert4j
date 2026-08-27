@@ -1,11 +1,13 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.InMemoryDependencyGraph;
+import io.github.agentassert4j.algorithm.ParameterValueTracer;
 import io.github.agentassert4j.config.AgentAssert4jConfig;
 import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.spi.GraphStore;
 import io.github.agentassert4j.spi.InteractionQueryStore;
+import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 
 import java.util.Set;
@@ -84,5 +86,16 @@ final class CliSupport {
             // 图是派生数据：坏快照不阻断影响分析，退化为空图（仅直接受影响 Skill）
         }
         return new InMemoryDependencyGraph();
+    }
+
+    /**
+     * 从交互记录现场重建依赖图（只读，不落盘）。
+     * 图是派生数据，重建永远反映最新录制状态；全量扫描在 v1 规模（数千条）
+     * 毫秒级，轻量列裁剪与增量构建按既定决策延迟。
+     */
+    static InMemoryDependencyGraph rebuildGraph(StorageRepository repository) {
+        ParameterValueTracer tracer = new ParameterValueTracer();
+        tracer.rebuildGraph(repository);
+        return tracer.getGraph();
     }
 }

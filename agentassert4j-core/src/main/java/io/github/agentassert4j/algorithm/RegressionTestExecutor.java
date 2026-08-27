@@ -93,6 +93,10 @@ public class RegressionTestExecutor {
             return RegressionTestResult.timeout(baseline.getRecordId());
         } catch (LlmApiException e) {
             return RegressionTestResult.apiError(baseline.getRecordId(), e.getMessage());
+        } catch (RuntimeException e) {
+            // 客户端实现的编程错误（NPE/非法参数等）同样转为单条 ERROR——
+            // 批量回归不允许一条记录的意外异常中断整体
+            return RegressionTestResult.error(baseline.getRecordId(), "LLM 客户端未捕获异常：" + e.getClass().getSimpleName() + "：" + e.getMessage());
         }
 
         // 3-7. LLM 调用成功后的处理（指纹提取/对比/候选落库/结果封装）。

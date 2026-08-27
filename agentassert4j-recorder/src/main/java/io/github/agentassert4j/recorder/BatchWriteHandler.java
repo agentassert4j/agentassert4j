@@ -43,19 +43,26 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
     /**
      * 丢弃计数（RingBuffer 满或 buffer 超限）
      */
-    private final AtomicLong droppedCount = new AtomicLong(0);
+    private final AtomicLong droppedCount;
     /**
      * 写入失败计数
      */
-    private final AtomicLong failedCount = new AtomicLong(0);
+    private final AtomicLong failedCount;
     /**
      * 成功写入总数
      */
-    private final AtomicLong writtenCount = new AtomicLong(0);
+    private final AtomicLong writtenCount;
 
     private ScheduledExecutorService flushScheduler;
 
-    public BatchWriteHandler(InteractionWriteStore repository, RecorderConfig config) {
+    /**
+     * 计数器由录制器持有注入：stop→restart 会创建新 handler，实例级计数
+     * 会让聚合口径（recorded = written + dropped + failed）在第二生命周期破裂。
+     */
+    public BatchWriteHandler(InteractionWriteStore repository, RecorderConfig config, AtomicLong writtenCount, AtomicLong failedCount, AtomicLong droppedCount) {
+        this.writtenCount = writtenCount;
+        this.failedCount = failedCount;
+        this.droppedCount = droppedCount;
         this.repository = repository;
         this.batchSize = config.getBatchSize();
         this.maxBufferSize = config.getMaxBufferSize();

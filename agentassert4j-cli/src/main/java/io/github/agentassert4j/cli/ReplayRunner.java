@@ -13,6 +13,8 @@ import io.github.agentassert4j.util.HashUtil;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * 重放执行流程 — 选例、成本预估、逐例重放、汇总报告与退出码。
@@ -53,11 +55,23 @@ public class ReplayRunner {
      * @return 进程退出码
      */
     public int run(String newSystemPrompt, String skillFilter, int maxCasesPerSkill, String oldPromptHash, boolean dryRun) {
+        // 超时下限钳位：0 在 HttpURLConnection 语义里是无限等待（CI 挂死），
+        // 负数会被当可重试错误重试后洗白成笼统失败
+        executionConfig.validate();
+
+        warnIfModelDiffers();
+
         new BaselineService(repository).establishMissing(out);
+
+        // 图是派生数据：每次重放现场重建并刷新快照（CLI 单进程单写者，
+        // last-writer-wins 语义安全）；分析直接用内存图，快照供 status 巡检留档
+        InMemoryDependencyGraph graph = CliSupport.rebuildGraph(repository);
+        saveGraphQuietly(graph);
+        out.println("依赖图：" + graph.nodeCount() + " 节点 / " + graph.edgeCount() + " 边" + (graph.edgeCount() == 0 ? "（无多轮会话数据时图为空，仅直接影响裁剪）" : ""));
 
         List<InteractionRecord> cases;
         if (oldPromptHash != null) {
-            AnalysisResult analysis = new ImpactAnalyzer(repository, CliSupport.loadGraphOrDefault(repository)).analyzeChange(oldPromptHash, HashUtil.sha256(newSystemPrompt));
+            AnalysisResult analysis = new ImpactAnalyzer(repository, graph).analyzeChange(oldPromptHash, HashUtil.sha256(newSystemPrompt));
             if (!analysis.isHasBaseline() || analysis.isError()) {
                 out.println(analysis.getMessage());
                 return 2;
@@ -89,7 +103,6 @@ public class ReplayRunner {
         int diff = 0;
         int regression = 0;
         int failed = 0;
-
         for (InteractionRecord testCase : cases) {
             RegressionTestResult result = executor.execute(testCase, newSystemPrompt, executionConfig);
             out.println("  [" + displayId(testCase) + "] " + testCase.getRecordId() + "  " + describe(result));
@@ -172,5 +185,43 @@ public class ReplayRunner {
             return String.format("%s  score=%.2f  %s", comparison.getVerdict(), comparison.getScore(), comparison.getSummary());
         }
         return result.getStatus() + "  " + (result.getErrorMessage() != null ? result.getErrorMessage() : "");
+    }
+
+    /**
+     * 基线与重放配置的模型身份不一致时告警——换模型重放的判定结果不可与
+     * 原基线直接比较（伪回归/伪通过都可能出现），决策留给使用者。
+     */
+    private void warnIfModelDiffers() {
+        String configModel = executionConfig.getModel();
+        if (configModel == null || configModel.isEmpty()) {
+            return;
+        }
+        Set<String> baselineModels = new TreeSet<>();
+        try {
+            for (String sessionId : repository.findAllSessionIds()) {
+                for (InteractionRecord record : repository.findBySessionId(sessionId)) {
+                    if (record.getModel() != null && !record.getModel().isEmpty()) {
+                        baselineModels.add(record.getModel());
+                    }
+                }
+            }
+        } catch (RuntimeException e) {
+            return; // 告警路径不得阻断重放
+        }
+        if (!baselineModels.isEmpty() && !baselineModels.contains(configModel)) {
+            out.println("警告：重放模型 " + configModel + " 与录制模型 " + baselineModels + " 不一致，行为判定结果不与基线直接可比（换模型属实验性操作）。");
+        }
+    }
+
+    /**
+     * 快照是分析视图留档（供 status 巡检），写失败只告警不阻断——
+     * 影响分析用的是已重建的内存图，快照缺席不改变本次判定。
+     */
+    private void saveGraphQuietly(InMemoryDependencyGraph graph) {
+        try {
+            repository.saveGraph(graph.toJson());
+        } catch (RuntimeException e) {
+            out.println("警告：依赖图快照写入失败（不影响本次分析）：" + e.getMessage());
+        }
     }
 }

@@ -93,6 +93,7 @@ class ReplayFlowTest {
 
             assertEquals(0, exit, "全部 PASS 时退出码必须为 0（CI gating 契约）");
             String report = output.toString();
+            assertTrue(report.contains("依赖图："), "重放输出必须含依赖图统计（图接线后的可见面）");
             assertTrue(report.contains("新建基线"), "重放前必须自动补建缺失基线");
             assertTrue(report.contains("PASS 2"), "两条用例均应 PASS");
             assertEquals(2, stubClient.callCount);
@@ -102,6 +103,7 @@ class ReplayFlowTest {
             assertNull(profile.getCandidateFingerprint(), "PASS 不产生候选");
             assertEquals(BaselineStatus.BASELINE, profile.getBaselineStatus());
             assertEquals(2, profile.getTotalRecords(), "建基线时记录数应回填为该 skill 的真实记录数");
+            assertTrue(repository.loadGraph() != null && !repository.loadGraph().isEmpty(), "重放是快照唯一写者，跑完必须留下分析视图快照");
         }
     }
 

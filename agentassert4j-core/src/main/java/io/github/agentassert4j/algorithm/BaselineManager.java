@@ -41,6 +41,10 @@ import io.github.agentassert4j.spi.StorageRepository;
  *         候选升为基线       保留旧基线
  * </pre>
  *
+ * <p><b>线程契约</b>：本类非线程安全——生命周期操作（approve/reject/rollback/
+ * recordCandidate）是无锁读改写，并发调用会丢失更新。CLI 单进程单线程使用
+ * 安全；并发场景需调用方自行串行化（SkillStore 无版本号，乐观锁待真实需求）。</p>
+ *
  * @author axy-yxa
  * @since 2026-08-26
  */
@@ -115,8 +119,7 @@ public class BaselineManager {
     public void rollback(String groupKey, String versionTag) {
         ArchivedBaseline archived = repository.findArchivedBaseline(groupKey, versionTag);
         if (archived == null) {
-            throw new IllegalStateException(
-                    "No archived baseline found for skill: " + groupKey + ", version: " + versionTag);
+            throw new IllegalStateException("No archived baseline found for skill: " + groupKey + ", version: " + versionTag);
         }
 
         SkillProfile profile = repository.findSkillByGroupKey(groupKey);
@@ -140,7 +143,7 @@ public class BaselineManager {
      * 回归执行器在对比结果非 PASS 时调用——候选必须经持久层落库，
      * 否则 approve 在新进程中不可达（重放与裁决通常不在同一进程）。
      *
-     * @param baseline 产生候选时所用基线交互记录（groupKey 由分组器从记录重算）
+     * @param baseline  产生候选时所用基线交互记录（groupKey 由分组器从记录重算）
      * @param candidate 回归测试提取的新指纹
      * @throws IllegalStateException 该 Skill 无画像时抛出（先录制建立基线）
      */

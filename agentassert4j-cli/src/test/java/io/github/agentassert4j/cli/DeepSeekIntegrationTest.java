@@ -5,8 +5,8 @@ import io.github.agentassert4j.cli.llm.OpenAiCompatibleClient;
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.result.ComparisonResult;
-import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
+import io.github.agentassert4j.spi.LlmTimeoutException;
 import io.github.agentassert4j.util.HashUtil;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *
  * <p>运行方式：</p>
  * <pre>
- * mvn test -pl agentassert4j-core "-Dtest=DeepSeekIntegrationTest" ^
+ * mvn test -pl agentassert4j-cli -am "-Dtest=DeepSeekIntegrationTest" ^
  *     "-Ddeepseek.api.key=sk-xxx"
  * </pre>
  *
@@ -184,7 +184,7 @@ class DeepSeekIntegrationTest {
             request.setUserInput("请写一篇1000字的文章");
             request.setTemperature(0.0);
 
-            assertThrows(LlmApiException.class, () -> client.chat(request, 1));
+            assertThrows(LlmTimeoutException.class, () -> client.chat(request, 1));
         }
 
         @Test
@@ -522,8 +522,8 @@ class DeepSeekIntegrationTest {
             DeterministicFingerprint candidateFp = result.getCandidateFingerprint();
             System.out.println("[6.2] toolCallSet=" + candidateFp.getToolCallSet() + ", Verdict=" + result.getComparison().getVerdict() + ", Score=" + String.format("%.4f", result.getComparison().getScore()));
 
-            // 注意：当前 buildReplayRequest 不传递 tools 定义
-            // 因此 LLM 可能不会返回 tool_calls — 这是已知限制
+            // 重放按基线记录原样携带 tools 定义；模型是否发起工具调用仍是
+            // 采样随机变量（不服从时判定面解释差异，不视为引擎缺陷）
         }
 
         @Test
@@ -765,7 +765,7 @@ class DeepSeekIntegrationTest {
                 DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline);
                 assertTrue(baselineFp.getToolCallSet().contains("get_weather"));
 
-                // 3. 用新 prompt 重放（但注意：当前不传递 tools，所以重放可能不返回工具调用）
+                // 3. 用新 prompt 重放（tools 定义随基线记录原样携带）
                 String newPrompt = "你是一个天气专家。用 get_weather 工具查天气。";
                 RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
                 RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());

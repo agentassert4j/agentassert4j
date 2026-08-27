@@ -7,6 +7,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -44,7 +46,7 @@ class BatchWriteHandlerTest {
         void flush_enrichesMissingDerivedFields() {
             InMemoryStorageRepository repo = new InMemoryStorageRepository();
             RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
-            BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+            BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
 
             InteractionEvent event = new InteractionEvent();
             event.setRecord(enrichableRecord("r1"));
@@ -61,7 +63,7 @@ class BatchWriteHandlerTest {
         void flush_preservesExplicitlySetDerivedFields() {
             InMemoryStorageRepository repo = new InMemoryStorageRepository();
             RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
-            BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+            BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
 
             InteractionRecord record = enrichableRecord("r1");
             record.setGroupKey("custom-group-key");
@@ -85,7 +87,7 @@ class BatchWriteHandlerTest {
         void flush_noSkillId_backfilledFromGrouper() {
             InMemoryStorageRepository repo = new InMemoryStorageRepository();
             RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
-            BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+            BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
 
             InteractionRecord record = createRecord("r1");
 
@@ -105,7 +107,7 @@ class BatchWriteHandlerTest {
     void onEvent_nullRecord_skipped() {
         InMemoryStorageRepository repo = new InMemoryStorageRepository();
         RecorderConfig config = RecorderConfig.builder().batchSize(10).build();
-        BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+        BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
 
         InteractionEvent event = new InteractionEvent();
         event.setRecord(null);
@@ -120,7 +122,7 @@ class BatchWriteHandlerTest {
     void onEvent_singleEvent_endOfBatch_flushes() {
         InMemoryStorageRepository repo = new InMemoryStorageRepository();
         RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
-        BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+        BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
 
         InteractionEvent event = new InteractionEvent();
         event.setRecord(createRecord("r1"));
@@ -136,7 +138,7 @@ class BatchWriteHandlerTest {
     void onEvent_batchSize_flushesAtThreshold() {
         InMemoryStorageRepository repo = new InMemoryStorageRepository();
         RecorderConfig config = RecorderConfig.builder().batchSize(3).maxBufferSize(100).build();
-        BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+        BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
 
         // 添加 2 条，endOfBatch=false，不 flush
         for (int i = 0; i < 2; i++) {
@@ -160,7 +162,7 @@ class BatchWriteHandlerTest {
         InMemoryStorageRepository repo = new InMemoryStorageRepository();
         // batchSize 很大，maxBufferSize=2
         RecorderConfig config = RecorderConfig.builder().batchSize(100).maxBufferSize(2).build();
-        BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+        BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
 
         // 添加 3 条（maxBufferSize=2，第 3 条丢弃）
         for (int i = 0; i < 3; i++) {
@@ -179,7 +181,7 @@ class BatchWriteHandlerTest {
         InMemoryStorageRepository repo = new InMemoryStorageRepository();
         repo.setThrowOnSave(true);
         RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
-        BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+        BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
 
         InteractionEvent event = new InteractionEvent();
         event.setRecord(createRecord("r1"));
@@ -193,7 +195,7 @@ class BatchWriteHandlerTest {
     void flush_emptyBuffer_noop() {
         InMemoryStorageRepository repo = new InMemoryStorageRepository();
         RecorderConfig config = RecorderConfig.builder().build();
-        BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+        BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
 
         handler.flush(); // 不应该抛异常
 
@@ -205,7 +207,7 @@ class BatchWriteHandlerTest {
     void flushScheduler_startsAndStops() throws Exception {
         InMemoryStorageRepository repo = new InMemoryStorageRepository();
         RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
-        BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+        BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
 
         handler.startFlushScheduler(100); // 100ms interval
 
@@ -229,7 +231,7 @@ class BatchWriteHandlerTest {
     void flushScheduler_zeroInterval_doesNotStart() {
         InMemoryStorageRepository repo = new InMemoryStorageRepository();
         RecorderConfig config = RecorderConfig.builder().build();
-        BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+        BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
 
         // flushIntervalMs=0 不启动调度器
         handler.startFlushScheduler(0);
@@ -240,7 +242,7 @@ class BatchWriteHandlerTest {
     void onEvent_misconfiguredBuffers_selfHealToBatchSize() {
         InMemoryStorageRepository repo = new InMemoryStorageRepository();
         RecorderConfig config = RecorderConfig.builder().batchSize(100).maxBufferSize(1).build();
-        BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+        BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
 
         InteractionEvent first = new InteractionEvent();
         first.setRecord(createRecord("r1"));

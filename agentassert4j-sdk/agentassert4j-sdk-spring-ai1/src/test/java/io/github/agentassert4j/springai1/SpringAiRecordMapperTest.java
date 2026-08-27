@@ -68,7 +68,7 @@ class SpringAiRecordMapperTest {
         void systemMessageBecomesTemplateHash() {
             Prompt prompt = new Prompt(List.of(new SystemMessage("你是售后客服助手"), user("订单 SO-1 在哪")));
 
-            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null);
+            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null, null);
 
             assertEquals(HashUtil.sha256("你是售后客服助手"), record.getTemplateHash());
             assertTrue(record.getPreviousTurns() == null || record.getPreviousTurns().isEmpty(), "系统消息不得混入 previousTurns");
@@ -80,7 +80,7 @@ class SpringAiRecordMapperTest {
         void multiTurnMapsUserInputAndTurns() {
             Prompt prompt = new Prompt(List.of(new SystemMessage("sys"), user("第一轮问题"), assistant("第一轮回答"), user("第二轮问题")));
 
-            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null);
+            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null, null);
 
             assertEquals("第二轮问题", record.getUserInput());
             assertEquals(2, record.getPreviousTurns().size());
@@ -95,7 +95,7 @@ class SpringAiRecordMapperTest {
         void toolTerminatedRoundMapsToolTurn() {
             Prompt prompt = new Prompt(List.of(new SystemMessage("sys"), user("查一下订单"), assistant(""), toolResponse("call-1", "query_order", "{\"status\":\"shipped\"}")));
 
-            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null);
+            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null, null);
 
             assertNull(record.getUserInput(), "工具结果收尾时无本轮用户输入");
             List<TurnContext> turns = record.getPreviousTurns();
@@ -117,7 +117,7 @@ class SpringAiRecordMapperTest {
             options.setMaxTokens(512);
             Prompt prompt = new Prompt(List.of(user("hi")), options);
 
-            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null);
+            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null, null);
 
             assertEquals("deepseek-chat", record.getModel());
             assertEquals("deepseek", record.getProvider());
@@ -145,7 +145,7 @@ class SpringAiRecordMapperTest {
             options.setToolCallbacks(List.of(callback));
             Prompt prompt = new Prompt(List.of(user("查订单")), options);
 
-            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null);
+            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null, null);
 
             List<Object> tools = (List<Object>) RecursiveJsonParser.parse(record.getToolsDefinition());
             assertEquals(1, tools.size());
@@ -164,13 +164,13 @@ class SpringAiRecordMapperTest {
             DefaultToolCallingChatOptions options = new DefaultToolCallingChatOptions();
             options.setModel("gpt-4o-mini");
             Prompt prompt = new Prompt(List.of(user("hi")), options);
-            assertEquals("openai", SpringAiRecordMapper.toRecord(prompt, null, 1, null).getProvider());
+            assertEquals("openai", SpringAiRecordMapper.toRecord(prompt, null, 1, null, null).getProvider());
 
             options.setModel("qwen3-32b");
-            assertEquals("qwen", SpringAiRecordMapper.toRecord(prompt, null, 1, null).getProvider());
+            assertEquals("qwen", SpringAiRecordMapper.toRecord(prompt, null, 1, null, null).getProvider());
 
             options.setModel("my-private-model");
-            assertEquals("custom", SpringAiRecordMapper.toRecord(prompt, null, 1, null).getProvider());
+            assertEquals("custom", SpringAiRecordMapper.toRecord(prompt, null, 1, null, null).getProvider());
         }
 
         @Test
@@ -179,7 +179,7 @@ class SpringAiRecordMapperTest {
             UserMessage multimodal = UserMessage.builder().text("这张图是什么").media(new Media(new MimeType("image", "png"), URI.create("https://cdn.example.com/a.png"))).build();
             Prompt prompt = new Prompt(List.of(new SystemMessage("sys"), multimodal));
 
-            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null);
+            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null, null);
 
             assertTrue(record.isMultimodalInput());
             assertEquals(record.getMultimodalContent(), record.getUserInput(), "userInput 与 multimodalContent 存同构副本，重放按数组原样注入");
@@ -202,7 +202,7 @@ class SpringAiRecordMapperTest {
         void contentUsageModelFinishReasonMapped() {
             ChatResponse response = chatResponse("已发货", "STOP", 12, 7, "deepseek-v4-flash-vision-exp");
 
-            InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), response, 33, null);
+            InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), response, 33, null, null);
 
             assertEquals("已发货", record.getModelResponse());
             assertEquals(12, record.getInputTokens());
@@ -226,7 +226,7 @@ class SpringAiRecordMapperTest {
 
         private String finishReasonOf(String springAiReason) {
             ChatResponse response = chatResponse("x", springAiReason, null, null, null);
-            return SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), response, 1, null).getFinishReason();
+            return SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), response, 1, null, null).getFinishReason();
         }
 
         @Test
@@ -236,7 +236,7 @@ class SpringAiRecordMapperTest {
             AssistantMessage output = new AssistantMessage("", Map.of(), List.of(springCall));
             ChatResponse response = new ChatResponse(List.of(new Generation(output, ChatGenerationMetadata.builder().finishReason("TOOL_EXECUTION").build())));
 
-            InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("查订单"))), response, 5, null);
+            InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("查订单"))), response, 5, null, null);
 
             assertTrue(record.isHasToolCalls());
             assertEquals(1, record.getToolCalls().size());
@@ -254,7 +254,7 @@ class SpringAiRecordMapperTest {
         void nullUsageDegradesToZero() {
             ChatResponse response = new ChatResponse(List.of(new Generation(new AssistantMessage("hi"), ChatGenerationMetadata.NULL)));
 
-            InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), response, 1, null);
+            InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), response, 1, null, null);
 
             assertEquals(0, record.getInputTokens());
             assertEquals(0, record.getOutputTokens());
@@ -266,7 +266,7 @@ class SpringAiRecordMapperTest {
     @DisplayName("录音上下文声明的会话/技能/元数据落到记录")
     void recordingContextFieldsApplied() {
         try (RecordingContext ctx = RecordingContext.start("session-42").withSkillId("order-refund").withTemplateId("order-extract/v2").withMetadata("channel", "app")) {
-            InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), null, 1, null);
+            InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), null, 1, null, RecordingContext.currentOrNull());
             assertEquals("session-42", record.getSessionId());
             assertEquals("order-refund", record.getSkillId());
             assertEquals("order-extract/v2", record.getTemplateId());
@@ -277,7 +277,7 @@ class SpringAiRecordMapperTest {
     @Test
     @DisplayName("录制器版本标识随记录落库")
     void recorderVersionStamped() {
-        InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), null, 1, null);
+        InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), null, 1, null, null);
         assertEquals(SpringAiRecordMapper.SDK_VERSION, record.getRecorderVersion());
     }
 }

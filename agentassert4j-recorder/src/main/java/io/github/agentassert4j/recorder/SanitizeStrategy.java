@@ -13,7 +13,7 @@ import io.github.agentassert4j.util.HashUtil;
 public enum SanitizeStrategy {
 
     /**
-     * 值替换为固定掩码 {@code "***}}。
+     * 值替换为固定掩码 {@code "***"}。
      * 适用于：密码、Token 等不需要保留原始值的场景。
      */
     MASK,

@@ -80,7 +80,7 @@ public class ReplayCommand implements Callable<Integer> {
             }
             LlmClient client = new OpenAiCompatibleClient(config.getLlm().getEndpoint(), config.getLlm().getApiKey(), config.getLlm().getModel(), OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, config.getLlm().getExtraBody());
 
-            TestExecutionConfig executionConfig = new TestExecutionConfig().timeoutMs(config.getLlm().getTimeoutMs());
+            TestExecutionConfig executionConfig = new TestExecutionConfig().timeoutMs(config.getLlm().getTimeoutMs()).temperature(config.getLlm().getTemperature());
             SkillRulesConfig rules = ConfigLoader.loadRulesConfig();
 
             return new ReplayRunner(repository, client, comparator, rules, executionConfig, System.out).run(newPrompt, skill, maxCases, oldPromptHash, dryRun);
