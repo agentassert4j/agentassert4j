@@ -6,6 +6,12 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * BatchWriteHandler 的单元测试。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
+ */
 class BatchWriteHandlerTest {
 
     private InteractionRecord createRecord(String id) {
@@ -148,5 +154,28 @@ class BatchWriteHandlerTest {
         // flushIntervalMs=0 不启动调度器
         handler.startFlushScheduler(0);
         handler.stopFlushScheduler(); // 应该不抛异常
+    }
+
+    @Test
+    void onEvent_bufferOverflow_dropsNewRecord_andCounts() {
+        InMemoryStorageRepository repo = new InMemoryStorageRepository();
+        RecorderConfig config = RecorderConfig.builder()
+                .batchSize(100)
+                .maxBufferSize(1)
+                .build();
+        BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+
+        InteractionEvent first = new InteractionEvent();
+        first.setRecord(createRecord("r1"));
+        handler.onEvent(first, 0, false); // 入缓冲；未到批量阈值且非批尾 → 不 flush
+
+        InteractionEvent second = new InteractionEvent();
+        second.setRecord(createRecord("r2"));
+        handler.onEvent(second, 1, true); // 缓冲已满（1 >= 1）→ 丢弃 r2；批尾 flush r1
+
+        assertEquals(1, handler.getDroppedCount());
+        assertEquals(1, handler.getWrittenCount());
+        assertTrue(repo.getStore().stream().noneMatch(r -> "r2".equals(r.getRecordId())),
+                "超限记录不得落库");
     }
 }

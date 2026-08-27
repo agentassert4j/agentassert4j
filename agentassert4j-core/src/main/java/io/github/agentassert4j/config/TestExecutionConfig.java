@@ -3,7 +3,7 @@ package io.github.agentassert4j.config;
 /**
  * 回归测试执行配置 — 控制 RegressionTestExecutor 的行为。
  *
- * <p>所有字段带安全默认值（退化不中断 R10）。</p>
+ * <p>所有字段带安全默认值（退化不中断）。</p>
  *
  * <h3>配置项说明</h3>
  * <ul>
@@ -14,6 +14,9 @@ package io.github.agentassert4j.config;
  *   <li>{@code dryRun} — 干跑模式（不调 LLM，只输出会用哪些用例）</li>
  *   <li>{@code model} — 覆盖默认模型（null 时使用 LlmClient 配置的默认模型）</li>
  * </ul>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class TestExecutionConfig {
 
@@ -36,7 +39,7 @@ public class TestExecutionConfig {
 
     /**
      * 钳位校验 — 确保所有参数在合法范围内。
-     * 越界参数自动修正到最近合法值，不抛异常（退化不中断 R10）。
+     * 越界参数自动修正到最近合法值，不抛异常（退化不中断）。
      */
     public void validate() {
         maxTestCases = Math.max(1, Math.min(200, maxTestCases));

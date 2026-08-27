@@ -9,6 +9,12 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * InteractionRecorder 的单元测试。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
+ */
 class InteractionRecorderTest {
 
     private InMemoryStorageRepository repo;
@@ -293,5 +299,32 @@ class InteractionRecorderTest {
             assertTrue(seqs.get(i) > seqs.get(i - 1),
                     "同录制器内 seq 必须严格单调：(session_id, seq) 是确定性排序键");
         }
+    }
+
+    @Test
+    void droppedCount_aggregatesProducerAndConsumerDrops() throws Exception {
+        RecorderConfig config = RecorderConfig.builder()
+                .batchSize(1000)
+                .flushIntervalMs(60_000)
+                .ringBufferSize(4096)
+                .maxBufferSize(2)
+                .build();
+
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        int total = 1000;
+        for (int i = 0; i < total; i++) {
+            recorder.intercept(createRecord("ovf-" + i));
+        }
+
+        recorder.stop();
+
+        // 总丢弃必须聚合消费侧（缓冲超限）计数——只报生产侧会把线上丢数伪装成零
+        assertTrue(recorder.getDroppedCount() > 0,
+                "maxBufferSize=2 + 1000 条突发，消费侧超限丢弃必须计入总丢弃数");
+        assertEquals(total, recorder.getRecordedCount());
+        assertEquals(total, recorder.getWrittenCount() + recorder.getDroppedCount(),
+                "written + dropped 必须闭合到 recorded（stop 后缓冲已排空）");
     }
 }

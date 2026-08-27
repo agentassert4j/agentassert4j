@@ -8,6 +8,9 @@ package io.github.agentassert4j.model;
  *   <li>有工具调用：sorted(toolNames).join("+") + "[" + paramSignature + "]"</li>
  *   <li>无工具调用：SHA-256(systemPrompt)</li>
  * </ul></p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class SkillProfile {
 

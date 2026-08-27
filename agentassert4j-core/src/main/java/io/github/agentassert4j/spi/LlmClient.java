@@ -7,6 +7,9 @@ import io.github.agentassert4j.model.LlmResponse;
  * LLM 客户端 SPI — 回归测试时调用 LLM API。
  *
  * <p>core 只定义契约；具体客户端实现由上层模块提供。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public interface LlmClient {
 

@@ -4,6 +4,9 @@ import java.util.Map;
 
 /**
  * LLM 返回的工具调用决策（重放时使用）。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class ToolCallResult {
 

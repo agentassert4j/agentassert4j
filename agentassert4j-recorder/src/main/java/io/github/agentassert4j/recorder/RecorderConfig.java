@@ -7,7 +7,10 @@ import java.util.List;
 /**
  * 录制器配置 — 控制批量写入行为和数据脱敏策略。
  *
- * <p>所有字段带安全默认值，构造后不可变（R10 退化不中断）。</p>
+ * <p>所有字段带安全默认值，构造后不可变（退化不中断）。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public final class RecorderConfig {
 

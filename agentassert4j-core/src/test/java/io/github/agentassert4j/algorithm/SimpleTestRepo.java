@@ -12,6 +12,9 @@ import java.util.stream.Collectors;
 /**
  * ImpactAnalyzer 和 BaselineManager 测试共用的内存 StorageRepository 模拟。
  * 所有数据存于内存 Map，不做 SQL 操作。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 class SimpleTestRepo implements StorageRepository {
 

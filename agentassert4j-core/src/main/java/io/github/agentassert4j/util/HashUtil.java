@@ -6,6 +6,9 @@ import java.security.NoSuchAlgorithmException;
 
 /**
  * SHA-256 哈希工具 — ThreadLocal 复用 MessageDigest 实例。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public final class HashUtil {
 

@@ -9,6 +9,9 @@ package io.github.agentassert4j.result;
  *   <li>UNSTABLE：PASS 率 < passThreshold，但 REGRESSION 率 <= regressionTolerance</li>
  *   <li>FLAKY：REGRESSION 率 > regressionTolerance（存在严重退化风险）</li>
  * </ul>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public enum StatisticalVerdict {
 

@@ -18,10 +18,13 @@ import java.util.regex.Pattern;
  *   <li>当前目录下的 {@code agentassert4j.json}</li>
  *   <li>用户主目录下的 {@code ~/.agentassert4j/agentassert4j.json}</li>
  *   <li>Classpath 下的 {@code agentassert4j.json}</li>
- *   <li>默认值（安全退化 R10）</li>
+ *   <li>默认值（安全退化）</li>
  * </ol>
  *
  * <p>环境变量替换：支持 {@code ${ENV_VAR}} 语法，未设置的环境变量替换为空字符串。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public final class ConfigLoader {
 

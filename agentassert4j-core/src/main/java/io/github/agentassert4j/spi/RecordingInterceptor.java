@@ -4,6 +4,9 @@ import io.github.agentassert4j.model.InteractionRecord;
 
 /**
  * 录制拦截器 SPI — 接入层实现此接口将交互数据转成 InteractionRecord。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public interface RecordingInterceptor {
 

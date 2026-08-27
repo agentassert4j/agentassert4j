@@ -2,6 +2,9 @@ package io.github.agentassert4j.util;
 
 /**
  * 字符串工具（core 零依赖约束下的 JDK 8 兼容实现）。
+ *
+ * @author axy-yxa
+ * @since 2026-08-27
  */
 public final class TextUtil {
 

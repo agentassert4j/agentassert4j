@@ -11,6 +11,9 @@ import java.util.Map;
  * 成本预估 — 执行回归测试前估算 API 调用费用。
  *
  * <p>纯静态工具类，按模型的每次调用成本估算（美元/次，基于 input+output 平均 token）。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public final class CostEstimator {
 

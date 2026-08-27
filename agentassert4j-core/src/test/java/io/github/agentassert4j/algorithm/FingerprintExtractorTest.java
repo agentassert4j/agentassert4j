@@ -13,6 +13,12 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * FingerprintExtractor 的单元测试。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
+ */
 class FingerprintExtractorTest {
 
     private InteractionRecord record(List<ToolCall> toolCalls, String modelResponse) {

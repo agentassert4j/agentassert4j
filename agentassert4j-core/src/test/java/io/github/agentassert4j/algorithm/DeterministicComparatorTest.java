@@ -13,6 +13,12 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * DeterministicComparator 的单元测试。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
+ */
 class DeterministicComparatorTest {
 
     private final DeterministicComparator comparator = new DeterministicComparator();

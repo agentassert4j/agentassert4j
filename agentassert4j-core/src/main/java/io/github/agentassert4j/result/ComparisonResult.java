@@ -4,6 +4,9 @@ import java.util.Set;
 
 /**
  * 对比结果 — DeterministicComparator.compare() 的返回值。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class ComparisonResult {
 

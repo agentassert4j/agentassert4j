@@ -5,6 +5,9 @@ package io.github.agentassert4j.spi;
  *
  * <p>hash 不可逆：模板原文只此一份，删除即永久丢失。
  * v1 角色从"prompt 文本缓存"演进为模板文本库（template_hash → 模板原文）。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public interface TemplateTextStore {
 

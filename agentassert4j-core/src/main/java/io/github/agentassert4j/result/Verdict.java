@@ -2,6 +2,9 @@ package io.github.agentassert4j.result;
 
 /**
  * 判定结果枚举。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public enum Verdict {
     /**

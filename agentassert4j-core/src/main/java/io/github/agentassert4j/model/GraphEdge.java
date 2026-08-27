@@ -12,6 +12,9 @@ import java.util.List;
  *   <li>LOW：字段名前缀匹配（如 orderId ≈ orderRef，前缀 "order" 相同）</li>
  *   <li>TRANSPARENT：穿透压缩产生的透传边，throughNodes 记录中间节点</li>
  * </ul>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class GraphEdge {
 

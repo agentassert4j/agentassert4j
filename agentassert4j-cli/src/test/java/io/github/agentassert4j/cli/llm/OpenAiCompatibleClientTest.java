@@ -12,6 +12,12 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * OpenAiCompatibleClient 的单元测试。
+ *
+ * @author axy-yxa
+ * @since 2026-08-27
+ */
 class OpenAiCompatibleClientTest {
 
     private OpenAiCompatibleClient client;

@@ -13,7 +13,7 @@ import java.util.Map;
  *
  * <p>配置优先级：CLI 参数 > 环境变量 > agentassert4j.json > 默认值。</p>
  *
- * <p>所有字段带安全默认值（退化不中断 R10），缺失配置时框架仍可正常运行。</p>
+ * <p>所有字段带安全默认值（退化不中断），缺失配置时框架仍可正常运行。</p>
  *
  * <h3>配置文件格式示例（agentassert4j.json）</h3>
  * <pre>
@@ -25,6 +25,9 @@ import java.util.Map;
  *   "tools": { "excludeFromGraph": ["read_file", "edit_file", "bash"] }
  * }
  * </pre>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class AgentAssert4jConfig {
 
@@ -50,7 +53,7 @@ public class AgentAssert4jConfig {
     }
 
     /**
-     * 从 JSON 字符串解析配置。解析失败时安全退化为默认值（R10）。
+     * 从 JSON 字符串解析配置。解析失败时安全退化为默认值。
      *
      * @param json JSON 格式的配置文本
      * @return 解析后的配置（任何解析失败的字段使用默认值）

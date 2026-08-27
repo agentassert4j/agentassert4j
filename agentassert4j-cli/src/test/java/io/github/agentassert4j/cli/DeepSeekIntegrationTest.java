@@ -40,6 +40,9 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * mvn test -pl agentassert4j-core "-Dtest=DeepSeekIntegrationTest" ^
  *     "-Ddeepseek.api.key=sk-xxx"
  * </pre>
+ *
+ * @author axy-yxa
+ * @since 2026-08-27
  */
 class DeepSeekIntegrationTest {
 

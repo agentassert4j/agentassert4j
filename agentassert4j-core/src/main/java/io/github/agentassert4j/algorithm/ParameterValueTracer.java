@@ -18,6 +18,9 @@ import java.util.stream.Collectors;
  * </ul>
  *
  * <p>链路构建：按 sessionId 分组 + 按 timestamp 排序，仅追踪单次会话内的数据流。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class ParameterValueTracer {
 

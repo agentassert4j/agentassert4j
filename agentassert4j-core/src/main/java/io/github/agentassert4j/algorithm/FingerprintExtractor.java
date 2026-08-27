@@ -14,6 +14,9 @@ import java.util.stream.Collectors;
  * 行为指纹提取器 — 从交互记录中提取四维度确定性指纹。
  *
  * <p>维度 1-2 全自动提取，维度 3-4 从声明式规则加载。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public final class FingerprintExtractor {
 

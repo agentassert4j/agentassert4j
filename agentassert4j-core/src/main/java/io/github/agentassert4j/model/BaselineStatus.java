@@ -8,6 +8,9 @@ package io.github.agentassert4j.model;
  * CANDIDATE → 候选指纹（等待开发者裁决：approve 或 reject）
  * ARCHIVED  → 已归档的旧基线（支持回滚）
  * </pre>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public enum BaselineStatus {
     /**

@@ -12,6 +12,9 @@ import java.util.Map;
  *   <li>优先级 3（默认）：全部默认 String</li>
  * </ol>
  * 接入层负责填充 argTypes，核心算法只消费。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class ToolCall {
 

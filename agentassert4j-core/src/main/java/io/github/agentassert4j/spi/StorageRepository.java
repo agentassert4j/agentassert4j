@@ -6,9 +6,12 @@ package io.github.agentassert4j.spi;
  * <p>遵循 JDBC 模式：接口在 core，实现在独立模块。
  * 插件发现优先级：CLI 显式配置 > Spring Boot AutoConfig > ServiceLoader > 默认 SQLite。</p>
  *
- * <p>按读写域拆分（R6 接口隔离）：消费方应依赖它实际需要的最小域接口——
+ * <p>按读写域拆分：消费方应依赖它实际需要的最小域接口——
  * 录制管道只见 {@link InteractionWriteStore}，分析管道只见 {@link InteractionQueryStore} 等；
  * 本门面仅作为组装根与发现入口。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public interface StorageRepository extends
         InteractionWriteStore,

@@ -12,6 +12,12 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * DeterministicSkillGrouper 的单元测试。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
+ */
 class DeterministicSkillGrouperTest {
 
     private InteractionRecord record(String promptHash, List<ToolCall> calls, boolean hasToolCalls) {

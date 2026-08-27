@@ -40,6 +40,9 @@ import io.github.agentassert4j.spi.StorageRepository;
  *         旧基线归档         丢弃候选
  *         候选升为基线       保留旧基线
  * </pre>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class BaselineManager {
 
@@ -51,6 +54,9 @@ public class BaselineManager {
 
     /**
      * 批准新基线：候选 → 基线，旧基线归档。
+     *
+     * <p>归档与保存是两步独立写入，无跨表事务：保存失败经 StorageException 向上可见，
+     * 重试时归档去重守卫保证不产生重复归档行， approve 可安全重放。</p>
      *
      * @param groupKey Skill 的分组键（DeterministicSkillGrouper 生成的 groupKey）
      * @throws IllegalStateException 无候选指纹时抛出
@@ -66,17 +72,15 @@ public class BaselineManager {
             throw new IllegalStateException("No candidate to approve for skill: " + groupKey);
         }
 
-        // 旧基线归档（可回溯）
-        if (profile.getFingerprint() != null) {
-            repository.archiveBaseline(groupKey, profile.getFingerprint(), profile.getVersionTag());
-        }
+        // 旧基线归档（可回溯）；回滚恢复的旧基线已在归档中，跳过避免同 tag 重复行
+        archiveIfAbsent(groupKey, profile);
 
         // 候选提升为基线
         profile.setFingerprint(candidate);
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);
-        // 更新版本标签
-        profile.setVersionTag(generateVersionTag(profile.getVersionTag()));
+        // 更新版本标签：跳过归档中已占用的 tag，保证 tag↔指纹一一对应（回滚后不产生同 tag 双指纹）
+        profile.setVersionTag(nextAvailableVersionTag(groupKey, profile.getVersionTag()));
         repository.saveSkillProfile(profile);
     }
 
@@ -85,11 +89,15 @@ public class BaselineManager {
      * 开发者需自行回滚 Prompt（回滚是 git 的职责，不是测试框架的职责）。
      *
      * @param groupKey Skill 的分组键
+     * @throws IllegalStateException 无候选指纹时抛出（与 approve 对称）
      */
     public void reject(String groupKey) {
         SkillProfile profile = repository.findSkillByGroupKey(groupKey);
         if (profile == null) {
             throw new IllegalStateException("Skill profile not found: " + groupKey);
+        }
+        if (profile.getCandidateFingerprint() == null) {
+            throw new IllegalStateException("No candidate to reject for skill: " + groupKey);
         }
 
         profile.setCandidateFingerprint(null);
@@ -116,16 +124,39 @@ public class BaselineManager {
             throw new IllegalStateException("Skill profile not found: " + groupKey);
         }
 
-        // 当前基线也归档
-        if (profile.getFingerprint() != null) {
-            repository.archiveBaseline(groupKey, profile.getFingerprint(), profile.getVersionTag());
-        }
+        // 当前基线也归档（若该 tag 未曾归档过）
+        archiveIfAbsent(groupKey, profile);
 
         // 恢复归档基线
         profile.setFingerprint(archived.getFingerprint());
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);
         profile.setVersionTag(versionTag);
+        repository.saveSkillProfile(profile);
+    }
+
+    /**
+     * 记录回归测试产生的新指纹为候选，供后续 approve/reject 裁决。
+     * 回归执行器在对比结果非 PASS 时调用——候选必须经持久层落库，
+     * 否则 approve 在新进程中不可达（重放与裁决通常不在同一进程）。
+     *
+     * @param baseline 产生候选时所用基线交互记录（groupKey 由分组器从记录重算）
+     * @param candidate 回归测试提取的新指纹
+     * @throws IllegalStateException 该 Skill 无画像时抛出（先录制建立基线）
+     */
+    public void recordCandidate(InteractionRecord baseline, DeterministicFingerprint candidate) {
+        if (baseline == null || candidate == null) {
+            return;
+        }
+
+        String groupKey = DeterministicSkillGrouper.group(baseline).getGroupKey();
+        SkillProfile profile = repository.findSkillByGroupKey(groupKey);
+        if (profile == null) {
+            throw new IllegalStateException("Skill profile not found: " + groupKey);
+        }
+
+        profile.setCandidateFingerprint(candidate);
+        profile.setBaselineStatus(BaselineStatus.CANDIDATE);
         repository.saveSkillProfile(profile);
     }
 
@@ -182,5 +213,30 @@ public class BaselineManager {
             }
         }
         return currentTag + "-next";
+    }
+
+    /**
+     * 归档当前基线——同 tag 已存在归档行时跳过（回滚恢复的基线本就在归档中）；
+     * 无版本标签的基线无回滚句柄，不归档。
+     */
+    private void archiveIfAbsent(String groupKey, SkillProfile profile) {
+        if (profile.getFingerprint() == null || profile.getVersionTag() == null) {
+            return;
+        }
+        if (repository.findArchivedBaseline(groupKey, profile.getVersionTag()) == null) {
+            repository.archiveBaseline(groupKey, profile.getFingerprint(), profile.getVersionTag());
+        }
+    }
+
+    /**
+     * 递增版本标签并跳过归档中已占用的 tag——保证任一 tag 在归档与活跃态之间
+     * 始终只对应一个指纹，rollback(tag) 不产生歧义。
+     */
+    private String nextAvailableVersionTag(String groupKey, String currentTag) {
+        String next = generateVersionTag(currentTag);
+        while (repository.findArchivedBaseline(groupKey, next) != null) {
+            next = generateVersionTag(next);
+        }
+        return next;
     }
 }

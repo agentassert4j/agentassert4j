@@ -14,6 +14,9 @@ import java.util.Set;
 /**
  * 内存 StorageRepository 实现，用于单元测试。
  * 不引入 mockito 零依赖。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 class InMemoryStorageRepository implements StorageRepository {
 

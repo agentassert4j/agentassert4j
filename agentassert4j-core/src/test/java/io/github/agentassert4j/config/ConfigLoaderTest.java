@@ -14,6 +14,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * ConfigLoader 单元测试 — 配置加载器。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 class ConfigLoaderTest {
 

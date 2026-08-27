@@ -7,6 +7,9 @@ import java.util.Set;
  * 对比器配置 — 可忽略字段、阈值等。
  *
  * <p>默认空配置，阈值与可忽略字段按需设置；外部化加载由调用方组装后注入。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class ComparatorConfig {
 

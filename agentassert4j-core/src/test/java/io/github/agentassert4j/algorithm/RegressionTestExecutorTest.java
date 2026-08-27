@@ -2,6 +2,7 @@ package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.*;
+import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.LlmTimeoutException;
@@ -15,6 +16,12 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * RegressionTestExecutor 的单元测试。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
+ */
 class RegressionTestExecutorTest {
 
     private StubLlmClient stubClient;
@@ -192,6 +199,60 @@ class RegressionTestExecutorTest {
         executor.execute(baseline, "prompt", config);
 
         assertEquals(5000, stubClient.lastTimeoutMs);
+    }
+
+    @Test
+    void execute_fingerprintDiff_persistsCandidateForAdjudication() {
+        SimpleTestRepo repo = new SimpleTestRepo();
+        BaselineManager baselineManager = new BaselineManager(repo);
+        RegressionTestExecutor wired = new RegressionTestExecutor(
+                stubClient, new DeterministicComparator(), baselineManager);
+
+        // 基线带工具调用，重放响应为纯文本 → 工具集维度必然差异（非 PASS）
+        InteractionRecord baseline = makeBaselineWithToolCall("hash", "input");
+        baselineManager.autoEstablishBaseline(baseline);
+        String groupKey = DeterministicSkillGrouper.group(baseline).getGroupKey();
+        stubClient.response = makeTextResponse("plain answer");
+
+        wired.execute(baseline, "new prompt", TestExecutionConfig.defaults());
+
+        // 候选必须经持久层落库，否则 approve 在另一进程不可达
+        SkillProfile profile = repo.findSkillByGroupKey(groupKey);
+        assertNotNull(profile);
+        assertNotNull(profile.getCandidateFingerprint());
+        assertEquals(BaselineStatus.CANDIDATE, profile.getBaselineStatus());
+    }
+
+    @Test
+    void execute_fingerprintIdentical_noCandidatePersisted() {
+        SimpleTestRepo repo = new SimpleTestRepo();
+        BaselineManager baselineManager = new BaselineManager(repo);
+        RegressionTestExecutor wired = new RegressionTestExecutor(
+                stubClient, new DeterministicComparator(), baselineManager);
+
+        // 基线与重放响应完全同形 → 指纹相同（PASS），无可裁决对象
+        InteractionRecord baseline = makeBaseline("hash", "input");
+        baseline.setModelResponse("same answer");
+        baselineManager.autoEstablishBaseline(baseline);
+        String groupKey = DeterministicSkillGrouper.group(baseline).getGroupKey();
+        stubClient.response = makeTextResponse("same answer");
+
+        RegressionTestResult result = wired.execute(baseline, "new prompt", TestExecutionConfig.defaults());
+
+        assertEquals(Verdict.PASS, result.getComparison().getVerdict());
+        assertNull(repo.findSkillByGroupKey(groupKey).getCandidateFingerprint());
+        assertEquals(BaselineStatus.BASELINE, repo.findSkillByGroupKey(groupKey).getBaselineStatus());
+    }
+
+    @Test
+    void execute_nullBaselineManager_skipsCandidatePersistence() {
+        // baselineManager 传 null 的旧用法不受影响
+        InteractionRecord baseline = makeBaselineWithToolCall("hash", "input");
+        stubClient.response = makeTextResponse("plain answer");
+
+        RegressionTestResult result = executor.execute(baseline, "new prompt", TestExecutionConfig.defaults());
+
+        assertNotNull(result.getComparison());
     }
 
     private InteractionRecord makeBaseline(String promptHash, String userInput) {

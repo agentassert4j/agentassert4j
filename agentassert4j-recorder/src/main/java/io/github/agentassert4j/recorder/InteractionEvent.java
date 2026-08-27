@@ -7,6 +7,9 @@ import io.github.agentassert4j.model.InteractionRecord;
  *
  * <p>Disruptor 要求 Event 类是可变的（通过 publishEvent 回调设置），
  * 因此这里使用 private 字段 + getter/setter 模式。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class InteractionEvent {
 

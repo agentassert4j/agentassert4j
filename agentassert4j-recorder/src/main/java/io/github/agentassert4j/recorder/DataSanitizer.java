@@ -16,7 +16,10 @@ import java.util.*;
  *   <li>modelResponse — 可配置，默认不脱敏</li>
  * </ul>
  *
- * <p>L1 错误处理：null 输入原样返回，匹配/解析失败不中断流程（R10）。</p>
+ * <p>null 输入原样返回，匹配/解析失败不中断流程。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class DataSanitizer {
 

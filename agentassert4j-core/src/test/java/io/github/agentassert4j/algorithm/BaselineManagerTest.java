@@ -13,6 +13,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * BaselineManager 单元测试 — 基线三态生命周期。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 class BaselineManagerTest {
 
@@ -168,6 +171,16 @@ class BaselineManagerTest {
             assertThrows(IllegalStateException.class,
                     () -> manager.reject("nonexistent"));
         }
+
+        @Test
+        @DisplayName("无候选指纹 → 抛出 IllegalStateException（与 approve 对称）")
+        void noCandidate_throwsException() {
+            SkillProfile profile = makeProfileWithBaseline("gk-1", "skill-1");
+            repo.saveSkillProfile(profile);
+
+            assertThrows(IllegalStateException.class,
+                    () -> manager.reject("gk-1"));
+        }
     }
 
     @Nested
@@ -235,6 +248,39 @@ class BaselineManagerTest {
 
             // 应该有两条归档：v1（approve 时的）和 v2（rollback 时的）
             assertEquals(2, repo.archivedBaselines.size());
+        }
+
+        @Test
+        @DisplayName("回滚后再 approve → 新 tag 跳过归档已占用值，不产生同 tag 双指纹")
+        void rollbackThenApprove_versionTagSkipsArchived() {
+            SkillProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
+            repo.saveSkillProfile(profile);
+            manager.approve("gk-1"); // v1 归档，活跃 v2
+
+            SkillProfile v2 = repo.findSkillByGroupKey("gk-1");
+            v2.setCandidateFingerprint(new DeterministicFingerprint());
+            v2.setBaselineStatus(BaselineStatus.CANDIDATE);
+            repo.saveSkillProfile(v2);
+            manager.approve("gk-1"); // v2 归档，活跃 v3
+
+            manager.rollback("gk-1", "v1"); // 活跃恢复 v1，v3 归档
+
+            SkillProfile rolled = repo.findSkillByGroupKey("gk-1");
+            rolled.setCandidateFingerprint(new DeterministicFingerprint());
+            rolled.setBaselineStatus(BaselineStatus.CANDIDATE);
+            repo.saveSkillProfile(rolled);
+
+            manager.approve("gk-1");
+
+            // v2/v3 已在归档中，新基线必须跳到 v4——否则 rollback("v2") 无法区分两个不同指纹
+            assertEquals("v4", repo.findSkillByGroupKey("gk-1").getVersionTag());
+            long distinctTags = repo.archivedBaselines.stream()
+                    .map(ArchivedBaseline::getVersionTag)
+                    .distinct()
+                    .count();
+            assertEquals(repo.archivedBaselines.size(), distinctTags);
+            // 回滚恢复的 v1 基线已在归档中，不得重复归档
+            assertEquals(3, repo.archivedBaselines.size());
         }
     }
 
@@ -322,6 +368,63 @@ class BaselineManagerTest {
             repo.saveSkillProfile(p);
             manager.approve("gk-1");
             assertEquals("v3", repo.findSkillByGroupKey("gk-1").getVersionTag());
+        }
+    }
+
+    @Nested
+    @DisplayName("recordCandidate - 候选指纹落库")
+    class RecordCandidate {
+
+        @Test
+        @DisplayName("候选落库，状态转为 CANDIDATE，旧基线不动")
+        void persistsCandidate_statusTransitions() {
+            InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
+            manager.autoEstablishBaseline(record);
+            String groupKey = DeterministicSkillGrouper.group(record).getGroupKey();
+            DeterministicFingerprint oldBaseline = repo.findSkillByGroupKey(groupKey).getFingerprint();
+
+            DeterministicFingerprint candidate = new DeterministicFingerprint();
+            manager.recordCandidate(record, candidate);
+
+            SkillProfile updated = repo.findSkillByGroupKey(groupKey);
+            assertEquals(BaselineStatus.CANDIDATE, updated.getBaselineStatus());
+            assertEquals(candidate, updated.getCandidateFingerprint());
+            assertEquals(oldBaseline, updated.getFingerprint());
+        }
+
+        @Test
+        @DisplayName("落库后 approve 在新进程可达（管道闭环）")
+        void persistedCandidate_approvable() {
+            InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
+            manager.autoEstablishBaseline(record);
+            String groupKey = DeterministicSkillGrouper.group(record).getGroupKey();
+
+            manager.recordCandidate(record, new DeterministicFingerprint());
+            manager.approve(groupKey);
+
+            assertNull(repo.findSkillByGroupKey(groupKey).getCandidateFingerprint());
+        }
+
+        @Test
+        @DisplayName("画像不存在 → 抛出 IllegalStateException")
+        void profileNotFound_throwsException() {
+            InteractionRecord record = makeToolRecord("skill-x", "queryOrder");
+
+            assertThrows(IllegalStateException.class,
+                    () -> manager.recordCandidate(record, new DeterministicFingerprint()));
+        }
+
+        @Test
+        @DisplayName("null 记录或 null 指纹 → 安全忽略")
+        void nullArguments_safeIgnore() {
+            InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
+            manager.autoEstablishBaseline(record);
+            String groupKey = DeterministicSkillGrouper.group(record).getGroupKey();
+
+            manager.recordCandidate(null, new DeterministicFingerprint());
+            manager.recordCandidate(record, null);
+
+            assertNull(repo.findSkillByGroupKey(groupKey).getCandidateFingerprint());
         }
     }
 }

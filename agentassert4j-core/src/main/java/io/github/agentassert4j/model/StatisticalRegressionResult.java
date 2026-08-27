@@ -16,6 +16,9 @@ import java.util.stream.Collectors;
  *   <li>score 均值、标准差、最小值</li>
  *   <li>差异模式分布（哪类差异最频繁）</li>
  * </ul>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class StatisticalRegressionResult {
 

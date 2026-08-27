@@ -8,6 +8,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * AgentAssert4jConfig 单元测试 — 主配置模型。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 class AgentAssert4jConfigTest {
 

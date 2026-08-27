@@ -11,6 +11,12 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * DataSanitizer 的单元测试。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
+ */
 class DataSanitizerTest {
 
     private RecorderConfig configWithFields(SanitizeStrategy strategy, String... fields) {

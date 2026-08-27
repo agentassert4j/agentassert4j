@@ -3,6 +3,7 @@ package io.github.agentassert4j.algorithm;
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.result.ComparisonResult;
+import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.LlmTimeoutException;
@@ -11,6 +12,8 @@ import io.github.agentassert4j.util.HashUtil;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 /**
@@ -24,8 +27,13 @@ import java.util.stream.Collectors;
  *   <li>FingerprintExtractor.extract — 提取指纹</li>
  *   <li>DeterministicComparator.compare — 与基线对比</li>
  * </ol>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class RegressionTestExecutor {
+
+    private static final Logger LOG = Logger.getLogger(RegressionTestExecutor.class.getName());
 
     private final LlmClient llmClient;
     private final DeterministicComparator comparator;
@@ -36,7 +44,7 @@ public class RegressionTestExecutor {
      *
      * @param llmClient       LLM 客户端
      * @param comparator      确定性对比器
-     * @param baselineManager 基线管理器（可选，传 null 跳过基线操作）
+     * @param baselineManager 基线管理器：对比结果非 PASS 时把候选指纹落库供 approve/reject 裁决（传 null 跳过）
      */
     public RegressionTestExecutor(LlmClient llmClient, DeterministicComparator comparator, BaselineManager baselineManager) {
         this.llmClient = llmClient;
@@ -86,7 +94,17 @@ public class RegressionTestExecutor {
         // 5. 对比
         ComparisonResult comparison = comparator.compare(baselineFp, currentFp, response.getContent());
 
-        // 6. 封装结果
+        // 6. 候选落库：与基线存在差异的新指纹进入待裁决状态（PASS 指纹相同，无可裁决对象）。
+        //    落库失败不中断批量回归——报告仍完整，仅 approve 不可用，SEVERE 留痕
+        if (baselineManager != null && comparison.getVerdict() != Verdict.PASS) {
+            try {
+                baselineManager.recordCandidate(baseline, currentFp);
+            } catch (RuntimeException e) {
+                LOG.log(Level.SEVERE, "Failed to persist candidate fingerprint for " + baseline.getRecordId(), e);
+            }
+        }
+
+        // 7. 封装结果
         RegressionTestResult result = new RegressionTestResult();
         result.setBaselineRecordId(baseline.getRecordId());
         result.setSkillId(baseline.getSkillId());

@@ -7,6 +7,12 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * TextDiffUtils 的单元测试。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
+ */
 class TextDiffUtilsTest {
 
     @Test

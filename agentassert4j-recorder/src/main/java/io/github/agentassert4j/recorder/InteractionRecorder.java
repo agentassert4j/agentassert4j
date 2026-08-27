@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * 核心录制器 — Disruptor 异步录制交互记录。
  *
  * <p>实现 {@link RecordingInterceptor} SPI 接口。
- * 通过 Disruptor RingBuffer 实现纳秒级入队，不阻塞业务线程（R8 零侵入）。</p>
+ * 通过 Disruptor RingBuffer 实现纳秒级入队，不阻塞业务线程（零侵入）。</p>
  *
  * <p>生命周期：构造 → {@link #start()} → {@link #intercept(InteractionRecord)} → {@link #stop()}。</p>
  *
@@ -27,6 +27,9 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li>RingBuffer 满时丢弃记录，不阻塞生产者</li>
  *   <li>批量写入失败记录丢弃计数器，不重试</li>
  * </ul>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class InteractionRecorder implements RecordingInterceptor {
 
@@ -129,7 +132,7 @@ public class InteractionRecorder implements RecordingInterceptor {
             // seq 透传：录制进程内单调（空洞合法）
             sanitized.setSeq(seqSource.incrementAndGet());
 
-            // 非阻塞发布到 RingBuffer：满时丢弃不阻塞业务线程（R8 零侵入）
+            // 非阻塞发布到 RingBuffer：满时丢弃不阻塞业务线程（零侵入）
             long sequence = disruptor.getRingBuffer().tryNext();
             try {
                 InteractionEvent event = disruptor.getRingBuffer().get(sequence);
@@ -188,8 +191,9 @@ public class InteractionRecorder implements RecordingInterceptor {
                 log.error("Error during InteractionRecorder shutdown: {}", e.getMessage(), e);
             } finally {
                 started = false;
-                log.info("InteractionRecorder stopped, recorded={}, dropped={}, written={}, failed={}",
+                log.info("InteractionRecorder stopped, recorded={}, dropped(ringBuffer={}, bufferOverflow={}), written={}, failed={}",
                         recordedCount.get(), droppedCount.get(),
+                        batchHandler != null ? batchHandler.getDroppedCount() : 0,
                         batchHandler != null ? batchHandler.getWrittenCount() : 0,
                         batchHandler != null ? batchHandler.getFailedCount() : 0);
             }
@@ -200,8 +204,12 @@ public class InteractionRecorder implements RecordingInterceptor {
         return recordedCount.get();
     }
 
+    /**
+     * 总丢弃数 = 生产侧（RingBuffer 满/发布异常）+ 消费侧（缓冲超限）。
+     * 两个计数器分属不同线程域，聚合口径以本方法为准。
+     */
     public long getDroppedCount() {
-        return droppedCount.get();
+        return droppedCount.get() + (batchHandler != null ? batchHandler.getDroppedCount() : 0);
     }
 
     public long getWrittenCount() {

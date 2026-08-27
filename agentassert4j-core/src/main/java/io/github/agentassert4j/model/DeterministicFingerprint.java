@@ -18,6 +18,9 @@ import java.util.Set;
  * 使用引用相等（==）而非值相等。当前 BaselineManagerTest 中测试能通过是因为直接持有对象引用。
  * 一旦出现跨反序列化的值比较需求，必须先实现 equals/hashCode。
  * 实现需注意 Set 和 Map 字段的顺序无关比较。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class DeterministicFingerprint {
 

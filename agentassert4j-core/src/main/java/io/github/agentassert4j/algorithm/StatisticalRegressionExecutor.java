@@ -17,6 +17,9 @@ import java.util.List;
  *   <li>成本安全：maxCostPerCase 硬限制，超出自动截断采样</li>
  *   <li>退化不中断：任何一次 LLM 调用失败不影响其余采样</li>
  * </ul>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class StatisticalRegressionExecutor {
 
@@ -89,7 +92,7 @@ public class StatisticalRegressionExecutor {
     /**
      * 执行单次采样 — 复用 RegressionTestExecutor 的核心逻辑。
      *
-     * <p>退化不中断（R10）：任何异常都转换为 SampleResult，不向外抛出。</p>
+     * <p>退化不中断：任何异常都转换为 SampleResult，不向外抛出。</p>
      */
     SampleResult executeOneSample(InteractionRecord baseline, String newSystemPrompt, int sampleIndex, StatisticalTestConfig config) {
 
@@ -142,7 +145,7 @@ public class StatisticalRegressionExecutor {
     /**
      * 并发执行采样 — 分批提交，避免 API 速率限制。
      *
-     * <p>使用裸 Thread + join，零额外依赖（R1）。</p>
+     * <p>使用裸 Thread + join，零额外依赖。</p>
      */
     private List<SampleResult> executeConcurrent(InteractionRecord baseline, String newSystemPrompt, StatisticalTestConfig config, int totalCount) {
 

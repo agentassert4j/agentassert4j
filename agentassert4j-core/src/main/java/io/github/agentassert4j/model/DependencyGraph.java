@@ -8,6 +8,9 @@ package io.github.agentassert4j.model;
  * <p><b>TODO: [模型简化]</b> 当前仅保留统计字段；CLI/Dashboard 落地时补充 Node 内部类
  * （skillId, groupKey, inboundCount, outboundCount）、edges 结构及从
  * InMemoryDependencyGraph 转换的工厂方法。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class DependencyGraph {
 

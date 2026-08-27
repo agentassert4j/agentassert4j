@@ -4,6 +4,9 @@ import java.util.List;
 
 /**
  * LLM 响应 — 回归测试重放时从 LLM API 获取。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class LlmResponse {
 

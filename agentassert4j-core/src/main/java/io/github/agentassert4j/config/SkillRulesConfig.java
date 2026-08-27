@@ -30,6 +30,9 @@ import java.util.*;
  * </pre>
  *
  * <p>规则加载优先级：agentassert4j-rules.json > agentassert4j.json 内联规则 > 默认空</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class SkillRulesConfig {
 
@@ -42,7 +45,7 @@ public class SkillRulesConfig {
     }
 
     /**
-     * 从 JSON 字符串解析规则配置。解析失败时安全退化为空配置（R10）。
+     * 从 JSON 字符串解析规则配置。解析失败时安全退化为空配置。
      *
      * @param json JSON 格式的规则文本
      * @return 解析后的规则配置

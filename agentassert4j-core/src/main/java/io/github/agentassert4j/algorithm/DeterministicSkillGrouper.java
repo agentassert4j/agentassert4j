@@ -21,6 +21,9 @@ import java.util.stream.Stream;
  *
  * <p>paramSignature 归一化：所有类型名 toLowerCase()，
  * 确保不同来源（SDK/JSON Schema/推断）生成相同签名。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public final class DeterministicSkillGrouper {
 

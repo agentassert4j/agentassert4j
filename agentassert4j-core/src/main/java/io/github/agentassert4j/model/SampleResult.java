@@ -7,6 +7,9 @@ import io.github.agentassert4j.result.Verdict;
  *
  * <p>包含该次重放的 Verdict、score、以及差异摘要，
  * 供 StatisticalRegressionResult 聚合统计。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class SampleResult {
 

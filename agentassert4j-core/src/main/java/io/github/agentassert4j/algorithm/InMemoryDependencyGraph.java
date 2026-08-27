@@ -19,6 +19,9 @@ import java.util.*;
  *   <li>反向邻接表 inEdges：tgt → Set&lt;src&gt;</li>
  * </ul>
  * 穿透压缩依赖反向邻接表做向上搜索。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class InMemoryDependencyGraph {
 

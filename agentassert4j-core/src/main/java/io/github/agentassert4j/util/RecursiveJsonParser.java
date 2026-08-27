@@ -15,6 +15,9 @@ import java.util.*;
  *   <li>boolean → Boolean</li>
  *   <li>null    → null</li>
  * </ul>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public final class RecursiveJsonParser {
 

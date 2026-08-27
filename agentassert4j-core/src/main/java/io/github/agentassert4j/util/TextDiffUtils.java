@@ -5,6 +5,9 @@ import java.util.*;
 /**
  * 文本差异工具 — 用于 Prompt 文本对比和字段路径对比。
  * 零外部依赖，纯 java.base 实现。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public final class TextDiffUtils {
 

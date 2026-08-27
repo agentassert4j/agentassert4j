@@ -11,6 +11,9 @@ import java.util.List;
  * <p>字段集与 v1 schema 的 interactions 列一一对应：
  * 只在调用时刻可知的观测事实（模型身份、采样参数、原文、token 遥测）
  * 必须由捕获侧填充，事后无法重建。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class InteractionRecord {
 

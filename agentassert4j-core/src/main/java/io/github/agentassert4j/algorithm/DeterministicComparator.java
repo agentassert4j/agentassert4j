@@ -19,6 +19,9 @@ import java.util.stream.Collectors;
  *   <li>0.70 <= score < 0.95 → DIFF</li>
  *   <li>score < 0.70 → REGRESSION</li>
  * </ul>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class DeterministicComparator {
 

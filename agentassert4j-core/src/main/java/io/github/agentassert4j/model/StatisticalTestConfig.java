@@ -8,6 +8,9 @@ package io.github.agentassert4j.model;
  *   <li>单次模式（默认）：sampleCount=1，行为与 RegressionTestExecutor 完全一致</li>
  *   <li>统计模式：sampleCount>1，对同一基线执行多次重放，聚合统计</li>
  * </ul>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class StatisticalTestConfig {
 
@@ -82,7 +85,7 @@ public class StatisticalTestConfig {
 
     /**
      * 钳位校验 — 确保所有参数在合法范围内。
-     * 越界参数自动修正，不抛异常（退化不中断 R10）。
+     * 越界参数自动修正，不抛异常（退化不中断）。
      */
     public void validate() {
         maxTestCases = Math.max(1, Math.min(200, maxTestCases));

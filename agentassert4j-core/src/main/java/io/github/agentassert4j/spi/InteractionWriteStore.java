@@ -9,6 +9,9 @@ import java.util.List;
  *
  * <p>interactions 是只追加历史：实现方必须保证同 record_id 重复写入不覆盖已有行
  * （如 SQLite 的 INSERT OR IGNORE），崩溃重放双写不得篡改已落库数据。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public interface InteractionWriteStore {
 

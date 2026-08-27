@@ -4,6 +4,9 @@ import io.github.agentassert4j.result.ComparisonResult;
 
 /**
  * 回归测试结果 — RegressionTestExecutor.execute() 返回值。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class RegressionTestResult {
 

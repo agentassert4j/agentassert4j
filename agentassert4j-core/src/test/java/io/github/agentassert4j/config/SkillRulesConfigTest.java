@@ -10,6 +10,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * SkillRulesConfig 单元测试 — 声明式规则配置模型。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 class SkillRulesConfigTest {
 

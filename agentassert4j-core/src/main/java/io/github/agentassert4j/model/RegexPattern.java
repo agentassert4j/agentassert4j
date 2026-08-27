@@ -2,6 +2,9 @@ package io.github.agentassert4j.model;
 
 /**
  * 正则模式 — 维度 3 中用户声明的正则约束。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class RegexPattern {
 

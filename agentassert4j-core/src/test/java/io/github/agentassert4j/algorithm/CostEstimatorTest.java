@@ -8,6 +8,12 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * CostEstimator 的单元测试。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
+ */
 class CostEstimatorTest {
 
     private InteractionRecord makeRecord(int turnIndex) {

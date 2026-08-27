@@ -6,6 +6,9 @@ import java.util.List;
 
 /**
  * Skill 画像域 SPI — 基线三态生命周期（BASELINE/CANDIDATE/ARCHIVED）的载体存储。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public interface SkillStore {
 

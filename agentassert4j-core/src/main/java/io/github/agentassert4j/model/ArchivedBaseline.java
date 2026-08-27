@@ -2,6 +2,9 @@ package io.github.agentassert4j.model;
 
 /**
  * 基线归档记录 — approve 时旧基线移入归档。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class ArchivedBaseline {
 

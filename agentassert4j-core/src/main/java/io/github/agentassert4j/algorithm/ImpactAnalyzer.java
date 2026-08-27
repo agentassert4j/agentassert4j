@@ -3,6 +3,7 @@ package io.github.agentassert4j.algorithm;
 import io.github.agentassert4j.model.AnalysisResult;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
+import io.github.agentassert4j.spi.StorageException;
 import io.github.agentassert4j.spi.StorageRepository;
 
 import java.util.*;
@@ -24,6 +25,9 @@ import java.util.stream.Collectors;
  * </ol>
  *
  * <p><b>设计决策</b>：零分类、零硬编码、零配置。数据说话。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class ImpactAnalyzer {
 
@@ -54,6 +58,15 @@ public class ImpactAnalyzer {
      * @return 分析结果（含冷启动提示 / 受影响 Skill + 测试用例）
      */
     public AnalysisResult analyzeChange(String oldPromptHash, String newPromptHash) {
+        // 查询失败与冷启动（合法空数据）必须区分：吞成空集会误导诊断方向
+        try {
+            return doAnalyze(oldPromptHash);
+        } catch (StorageException e) {
+            return AnalysisResult.error("影响分析存储查询失败：" + e.getMessage());
+        }
+    }
+
+    private AnalysisResult doAnalyze(String oldPromptHash) {
         // 1. 查询直接受影响的 Skill
         Set<String> directSkills = repository.findSkillIdsByTemplateHash(oldPromptHash);
 

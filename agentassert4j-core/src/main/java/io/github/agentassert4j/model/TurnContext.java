@@ -2,6 +2,9 @@ package io.github.agentassert4j.model;
 
 /**
  * 多轮对话上下文 — InteractionRecord.previousTurns 的元素。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class TurnContext {
 

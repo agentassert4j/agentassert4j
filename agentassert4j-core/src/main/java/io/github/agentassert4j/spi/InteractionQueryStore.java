@@ -10,6 +10,9 @@ import java.util.Set;
  *
  * <p>实现方必须保证返回顺序确定性（按 timestamp、seq、record_id 稳定排序），
  * 同一数据重复查询返回相同顺序——依赖边构建的可复现性依赖这一点。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public interface InteractionQueryStore {
 

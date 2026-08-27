@@ -4,6 +4,7 @@ import io.github.agentassert4j.model.ArchivedBaseline;
 import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
+import io.github.agentassert4j.spi.StorageException;
 import io.github.agentassert4j.spi.StorageRepository;
 
 import java.io.File;
@@ -21,7 +22,13 @@ import java.util.logging.Logger;
  * <p>遵循 JDBC 模式：接口在 core，实现在独立模块。
  * 插件发现：ServiceLoader 自动发现。</p>
  *
+ * <p>错误契约：SQL 失败一律抛 {@link StorageException}，绝不静默吞掉——
+ * 吞掉会把磁盘满/库锁死伪装成"成功"或"无数据"。录制管道在上层捕获并计入失败计数。</p>
+ *
  * <p><b>技术债标记</b>：本类中标注了多处 TODO，将在后续功能完善后优化。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class SqliteStorageRepository implements StorageRepository {
 
@@ -36,30 +43,6 @@ public class SqliteStorageRepository implements StorageRepository {
 
     public SqliteStorageRepository(String dbPath) {
         this.dbPath = dbPath;
-    }
-
-    private static String serializeToolCalls(List<io.github.agentassert4j.model.ToolCall> list) {
-        if (list == null || list.isEmpty()) return "[]";
-        StringBuilder sb = new StringBuilder();
-        sb.append("[");
-        for (int i = 0; i < list.size(); i++) {
-            if (i > 0) sb.append(",");
-            sb.append(toolCallToJson(list.get(i)));
-        }
-        sb.append("]");
-        return sb.toString();
-    }
-
-    private static String serializeTurnContexts(List<io.github.agentassert4j.model.TurnContext> list) {
-        if (list == null || list.isEmpty()) return "[]";
-        StringBuilder sb = new StringBuilder();
-        sb.append("[");
-        for (int i = 0; i < list.size(); i++) {
-            if (i > 0) sb.append(",");
-            sb.append(turnContextToJson(list.get(i)));
-        }
-        sb.append("]");
-        return sb.toString();
     }
 
     private static void setNullableInt(PreparedStatement ps, int index, Integer value) throws SQLException {
@@ -90,329 +73,6 @@ public class SqliteStorageRepository implements StorageRepository {
     private static Double getNullableDouble(ResultSet rs, String column) throws SQLException {
         double value = rs.getDouble(column);
         return rs.wasNull() ? null : value;
-    }
-
-    private static String toolCallToJson(io.github.agentassert4j.model.ToolCall tc) {
-        StringBuilder sb = new StringBuilder(256);
-        sb.append("{\"toolName\":\"").append(escape(tc.getToolName())).append("\",");
-        sb.append("\"toolCallId\":\"").append(escape(tc.getToolCallId())).append("\",");
-        sb.append("\"success\":").append(tc.isSuccess()).append(",");
-        sb.append("\"result\":\"").append(escape(tc.getResult())).append("\",");
-        sb.append("\"arguments\":").append(mapToJson(tc.getArguments())).append(",");
-        sb.append("\"argTypes\":").append(argTypesToJson(tc.getArgTypes()));
-        sb.append("}");
-        return sb.toString();
-    }
-
-    private static String turnContextToJson(io.github.agentassert4j.model.TurnContext tc) {
-        StringBuilder sb = new StringBuilder(128);
-        sb.append("{\"role\":\"").append(escape(tc.getRole())).append("\",");
-        sb.append("\"content\":\"").append(escape(tc.getContent())).append("\"");
-        if (tc.getToolCallId() != null) {
-            sb.append(",\"toolCallId\":\"").append(escape(tc.getToolCallId())).append("\"");
-        }
-        if (tc.getToolName() != null) {
-            sb.append(",\"toolName\":\"").append(escape(tc.getToolName())).append("\"");
-        }
-        sb.append("}");
-        return sb.toString();
-    }
-
-    private static List<io.github.agentassert4j.model.ToolCall> parseToolCallsFromDb(String json) {
-        String arr = extractArrayFromDb(json, "toolCalls");
-        if (arr == null || arr.trim().isEmpty()) return new ArrayList<>();
-        List<String> items = splitArrayItemsFromDb(arr);
-        List<io.github.agentassert4j.model.ToolCall> result = new ArrayList<>();
-        for (String item : items) {
-            io.github.agentassert4j.model.ToolCall tc = new io.github.agentassert4j.model.ToolCall();
-            tc.setToolName(getStringFromDb(item, "toolName"));
-            tc.setToolCallId(getStringFromDb(item, "toolCallId"));
-            tc.setSuccess(getBoolFromDb(item, "success"));
-            tc.setResult(getStringFromDb(item, "result"));
-            // arguments 和 argTypes 从 JSON 子对象解析
-            tc.setArguments(extractStringMapFromDb(item, "arguments"));
-            java.util.Map<String, Object> rawArgTypes = extractStringMapFromDb(item, "argTypes");
-            if (rawArgTypes != null) {
-                java.util.Map<String, String> argTypesMap = new java.util.LinkedHashMap<>();
-                for (java.util.Map.Entry<String, Object> e : rawArgTypes.entrySet()) {
-                    argTypesMap.put(e.getKey(), e.getValue() != null ? String.valueOf(e.getValue()) : null);
-                }
-                tc.setArgTypes(argTypesMap);
-            }
-            result.add(tc);
-        }
-        return result;
-    }
-
-    private static List<io.github.agentassert4j.model.TurnContext> parseTurnsFromDb(String json) {
-        String arr = extractArrayFromDb(json, "previousTurns");
-        if (arr == null || arr.trim().isEmpty()) return new ArrayList<>();
-        List<String> items = splitArrayItemsFromDb(arr);
-        List<io.github.agentassert4j.model.TurnContext> result = new ArrayList<>();
-        for (String item : items) {
-            io.github.agentassert4j.model.TurnContext tc =
-                    new io.github.agentassert4j.model.TurnContext(
-                            getStringFromDb(item, "role"), getStringFromDb(item, "content"));
-            tc.setToolCallId(getStringFromDb(item, "toolCallId"));
-            tc.setToolName(getStringFromDb(item, "toolName"));
-            result.add(tc);
-        }
-        return result;
-    }
-
-    // TODO: [技术债] 以下简化版 JSON 解析（escape/getStringFromDb/getBoolFromDb/extractArrayFromDb/splitArrayItemsFromDb）
-    //       与 JsonMapper 中的解析逻辑高度重复。待统一使用 RecursiveJsonParser 后删除本段。
-    // 简化版 JSON 解析（用于数据库读取）
-    private static String escape(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
-    }
-
-    private static String getStringFromDb(String json, String key) {
-        String pattern = "\"" + key + "\":\"";
-        int start = json.indexOf(pattern);
-        if (start < 0) return null;
-        start += pattern.length();
-        int end = start;
-        while (end < json.length()) {
-            if (json.charAt(end) == '\\' && end + 1 < json.length()) {
-                end += 2;
-                continue;
-            }
-            if (json.charAt(end) == '"') break;
-            end++;
-        }
-        // 写侧 escape 过的字符串读侧必须反转义；扫描式实现，链式 replace 会破坏 "\\\\" 组合
-        return unescape(json.substring(start, end));
-    }
-
-    /**
-     * 扫描式 JSON 反转义——与写侧 {@link #escape(String)} 对称。
-     * 未知转义序列保留原样（不吞字符），与手写解析生态的能力面对齐。
-     */
-    private static String unescape(String s) {
-        if (s == null) return null;
-        StringBuilder sb = new StringBuilder(s.length());
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c == '\\' && i + 1 < s.length()) {
-                char next = s.charAt(i + 1);
-                switch (next) {
-                    case 'n':
-                        sb.append('\n');
-                        i++;
-                        break;
-                    case 'r':
-                        sb.append('\r');
-                        i++;
-                        break;
-                    case 't':
-                        sb.append('\t');
-                        i++;
-                        break;
-                    case 'b':
-                        sb.append('\b');
-                        i++;
-                        break;
-                    case 'f':
-                        sb.append('\f');
-                        i++;
-                        break;
-                    case '"':
-                        sb.append('"');
-                        i++;
-                        break;
-                    case '\\':
-                        sb.append('\\');
-                        i++;
-                        break;
-                    case '/':
-                        sb.append('/');
-                        i++;
-                        break;
-                    default:
-                        sb.append(c);
-                }
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
-    }
-
-    private static boolean getBoolFromDb(String json, String key) {
-        String pattern = "\"" + key + "\":";
-        int start = json.indexOf(pattern);
-        if (start < 0) return false;
-        start += pattern.length();
-        return json.startsWith("true", start);
-    }
-
-    private static String extractArrayFromDb(String json, String key) {
-        String pattern = "\"" + key + "\":";
-        int start = json.indexOf(pattern);
-        if (start < 0) return null;
-        start += pattern.length();
-        if (start >= json.length() || json.charAt(start) != '[') return null;
-        int depth = 1;
-        int end = start + 1;
-        while (end < json.length() && depth > 0) {
-            char c = json.charAt(end);
-            if (c == '[') depth++;
-            else if (c == ']') depth--;
-            else if (c == '"') {
-                end++;
-                while (end < json.length() && json.charAt(end) != '"') {
-                    if (json.charAt(end) == '\\') end++;
-                    end++;
-                }
-            }
-            end++;
-        }
-        return json.substring(start + 1, end - 1);
-    }
-
-    private static List<String> splitArrayItemsFromDb(String arrayContent) {
-        List<String> items = new ArrayList<>();
-        if (arrayContent == null || arrayContent.trim().isEmpty()) return items;
-        int depth = 0;
-        int start = 0;
-        boolean inString = false;
-        for (int i = 0; i < arrayContent.length(); i++) {
-            char c = arrayContent.charAt(i);
-            if (c == '\\' && inString) {
-                i++;
-                continue;
-            }
-            if (c == '"') {
-                inString = !inString;
-                continue;
-            }
-            if (inString) continue;
-            if (c == '{' || c == '[') depth++;
-            else if (c == '}' || c == ']') depth--;
-            else if (c == ',' && depth == 0) {
-                String item = arrayContent.substring(start, i).trim();
-                if (!item.isEmpty()) items.add(item);
-                start = i + 1;
-            }
-        }
-        String last = arrayContent.substring(start).trim();
-        if (!last.isEmpty()) items.add(last);
-        return items;
-    }
-
-    private static String mapToJson(java.util.Map<String, Object> map) {
-        if (map == null || map.isEmpty()) return "{}";
-        StringBuilder sb = new StringBuilder(map.size() * 32);
-        sb.append("{");
-        boolean first = true;
-        for (java.util.Map.Entry<String, Object> entry : map.entrySet()) {
-            if (!first) sb.append(",");
-            first = false;
-            sb.append("\"").append(escape(entry.getKey())).append("\":");
-            Object val = entry.getValue();
-            if (val == null) {
-                sb.append("null");
-            } else if (val instanceof Boolean) {
-                sb.append(val);
-            } else if (val instanceof Number) {
-                sb.append(val);
-            } else {
-                sb.append("\"").append(escape(String.valueOf(val))).append("\"");
-            }
-        }
-        sb.append("}");
-        return sb.toString();
-    }
-
-    private static String argTypesToJson(java.util.Map<String, String> map) {
-        if (map == null || map.isEmpty()) return "{}";
-        StringBuilder sb = new StringBuilder(map.size() * 32);
-        sb.append("{");
-        boolean first = true;
-        for (java.util.Map.Entry<String, String> entry : map.entrySet()) {
-            if (!first) sb.append(",");
-            first = false;
-            sb.append("\"").append(escape(entry.getKey())).append("\":\"").append(escape(entry.getValue())).append("\"");
-        }
-        sb.append("}");
-        return sb.toString();
-    }
-
-    // TODO: [技术债] 以下序列化方法（serializeToolCalls/serializeTurnContexts/escape 等）
-    //       与 JsonMapper 中的手写 JSON 逻辑存在重复。
-    //       待 RecursiveJsonParser 在 core util 包稳定后，应重构为统一使用 RecursiveJsonParser.parse()/serialize()，
-    //       消除 SqliteStorageRepository 和 JsonMapper 中的手写 JSON 解析代码。
-    //       参见 JsonMapper 类头注释。
-
-    private static java.util.Map<String, Object> extractStringMapFromDb(String json, String key) {
-        String pattern = "\"" + key + "\":";
-        int start = json.indexOf(pattern);
-        if (start < 0) return null;
-        start += pattern.length();
-        if (start >= json.length() || json.charAt(start) != '{') return null;
-        int depth = 1;
-        int end = start + 1;
-        while (end < json.length() && depth > 0) {
-            char c = json.charAt(end);
-            if (c == '{') depth++;
-            else if (c == '}') depth--;
-            else if (c == '"') {
-                end++;
-                while (end < json.length() && json.charAt(end) != '"') {
-                    if (json.charAt(end) == '\\') end++;
-                    end++;
-                }
-            }
-            end++;
-        }
-        String obj = json.substring(start + 1, end - 1);
-        if (obj.trim().isEmpty()) return new java.util.LinkedHashMap<>();
-        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
-        List<String> pairs = splitMapPairs(obj);
-        for (String pair : pairs) {
-            int colon = pair.indexOf(':');
-            if (colon < 0) continue;
-            String k = pair.substring(0, colon).trim();
-            if (k.startsWith("\"") && k.endsWith("\"")) k = unescape(k.substring(1, k.length() - 1));
-            String v = pair.substring(colon + 1).trim();
-            if (v.startsWith("\"") && v.endsWith("\"")) {
-                result.put(k, unescape(v.substring(1, v.length() - 1)));
-            } else {
-                result.put(k, v);
-            }
-        }
-        return result;
-    }
-
-    private static List<String> splitMapPairs(String content) {
-        List<String> pairs = new ArrayList<>();
-        int depth = 0;
-        int start = 0;
-        boolean inStr = false;
-        for (int i = 0; i < content.length(); i++) {
-            char c = content.charAt(i);
-            if (c == '\\' && inStr) {
-                i++;
-                continue;
-            }
-            if (c == '"') {
-                inStr = !inStr;
-                continue;
-            }
-            if (inStr) continue;
-            if (c == '{' || c == '[') depth++;
-            else if (c == '}' || c == ']') depth--;
-            else if (c == ',' && depth == 0) {
-                String p = content.substring(start, i).trim();
-                if (!p.isEmpty()) pairs.add(p);
-                start = i + 1;
-            }
-        }
-        String last = content.substring(start).trim();
-        if (!last.isEmpty()) pairs.add(last);
-        return pairs;
     }
 
     @Override
@@ -449,7 +109,7 @@ public class SqliteStorageRepository implements StorageRepository {
                 connection = null;
             }
             LOG.log(Level.SEVERE, "SQLite 初始化失败: " + dbPath, e);
-            throw new RuntimeException("Storage initialization failed", e);
+            throw new StorageException("initialize: " + dbPath, e);
         }
     }
 
@@ -505,7 +165,7 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setString(i++, r.getFinishReason());
             ps.setString(i++, r.getModelResponse());
             ps.setString(i++, r.getModelResponseRaw());
-            ps.setString(i++, serializeToolCalls(r.getToolCalls()));
+            ps.setString(i++, JsonMapper.toolCallsToJson(r.getToolCalls()));
             ps.setInt(i++, r.isHasToolCalls() ? 1 : 0);
             setNullableInt(ps, i++, r.getInputTokens());
             setNullableInt(ps, i++, r.getOutputTokens());
@@ -518,37 +178,56 @@ public class SqliteStorageRepository implements StorageRepository {
             setNullableDouble(ps, i++, r.getCostUsd());
             ps.setInt(i++, r.isMultimodalInput() ? 1 : 0);
             ps.setString(i++, r.getMultimodalContent());
-            ps.setString(i++, serializeTurnContexts(r.getPreviousTurns()));
+            ps.setString(i++, JsonMapper.turnsToJson(r.getPreviousTurns()));
             // TODO: fingerprint 字段暂存 null。FingerprintExtractor 已实现，
             //       但 InteractionRecord 无 fingerprint 字段，需在 recorder 层通过
             //       FingerprintExtractor.extract(record) 生成指纹，序列化后写入。
-            //       届时应使用 JsonMapper.toJson(FingerprintExtractor.extract(r)) 替代此 null
+            //       届时应使用 JsonMapper.fingerprintToJson(FingerprintExtractor.extract(r)) 替代此 null
             ps.setString(i++, null);
             ps.setString(i++, r.getMetadata());
             ps.setString(i++, r.getRecorderVersion());
             ps.executeUpdate();
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "saveInteraction failed", e);
+            throw new StorageException("saveInteraction", e);
         }
     }
 
     @Override
     public void saveInteractions(List<InteractionRecord> records) {
-        if (records == null || records.isEmpty()) return;
+        if (records == null || records.isEmpty()) {
+            return;
+        }
         try {
             connection.setAutoCommit(false);
             for (InteractionRecord r : records) {
                 saveInteraction(r);
             }
             connection.commit();
-            connection.setAutoCommit(true);
         } catch (SQLException e) {
-            try {
-                connection.rollback();
-                connection.setAutoCommit(true);
-            } catch (SQLException ignored) {
-            }
             LOG.log(Level.SEVERE, "saveInteractions batch failed", e);
+            rollbackQuietly();
+            throw new StorageException("saveInteractions", e);
+        } catch (StorageException e) {
+            // 子操作已带失败语义；整批回滚后原样上抛，避免双重包装丢失定位信息
+            rollbackQuietly();
+            throw e;
+        } finally {
+            setAutoCommitQuietly(true);
+        }
+    }
+
+    private void rollbackQuietly() {
+        try {
+            connection.rollback();
+        } catch (SQLException ignored) {
+        }
+    }
+
+    private void setAutoCommitQuietly(boolean autoCommit) {
+        try {
+            connection.setAutoCommit(autoCommit);
+        } catch (SQLException ignored) {
         }
     }
 
@@ -564,8 +243,6 @@ public class SqliteStorageRepository implements StorageRepository {
                 + " ORDER BY timestamp ASC, seq ASC, record_id ASC", hash);
     }
 
-    // ToolCall 和 TurnContext 的独立序列化（供 saveInteraction 使用）
-
     @Override
     public Set<String> findSkillIdsByTemplateHash(String hash) {
         Set<String> result = new HashSet<>();
@@ -577,6 +254,7 @@ public class SqliteStorageRepository implements StorageRepository {
             }
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "findSkillIdsByTemplateHash failed", e);
+            throw new StorageException("findSkillIdsByTemplateHash", e);
         }
         return result;
     }
@@ -596,6 +274,7 @@ public class SqliteStorageRepository implements StorageRepository {
             while (rs.next()) result.add(rs.getString("session_id"));
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "findAllSessionIds failed", e);
+            throw new StorageException("findAllSessionIds", e);
         }
         return result;
     }
@@ -614,8 +293,8 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setString(i++, p.getGroupKey());
             ps.setString(i++, p.getSkillName());
             ps.setString(i++, p.getSkillType() != null ? p.getSkillType().name() : "TOOL_SKILL");
-            ps.setString(i++, JsonMapper.toJson(p.getFingerprint()));
-            ps.setString(i++, JsonMapper.toJson(p.getCandidateFingerprint()));
+            ps.setString(i++, JsonMapper.fingerprintToJson(p.getFingerprint()));
+            ps.setString(i++, JsonMapper.fingerprintToJson(p.getCandidateFingerprint()));
             ps.setString(i++, p.getBaselineStatus() != null ? p.getBaselineStatus().name() : "BASELINE");
             ps.setString(i++, p.getVersionTag());
             ps.setString(i++, p.getAlgoVersion());
@@ -628,6 +307,7 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.executeUpdate();
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "saveSkillProfile failed", e);
+            throw new StorageException("saveSkillProfile", e);
         }
     }
 
@@ -641,6 +321,7 @@ public class SqliteStorageRepository implements StorageRepository {
             }
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "findSkillByGroupKey failed", e);
+            throw new StorageException("findSkillByGroupKey", e);
         }
         return null;
     }
@@ -654,6 +335,7 @@ public class SqliteStorageRepository implements StorageRepository {
             while (rs.next()) result.add(JsonMapper.toSkillProfile(rs));
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "findAllSkills failed", e);
+            throw new StorageException("findAllSkills", e);
         }
         return result;
     }
@@ -668,6 +350,7 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.executeUpdate();
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "saveTemplateText failed", e);
+            throw new StorageException("saveTemplateText", e);
         }
     }
 
@@ -681,6 +364,7 @@ public class SqliteStorageRepository implements StorageRepository {
             }
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "findTemplateText failed", e);
+            throw new StorageException("findTemplateText", e);
         }
         return null;
     }
@@ -694,6 +378,7 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.executeUpdate();
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "saveGraph failed", e);
+            throw new StorageException("saveGraph", e);
         }
     }
 
@@ -705,6 +390,7 @@ public class SqliteStorageRepository implements StorageRepository {
             if (rs.next()) return rs.getString("graph_json");
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "loadGraph failed", e);
+            throw new StorageException("loadGraph", e);
         }
         return null;
     }
@@ -714,12 +400,13 @@ public class SqliteStorageRepository implements StorageRepository {
         String sql = "INSERT INTO archived_baselines (skill_id, fingerprint, version_tag, archived_at) VALUES (?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, skillId);
-            ps.setString(2, JsonMapper.toJson(fingerprint));
+            ps.setString(2, JsonMapper.fingerprintToJson(fingerprint));
             ps.setString(3, versionTag);
             ps.setLong(4, System.currentTimeMillis());
             ps.executeUpdate();
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "archiveBaseline failed", e);
+            throw new StorageException("archiveBaseline", e);
         }
     }
 
@@ -734,6 +421,7 @@ public class SqliteStorageRepository implements StorageRepository {
             }
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "findArchivedBaseline failed", e);
+            throw new StorageException("findArchivedBaseline", e);
         }
         return null;
     }
@@ -749,6 +437,7 @@ public class SqliteStorageRepository implements StorageRepository {
             }
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "queryInteractions failed", e);
+            throw new StorageException("queryInteractions", e);
         }
         return result;
     }
@@ -792,17 +481,15 @@ public class SqliteStorageRepository implements StorageRepository {
         r.setMetadata(rs.getString("metadata"));
         r.setRecorderVersion(rs.getString("recorder_version"));
 
-        // 解析 JSON 字段
+        // 解析 JSON 列（列缺省 null 保持字段 null，与写侧 "[]" 的显式空集语义区分）
         String toolCallsJson = rs.getString("tool_calls");
         if (toolCallsJson != null && !toolCallsJson.isEmpty()) {
-            String json = "{\"toolCalls\":" + toolCallsJson + "}";
-            r.setToolCalls(parseToolCallsFromDb(json));
+            r.setToolCalls(JsonMapper.toolCallsFromDb(toolCallsJson));
         }
 
         String turnsJson = rs.getString("previous_turns");
         if (turnsJson != null && !turnsJson.isEmpty()) {
-            String json = "{\"previousTurns\":" + turnsJson + "}";
-            r.setPreviousTurns(parseTurnsFromDb(json));
+            r.setPreviousTurns(JsonMapper.turnsFromDb(turnsJson));
         }
 
         return r;

@@ -12,6 +12,9 @@ package io.github.agentassert4j.storage.sqlite;
  *
  * <p>演进规则：公开发布后只允许「新增可空列 + 从 raw 回填」，禁止破坏性变更。
  * 版本由 {@link SchemaMigrator} 以 PRAGMA user_version 盖戳。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 final class Schema {
 

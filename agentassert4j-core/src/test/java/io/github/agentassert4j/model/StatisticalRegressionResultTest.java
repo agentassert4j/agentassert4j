@@ -11,6 +11,12 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+/**
+ * StatisticalRegressionResult 的单元测试。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
+ */
 class StatisticalRegressionResultTest {
 
     @Test

@@ -8,6 +8,12 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * BehaviorChecker 的单元测试。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
+ */
 class BehaviorCheckerTest {
 
     private DeterministicFingerprint fpNoError;

@@ -16,6 +16,9 @@ import java.util.function.BiFunction;
  *
  * <p>设计决策：内置库用 Map 而非 SPI，10 个常用 behavior 不值得做成插件机制。
  * 需要新 behavior 时提 PR 或 issue 加到内置库。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public final class BehaviorChecker {
 

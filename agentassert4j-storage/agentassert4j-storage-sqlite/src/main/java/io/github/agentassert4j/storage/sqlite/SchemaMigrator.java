@@ -10,6 +10,9 @@ import java.sql.Statement;
  *
  * <p>当前契约版本固定为 1：首次初始化执行建表并盖戳，已是当前版本直接返回。
  * 版本高于本代码支持值时拒绝打开——旧代码不得静默误读新语义。</p>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 final class SchemaMigrator {
 

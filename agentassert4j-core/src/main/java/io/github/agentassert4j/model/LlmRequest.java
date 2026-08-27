@@ -5,6 +5,9 @@ import java.util.List;
 
 /**
  * LLM 请求 — 回归测试重放时构建。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class LlmRequest {
 

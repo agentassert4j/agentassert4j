@@ -1,6 +1,7 @@
 package io.github.agentassert4j.storage.sqlite;
 
 import io.github.agentassert4j.model.*;
+import io.github.agentassert4j.spi.StorageException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,12 @@ import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * SqliteStorageRepository 的单元测试。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
+ */
 class SqliteStorageRepositoryTest {
 
     private SqliteStorageRepository repo;
@@ -436,5 +443,158 @@ class SqliteStorageRepositoryTest {
         fp.setToolCallSet(new java.util.HashSet<>());
         p.setFingerprint(fp);
         repo.saveSkillProfile(p);
+    }
+
+    @Test
+    void storageFailure_throwsStorageException_neverSwallowed() throws Exception {
+        // 底层连接失效（库锁死/磁盘满的等价模拟）：读写必须上抛，不得伪装成成功或空结果
+        repo.getConnection().close();
+
+        InteractionRecord r = new InteractionRecord();
+        r.setRecordId("rec-closed");
+        r.setSessionId("s");
+        r.setTimestamp(1L);
+        r.setSkillId("sk");
+        r.setModelResponse("m");
+
+        assertThrows(StorageException.class, () -> repo.saveInteraction(r));
+        assertThrows(StorageException.class, () -> repo.saveInteractions(List.of(r)));
+        assertThrows(StorageException.class, () -> repo.findSkillIdsByTemplateHash("h"));
+        assertThrows(StorageException.class, () -> repo.findAllSessionIds());
+        assertThrows(StorageException.class, () -> repo.findAllSkills());
+        assertThrows(StorageException.class, () -> repo.saveSkillProfile(new SkillProfile()));
+        assertThrows(StorageException.class, () -> repo.loadGraph());
+
+        // tearDown 会对已关连接再 close，保持幂等
+    }
+
+    @Test
+    void jsonColumns_roundTripHostileContent() {
+        InteractionRecord r = new InteractionRecord();
+        r.setRecordId("rec-nasty");
+        r.setSessionId("sess-nasty");
+        r.setTimestamp(42L);
+        r.setSkillId("sk");
+        r.setUserInput("引号\" 反斜杠\\ 换行\n 回车\r 制表\t 控制\u0001符 emoji 😀");
+        r.setModelResponse("line1\nline2 \"quoted\" \\tail\\");
+        r.setTurnIndex(1);
+
+        ToolCall tc = new ToolCall();
+        tc.setToolName("query\"Order");
+        tc.setToolCallId("call\\1");
+        tc.setSuccess(true);
+        tc.setResult("多行\n结果 \"引号\" \\\\尾\\\\");
+        Map<String, Object> args = new LinkedHashMap<>();
+        args.put("id", "A\"B");
+        args.put("count", 3);
+        args.put("flag", true);
+        tc.setArguments(args);
+        Map<String, String> argTypes = new LinkedHashMap<>();
+        argTypes.put("id", "String");
+        argTypes.put("count", "Integer");
+        tc.setArgTypes(argTypes);
+        r.setToolCalls(List.of(tc));
+        r.setHasToolCalls(true);
+
+        TurnContext t1 = new TurnContext("user", "问题\"一\"\n");
+        TurnContext t2 = new TurnContext("tool", "结果\\两");
+        t2.setToolCallId("call\\1");
+        t2.setToolName("tool\"");
+        r.setPreviousTurns(List.of(t1, t2));
+
+        repo.saveInteraction(r);
+
+        List<InteractionRecord> found = repo.findBySessionId("sess-nasty");
+        assertEquals(1, found.size());
+        InteractionRecord back = found.get(0);
+
+        assertEquals(r.getUserInput(), back.getUserInput());
+        assertEquals(r.getModelResponse(), back.getModelResponse());
+        assertEquals(1, back.getToolCalls().size());
+        ToolCall b = back.getToolCalls().get(0);
+        assertEquals("query\"Order", b.getToolName());
+        assertEquals("call\\1", b.getToolCallId());
+        assertTrue(b.isSuccess());
+        assertEquals(tc.getResult(), b.getResult());
+        assertEquals("A\"B", b.getArguments().get("id"));
+        assertEquals(3, ((Number) b.getArguments().get("count")).intValue());
+        assertEquals(Boolean.TRUE, b.getArguments().get("flag"));
+        assertEquals("String", b.getArgTypes().get("id"));
+        assertEquals("Integer", b.getArgTypes().get("count"));
+
+        assertEquals(2, back.getPreviousTurns().size());
+        assertEquals("问题\"一\"\n", back.getPreviousTurns().get(0).getContent());
+        assertEquals("结果\\两", back.getPreviousTurns().get(1).getContent());
+        assertEquals("call\\1", back.getPreviousTurns().get(1).getToolCallId());
+        assertEquals("tool\"", back.getPreviousTurns().get(1).getToolName());
+    }
+
+    @Test
+    void fingerprintColumns_roundTripHostileContent() {
+        SkillProfile p = new SkillProfile();
+        p.setSkillId("sk-fp");
+        p.setGroupKey("gk-fp");
+        p.setSkillName("n");
+        p.setSkillType(SkillType.TOOL_SKILL);
+        p.setBaselineStatus(BaselineStatus.CANDIDATE);
+        p.setVersionTag("v1");
+
+        DeterministicFingerprint fp = new DeterministicFingerprint();
+        fp.setToolCallSet(new LinkedHashSet<>(List.of("tool\"A", "tool\\B", "工具\nC")));
+        Map<String, String> paramTypes = new LinkedHashMap<>();
+        paramTypes.put("k\"1", "String");
+        fp.setToolParamTypes(paramTypes);
+        Map<String, Boolean> required = new LinkedHashMap<>();
+        required.put("k\"1", true);
+        fp.setToolParamRequired(required);
+        fp.setOutputContentType("text/plain");
+        fp.setOutputFieldPaths(new LinkedHashSet<>(List.of("a.b\"c")));
+        fp.setTextLengthMagnitude(3);
+        fp.setRequiredKeywords(new LinkedHashSet<>(List.of("必\"需", "关键字\n")));
+        fp.setRegexPatterns(List.of(new RegexPattern("^\\d+\"$", "描述\"一")));
+        fp.setDeclaredBehaviors(new LinkedHashSet<>(List.of("行为\"X")));
+        fp.setHasError(false);
+        p.setFingerprint(fp);
+
+        DeterministicFingerprint candidate = new DeterministicFingerprint();
+        candidate.setTextLengthMagnitude(1);
+        p.setCandidateFingerprint(candidate);
+
+        repo.saveSkillProfile(p);
+
+        SkillProfile back = repo.findSkillByGroupKey("gk-fp");
+        assertNotNull(back);
+        DeterministicFingerprint bf = back.getFingerprint();
+        assertEquals(fp.getToolCallSet(), bf.getToolCallSet());
+        assertEquals("String", bf.getToolParamTypes().get("k\"1"));
+        assertEquals(Boolean.TRUE, bf.getToolParamRequired().get("k\"1"));
+        assertEquals("text/plain", bf.getOutputContentType());
+        assertEquals(fp.getOutputFieldPaths(), bf.getOutputFieldPaths());
+        assertEquals(3, bf.getTextLengthMagnitude());
+        assertEquals(fp.getRequiredKeywords(), bf.getRequiredKeywords());
+        assertEquals(1, bf.getRegexPatterns().size());
+        assertEquals("^\\d+\"$", bf.getRegexPatterns().get(0).getPattern());
+        assertEquals("描述\"一", bf.getRegexPatterns().get(0).getDescription());
+        assertEquals(fp.getDeclaredBehaviors(), bf.getDeclaredBehaviors());
+        assertFalse(bf.isHasError());
+
+        assertNotNull(back.getCandidateFingerprint());
+        assertEquals(1, back.getCandidateFingerprint().getTextLengthMagnitude());
+    }
+
+    @Test
+    void fingerprintColumn_nullRoundTripsAsNull() {
+        // fingerprint 列 NOT NULL：null 指纹以 "{}" 落库，读侧映射回 null
+        SkillProfile p = new SkillProfile();
+        p.setSkillId("sk-null");
+        p.setGroupKey("gk-null");
+        p.setSkillName("n");
+        p.setSkillType(SkillType.TOOL_SKILL);
+        p.setBaselineStatus(BaselineStatus.BASELINE);
+        repo.saveSkillProfile(p);
+
+        SkillProfile back = repo.findSkillByGroupKey("gk-null");
+        assertNull(back.getFingerprint());
+        assertNull(back.getCandidateFingerprint());
     }
 }

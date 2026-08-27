@@ -3,6 +3,7 @@ package io.github.agentassert4j.algorithm;
 import io.github.agentassert4j.model.AnalysisResult;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
+import io.github.agentassert4j.spi.StorageException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -15,6 +16,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * ImpactAnalyzer 单元测试 — 数据驱动影响分析。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 class ImpactAnalyzerTest {
 
@@ -338,6 +342,55 @@ class ImpactAnalyzerTest {
                     .toList();
             assertEquals(List.of("r-100", "r-200", "r-300"), pickedForSkill0,
                     "top3 必须是规范序（timestamp,recordId）的前三条，两次分析选例必须一致");
+        }
+    }
+
+    @Nested
+    @DisplayName("存储失败 - 与冷启动严格区分")
+    class StorageFailure {
+
+        @Test
+        @DisplayName("直接查询失败 → 报告为存储错误而非冷启动")
+        void directQueryFailure_reportedAsError() {
+            SimpleTestRepo broken = new SimpleTestRepo() {
+                @Override
+                public Set<String> findSkillIdsByTemplateHash(String hash) {
+                    throw new StorageException("findSkillIdsByTemplateHash", new RuntimeException("db locked"));
+                }
+            };
+            ImpactAnalyzer brokenAnalyzer = new ImpactAnalyzer(broken, new InMemoryDependencyGraph());
+
+            AnalysisResult result = brokenAnalyzer.analyzeChange("hash-old", "hash-new");
+
+            assertTrue(result.isError(), "查询失败必须带错误标志");
+            assertFalse(result.isHasBaseline());
+            assertNotNull(result.getMessage());
+            assertNull(result.getTestCases());
+        }
+
+        @Test
+        @DisplayName("冷启动探测查询失败 → 同样报告为存储错误")
+        void coldStartProbeFailure_reportedAsError() {
+            SimpleTestRepo broken = new SimpleTestRepo() {
+                @Override
+                public List<SkillProfile> findAllSkills() {
+                    throw new StorageException("findAllSkills", new RuntimeException("disk full"));
+                }
+            };
+            ImpactAnalyzer brokenAnalyzer = new ImpactAnalyzer(broken, new InMemoryDependencyGraph());
+
+            AnalysisResult result = brokenAnalyzer.analyzeChange("hash-old", "hash-new");
+
+            assertTrue(result.isError(), "DB 故障不得伪装成'未录制到任何交互数据'的冷启动引导");
+        }
+
+        @Test
+        @DisplayName("真正的空库 → 仍是冷启动而非错误")
+        void genuinelyEmptyDb_remainsColdStart() {
+            AnalysisResult result = analyzer.analyzeChange("hash-old", "hash-new");
+
+            assertFalse(result.isError());
+            assertFalse(result.isHasBaseline());
         }
     }
 }

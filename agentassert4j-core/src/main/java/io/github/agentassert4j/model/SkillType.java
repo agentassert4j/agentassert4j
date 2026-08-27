@@ -2,6 +2,9 @@ package io.github.agentassert4j.model;
 
 /**
  * Skill 类型枚举。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public enum SkillType {
     /**

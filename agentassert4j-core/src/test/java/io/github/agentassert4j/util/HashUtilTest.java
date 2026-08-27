@@ -4,6 +4,12 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * HashUtil 的单元测试。
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
+ */
 class HashUtilTest {
 
     @Test

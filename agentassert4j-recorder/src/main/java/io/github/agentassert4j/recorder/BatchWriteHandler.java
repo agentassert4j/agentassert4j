@@ -23,6 +23,9 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li>缓冲区上限 {@code maxBufferSize} 防止 OOM，超限丢弃新记录</li>
  *   <li>写入失败仅记计数器，不重试</li>
  * </ul>
+ *
+ * @author axy-yxa
+ * @since 2026-08-26
  */
 public class BatchWriteHandler implements EventHandler<InteractionEvent> {
 
@@ -101,6 +104,9 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
         synchronized (buffer) {
             if (buffer.size() >= maxBufferSize) {
                 droppedCount.incrementAndGet();
+                // 超限丢弃必须留痕：无日志的丢数在线上无法定位
+                log.warn("Buffer overflow (maxBufferSize={}), record dropped: {}",
+                        maxBufferSize, record.getRecordId());
                 // buffer 满时丢弃，但 endOfBatch 仍需 flush 已有数据
                 if (endOfBatch && !buffer.isEmpty()) {
                     shouldFlush = true;

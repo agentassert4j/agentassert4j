@@ -31,6 +31,9 @@ import java.util.Map;
  * <pre>
  * buildRequestBody(LlmRequest) → HTTP POST → parseResponse(String) → LlmResponse
  * </pre>
+ *
+ * @author axy-yxa
+ * @since 2026-08-27
  */
 public class OpenAiCompatibleClient implements LlmClient {
 
