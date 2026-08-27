@@ -182,9 +182,9 @@ public class BaselineManager {
         // 提取指纹作为基线
         DeterministicFingerprint fingerprint = FingerprintExtractor.extract(record);
 
-        SkillProfile profile = existing != null ? existing : new SkillProfile();
-        profile.setSkillId(record.getSkillId());
-        profile.setGroupKey(grouping.getGroupKey());
+        // 以分组器产出为基底：skill_name/skill_type 等展示列来自分组的派生结果，
+        // 裸画像会违反存储层的 NOT NULL 契约
+        SkillProfile profile = existing != null ? existing : grouping;
         profile.setFingerprint(fingerprint);
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);

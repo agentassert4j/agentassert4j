@@ -9,9 +9,11 @@ import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.LlmTimeoutException;
 import io.github.agentassert4j.util.HashUtil;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -49,8 +51,7 @@ public class RegressionTestExecutor {
      * @param baselineManager 基线管理器：对比结果非 PASS 时把候选指纹落库供 approve/reject 裁决（传 null 跳过）
      * @param rules           声明式规则配置：维度 3-4（内容规则/约束行为）按 skillId 查找注入（传 null 跳过规则判定）
      */
-    public RegressionTestExecutor(LlmClient llmClient, DeterministicComparator comparator,
-                                  BaselineManager baselineManager, SkillRulesConfig rules) {
+    public RegressionTestExecutor(LlmClient llmClient, DeterministicComparator comparator, BaselineManager baselineManager, SkillRulesConfig rules) {
         this.llmClient = llmClient;
         this.comparator = comparator;
         this.baselineManager = baselineManager;
@@ -121,8 +122,7 @@ public class RegressionTestExecutor {
             return result;
         } catch (RuntimeException e) {
             LOG.log(Level.SEVERE, "Post-processing failed for " + baseline.getRecordId(), e);
-            return RegressionTestResult.error(baseline.getRecordId(),
-                    e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+            return RegressionTestResult.error(baseline.getRecordId(), e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
         }
     }
 
@@ -134,6 +134,7 @@ public class RegressionTestExecutor {
      *   <li>替换 System Prompt（这是要测的变量）</li>
      *   <li>复用历史 User Input（这是控制变量）</li>
      *   <li>注入 previousTurns（多轮对话上下文）</li>
+     *   <li>复用工具定义（不带工具则模型无法发起调用，工具维必然差异）</li>
      *   <li>多模态原样复用</li>
      * </ul>
      */
@@ -163,7 +164,36 @@ public class RegressionTestExecutor {
             request.setModel(config.getModel());
         }
 
+        // 工具定义原样复用：重放不带工具，模型无法发起工具调用，
+        // 工具维指纹必然差异（假阳性回归）。损坏定义跳过不中断
+        List<String> toolDefinitions = splitToolDefinitions(baseline.getToolsDefinition());
+        if (!toolDefinitions.isEmpty()) {
+            request.setToolDefinitions(toolDefinitions);
+        }
+
         return request;
+    }
+
+    /**
+     * 录制的工具定义（JSON 数组原文，或单个工具对象）拆成逐工具的 JSON 字符串。
+     * 解析失败返回空列表——脱敏等破坏原文时宁可不带工具也不构造非法请求。
+     */
+    private static List<String> splitToolDefinitions(String toolsJson) {
+        List<String> definitions = new ArrayList<>();
+        if (toolsJson == null || toolsJson.isEmpty()) {
+            return definitions;
+        }
+        Object parsed = RecursiveJsonParser.parse(toolsJson);
+        if (parsed instanceof List) {
+            for (Object item : (List<?>) parsed) {
+                if (item != null) {
+                    definitions.add(RecursiveJsonParser.serialize(item));
+                }
+            }
+        } else if (parsed instanceof Map) {
+            definitions.add(RecursiveJsonParser.serialize(parsed));
+        }
+        return definitions;
     }
 
     /**

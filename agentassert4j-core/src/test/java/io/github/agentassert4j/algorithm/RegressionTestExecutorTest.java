@@ -34,11 +34,7 @@ class RegressionTestExecutorTest {
     @BeforeEach
     void setUp() {
         stubClient = new StubLlmClient();
-        executor = new RegressionTestExecutor(
-                stubClient,
-                new DeterministicComparator(),
-                null
-        );
+        executor = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null);
     }
 
     @Test
@@ -56,11 +52,7 @@ class RegressionTestExecutorTest {
     void buildReplayRequest_injectsPreviousTurns() {
         InteractionRecord baseline = makeBaseline("hash", "input");
         baseline.setTurnIndex(2);
-        baseline.setPreviousTurns(List.of(
-                new TurnContext("user", "q1"),
-                new TurnContext("assistant", "a1"),
-                new TurnContext("tool", "result1")
-        ));
+        baseline.setPreviousTurns(List.of(new TurnContext("user", "q1"), new TurnContext("assistant", "a1"), new TurnContext("tool", "result1")));
 
         TestExecutionConfig config = TestExecutionConfig.defaults();
         LlmRequest request = executor.buildReplayRequest(baseline, "prompt", config);
@@ -209,8 +201,7 @@ class RegressionTestExecutorTest {
     void execute_fingerprintDiff_persistsCandidateForAdjudication() {
         SimpleTestRepo repo = new SimpleTestRepo();
         BaselineManager baselineManager = new BaselineManager(repo);
-        RegressionTestExecutor wired = new RegressionTestExecutor(
-                stubClient, new DeterministicComparator(), baselineManager);
+        RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), baselineManager);
 
         // 基线带工具调用，重放响应为纯文本 → 工具集维度必然差异（非 PASS）
         InteractionRecord baseline = makeBaselineWithToolCall("hash", "input");
@@ -231,8 +222,7 @@ class RegressionTestExecutorTest {
     void execute_fingerprintIdentical_noCandidatePersisted() {
         SimpleTestRepo repo = new SimpleTestRepo();
         BaselineManager baselineManager = new BaselineManager(repo);
-        RegressionTestExecutor wired = new RegressionTestExecutor(
-                stubClient, new DeterministicComparator(), baselineManager);
+        RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), baselineManager);
 
         // 基线与重放响应完全同形 → 指纹相同（PASS），无可裁决对象
         InteractionRecord baseline = makeBaseline("hash", "input");
@@ -262,6 +252,42 @@ class RegressionTestExecutorTest {
     @Nested
     @DisplayName("重放上下文保真")
     class ReplayContext {
+
+        @Test
+        @DisplayName("工具定义随重放携带——不带工具模型无法发起调用，工具维必然假阳性回归")
+        void buildReplayRequest_carriesToolDefinitions() {
+            InteractionRecord baseline = makeBaseline("hash", "input");
+            baseline.setToolsDefinition("[{\"type\":\"function\",\"function\":{\"name\":\"queryOrder\",\"parameters\":{}}}]");
+
+            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", TestExecutionConfig.defaults());
+
+            assertNotNull(request.getToolDefinitions(), "重放请求必须携带录制的工具定义");
+            assertEquals(1, request.getToolDefinitions().size());
+            assertTrue(request.getToolDefinitions().get(0).contains("queryOrder"));
+        }
+
+        @Test
+        @DisplayName("单个工具对象（非数组）也能装载")
+        void buildReplayRequest_singleToolObject_wrapped() {
+            InteractionRecord baseline = makeBaseline("hash", "input");
+            baseline.setToolsDefinition("{\"type\":\"function\",\"function\":{\"name\":\"search\"}}");
+
+            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", TestExecutionConfig.defaults());
+
+            assertEquals(1, request.getToolDefinitions().size());
+            assertTrue(request.getToolDefinitions().get(0).contains("search"));
+        }
+
+        @Test
+        @DisplayName("工具定义损坏（非法 JSON）时跳过，不中断重放")
+        void buildReplayRequest_brokenToolsDefinition_skipped() {
+            InteractionRecord baseline = makeBaseline("hash", "input");
+            baseline.setToolsDefinition("not-json");
+
+            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", TestExecutionConfig.defaults());
+
+            assertTrue(request.getToolDefinitions() == null || request.getToolDefinitions().isEmpty(), "损坏的工具定义不得进入重放请求");
+        }
 
         @Test
         @DisplayName("tool 轮次的 toolCallId/toolName 完整复制到重放请求")
@@ -301,8 +327,7 @@ class RegressionTestExecutorTest {
         @Test
         @DisplayName("requiredKeywords 缺失 → keywordMatch=false 且判定非 PASS")
         void requiredKeywordMissing_failsComparison() {
-            SkillRulesConfig rules = SkillRulesConfig.fromJson(
-                    "{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
+            SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
             RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
             stubClient.response = makeTextResponse("回答里没有关键词");
 
@@ -315,8 +340,7 @@ class RegressionTestExecutorTest {
         @Test
         @DisplayName("requiredKeywords 命中 → 判定不受影响")
         void requiredKeywordPresent_staysPass() {
-            SkillRulesConfig rules = SkillRulesConfig.fromJson(
-                    "{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
+            SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
             RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
             // 基线与重放输出完全同形（含关键词）→ PASS
             InteractionRecord baseline = makeBaseline("hash", "input");
@@ -332,8 +356,7 @@ class RegressionTestExecutorTest {
         @Test
         @DisplayName("forbiddenKeywords 出现 → keywordMatch=false")
         void forbiddenKeywordPresent_failsComparison() {
-            SkillRulesConfig rules = SkillRulesConfig.fromJson(
-                    "{\"skills\":{\"skill-1\":{\"forbiddenKeywords\":[\"密码\"]}}}");
+            SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"forbiddenKeywords\":[\"密码\"]}}}");
             RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
             stubClient.response = makeTextResponse("请提供密码");
 
@@ -345,8 +368,7 @@ class RegressionTestExecutorTest {
         @Test
         @DisplayName("behaviors 约束不满足 → behaviorMatch=false")
         void declaredBehaviorViolated_failsComparison() {
-            SkillRulesConfig rules = SkillRulesConfig.fromJson(
-                    "{\"skills\":{\"skill-1\":{\"behaviors\":[\"mustUseChinese\"]}}}");
+            SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"behaviors\":[\"mustUseChinese\"]}}}");
             RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
             stubClient.response = makeTextResponse("english only answer");
 
@@ -358,8 +380,7 @@ class RegressionTestExecutorTest {
         @Test
         @DisplayName("规则声明给其他 skill → 本 skill 不受影响")
         void rulesForOtherSkill_notApplied() {
-            SkillRulesConfig rules = SkillRulesConfig.fromJson(
-                    "{\"skills\":{\"other-skill\":{\"requiredKeywords\":[\"订单\"]}}}");
+            SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"other-skill\":{\"requiredKeywords\":[\"订单\"]}}}");
             RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
             InteractionRecord baseline = makeBaseline("hash", "input");
             baseline.setModelResponse("same answer");
@@ -379,8 +400,7 @@ class RegressionTestExecutorTest {
         @Test
         @DisplayName("对比阶段抛 RuntimeException → 转为 ERROR 结果，不向调用方逃逸")
         void comparatorThrows_returnsErrorResult() {
-            RegressionTestExecutor wired = new RegressionTestExecutor(
-                    stubClient, new ThrowingComparator(), null);
+            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new ThrowingComparator(), null);
             stubClient.response = makeTextResponse("hello");
 
             RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
@@ -468,8 +488,7 @@ class RegressionTestExecutorTest {
         long lastTimeoutMs = 0;
 
         @Override
-        public LlmResponse chat(LlmRequest request, long timeoutMs)
-                throws LlmTimeoutException, LlmApiException {
+        public LlmResponse chat(LlmRequest request, long timeoutMs) throws LlmTimeoutException, LlmApiException {
             callCount++;
             lastTimeoutMs = timeoutMs;
             if (throwTimeout) throw new LlmTimeoutException("timeout");

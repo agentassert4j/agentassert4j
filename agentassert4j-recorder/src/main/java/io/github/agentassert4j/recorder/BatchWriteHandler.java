@@ -1,8 +1,12 @@
 package io.github.agentassert4j.recorder;
 
 import com.lmax.disruptor.EventHandler;
+import io.github.agentassert4j.algorithm.DeterministicSkillGrouper;
+import io.github.agentassert4j.algorithm.FingerprintExtractor;
 import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.InteractionWriteStore;
+import io.github.agentassert4j.util.TextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,8 +74,7 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
             t.setDaemon(true);
             return t;
         });
-        flushScheduler.scheduleAtFixedRate(this::flush,
-                flushIntervalMs, flushIntervalMs, TimeUnit.MILLISECONDS);
+        flushScheduler.scheduleAtFixedRate(this::flush, flushIntervalMs, flushIntervalMs, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -105,8 +108,7 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
             if (buffer.size() >= maxBufferSize) {
                 droppedCount.incrementAndGet();
                 // 超限丢弃必须留痕：无日志的丢数在线上无法定位
-                log.warn("Buffer overflow (maxBufferSize={}), record dropped: {}",
-                        maxBufferSize, record.getRecordId());
+                log.warn("Buffer overflow (maxBufferSize={}), record dropped: {}", maxBufferSize, record.getRecordId());
                 // buffer 满时丢弃，但 endOfBatch 仍需 flush 已有数据
                 if (endOfBatch && !buffer.isEmpty()) {
                     shouldFlush = true;
@@ -138,13 +140,42 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
             buffer.clear();
         }
 
+        enrich(toWrite);
+
         try {
             repository.saveInteractions(toWrite);
             writtenCount.addAndGet(toWrite.size());
         } catch (Exception e) {
             failedCount.addAndGet(toWrite.size());
-            log.error("Batch write failed, {} records lost: {}",
-                    toWrite.size(), e.getMessage(), e);
+            log.error("Batch write failed, {} records lost: {}", toWrite.size(), e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 落库前补全派生字段（skillId/分组键 + 指纹快照）。
+     * 在消费线程执行——指纹提取含响应体 JSON 解析，不允许回到业务线程。
+     * skill_id 与 group_key 列有 NOT NULL 约束，上游缺失时回充分组器派生 id，
+     * 否则整批 INSERT 失败；已有值不覆盖（上游显式设置的优先）。
+     * 单条补全失败不拦截落库——原始交互数据是真源，派生字段缺失可事后重建。
+     */
+    private void enrich(List<InteractionRecord> records) {
+        for (InteractionRecord record : records) {
+            try {
+                if (TextUtil.isBlank(record.getGroupKey()) || TextUtil.isBlank(record.getSkillId())) {
+                    SkillProfile grouping = DeterministicSkillGrouper.group(record);
+                    if (TextUtil.isBlank(record.getGroupKey())) {
+                        record.setGroupKey(grouping.getGroupKey());
+                    }
+                    if (TextUtil.isBlank(record.getSkillId())) {
+                        record.setSkillId(grouping.getSkillId());
+                    }
+                }
+                if (record.getFingerprint() == null) {
+                    record.setFingerprint(FingerprintExtractor.extract(record));
+                }
+            } catch (RuntimeException e) {
+                log.warn("Enrichment incomplete, record saved without derived fields: {} ({})", record.getRecordId(), e.getMessage());
+            }
         }
     }
 

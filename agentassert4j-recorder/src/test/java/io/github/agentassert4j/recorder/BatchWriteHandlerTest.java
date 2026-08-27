@@ -1,10 +1,13 @@
 package io.github.agentassert4j.recorder;
 
+import io.github.agentassert4j.algorithm.DeterministicSkillGrouper;
+import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * BatchWriteHandler 的单元测试。
@@ -19,6 +22,83 @@ class BatchWriteHandlerTest {
         record.setRecordId(id);
         record.setTimestamp(System.currentTimeMillis());
         return record;
+    }
+
+    @Nested
+    @DisplayName("落库前派生字段补全")
+    class Enrichment {
+
+        private InteractionRecord enrichableRecord(String id) {
+            InteractionRecord record = new InteractionRecord();
+            record.setRecordId(id);
+            record.setTimestamp(System.currentTimeMillis());
+            record.setSkillId("skill-1");
+            record.setSessionId("session-1");
+            record.setUserInput("查订单 ORD-001");
+            record.setModelResponse("{\"data\":{\"orderId\":\"ORD-001\"}}");
+            return record;
+        }
+
+        @Test
+        @DisplayName("缺失的 groupKey/指纹在落库前补全")
+        void flush_enrichesMissingDerivedFields() {
+            InMemoryStorageRepository repo = new InMemoryStorageRepository();
+            RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
+            BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+
+            InteractionEvent event = new InteractionEvent();
+            event.setRecord(enrichableRecord("r1"));
+            handler.onEvent(event, 0, true);
+
+            InteractionRecord saved = repo.getStore().get(0);
+            assertEquals(DeterministicSkillGrouper.group(saved).getGroupKey(), saved.getGroupKey(), "groupKey 必须由分组器补全，存储与画像才可关联");
+            assertNotNull(saved.getFingerprint(), "指纹快照必须落库前提取");
+            assertEquals("application/json", saved.getFingerprint().getOutputContentType());
+        }
+
+        @Test
+        @DisplayName("上游显式设置的派生字段不被覆盖")
+        void flush_preservesExplicitlySetDerivedFields() {
+            InMemoryStorageRepository repo = new InMemoryStorageRepository();
+            RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
+            BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+
+            InteractionRecord record = enrichableRecord("r1");
+            record.setGroupKey("custom-group-key");
+            DeterministicFingerprint preset = new DeterministicFingerprint();
+            preset.setOutputContentType("text/plain");
+            preset.setTextLengthMagnitude(7);
+            record.setFingerprint(preset);
+
+            InteractionEvent event = new InteractionEvent();
+            event.setRecord(record);
+            handler.onEvent(event, 0, true);
+
+            InteractionRecord saved = repo.getStore().get(0);
+            assertEquals("custom-group-key", saved.getGroupKey());
+            assertEquals("text/plain", saved.getFingerprint().getOutputContentType());
+            assertEquals(7, saved.getFingerprint().getTextLengthMagnitude());
+        }
+
+        @Test
+        @DisplayName("无 skillId 的记录回充分组派生 id（skill_id 列 NOT NULL，缺失会整批 INSERT 失败）")
+        void flush_noSkillId_backfilledFromGrouper() {
+            InMemoryStorageRepository repo = new InMemoryStorageRepository();
+            RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
+            BatchWriteHandler handler = new BatchWriteHandler(repo, config);
+
+            InteractionRecord record = createRecord("r1");
+
+            InteractionEvent event = new InteractionEvent();
+            event.setRecord(record);
+            handler.onEvent(event, 0, true);
+
+            InteractionRecord saved = repo.getStore().get(0);
+            assertNotNull(saved.getSkillId(), "skillId 必须回充分组器派生 id");
+            assertEquals(DeterministicSkillGrouper.group(saved).getSkillId(), saved.getSkillId());
+            assertNotNull(saved.getGroupKey());
+            assertNotNull(saved.getFingerprint());
+        }
     }
 
     @Test
@@ -89,9 +169,9 @@ class BatchWriteHandlerTest {
             handler.onEvent(event, i, i == 2);
         }
 
-        // 第 3 条被丢弃，但 flush 了前 2 条
-        assertEquals(2, repo.getStore().size());
-        assertEquals(1, handler.getDroppedCount());
+        // maxBufferSize 已被钳位到 batchSize：错配不得演变为持续丢弃，3 条全部落库
+        assertEquals(3, repo.getStore().size());
+        assertEquals(0, handler.getDroppedCount());
     }
 
     @Test
@@ -157,12 +237,9 @@ class BatchWriteHandlerTest {
     }
 
     @Test
-    void onEvent_bufferOverflow_dropsNewRecord_andCounts() {
+    void onEvent_misconfiguredBuffers_selfHealToBatchSize() {
         InMemoryStorageRepository repo = new InMemoryStorageRepository();
-        RecorderConfig config = RecorderConfig.builder()
-                .batchSize(100)
-                .maxBufferSize(1)
-                .build();
+        RecorderConfig config = RecorderConfig.builder().batchSize(100).maxBufferSize(1).build();
         BatchWriteHandler handler = new BatchWriteHandler(repo, config);
 
         InteractionEvent first = new InteractionEvent();
@@ -171,11 +248,11 @@ class BatchWriteHandlerTest {
 
         InteractionEvent second = new InteractionEvent();
         second.setRecord(createRecord("r2"));
-        handler.onEvent(second, 1, true); // 缓冲已满（1 >= 1）→ 丢弃 r2；批尾 flush r1
+        handler.onEvent(second, 1, true); // 批尾 flush
 
-        assertEquals(1, handler.getDroppedCount());
-        assertEquals(1, handler.getWrittenCount());
-        assertTrue(repo.getStore().stream().noneMatch(r -> "r2".equals(r.getRecordId())),
-                "超限记录不得落库");
+        // maxBufferSize 钳位到 batchSize（100）：错配自愈，不得丢弃 r2
+        assertEquals(0, handler.getDroppedCount());
+        assertEquals(2, handler.getWrittenCount());
+        assertTrue(repo.getStore().stream().anyMatch(r -> "r2".equals(r.getRecordId())), "错配配置下的记录同样必须落库");
     }
 }

@@ -41,6 +41,42 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
+    void fingerprintColumn_roundTripsThroughStorage() {
+        InteractionRecord r = createSampleRecord("rec-fp", "session-1", "skill-1", "hash-abc");
+        DeterministicFingerprint fp = new DeterministicFingerprint();
+        fp.setOutputContentType("application/json");
+        fp.setOutputFieldPaths(new LinkedHashSet<>(Arrays.asList("data.orderId", "data.amount")));
+        fp.setTextLengthMagnitude(0);
+        r.setFingerprint(fp);
+        repo.saveInteraction(r);
+
+        InteractionRecord loaded = repo.findBySkillId("skill-1").get(0);
+        assertNotNull(loaded.getFingerprint(), "指纹快照列必须写读对称");
+        assertEquals("application/json", loaded.getFingerprint().getOutputContentType());
+        assertEquals(new LinkedHashSet<>(Arrays.asList("data.orderId", "data.amount")), loaded.getFingerprint().getOutputFieldPaths());
+    }
+
+    @Test
+    void fingerprintColumn_absentStaysNull() {
+        repo.saveInteraction(createSampleRecord("rec-nfp", "session-1", "skill-1", "hash-abc"));
+
+        assertNull(repo.findBySkillId("skill-1").get(0).getFingerprint());
+    }
+
+    @Test
+    void nullModelResponse_withToolCalls_savesAndReloads() {
+        // 纯工具调用的响应没有文本内容（content=null），必须可录入可重读
+        InteractionRecord r = createSampleRecord("rec-toolonly", "session-1", "skill-1", "hash-abc");
+        r.setModelResponse(null);
+
+        repo.saveInteraction(r);
+
+        InteractionRecord loaded = repo.findBySkillId("skill-1").get(0);
+        assertNull(loaded.getModelResponse());
+        assertTrue(loaded.isHasToolCalls());
+    }
+
+    @Test
     void saveAndFindInteraction() {
         InteractionRecord r = createSampleRecord("rec-1", "session-1", "skill-1", "hash-abc");
         repo.saveInteraction(r);
@@ -266,10 +302,8 @@ class SqliteStorageRepositoryTest {
         repo.saveInteraction(r);
 
         List<ToolCall> loadedTc = repo.findBySkillId("sk-e").get(0).getToolCalls();
-        assertEquals(resultWithSpecials, loadedTc.get(0).getResult(),
-                "tool result 读回必须与原文一致（真实换行/引号/反斜杠），不得残留转义序列");
-        assertEquals(argValueWithNewline, loadedTc.get(0).getArguments().get("note"),
-                "arguments 值读回同样必须反转义");
+        assertEquals(resultWithSpecials, loadedTc.get(0).getResult(), "tool result 读回必须与原文一致（真实换行/引号/反斜杠），不得残留转义序列");
+        assertEquals(argValueWithNewline, loadedTc.get(0).getArguments().get("note"), "arguments 值读回同样必须反转义");
 
         List<TurnContext> turns = new ArrayList<>();
         turns.add(new TurnContext("user", "内容\"引号\"\n换行"));
@@ -278,18 +312,13 @@ class SqliteStorageRepositoryTest {
         repo.saveInteraction(r2);
         List<InteractionRecord> all = repo.findBySkillId("sk-e");
         assertEquals(2, all.size(), "esc-2 是新 record_id，必须正常落库");
-        TurnContext loadedTurn = all.stream()
-                .filter(x -> "esc-2".equals(x.getRecordId()))
-                .findFirst().orElseThrow()
-                .getPreviousTurns().get(0);
-        assertEquals("内容\"引号\"\n换行", loadedTurn.getContent(),
-                "previousTurns 内容读回必须反转义");
+        TurnContext loadedTurn = all.stream().filter(x -> "esc-2".equals(x.getRecordId())).findFirst().orElseThrow().getPreviousTurns().get(0);
+        assertEquals("内容\"引号\"\n换行", loadedTurn.getContent(), "previousTurns 内容读回必须反转义");
     }
 
     @Test
     void schemaVersionStamped() throws Exception {
-        try (Statement stmt = repo.getConnection().createStatement();
-             ResultSet rs = stmt.executeQuery("PRAGMA user_version")) {
+        try (Statement stmt = repo.getConnection().createStatement(); ResultSet rs = stmt.executeQuery("PRAGMA user_version")) {
             rs.next();
             assertEquals(Schema.USER_VERSION, rs.getInt(1), "initialize 后必须盖戳 user_version");
         }
@@ -315,8 +344,7 @@ class SqliteStorageRepositoryTest {
             }
             futureRepo.close();
 
-            assertThrows(RuntimeException.class, futureRepo::initialize,
-                    "高于支持版本的库必须被拒绝，不得静默打开");
+            assertThrows(RuntimeException.class, futureRepo::initialize, "高于支持版本的库必须被拒绝，不得静默打开");
             futureRepo.close();
         } finally {
             Files.deleteIfExists(db);

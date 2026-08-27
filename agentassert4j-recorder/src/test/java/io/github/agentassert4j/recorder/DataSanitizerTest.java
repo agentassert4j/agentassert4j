@@ -1,7 +1,10 @@
 package io.github.agentassert4j.recorder;
 
+import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.ToolCall;
+import io.github.agentassert4j.model.TurnContext;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -20,18 +23,11 @@ import static org.junit.jupiter.api.Assertions.*;
 class DataSanitizerTest {
 
     private RecorderConfig configWithFields(SanitizeStrategy strategy, String... fields) {
-        return RecorderConfig.builder()
-                .sensitiveFields(Arrays.asList(fields))
-                .sanitizeStrategy(strategy)
-                .build();
+        return RecorderConfig.builder().sensitiveFields(Arrays.asList(fields)).sanitizeStrategy(strategy).build();
     }
 
     private RecorderConfig configWithUserInputSanitize(String... fields) {
-        return RecorderConfig.builder()
-                .sensitiveFields(Arrays.asList(fields))
-                .sanitizeUserInput(true)
-                .sanitizeModelResponse(true)
-                .build();
+        return RecorderConfig.builder().sensitiveFields(Arrays.asList(fields)).sanitizeUserInput(true).sanitizeModelResponse(true).build();
     }
 
     private InteractionRecord createTestRecord() {
@@ -67,6 +63,59 @@ class DataSanitizerTest {
     }
 
     @Test
+    void sanitize_copyCarriesDerivedFields() {
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "password"));
+        InteractionRecord record = createTestRecord();
+        record.setSkillId("skill-1");
+        record.setGroupKey("gk-1");
+        DeterministicFingerprint fp = new DeterministicFingerprint();
+        fp.setOutputContentType("application/json");
+        record.setFingerprint(fp);
+
+        InteractionRecord result = sanitizer.sanitize(record);
+
+        assertNotSame(record, result, "有脱敏配置时必须拷贝隔离");
+        assertEquals("skill-1", result.getSkillId());
+        assertEquals("gk-1", result.getGroupKey(), "拷贝不得丢失分组键");
+        assertNotNull(result.getFingerprint(), "拷贝不得丢失指纹快照");
+        assertEquals("application/json", result.getFingerprint().getOutputContentType());
+    }
+
+    @Test
+    void sanitizeJsonString_dropCaseMismatch_stillValidJson() {
+        // 键名大小写与配置不一致时，DROP 的定位（忽略大小写）与回溯删除（曾为精确匹配）
+        // 不一致会残留 "键": 产生非法 JSON
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.DROP, "password"));
+
+        String json = "{\"orderId\":\"ORD-1\",\"Password\":\"secret123\"}";
+        String sanitized = sanitizer.sanitizeJsonString(json);
+
+        Object parsed = RecursiveJsonParser.parse(sanitized);
+        assertTrue(parsed instanceof Map, "DROP 后必须是仍可解析的合法 JSON，实际: " + sanitized);
+        @SuppressWarnings("unchecked") Map<String, Object> map = (Map<String, Object>) parsed;
+        assertFalse(map.containsKey("Password"), "大小写不一致的敏感键也必须被 DROP");
+        assertFalse(map.containsKey("password"));
+        assertEquals("ORD-1", map.get("orderId"));
+    }
+
+    @Test
+    void sanitize_copiesAreIsolated_downToTurns() {
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "password"));
+        InteractionRecord record = createTestRecord();
+        TurnContext turn = new TurnContext("user", "q1");
+        turn.setToolCallId("call-1");
+        record.setPreviousTurns(List.of(turn));
+
+        InteractionRecord result = sanitizer.sanitize(record);
+
+        // 原记录的轮次对象后续被上游修改时，已脱敏副本不得受影响
+        turn.setContent("mutated-by-upstream");
+        turn.setToolCallId("mutated");
+        assertEquals("q1", result.getPreviousTurns().get(0).getContent());
+        assertEquals("call-1", result.getPreviousTurns().get(0).getToolCallId());
+    }
+
+    @Test
     void sanitize_nullConfig_noException() {
         DataSanitizer sanitizer = new DataSanitizer(null);
         InteractionRecord record = createTestRecord();
@@ -86,8 +135,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitize_maskStrategy_masksSensitiveArgs() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.MASK, "password", "token"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "password", "token"));
 
         InteractionRecord record = createTestRecord();
         InteractionRecord result = sanitizer.sanitize(record);
@@ -104,8 +152,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitize_maskStrategy_masksSensitiveFieldsInResult() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.MASK, "token"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "token"));
 
         InteractionRecord record = createTestRecord();
         InteractionRecord result = sanitizer.sanitize(record);
@@ -121,8 +168,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitize_hashStrategy_hashesSensitiveArgs() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.HASH, "password"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.HASH, "password"));
 
         InteractionRecord record = createTestRecord();
         InteractionRecord result = sanitizer.sanitize(record);
@@ -139,8 +185,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitize_dropStrategy_removesSensitiveArgs() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.DROP, "password", "token"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.DROP, "password", "token"));
 
         InteractionRecord record = createTestRecord();
         InteractionRecord result = sanitizer.sanitize(record);
@@ -154,8 +199,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitize_caseInsensitiveMatch() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.MASK, "Password", "TOKEN"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "Password", "TOKEN"));
 
         InteractionRecord record = createTestRecord();
         InteractionRecord result = sanitizer.sanitize(record);
@@ -167,8 +211,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitize_userInputAndModelResponse_notSanitizedByDefault() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.MASK, "password"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "password"));
 
         InteractionRecord record = createTestRecord();
         InteractionRecord result = sanitizer.sanitize(record);
@@ -180,8 +223,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitize_userInputAndModelResponse_sanitizedWhenEnabled() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithUserInputSanitize("password"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithUserInputSanitize("password"));
 
         InteractionRecord record = new InteractionRecord();
         record.setRecordId("test-002");
@@ -196,8 +238,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitize_doesNotModifyOriginal() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.MASK, "password"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "password"));
 
         InteractionRecord record = createTestRecord();
         sanitizer.sanitize(record);
@@ -209,8 +250,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitize_recordWithNoToolCalls() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.MASK, "password"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "password"));
 
         InteractionRecord record = new InteractionRecord();
         record.setRecordId("test-003");
@@ -223,8 +263,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitize_recordWithEmptyToolCalls() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.MASK, "password"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "password"));
 
         InteractionRecord record = new InteractionRecord();
         record.setRecordId("test-004");
@@ -237,8 +276,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitize_toolCallWithNullArguments() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.MASK, "password"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "password"));
 
         ToolCall tc = new ToolCall();
         tc.setToolName("test");
@@ -255,8 +293,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitize_toolCallWithNullResult() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.MASK, "password"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "password"));
 
         ToolCall tc = new ToolCall();
         tc.setToolName("test");
@@ -273,8 +310,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitizeJsonString_nestedJson() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.MASK, "secret"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "secret"));
 
         String json = "{\"name\":\"John\",\"secret\":\"mySecret\",\"age\":30}";
         String result = sanitizer.sanitizeJsonString(json);
@@ -286,8 +322,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitizeJsonString_noMatch() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.MASK, "nonexistent"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "nonexistent"));
 
         String json = "{\"name\":\"John\",\"age\":30}";
         String result = sanitizer.sanitizeJsonString(json);
@@ -297,8 +332,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitizeJsonString_nullOrEmpty() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.MASK, "secret"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "secret"));
 
         assertNull(sanitizer.sanitizeJsonString(null));
         assertEquals("", sanitizer.sanitizeJsonString(""));
@@ -306,8 +340,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitizeJsonString_dropMiddleKey_noTrailingComma() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.DROP, "secret"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.DROP, "secret"));
 
         String json = "{\"name\":\"John\",\"secret\":\"mySecret\",\"age\":30}";
         String result = sanitizer.sanitizeJsonString(json);
@@ -322,8 +355,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitizeJsonString_dropFirstKey_noLeadingComma() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.DROP, "secret"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.DROP, "secret"));
 
         String json = "{\"secret\":\"mySecret\",\"name\":\"John\"}";
         String result = sanitizer.sanitizeJsonString(json);
@@ -335,8 +367,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitizeJsonString_dropLastKey_noTrailingComma() {
-        DataSanitizer sanitizer = new DataSanitizer(
-                configWithFields(SanitizeStrategy.DROP, "secret"));
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.DROP, "secret"));
 
         String json = "{\"name\":\"John\",\"secret\":\"mySecret\"}";
         String result = sanitizer.sanitizeJsonString(json);

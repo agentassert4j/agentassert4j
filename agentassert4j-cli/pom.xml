@@ -20,6 +20,19 @@
             <artifactId>agentassert4j-recorder</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.github.agentassert4j</groupId>
+            <artifactId>agentassert4j-storage-sqlite</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>info.picocli</groupId>
+            <artifactId>picocli</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>

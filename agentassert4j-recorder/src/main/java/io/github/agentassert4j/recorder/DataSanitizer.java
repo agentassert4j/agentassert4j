@@ -2,6 +2,7 @@ package io.github.agentassert4j.recorder;
 
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.ToolCall;
+import io.github.agentassert4j.model.TurnContext;
 
 import java.util.*;
 
@@ -306,10 +307,11 @@ public class DataSanitizer {
 
     /**
      * 从 StringBuilder 中删除最后一个添加的键值对（包括键名前的空白和逗号）。
-     * 用于 DROP 策略回溯。处理后不会产生尾逗号或前逗号。
+     * 用于 DROP 策略回溯。键定位按忽略大小写（与查找阶段一致，否则键名
+     * 大小写与配置不同时会残留 "键": 产生非法 JSON）。处理后不产生尾逗号或前逗号。
      */
     private void removeLastKeyAndColon(StringBuilder sb, String searchKey) {
-        int keyIdx = sb.lastIndexOf(searchKey);
+        int keyIdx = lastIndexOfIgnoreCase(sb, searchKey);
         if (keyIdx < 0) {
             return;
         }
@@ -327,6 +329,28 @@ public class DataSanitizer {
             }
         }
         sb.delete(deleteStart, sb.length());
+    }
+
+    /**
+     * 忽略大小写地从后向前查找子串位置。
+     */
+    private static int lastIndexOfIgnoreCase(StringBuilder sb, String pattern) {
+        int patternLen = pattern.length();
+        for (int i = sb.length() - patternLen; i >= 0; i--) {
+            boolean match = true;
+            for (int p = 0; p < patternLen; p++) {
+                char a = sb.charAt(i + p);
+                char b = pattern.charAt(p);
+                if (a != b && Character.toLowerCase(a) != Character.toLowerCase(b)) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -384,6 +408,7 @@ public class DataSanitizer {
         copy.setSessionId(original.getSessionId());
         copy.setSkillId(original.getSkillId());
         copy.setGroupKey(original.getGroupKey());
+        copy.setFingerprint(original.getFingerprint());
         copy.setMultimodalInput(original.isMultimodalInput());
         copy.setMultimodalContent(original.getMultimodalContent());
         copy.setMetadata(original.getMetadata());
@@ -405,9 +430,20 @@ public class DataSanitizer {
             copy.setToolCalls(callsCopy);
         }
 
-        // 深拷贝 previousTurns
+        // 深拷贝 previousTurns（元素级：上游事后修改轮次对象不得影响已入队的副本）
         if (original.getPreviousTurns() != null) {
-            copy.setPreviousTurns(new ArrayList<>(original.getPreviousTurns()));
+            List<TurnContext> turnsCopy = new ArrayList<>(original.getPreviousTurns().size());
+            for (TurnContext turn : original.getPreviousTurns()) {
+                if (turn == null) {
+                    turnsCopy.add(null);
+                    continue;
+                }
+                TurnContext turnCopy = new TurnContext(turn.getRole(), turn.getContent());
+                turnCopy.setToolCallId(turn.getToolCallId());
+                turnCopy.setToolName(turn.getToolName());
+                turnsCopy.add(turnCopy);
+            }
+            copy.setPreviousTurns(turnsCopy);
         }
 
         return copy;

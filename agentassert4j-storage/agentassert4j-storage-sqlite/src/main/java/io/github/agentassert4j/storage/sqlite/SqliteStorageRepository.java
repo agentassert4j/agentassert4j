@@ -25,8 +25,6 @@ import java.util.logging.Logger;
  * <p>错误契约：SQL 失败一律抛 {@link StorageException}，绝不静默吞掉——
  * 吞掉会把磁盘满/库锁死伪装成"成功"或"无数据"。录制管道在上层捕获并计入失败计数。</p>
  *
- * <p><b>技术债标记</b>：本类中标注了多处 TODO，将在后续功能完善后优化。</p>
- *
  * @author axy-yxa
  * @since 2026-08-26
  */
@@ -155,7 +153,6 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setString(i++, r.getServedModel());
             ps.setString(i++, r.getEndpoint());
             ps.setString(i++, r.getSkillId());
-            // TODO: [group_key 占位空串] 分组器已能产出 groupKey，录制管道接线后即回填
             ps.setString(i++, r.getGroupKey() != null ? r.getGroupKey() : "");
             ps.setString(i++, r.getUserInput());
             ps.setInt(i++, r.getTurnIndex());
@@ -179,11 +176,8 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setInt(i++, r.isMultimodalInput() ? 1 : 0);
             ps.setString(i++, r.getMultimodalContent());
             ps.setString(i++, JsonMapper.turnsToJson(r.getPreviousTurns()));
-            // TODO: fingerprint 字段暂存 null。FingerprintExtractor 已实现，
-            //       但 InteractionRecord 无 fingerprint 字段，需在 recorder 层通过
-            //       FingerprintExtractor.extract(record) 生成指纹，序列化后写入。
-            //       届时应使用 JsonMapper.fingerprintToJson(FingerprintExtractor.extract(r)) 替代此 null
-            ps.setString(i++, null);
+            // 无指纹快照保持 SQL NULL（列可空）；有则序列化存储
+            ps.setString(i++, r.getFingerprint() != null ? JsonMapper.fingerprintToJson(r.getFingerprint()) : null);
             ps.setString(i++, r.getMetadata());
             ps.setString(i++, r.getRecorderVersion());
             ps.executeUpdate();
@@ -490,6 +484,11 @@ public class SqliteStorageRepository implements StorageRepository {
         String turnsJson = rs.getString("previous_turns");
         if (turnsJson != null && !turnsJson.isEmpty()) {
             r.setPreviousTurns(JsonMapper.turnsFromDb(turnsJson));
+        }
+
+        String fingerprintJson = rs.getString("fingerprint");
+        if (fingerprintJson != null && !fingerprintJson.isEmpty()) {
+            r.setFingerprint(JsonMapper.fingerprintFromDb(fingerprintJson));
         }
 
         return r;

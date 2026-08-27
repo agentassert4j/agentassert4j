@@ -39,7 +39,7 @@ public class InteractionRecorder implements RecordingInterceptor {
     private final RecorderConfig config;
     private final DataSanitizer sanitizer;
     /**
-     * 已入队的记录数（含丢弃）
+     * 到达录制器的记录数（含丢弃）——written + dropped 与之闭合
      */
     private final AtomicLong recordedCount = new AtomicLong(0);
     /**
@@ -90,13 +90,7 @@ public class InteractionRecorder implements RecordingInterceptor {
 
         batchHandler = new BatchWriteHandler(repository, config);
 
-        disruptor = new Disruptor<>(
-                InteractionEvent::new,
-                config.getRingBufferSize(),
-                DaemonThreadFactory.INSTANCE,
-                ProducerType.MULTI,
-                new SleepingWaitStrategy()
-        );
+        disruptor = new Disruptor<>(InteractionEvent::new, config.getRingBufferSize(), DaemonThreadFactory.INSTANCE, ProducerType.MULTI, new SleepingWaitStrategy());
 
         disruptor.handleEventsWith(batchHandler);
         disruptor.start();
@@ -105,8 +99,7 @@ public class InteractionRecorder implements RecordingInterceptor {
         batchHandler.startFlushScheduler(config.getFlushIntervalMs());
 
         started = true;
-        log.info("InteractionRecorder started, ringBufferSize={}, batchSize={}, flushIntervalMs={}",
-                config.getRingBufferSize(), config.getBatchSize(), config.getFlushIntervalMs());
+        log.info("InteractionRecorder started, ringBufferSize={}, batchSize={}, flushIntervalMs={}", config.getRingBufferSize(), config.getBatchSize(), config.getFlushIntervalMs());
     }
 
     /**
@@ -125,6 +118,14 @@ public class InteractionRecorder implements RecordingInterceptor {
             if (record.getRecordId() == null || record.getRecordId().isEmpty()) {
                 record.setRecordId(UUID.randomUUID().toString());
             }
+            // session_id 列有 NOT NULL 约束：缺失时退化为独立会话
+            // （每条自成一组，依赖链为空），保住录制不整批失败
+            if (record.getSessionId() == null || record.getSessionId().isEmpty()) {
+                record.setSessionId(record.getRecordId());
+            }
+
+            // 到达即计数（含后续丢弃）：written + dropped 闭合到本计数
+            recordedCount.incrementAndGet();
 
             // 脱敏
             InteractionRecord sanitized = sanitizer.sanitize(record);
@@ -140,7 +141,6 @@ public class InteractionRecorder implements RecordingInterceptor {
             } finally {
                 disruptor.getRingBuffer().publish(sequence);
             }
-            recordedCount.incrementAndGet();
         } catch (InsufficientCapacityException e) {
             // RingBuffer 满时丢弃，不阻塞
             droppedCount.incrementAndGet();
@@ -191,11 +191,7 @@ public class InteractionRecorder implements RecordingInterceptor {
                 log.error("Error during InteractionRecorder shutdown: {}", e.getMessage(), e);
             } finally {
                 started = false;
-                log.info("InteractionRecorder stopped, recorded={}, dropped(ringBuffer={}, bufferOverflow={}), written={}, failed={}",
-                        recordedCount.get(), droppedCount.get(),
-                        batchHandler != null ? batchHandler.getDroppedCount() : 0,
-                        batchHandler != null ? batchHandler.getWrittenCount() : 0,
-                        batchHandler != null ? batchHandler.getFailedCount() : 0);
+                log.info("InteractionRecorder stopped, recorded={}, dropped(ringBuffer={}, bufferOverflow={}), written={}, failed={}", recordedCount.get(), droppedCount.get(), batchHandler != null ? batchHandler.getDroppedCount() : 0, batchHandler != null ? batchHandler.getWrittenCount() : 0, batchHandler != null ? batchHandler.getFailedCount() : 0);
             }
         }
     }

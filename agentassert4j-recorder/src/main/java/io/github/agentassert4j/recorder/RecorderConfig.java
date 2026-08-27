@@ -50,7 +50,9 @@ public final class RecorderConfig {
     private RecorderConfig(Builder builder) {
         this.batchSize = builder.batchSize;
         this.flushIntervalMs = builder.flushIntervalMs;
-        this.maxBufferSize = builder.maxBufferSize;
+        // 钳位：maxBufferSize < batchSize 时批量阈值永远达不到，超限记录会被
+        // 持续丢弃而非攒批刷盘——按较大者执行
+        this.maxBufferSize = Math.max(builder.maxBufferSize, builder.batchSize);
         this.ringBufferSize = builder.ringBufferSize;
         this.sensitiveFields = Collections.unmodifiableList(new ArrayList<>(builder.sensitiveFields));
         this.sanitizeStrategy = builder.sanitizeStrategy;
@@ -137,9 +139,7 @@ public final class RecorderConfig {
         }
 
         public Builder sensitiveFields(List<String> sensitiveFields) {
-            this.sensitiveFields = sensitiveFields != null
-                    ? new ArrayList<>(sensitiveFields)
-                    : new ArrayList<>();
+            this.sensitiveFields = sensitiveFields != null ? new ArrayList<>(sensitiveFields) : new ArrayList<>();
             return this;
         }
 

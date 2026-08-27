@@ -49,9 +49,9 @@ final class Schema {
                     "  tools_definition      TEXT," +
                     "  sampling_params       TEXT," +
                     "  model_request_raw     TEXT," +
-                    // 响应保真
+                    // 响应保真（model_response 可空——纯工具调用的响应没有文本内容）
                     "  finish_reason         TEXT," +
-                    "  model_response        TEXT NOT NULL," +
+                    "  model_response        TEXT," +
                     "  model_response_raw    TEXT," +
                     "  tool_calls            TEXT NOT NULL," +
                     "  has_tool_calls        INTEGER NOT NULL," +

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -76,11 +77,7 @@ class InteractionRecorderTest {
     @Test
     void intercept_singleRecord_writtenAfterStop() throws Exception {
         // 使用小的 batchSize 确保快速 flush
-        RecorderConfig config = RecorderConfig.builder()
-                .batchSize(1)
-                .flushIntervalMs(100)
-                .ringBufferSize(1024)
-                .build();
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
@@ -98,11 +95,7 @@ class InteractionRecorderTest {
 
     @Test
     void intercept_multipleRecords_allWritten() throws Exception {
-        RecorderConfig config = RecorderConfig.builder()
-                .batchSize(5)
-                .flushIntervalMs(100)
-                .ringBufferSize(1024)
-                .build();
+        RecorderConfig config = RecorderConfig.builder().batchSize(5).flushIntervalMs(100).ringBufferSize(1024).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
@@ -128,11 +121,7 @@ class InteractionRecorderTest {
 
     @Test
     void intercept_nullRecord_ignored() throws Exception {
-        RecorderConfig config = RecorderConfig.builder()
-                .batchSize(1)
-                .flushIntervalMs(100)
-                .ringBufferSize(1024)
-                .build();
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
@@ -148,11 +137,7 @@ class InteractionRecorderTest {
 
     @Test
     void record_delegatesToIntercept() throws Exception {
-        RecorderConfig config = RecorderConfig.builder()
-                .batchSize(1)
-                .flushIntervalMs(100)
-                .ringBufferSize(1024)
-                .build();
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
@@ -167,13 +152,7 @@ class InteractionRecorderTest {
 
     @Test
     void intercept_withSanitization_masksSensitiveData() throws Exception {
-        RecorderConfig config = RecorderConfig.builder()
-                .batchSize(1)
-                .flushIntervalMs(100)
-                .ringBufferSize(1024)
-                .sensitiveFields(java.util.Arrays.asList("password"))
-                .sanitizeStrategy(SanitizeStrategy.MASK)
-                .build();
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).sensitiveFields(java.util.Arrays.asList("password")).sanitizeStrategy(SanitizeStrategy.MASK).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
@@ -192,11 +171,7 @@ class InteractionRecorderTest {
 
     @Test
     void statistics_afterMultipleRecords() throws Exception {
-        RecorderConfig config = RecorderConfig.builder()
-                .batchSize(3)
-                .flushIntervalMs(100)
-                .ringBufferSize(1024)
-                .build();
+        RecorderConfig config = RecorderConfig.builder().batchSize(3).flushIntervalMs(100).ringBufferSize(1024).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
@@ -226,11 +201,9 @@ class InteractionRecorderTest {
 
     @Test
     void flush_manualFlush_writesBufferedRecords() throws Exception {
-        RecorderConfig config = RecorderConfig.builder()
-                .batchSize(100) // 大 batchSize，不自动 flush
+        RecorderConfig config = RecorderConfig.builder().batchSize(100) // 大 batchSize，不自动 flush
                 .flushIntervalMs(60000) // 长间隔，不自动 flush
-                .ringBufferSize(1024)
-                .build();
+                .ringBufferSize(1024).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
@@ -250,11 +223,7 @@ class InteractionRecorderTest {
 
     @Test
     void intercept_blankRecordId_getsUuidAssigned() throws Exception {
-        RecorderConfig config = RecorderConfig.builder()
-                .batchSize(1)
-                .flushIntervalMs(100)
-                .ringBufferSize(1024)
-                .build();
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
@@ -274,11 +243,7 @@ class InteractionRecorderTest {
 
     @Test
     void intercept_seqStrictlyMonotonic() throws Exception {
-        RecorderConfig config = RecorderConfig.builder()
-                .batchSize(2)
-                .flushIntervalMs(100)
-                .ringBufferSize(1024)
-                .build();
+        RecorderConfig config = RecorderConfig.builder().batchSize(2).flushIntervalMs(100).ringBufferSize(1024).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
@@ -290,41 +255,44 @@ class InteractionRecorderTest {
         Thread.sleep(300);
         recorder.stop();
 
-        List<Long> seqs = repo.getStore().stream()
-                .map(InteractionRecord::getSeq)
-                .sorted()
-                .toList();
+        List<Long> seqs = repo.getStore().stream().map(InteractionRecord::getSeq).sorted().toList();
         assertEquals(5, seqs.size());
         for (int i = 1; i < seqs.size(); i++) {
-            assertTrue(seqs.get(i) > seqs.get(i - 1),
-                    "同录制器内 seq 必须严格单调：(session_id, seq) 是确定性排序键");
+            assertTrue(seqs.get(i) > seqs.get(i - 1), "同录制器内 seq 必须严格单调：(session_id, seq) 是确定性排序键");
         }
     }
 
     @Test
-    void droppedCount_aggregatesProducerAndConsumerDrops() throws Exception {
-        RecorderConfig config = RecorderConfig.builder()
-                .batchSize(1000)
-                .flushIntervalMs(60_000)
-                .ringBufferSize(4096)
-                .maxBufferSize(2)
-                .build();
+    void droppedCount_closesOverRingBufferFullDrops() throws Exception {
+        // 消费线程被存储写入阻塞 → RingBuffer 填满 → 生产侧 tryNext 失败丢弃。
+        // 总丢弃口径必须含该路径，且 written + dropped 闭合到 recorded。
+        CountDownLatch releaseStorage = new CountDownLatch(1);
+        InMemoryStorageRepository blockingRepo = new InMemoryStorageRepository() {
+            @Override
+            public void saveInteractions(List<InteractionRecord> records) {
+                try {
+                    releaseStorage.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                super.saveInteractions(records);
+            }
+        };
+        RecorderConfig config = RecorderConfig.builder().batchSize(1000).flushIntervalMs(60_000).ringBufferSize(1024).build();
 
-        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        InteractionRecorder recorder = new InteractionRecorder(blockingRepo, config);
         recorder.start();
 
-        int total = 1000;
+        int total = 8192;
         for (int i = 0; i < total; i++) {
-            recorder.intercept(createRecord("ovf-" + i));
+            recorder.intercept(createRecord("ring-" + i));
         }
 
+        releaseStorage.countDown();
         recorder.stop();
 
-        // 总丢弃必须聚合消费侧（缓冲超限）计数——只报生产侧会把线上丢数伪装成零
-        assertTrue(recorder.getDroppedCount() > 0,
-                "maxBufferSize=2 + 1000 条突发，消费侧超限丢弃必须计入总丢弃数");
+        assertTrue(recorder.getDroppedCount() > 0, "RingBuffer(1024) + 8192 条突发且消费阻塞，生产侧丢弃必须计入总丢弃数");
         assertEquals(total, recorder.getRecordedCount());
-        assertEquals(total, recorder.getWrittenCount() + recorder.getDroppedCount(),
-                "written + dropped 必须闭合到 recorded（stop 后缓冲已排空）");
+        assertEquals(total, recorder.getWrittenCount() + recorder.getDroppedCount(), "written + dropped 必须闭合到 recorded");
     }
 }

@@ -31,17 +31,16 @@ class RecorderConfigTest {
     }
 
     @Test
+    void builder_maxBufferSizeBelowBatchSize_clampedToBatchSize() {
+        // 错配时按较大者执行：maxBufferSize < batchSize 会持续丢弃而非攒批刷盘
+        RecorderConfig config = RecorderConfig.builder().batchSize(1000).maxBufferSize(100).build();
+
+        assertEquals(1000, config.getMaxBufferSize());
+    }
+
+    @Test
     void builder_customValues() {
-        RecorderConfig config = RecorderConfig.builder()
-                .batchSize(50)
-                .flushIntervalMs(3000)
-                .maxBufferSize(200)
-                .ringBufferSize(8192)
-                .sensitiveFields(Arrays.asList("password", "token"))
-                .sanitizeStrategy(SanitizeStrategy.HASH)
-                .sanitizeUserInput(true)
-                .sanitizeModelResponse(true)
-                .build();
+        RecorderConfig config = RecorderConfig.builder().batchSize(50).flushIntervalMs(3000).maxBufferSize(200).ringBufferSize(8192).sensitiveFields(Arrays.asList("password", "token")).sanitizeStrategy(SanitizeStrategy.HASH).sanitizeUserInput(true).sanitizeModelResponse(true).build();
 
         assertEquals(50, config.getBatchSize());
         assertEquals(3000, config.getFlushIntervalMs());
@@ -55,9 +54,7 @@ class RecorderConfigTest {
 
     @Test
     void builder_sensitiveFieldsNull_returnsEmptyList() {
-        RecorderConfig config = RecorderConfig.builder()
-                .sensitiveFields(null)
-                .build();
+        RecorderConfig config = RecorderConfig.builder().sensitiveFields(null).build();
 
         assertNotNull(config.getSensitiveFields());
         assertTrue(config.getSensitiveFields().isEmpty());
@@ -65,18 +62,14 @@ class RecorderConfigTest {
 
     @Test
     void builder_sanitizeStrategyNull_defaultsToMask() {
-        RecorderConfig config = RecorderConfig.builder()
-                .sanitizeStrategy(null)
-                .build();
+        RecorderConfig config = RecorderConfig.builder().sanitizeStrategy(null).build();
 
         assertEquals(SanitizeStrategy.MASK, config.getSanitizeStrategy());
     }
 
     @Test
     void sensitiveFields_isUnmodifiable() {
-        RecorderConfig config = RecorderConfig.builder()
-                .sensitiveFields(Arrays.asList("password"))
-                .build();
+        RecorderConfig config = RecorderConfig.builder().sensitiveFields(Arrays.asList("password")).build();
 
         List<String> fields = config.getSensitiveFields();
         assertThrows(UnsupportedOperationException.class, () -> fields.add("newField"));
@@ -85,9 +78,7 @@ class RecorderConfigTest {
     @Test
     void builder_modifyingOriginalList_doesNotAffectConfig() {
         List<String> mutable = new ArrayList<>(Arrays.asList("password"));
-        RecorderConfig config = RecorderConfig.builder()
-                .sensitiveFields(mutable)
-                .build();
+        RecorderConfig config = RecorderConfig.builder().sensitiveFields(mutable).build();
 
         mutable.add("newField");
 

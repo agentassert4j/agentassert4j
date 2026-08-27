@@ -63,7 +63,7 @@ agentassert4j/
 │  ── 核心模块 ──
 ├── agentassert4j-core/                        ← 零依赖心脏（java.base ONLY）
 ├── agentassert4j-recorder/                    ← Disruptor 异步录制
-├── agentassert4j-cli/                         ← Picocli 命令行工具（待实现）
+├── agentassert4j-cli/                         ← Picocli 命令行工具（baseline/status/replay/approve/reject）
 │
 │  ── 存储插件（聚合在 agentassert4j-storage/ 下）──
 ├── agentassert4j-storage/                     ← 聚合 POM (packaging=pom)
@@ -95,7 +95,7 @@ Layer 1: agentassert4j-core          ← 零外部依赖，纯 java.base
            │
 Layer 2: agentassert4j-recorder      ← core + Disruptor + SLF4J API
            │
-Layer 3: agentassert4j-cli           ← core + recorder + Picocli
+Layer 3: agentassert4j-cli           ← core + recorder + Picocli + storage-sqlite（组合根，默认后端随行）
          agentassert4j-sdk-spring-ai1 ← core + recorder + Spring AI 1.x
            │
 Layer 4: agentassert4j-spring-boot3-starter ← 聚合 core + sdk-spring-ai1 + storage-sqlite + 自动装配
