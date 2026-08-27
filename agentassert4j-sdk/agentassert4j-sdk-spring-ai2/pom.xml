@@ -9,8 +9,8 @@
         <version>1.0.0-SNAPSHOT</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
-    <artifactId>agentassert4j-sdk-spring-ai1</artifactId>
-    <name>AgentAssert4j SDK - Spring AI 1.x</name>
+    <artifactId>agentassert4j-sdk-spring-ai2</artifactId>
+    <name>AgentAssert4j SDK - Spring AI 2.x</name>
 
     <dependencies>
         <dependency>
@@ -29,7 +29,7 @@
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-model</artifactId>
-            <version>${spring-ai1.version}</version>
+            <version>${spring-ai2.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>

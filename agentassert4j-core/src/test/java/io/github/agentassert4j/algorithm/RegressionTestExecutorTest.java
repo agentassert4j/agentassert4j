@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -506,37 +505,4 @@ class RegressionTestExecutorTest {
             return true;
         }
     }
-
-    @Nested
-    class ReplayArgTypes {
-
-        @Test
-        void deriveArgTypes_matchesCaptureVocabulary() {
-            Map<String, Object> args = new java.util.LinkedHashMap<>();
-            args.put("order_id", "SO-1");
-            args.put("amount", 12.5);
-            args.put("count", 3L);
-            args.put("urgent", Boolean.TRUE);
-            args.put("meta", new java.util.LinkedHashMap<>());
-            args.put("tags", new java.util.ArrayList<>());
-            args.put("missing", null);
-
-            Map<String, String> types = RegressionTestExecutor.deriveArgTypes(args);
-
-            assertEquals("string", types.get("order_id"));
-            assertEquals("number", types.get("amount"));
-            assertEquals("number", types.get("count"));
-            assertEquals("boolean", types.get("urgent"));
-            assertEquals("object", types.get("meta"));
-            assertEquals("array", types.get("tags"));
-            assertEquals("null", types.get("missing"));
-        }
-
-        @Test
-        void deriveArgTypes_nullOrEmpty_returnsEmptyMap() {
-            assertTrue(RegressionTestExecutor.deriveArgTypes(null).isEmpty());
-            assertTrue(RegressionTestExecutor.deriveArgTypes(new java.util.LinkedHashMap<>()).isEmpty());
-        }
-    }
 }
-

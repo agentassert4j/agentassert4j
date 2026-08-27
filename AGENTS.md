@@ -71,7 +71,8 @@ agentassert4j/
 │
 │  ── 框架适配 SDK（聚合在 agentassert4j-sdk/ 下）──
 └── agentassert4j-sdk/                         ← 聚合 POM (packaging=pom)
-    ├── agentassert4j-sdk-spring-ai1/          ← core + recorder + Spring AI 1.x（待实现）
+    ├── agentassert4j-sdk-spring-ai1/          ← core + recorder + Spring AI 1.x（Boot 3.4/3.5 线）
+    ├── agentassert4j-sdk-spring-ai2/          ← core + recorder + Spring AI 2.x（Boot 4 线，两代坐标同名互斥必分模块）
     └── agentassert4j-spring-boot3-starter/    ← 聚合 core + sdk-spring-ai1 + storage-sqlite + 自动装配（待实现）
 ```
 
@@ -97,6 +98,7 @@ Layer 2: agentassert4j-recorder      ← core + Disruptor + SLF4J API
            │
 Layer 3: agentassert4j-cli           ← core + recorder + Picocli + storage-sqlite（组合根，默认后端随行）
          agentassert4j-sdk-spring-ai1 ← core + recorder + Spring AI 1.x
+         agentassert4j-sdk-spring-ai2 ← core + recorder + Spring AI 2.x（1.x/2.x 基线互斥，各自独立模块）
            │
 Layer 4: agentassert4j-spring-boot3-starter ← 聚合 core + sdk-spring-ai1 + storage-sqlite + 自动装配
 

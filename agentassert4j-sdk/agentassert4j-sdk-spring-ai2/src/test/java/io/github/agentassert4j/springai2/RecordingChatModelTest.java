@@ -1,0 +1,139 @@
+package io.github.agentassert4j.springai2;
+
+import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.spi.RecordingInterceptor;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
+import org.springframework.ai.chat.metadata.ChatResponseMetadata;
+import org.springframework.ai.chat.metadata.DefaultUsage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.chat.prompt.Prompt;
+import reactor.core.publisher.Flux;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * 录制装饰器行为契约：透传零干预、旁路记录、异常隔离。
+ *
+ * @author axy-yxa
+ * @since 2026-08-27
+ */
+class RecordingChatModelTest {
+
+    private static final class CapturingInterceptor implements RecordingInterceptor {
+        final List<InteractionRecord> records = new CopyOnWriteArrayList<>();
+
+        @Override
+        public void intercept(InteractionRecord record) {
+            records.add(record);
+        }
+    }
+
+    private static final class StubChatModel implements ChatModel {
+        ChatResponse next;
+        Flux<ChatResponse> nextStream;
+
+        @Override
+        public ChatResponse call(Prompt prompt) {
+            return next;
+        }
+
+        @Override
+        public Flux<ChatResponse> stream(Prompt prompt) {
+            return nextStream;
+        }
+
+        @Override
+        public ChatOptions getOptions() {
+            return null;
+        }
+    }
+
+    private static ChatResponse textResponse(String content) {
+        return new ChatResponse(List.of(new Generation(new AssistantMessage(content), ChatGenerationMetadata.builder().finishReason("STOP").build())), ChatResponseMetadata.builder().model("deepseek-v4-flash").usage(new DefaultUsage(10, 5)).build());
+    }
+
+    @Test
+    @DisplayName("call 透传原响应并旁路落一条完整记录")
+    void callDelegatesAndRecords() {
+        StubChatModel stub = new StubChatModel();
+        stub.next = textResponse("已发货");
+        CapturingInterceptor interceptor = new CapturingInterceptor();
+        RecordingChatModel model = RecordingChatModel.wrap(stub, interceptor);
+        Prompt prompt = new Prompt(List.of(new UserMessage("订单 SO-1 在哪")));
+
+        ChatResponse response = model.call(prompt);
+
+        assertSame(stub.next, response, "业务响应原样透传");
+        assertEquals(1, interceptor.records.size());
+        InteractionRecord record = interceptor.records.get(0);
+        assertEquals("订单 SO-1 在哪", record.getUserInput());
+        assertEquals("已发货", record.getModelResponse());
+        assertEquals("deepseek-v4-flash", record.getServedModel());
+        assertEquals(10, record.getInputTokens());
+        assertEquals("stop", record.getFinishReason());
+        assertTrue(record.getLatencyMs() >= 0);
+        assertNotNull(record.getRecorderVersion());
+    }
+
+    @Test
+    @DisplayName("录制器抛异常不影响业务调用")
+    void recorderFailureDoesNotAffectBusiness() {
+        StubChatModel stub = new StubChatModel();
+        stub.next = textResponse("ok");
+        RecordingInterceptor broken = record -> {
+            throw new IllegalStateException("storage down");
+        };
+        RecordingChatModel model = RecordingChatModel.wrap(stub, broken);
+
+        ChatResponse response = model.call(new Prompt(List.of(new UserMessage("hi"))));
+
+        assertEquals("ok", response.getResult().getOutput().getText(), "录制故障必须被隔离，业务拿到正常响应");
+    }
+
+    @Test
+    @DisplayName("流式调用聚合成单条记录并测得首 token 延迟")
+    void streamAggregatesAndRecords() {
+        StubChatModel stub = new StubChatModel();
+        stub.nextStream = Flux.just(textResponse("你"), textResponse("好"));
+        CapturingInterceptor interceptor = new CapturingInterceptor();
+        RecordingChatModel model = RecordingChatModel.wrap(stub, interceptor);
+        Prompt prompt = new Prompt(List.of(new UserMessage("打个招呼")));
+
+        model.stream(prompt).blockLast();
+
+        assertEquals(1, interceptor.records.size(), "一次流式调用只落一条聚合记录");
+        InteractionRecord record = interceptor.records.get(0);
+        assertEquals("你好", record.getModelResponse(), "分片正文聚合");
+        assertNotNull(record.getTtftMs(), "流式调用必须带首 token 延迟");
+        assertTrue(record.getTtftMs() >= 0);
+    }
+
+    @Test
+    @DisplayName("录音上下文内的调用携带会话与技能标注")
+    void recordingContextAnnotatesRecords() {
+        StubChatModel stub = new StubChatModel();
+        stub.next = textResponse("ok");
+        CapturingInterceptor interceptor = new CapturingInterceptor();
+        RecordingChatModel model = RecordingChatModel.wrap(stub, interceptor);
+
+        try (RecordingContext ctx = RecordingContext.start("session-7").withSkillId("refund")) {
+            model.call(new Prompt(List.of(new UserMessage("hi"))));
+        }
+        model.call(new Prompt(List.of(new UserMessage("again"))));
+
+        assertEquals(2, interceptor.records.size());
+        assertEquals("session-7", interceptor.records.get(0).getSessionId());
+        assertEquals("refund", interceptor.records.get(0).getSkillId());
+        assertTrue(interceptor.records.get(1).getSessionId() == null || interceptor.records.get(1).getSessionId().isEmpty(), "作用域关闭后不再携带会话标注");
+    }
+}

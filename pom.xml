@@ -37,6 +37,9 @@
         <sqlite.version>3.46.0.0</sqlite.version>
         <picocli.version>4.7.6</picocli.version>
         <slf4j.version>2.0.13</slf4j.version>
+        <!-- Spring AI 两代坐标同名互斥，不入 dependencyManagement，由 sdk 模块各自引用 -->
+        <spring-ai1.version>1.0.0</spring-ai1.version>
+        <spring-ai2.version>2.0.0</spring-ai2.version>
     </properties>
 
     <dependencyManagement>
@@ -60,6 +63,11 @@
             <dependency>
                 <groupId>io.github.agentassert4j</groupId>
                 <artifactId>agentassert4j-sdk-spring-ai1</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.agentassert4j</groupId>
+                <artifactId>agentassert4j-sdk-spring-ai2</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
