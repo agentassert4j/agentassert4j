@@ -6,8 +6,7 @@ import io.github.agentassert4j.model.LlmResponse;
 /**
  * LLM 客户端 SPI — 回归测试时调用 LLM API。
  *
- * <p>内置 OpenAI 兼容客户端覆盖 80%+ 场景。
- * 使用 java.net.http.HttpClient（JDK 自带，零 SDK 依赖）。</p>
+ * <p>core 只定义契约；具体客户端实现由上层模块提供。</p>
  */
 public interface LlmClient {
 
@@ -20,8 +19,7 @@ public interface LlmClient {
      * @throws LlmTimeoutException 超时
      * @throws LlmApiException     API 错误
      */
-    LlmResponse chat(LlmRequest request, long timeoutMs)
-            throws LlmTimeoutException, LlmApiException;
+    LlmResponse chat(LlmRequest request, long timeoutMs) throws LlmTimeoutException, LlmApiException;
 
     /**
      * 客户端名称

@@ -6,6 +6,7 @@ import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 增量测试筛选 — 数据驱动的变更影响分析。
@@ -49,7 +50,7 @@ public class ImpactAnalyzer {
      *
      * @param oldPromptHash 变更前的 System Prompt SHA-256 hash
      * @param newPromptHash 变更后的 System Prompt SHA-256 hash
-     *                                           TODO: [预留参数] 当前未使用，未来可能用于查询新增 Skill（新 hash 关联但旧 hash 不关联的 Skill）
+     *                                                                                                                                                    TODO: [预留参数] 当前未使用，未来可能用于查询新增 Skill（新 hash 关联但旧 hash 不关联的 Skill）
      * @return 分析结果（含冷启动提示 / 受影响 Skill + 测试用例）
      */
     public AnalysisResult analyzeChange(String oldPromptHash, String newPromptHash) {
@@ -60,11 +61,9 @@ public class ImpactAnalyzer {
         if (directSkills.isEmpty()) {
             List<SkillProfile> allSkills = repository.findAllSkills();
             if (allSkills.isEmpty()) {
-                return AnalysisResult.noBaseline(
-                        "未录制到任何交互数据。请先运行 Agent 积累交互数据，框架将自动建立基线。");
+                return AnalysisResult.noBaseline("未录制到任何交互数据。请先运行 Agent 积累交互数据，框架将自动建立基线。");
             } else {
-                return AnalysisResult.noBaseline(
-                        "未找到使用此 Prompt hash 的 Skill。可能是新 Prompt 或 hash 不匹配。");
+                return AnalysisResult.noBaseline("未找到使用此 Prompt hash 的 Skill。可能是新 Prompt 或 hash 不匹配。");
             }
         }
 
@@ -85,8 +84,7 @@ public class ImpactAnalyzer {
      * 全局 Prompt（10+ Skill 共享）：每 Skill 采样 top 3 条。
      * 局部 Prompt（1-9 Skill）：全部测试。
      */
-    private List<InteractionRecord> selectTestCases(Set<String> directSkills,
-                                                    Set<String> allAffectedSkills) {
+    private List<InteractionRecord> selectTestCases(Set<String> directSkills, Set<String> allAffectedSkills) {
         List<InteractionRecord> testCases = new ArrayList<>();
 
         if (directSkills.size() >= GLOBAL_PROMPT_THRESHOLD) {
@@ -95,11 +93,7 @@ public class ImpactAnalyzer {
                 List<InteractionRecord> records = repository.findBySkillId(skill);
                 // 存储查询自带确定性排序，top3 采样直接取规范序前缀
                 // （timestamp + recordId 平局决胜）的前缀，两次分析选例才一致
-                List<InteractionRecord> ordered = records.stream()
-                        .sorted(Comparator
-                                .comparingLong(InteractionRecord::getTimestamp)
-                                .thenComparing(r -> r.getRecordId() != null ? r.getRecordId() : ""))
-                        .toList();
+                List<InteractionRecord> ordered = records.stream().sorted(Comparator.comparingLong(InteractionRecord::getTimestamp).thenComparing(r -> r.getRecordId() != null ? r.getRecordId() : "")).collect(Collectors.toList());
                 int limit = Math.min(GLOBAL_SAMPLE_PER_SKILL, ordered.size());
                 testCases.addAll(ordered.subList(0, limit));
             }

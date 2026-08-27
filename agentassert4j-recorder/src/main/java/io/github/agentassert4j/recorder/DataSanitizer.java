@@ -35,8 +35,8 @@ public class DataSanitizer {
      */
     public DataSanitizer(RecorderConfig config) {
         if (config == null) {
-            this.sensitiveFields = List.of();
-            this.sensitiveFieldsLower = Set.of();
+            this.sensitiveFields = Collections.emptyList();
+            this.sensitiveFieldsLower = Collections.emptySet();
             this.strategy = SanitizeStrategy.MASK;
             this.sanitizeUserInput = false;
             this.sanitizeModelResponse = false;
@@ -107,8 +107,7 @@ public class DataSanitizer {
             for (Map.Entry<String, Object> entry : origArgs.entrySet()) {
                 if (isSensitiveField(entry.getKey())) {
                     if (strategy != SanitizeStrategy.DROP) {
-                        sanitizedArgs.put(entry.getKey(),
-                                applyStrategy(String.valueOf(entry.getValue())));
+                        sanitizedArgs.put(entry.getKey(), applyStrategy(String.valueOf(entry.getValue())));
                     }
                     // DROP 策略：不 put 该键
                 } else {
@@ -395,10 +394,8 @@ public class DataSanitizer {
                 tcCopy.setToolName(tc.getToolName());
                 tcCopy.setToolCallId(tc.getToolCallId());
                 tcCopy.setSuccess(tc.isSuccess());
-                tcCopy.setArgTypes(tc.getArgTypes() != null
-                        ? new HashMap<>(tc.getArgTypes()) : null);
-                tcCopy.setArguments(tc.getArguments() != null
-                        ? new LinkedHashMap<>(tc.getArguments()) : null);
+                tcCopy.setArgTypes(tc.getArgTypes() != null ? new HashMap<>(tc.getArgTypes()) : null);
+                tcCopy.setArguments(tc.getArguments() != null ? new LinkedHashMap<>(tc.getArguments()) : null);
                 tcCopy.setResult(tc.getResult());
                 callsCopy.add(tcCopy);
             }

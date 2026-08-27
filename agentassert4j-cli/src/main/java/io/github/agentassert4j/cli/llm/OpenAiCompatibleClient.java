@@ -1,25 +1,30 @@
-package io.github.agentassert4j.spi;
+package io.github.agentassert4j.cli.llm;
 
 import io.github.agentassert4j.model.LlmRequest;
 import io.github.agentassert4j.model.LlmResponse;
 import io.github.agentassert4j.model.ToolCallResult;
+import io.github.agentassert4j.model.TurnContext;
+import io.github.agentassert4j.spi.LlmApiException;
+import io.github.agentassert4j.spi.LlmClient;
+import io.github.agentassert4j.spi.LlmTimeoutException;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.ConnectException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * OpenAI 兼容 LLM 客户端 — 覆盖 80%+ 场景。
+ * OpenAI 兼容 LLM 客户端
  *
- * <p>使用 java.net.http.HttpClient（JDK 11+），零 SDK 依赖。
+ * <p>基于 JDK 内置 HttpURLConnection（Java 8 可用），零 SDK 依赖。
  * 兼容 Azure OpenAI / 通义千问 / DeepSeek / Gemini 等 OpenAI API 格式。</p>
  *
  * <h3>核心流程</h3>
@@ -36,7 +41,6 @@ public class OpenAiCompatibleClient implements LlmClient {
     private final String endpoint;
     private final String apiKey;
     private final String defaultModel;
-    private final HttpClient httpClient;
 
     /**
      * 构造客户端。
@@ -49,20 +53,6 @@ public class OpenAiCompatibleClient implements LlmClient {
         this.endpoint = normalizeEndpoint(endpoint);
         this.apiKey = apiKey;
         this.defaultModel = defaultModel;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .build();
-    }
-
-    /**
-     * 可注入自定义 HttpClient 的构造器（供测试使用）。
-     */
-    public OpenAiCompatibleClient(String endpoint, String apiKey, String defaultModel,
-                                  HttpClient httpClient) {
-        this.endpoint = normalizeEndpoint(endpoint);
-        this.apiKey = apiKey;
-        this.defaultModel = defaultModel;
-        this.httpClient = httpClient;
     }
 
     /**
@@ -71,13 +61,20 @@ public class OpenAiCompatibleClient implements LlmClient {
      */
     static String normalizeFinishReason(String raw) {
         if (raw == null || raw.isEmpty()) return null;
-        return switch (raw) {
-            case "stop" -> "stop";
-            case "tool_calls", "function_call" -> "tool_calls";
-            case "max_tokens", "length" -> "max_tokens";
-            case "content_filter" -> "content_filter";
-            default -> "other";
-        };
+        switch (raw) {
+            case "stop":
+                return "stop";
+            case "tool_calls":
+            case "function_call":
+                return "tool_calls";
+            case "max_tokens":
+            case "length":
+                return "max_tokens";
+            case "content_filter":
+                return "content_filter";
+            default:
+                return "other";
+        }
     }
 
     private static String normalizeEndpoint(String endpoint) {
@@ -86,19 +83,10 @@ public class OpenAiCompatibleClient implements LlmClient {
     }
 
     @Override
-    public LlmResponse chat(LlmRequest request, long timeoutMs)
-            throws LlmTimeoutException, LlmApiException {
+    public LlmResponse chat(LlmRequest request, long timeoutMs) throws LlmTimeoutException, LlmApiException {
 
         String model = request.getModel() != null ? request.getModel() : this.defaultModel;
         String body = buildRequestBody(request, model);
-
-        HttpRequest httpRequest = HttpRequest.newBuilder()
-                .uri(URI.create(endpoint + "/v1/chat/completions"))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey)
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .timeout(Duration.ofMillis(timeoutMs))
-                .build();
 
         Exception lastException = null;
         long startNanos = System.nanoTime();
@@ -114,14 +102,18 @@ public class OpenAiCompatibleClient implements LlmClient {
                 }
             }
 
+            HttpURLConnection conn = null;
             try {
-                HttpResponse<String> response = httpClient.send(httpRequest,
-                        HttpResponse.BodyHandlers.ofString());
+                conn = openChatConnection(timeoutMs);
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(body.getBytes(StandardCharsets.UTF_8));
+                }
 
-                int statusCode = response.statusCode();
+                int statusCode = conn.getResponseCode();
+                String responseBody = readBody(conn);
 
                 if (statusCode == 200) {
-                    LlmResponse parsed = parseResponse(response.body());
+                    LlmResponse parsed = parseResponse(responseBody);
                     // 端到端墙钟（含重试等待）：latencyMs 的语义是整次调用的耗时
                     parsed.setLatencyMs((System.nanoTime() - startNanos) / 1_000_000L);
                     return parsed;
@@ -129,14 +121,12 @@ public class OpenAiCompatibleClient implements LlmClient {
 
                 // 可重试的状态码
                 if (statusCode == 429 || statusCode >= 500) {
-                    lastException = new LlmApiException(
-                            "HTTP " + statusCode + ": " + response.body());
+                    lastException = new LlmApiException("HTTP " + statusCode + ": " + responseBody);
                     continue;
                 }
 
                 // 不可重试的客户端错误
-                throw new LlmApiException(
-                        "HTTP " + statusCode + ": " + response.body());
+                throw new LlmApiException("HTTP " + statusCode + ": " + responseBody);
 
             } catch (IOException e) {
                 if (e instanceof ConnectException) {
@@ -145,14 +135,13 @@ public class OpenAiCompatibleClient implements LlmClient {
                 }
                 lastException = e;
                 continue;
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new LlmApiException("Request interrupted", e);
             } catch (LlmApiException e) {
                 throw e;
             } catch (Exception e) {
                 lastException = e;
                 continue;
+            } finally {
+                if (conn != null) conn.disconnect();
             }
         }
 
@@ -160,9 +149,35 @@ public class OpenAiCompatibleClient implements LlmClient {
         if (lastException instanceof LlmApiException) {
             throw (LlmApiException) lastException;
         }
-        throw new LlmApiException("All retries exhausted: " +
-                (lastException != null ? lastException.getMessage() : "unknown error"),
-                lastException);
+        throw new LlmApiException("All retries exhausted: " + (lastException != null ? lastException.getMessage() : "unknown error"), lastException);
+    }
+
+    private HttpURLConnection openChatConnection(long timeoutMs) throws IOException {
+        URL url = new URL(endpoint + "/v1/chat/completions");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        // TODO: [超时语义简化] HttpURLConnection 仅有连接/读取两个独立超时，暂以同一 timeoutMs
+        //  兼代单请求总预算，待 CLI 超时契约实现时统一语义并区分 LlmTimeoutException
+        conn.setConnectTimeout((int) Math.min(timeoutMs, Integer.MAX_VALUE));
+        conn.setReadTimeout((int) Math.min(timeoutMs, Integer.MAX_VALUE));
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+        conn.setDoOutput(true);
+        return conn;
+    }
+
+    private static String readBody(HttpURLConnection conn) throws IOException {
+        InputStream stream = conn.getResponseCode() >= 400 ? conn.getErrorStream() : conn.getInputStream();
+        if (stream == null) {
+            return "";
+        }
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        byte[] chunk = new byte[4096];
+        int read;
+        while ((read = stream.read(chunk)) != -1) {
+            buffer.write(chunk, 0, read);
+        }
+        return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
     }
 
     @Override
@@ -172,19 +187,19 @@ public class OpenAiCompatibleClient implements LlmClient {
 
     @Override
     public boolean isAvailable() {
+        HttpURLConnection conn = null;
         try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(endpoint + "/v1/models"))
-                    .header("Authorization", "Bearer " + apiKey)
-                    .timeout(Duration.ofSeconds(5))
-                    .GET()
-                    .build();
-
-            HttpResponse<String> response = httpClient.send(request,
-                    HttpResponse.BodyHandlers.ofString());
-            return response.statusCode() == 200;
+            URL url = new URL(endpoint + "/v1/models");
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+            return conn.getResponseCode() == 200;
         } catch (Exception e) {
             return false;
+        } finally {
+            if (conn != null) conn.disconnect();
         }
     }
 
@@ -219,21 +234,18 @@ public class OpenAiCompatibleClient implements LlmClient {
 
         // system message
         if (request.getSystemPrompt() != null && !request.getSystemPrompt().isEmpty()) {
-            sb.append("{\"role\":\"system\",\"content\":\"")
-                    .append(escapeJson(request.getSystemPrompt())).append("\"}");
+            sb.append("{\"role\":\"system\",\"content\":\"").append(escapeJson(request.getSystemPrompt())).append("\"}");
             first = false;
         }
 
         // previousTurns（多轮上下文）
         if (request.getPreviousTurns() != null) {
-            for (var turn : request.getPreviousTurns()) {
+            for (TurnContext turn : request.getPreviousTurns()) {
                 if (!first) sb.append(",");
                 String role = turn.getRole();
                 // OpenAI 不支持 role="tool" 在 messages 中，统一用 user/assistant
                 // 但实际上 OpenAI 2024+ 已支持 tool role
-                sb.append("{\"role\":\"").append(escapeJson(role))
-                        .append("\",\"content\":\"")
-                        .append(escapeJson(turn.getContent())).append("\"}");
+                sb.append("{\"role\":\"").append(escapeJson(role)).append("\",\"content\":\"").append(escapeJson(turn.getContent())).append("\"}");
                 first = false;
             }
         }
@@ -243,11 +255,9 @@ public class OpenAiCompatibleClient implements LlmClient {
             if (!first) sb.append(",");
             if (request.isMultimodalInput()) {
                 // 多模态：userInput 存储的是 JSON 数组，原样注入
-                sb.append("{\"role\":\"user\",\"content\":")
-                        .append(request.getUserInput()).append("}");
+                sb.append("{\"role\":\"user\",\"content\":").append(request.getUserInput()).append("}");
             } else {
-                sb.append("{\"role\":\"user\",\"content\":\"")
-                        .append(escapeJson(request.getUserInput())).append("\"}");
+                sb.append("{\"role\":\"user\",\"content\":\"").append(escapeJson(request.getUserInput())).append("\"}");
             }
         }
 
@@ -523,8 +533,7 @@ public class OpenAiCompatibleClient implements LlmClient {
     }
 
     private int findMatchingBracket(String json, int openPos) {
-        if (openPos >= json.length() || json.charAt(openPos) != '{'
-                && json.charAt(openPos) != '[') return -1;
+        if (openPos >= json.length() || json.charAt(openPos) != '{' && json.charAt(openPos) != '[') return -1;
 
         char open = json.charAt(openPos);
         char close = (open == '{') ? '}' : ']';
@@ -565,11 +574,7 @@ public class OpenAiCompatibleClient implements LlmClient {
 
     private String escapeJson(String s) {
         if (s == null) return "";
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
+        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
     }
 
     private String unescapeJson(String s) {

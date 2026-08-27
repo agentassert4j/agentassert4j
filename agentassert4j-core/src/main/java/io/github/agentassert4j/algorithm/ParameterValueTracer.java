@@ -48,12 +48,9 @@ public class ParameterValueTracer {
     public void rebuildGraph(StorageRepository repository) {
         List<String> sessionIds = repository.findAllSessionIds();
         for (String sessionId : sessionIds) {
-            List<InteractionRecord> chain = repository.findBySessionId(sessionId)
-                    .stream()
+            List<InteractionRecord> chain = repository.findBySessionId(sessionId).stream()
                     // timestamp 平局时按 recordId 决胜——同毫秒交互的边方向必须可复现
-                    .sorted(Comparator.comparingLong(InteractionRecord::getTimestamp)
-                            .thenComparing(r -> r.getRecordId() != null ? r.getRecordId() : ""))
-                    .toList();
+                    .sorted(Comparator.comparingLong(InteractionRecord::getTimestamp).thenComparing(r -> r.getRecordId() != null ? r.getRecordId() : "")).collect(Collectors.toList());
             traceDependency(chain);
         }
     }
@@ -135,11 +132,9 @@ public class ParameterValueTracer {
     private void collectLeafValues(Object node, Set<String> sink, int depth) {
         if (depth > MAX_EXTRACT_DEPTH || sink.size() >= MAX_EXTRACTED_VALUES) return;
         if (node instanceof Map) {
-            ((Map<String, Object>) node).values()
-                    .forEach(v -> collectLeafValues(v, sink, depth + 1));
+            ((Map<String, Object>) node).values().forEach(v -> collectLeafValues(v, sink, depth + 1));
         } else if (node instanceof List) {
-            ((List<Object>) node)
-                    .forEach(v -> collectLeafValues(v, sink, depth + 1));
+            ((List<Object>) node).forEach(v -> collectLeafValues(v, sink, depth + 1));
         } else if (node != null) {
             String val = node.toString();
             if (val.length() >= 2 && val.length() <= 1000) {
@@ -153,12 +148,7 @@ public class ParameterValueTracer {
      */
     public Set<String> extractArgValues(InteractionRecord record) {
         if (record == null || record.getToolCalls() == null) return Collections.emptySet();
-        return record.getToolCalls().stream()
-                .filter(tc -> tc.getArguments() != null)
-                .flatMap(tc -> tc.getArguments().values().stream())
-                .map(Object::toString)
-                .filter(v -> v.length() >= 2)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+        return record.getToolCalls().stream().filter(tc -> tc.getArguments() != null).flatMap(tc -> tc.getArguments().values().stream()).map(Object::toString).filter(v -> v.length() >= 2).collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     /**
@@ -194,10 +184,7 @@ public class ParameterValueTracer {
      */
     public Set<String> extractArgNames(InteractionRecord record) {
         if (record == null || record.getToolCalls() == null) return Collections.emptySet();
-        return record.getToolCalls().stream()
-                .filter(tc -> tc.getArguments() != null)
-                .flatMap(tc -> tc.getArguments().keySet().stream())
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+        return record.getToolCalls().stream().filter(tc -> tc.getArguments() != null).flatMap(tc -> tc.getArguments().keySet().stream()).collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     /**

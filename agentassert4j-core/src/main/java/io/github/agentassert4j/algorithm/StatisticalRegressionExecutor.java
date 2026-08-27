@@ -5,6 +5,7 @@ import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.LlmClient;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -14,7 +15,7 @@ import java.util.List;
  * <ul>
  *   <li>向后兼容：sampleCount=1 时行为与 RegressionTestExecutor 完全等价</li>
  *   <li>成本安全：maxCostPerCase 硬限制，超出自动截断采样</li>
- *   <li>退化不中断（R10）：任何一次 LLM 调用失败不影响其余采样</li>
+ *   <li>退化不中断：任何一次 LLM 调用失败不影响其余采样</li>
  * </ul>
  */
 public class StatisticalRegressionExecutor {
@@ -28,8 +29,7 @@ public class StatisticalRegressionExecutor {
      * @param llmClient  LLM 客户端
      * @param comparator 确定性对比器
      */
-    public StatisticalRegressionExecutor(LlmClient llmClient,
-                                         DeterministicComparator comparator) {
+    public StatisticalRegressionExecutor(LlmClient llmClient, DeterministicComparator comparator) {
         this.llmClient = llmClient;
         this.singleExecutor = new RegressionTestExecutor(llmClient, comparator, null);
     }
@@ -42,10 +42,7 @@ public class StatisticalRegressionExecutor {
      * @param config          统计测试配置
      * @return 聚合统计结果
      */
-    public StatisticalRegressionResult execute(
-            InteractionRecord baseline,
-            String newSystemPrompt,
-            StatisticalTestConfig config) {
+    public StatisticalRegressionResult execute(InteractionRecord baseline, String newSystemPrompt, StatisticalTestConfig config) {
 
         config.validate();
 
@@ -63,9 +60,7 @@ public class StatisticalRegressionExecutor {
 
         if (effectiveSampleCount <= 0) {
             // 成本限制太严格，无法执行任何采样
-            return StatisticalRegressionResult.aggregate(
-                    baseline.getRecordId(), baseline.getSkillId(),
-                    List.of(), config.getPassThreshold(), config.getRegressionTolerance());
+            return StatisticalRegressionResult.aggregate(baseline.getRecordId(), baseline.getSkillId(), Collections.emptyList(), config.getPassThreshold(), config.getRegressionTolerance());
         }
 
         // 执行 N 次采样
@@ -84,13 +79,7 @@ public class StatisticalRegressionExecutor {
         long totalLatency = System.currentTimeMillis() - totalStart;
 
         // 聚合统计
-        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
-                baseline.getRecordId(),
-                baseline.getSkillId(),
-                samples,
-                config.getPassThreshold(),
-                config.getRegressionTolerance()
-        );
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(baseline.getRecordId(), baseline.getSkillId(), samples, config.getPassThreshold(), config.getRegressionTolerance());
         result.setTotalLatencyMs(totalLatency);
         result.setEstimatedCost(samples.size() * costPerCall);
 
@@ -102,17 +91,12 @@ public class StatisticalRegressionExecutor {
      *
      * <p>退化不中断（R10）：任何异常都转换为 SampleResult，不向外抛出。</p>
      */
-    SampleResult executeOneSample(
-            InteractionRecord baseline,
-            String newSystemPrompt,
-            int sampleIndex,
-            StatisticalTestConfig config) {
+    SampleResult executeOneSample(InteractionRecord baseline, String newSystemPrompt, int sampleIndex, StatisticalTestConfig config) {
 
         long start = System.currentTimeMillis();
 
         try {
-            RegressionTestResult single = singleExecutor.execute(
-                    baseline, newSystemPrompt, toTestExecutionConfig(config));
+            RegressionTestResult single = singleExecutor.execute(baseline, newSystemPrompt, toTestExecutionConfig(config));
 
             long latency = System.currentTimeMillis() - start;
 
@@ -141,14 +125,7 @@ public class StatisticalRegressionExecutor {
                 return sr;
             }
 
-            return new SampleResult(
-                    sampleIndex,
-                    single.getComparison().getVerdict(),
-                    single.getComparison().getScore(),
-                    single.getComparison().getVerdict() != Verdict.PASS
-                            ? single.getComparison().getSummary() : null,
-                    latency
-            );
+            return new SampleResult(sampleIndex, single.getComparison().getVerdict(), single.getComparison().getScore(), single.getComparison().getVerdict() != Verdict.PASS ? single.getComparison().getSummary() : null, latency);
 
         } catch (Exception e) {
             // 防御性：任何意外异常都不中断其余采样
@@ -167,11 +144,7 @@ public class StatisticalRegressionExecutor {
      *
      * <p>使用裸 Thread + join，零额外依赖（R1）。</p>
      */
-    private List<SampleResult> executeConcurrent(
-            InteractionRecord baseline,
-            String newSystemPrompt,
-            StatisticalTestConfig config,
-            int totalCount) {
+    private List<SampleResult> executeConcurrent(InteractionRecord baseline, String newSystemPrompt, StatisticalTestConfig config, int totalCount) {
 
         int batchSize = config.getConcurrency();
         List<SampleResult> allSamples = new ArrayList<>(totalCount);
@@ -187,8 +160,7 @@ public class StatisticalRegressionExecutor {
                 final int sampleIndex = batchStart + i + 1;
                 final int resultIndex = i;
                 threads[i] = new Thread(() -> {
-                    batchResults[resultIndex] = executeOneSample(
-                            baseline, newSystemPrompt, sampleIndex, config);
+                    batchResults[resultIndex] = executeOneSample(baseline, newSystemPrompt, sampleIndex, config);
                 });
                 threads[i].setName("agentassert4j-statistical-" + sampleIndex);
                 threads[i].setDaemon(true);
@@ -219,16 +191,11 @@ public class StatisticalRegressionExecutor {
     /**
      * 单次模式包装 — 向后兼容。
      */
-    private StatisticalRegressionResult executeSingleAsStatistical(
-            InteractionRecord baseline,
-            String newSystemPrompt,
-            StatisticalTestConfig config) {
+    private StatisticalRegressionResult executeSingleAsStatistical(InteractionRecord baseline, String newSystemPrompt, StatisticalTestConfig config) {
 
         SampleResult sample = executeOneSample(baseline, newSystemPrompt, 1, config);
 
-        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(
-                baseline.getRecordId(), baseline.getSkillId(),
-                List.of(sample), 1.0, 0.0);
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(baseline.getRecordId(), baseline.getSkillId(), Collections.singletonList(sample), 1.0, 0.0);
 
         result.setTotalLatencyMs(sample.getLatencyMs());
         return result;
@@ -237,14 +204,7 @@ public class StatisticalRegressionExecutor {
     /**
      * StatisticalTestConfig → TestExecutionConfig 转换。
      */
-    private io.github.agentassert4j.config.TestExecutionConfig toTestExecutionConfig(
-            StatisticalTestConfig config) {
-        return new io.github.agentassert4j.config.TestExecutionConfig()
-                .maxTestCases(config.getMaxTestCases())
-                .timeoutMs(config.getTimeoutMs())
-                .maxRetries(config.getMaxRetries())
-                .temperature(config.getTemperature())
-                .dryRun(config.isDryRun())
-                .model(config.getModel());
+    private io.github.agentassert4j.config.TestExecutionConfig toTestExecutionConfig(StatisticalTestConfig config) {
+        return new io.github.agentassert4j.config.TestExecutionConfig().maxTestCases(config.getMaxTestCases()).timeoutMs(config.getTimeoutMs()).maxRetries(config.getMaxRetries()).temperature(config.getTemperature()).dryRun(config.isDryRun()).model(config.getModel());
     }
 }

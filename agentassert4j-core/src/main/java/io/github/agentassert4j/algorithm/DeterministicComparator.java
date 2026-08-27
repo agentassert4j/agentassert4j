@@ -5,10 +5,7 @@ import io.github.agentassert4j.model.RegexPattern;
 import io.github.agentassert4j.result.ComparisonResult;
 import io.github.agentassert4j.result.Verdict;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -26,10 +23,7 @@ import java.util.stream.Collectors;
 public class DeterministicComparator {
 
     // 自动触发 REGRESSION 的字段名（无论用户是否配置为可忽略）
-    private static final Set<String> AUTO_REGRESSION_FIELDS = Set.of(
-            "error", "errormessage", "error_code", "errorcode", "err", "exception",
-            "error_msg", "errormsg", "fail_reason", "failreason"
-    );
+    private static final Set<String> AUTO_REGRESSION_FIELDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList("error", "errormessage", "error_code", "errorcode", "err", "exception", "error_msg", "errormsg", "fail_reason", "failreason")));
     private final ComparatorConfig config;
 
     public DeterministicComparator() {
@@ -48,9 +42,7 @@ public class DeterministicComparator {
      * @param currentOutput 当前输出文本（用于内容规则校验）
      * @return 对比结果（含评分、判定、差异详情）
      */
-    public ComparisonResult compare(DeterministicFingerprint baseline,
-                                    DeterministicFingerprint current,
-                                    String currentOutput) {
+    public ComparisonResult compare(DeterministicFingerprint baseline, DeterministicFingerprint current, String currentOutput) {
         String output = currentOutput != null ? currentOutput : "";
         ComparisonResult r = new ComparisonResult();
 
@@ -75,24 +67,18 @@ public class DeterministicComparator {
         r.setAddedFields(added);
         r.setRemovedFields(removed);
 
-        boolean typeOk = baseline.getOutputFieldTypeMap().entrySet().stream()
-                .filter(e -> !isIgnorable(e.getKey()))
-                .allMatch(e -> e.getValue().equals(current.getOutputFieldTypeMap().get(e.getKey())));
+        boolean typeOk = baseline.getOutputFieldTypeMap().entrySet().stream().filter(e -> !isIgnorable(e.getKey())).allMatch(e -> e.getValue().equals(current.getOutputFieldTypeMap().get(e.getKey())));
         r.setFieldTypeMatch(typeOk);
 
         double d2 = computeDimension2(baseline, current, removed, typeOk);
 
         // === 维度 3：内容规则（动态权重）===
-        boolean hasDeclaredRules = !isEmpty(baseline.getRequiredKeywords())
-                || !isEmpty(baseline.getForbiddenKeywords())
-                || (baseline.getRegexPatterns() != null && !baseline.getRegexPatterns().isEmpty());
+        boolean hasDeclaredRules = !isEmpty(baseline.getRequiredKeywords()) || !isEmpty(baseline.getForbiddenKeywords()) || (baseline.getRegexPatterns() != null && !baseline.getRegexPatterns().isEmpty());
 
         double d3;
         if (hasDeclaredRules) {
-            boolean kwOk = baseline.getRequiredKeywords().stream()
-                    .allMatch(kw -> output.contains(kw));
-            boolean fkOk = baseline.getForbiddenKeywords().stream()
-                    .noneMatch(kw -> output.contains(kw));
+            boolean kwOk = baseline.getRequiredKeywords().stream().allMatch(kw -> output.contains(kw));
+            boolean fkOk = baseline.getForbiddenKeywords().stream().noneMatch(kw -> output.contains(kw));
             boolean reOk = matchRegexPatterns(baseline.getRegexPatterns(), output);
             r.setKeywordMatch(kwOk && fkOk);
             r.setRegexMatch(reOk);
@@ -107,8 +93,7 @@ public class DeterministicComparator {
         boolean hasDeclaredBehaviors = !isEmpty(baseline.getDeclaredBehaviors());
         double d4;
         if (hasDeclaredBehaviors) {
-            boolean behMatch = BehaviorChecker.checkAll(
-                    baseline.getDeclaredBehaviors(), current, output);
+            boolean behMatch = BehaviorChecker.checkAll(baseline.getDeclaredBehaviors(), current, output);
             r.setBehaviorMatch(behMatch);
             d4 = behMatch ? 1.0 : 0.0;
         } else {
@@ -145,9 +130,7 @@ public class DeterministicComparator {
         // 自动回归信号：error 类字段出现（用未过滤集合——无论用户是否配置为可忽略）
         Set<String> rawAdded = new HashSet<>(cFieldsRaw);
         rawAdded.removeAll(bFieldsRaw);
-        boolean addedErrorField = rawAdded.stream()
-                .anyMatch(f -> AUTO_REGRESSION_FIELDS.contains(
-                        f.contains(".") ? f.substring(f.lastIndexOf('.') + 1).toLowerCase() : f.toLowerCase()));
+        boolean addedErrorField = rawAdded.stream().anyMatch(f -> AUTO_REGRESSION_FIELDS.contains(f.contains(".") ? f.substring(f.lastIndexOf('.') + 1).toLowerCase() : f.toLowerCase()));
 
         if (addedErrorField) {
             r.setVerdict(Verdict.REGRESSION);
@@ -165,9 +148,7 @@ public class DeterministicComparator {
         return r;
     }
 
-    private double computeDimension2(DeterministicFingerprint baseline,
-                                     DeterministicFingerprint current,
-                                     Set<String> removed, boolean typeOk) {
+    private double computeDimension2(DeterministicFingerprint baseline, DeterministicFingerprint current, Set<String> removed, boolean typeOk) {
         String bType = baseline.getOutputContentType();
         String cType = current.getOutputContentType();
 
@@ -196,9 +177,7 @@ public class DeterministicComparator {
 
     private Set<String> filterIgnorable(Set<String> fields) {
         if (fields == null) return Collections.emptySet();
-        return fields.stream()
-                .filter(f -> !isIgnorable(f))
-                .collect(Collectors.toSet());
+        return fields.stream().filter(f -> !isIgnorable(f)).collect(Collectors.toSet());
     }
 
     private boolean isIgnorable(String fieldPath) {

@@ -71,8 +71,8 @@ agentassert4j/
 │
 │  ── 框架适配 SDK（聚合在 agentassert4j-sdk/ 下）──
 └── agentassert4j-sdk/                         ← 聚合 POM (packaging=pom)
-    ├── agentassert4j-sdk-spring/              ← core + recorder + Spring AI（待实现）
-    └── agentassert4j-spring-boot-starter/     ← 聚合 core + sdk-spring + storage-sqlite + 自动装配（待实现）
+    ├── agentassert4j-sdk-spring-ai1/          ← core + recorder + Spring AI 1.x（待实现）
+    └── agentassert4j-spring-boot3-starter/    ← 聚合 core + sdk-spring-ai1 + storage-sqlite + 自动装配（待实现）
 ```
 
 > **裁剪说明**：曾存在的空壳模块（proxy / agent / dashboard / embedding / storage-mysql / storage-pg / sdk-lang / bom）已于
@@ -86,6 +86,7 @@ pom**。
 - 子模块的 parent 仍指向根 POM，通过 `<relativePath>../../pom.xml</relativePath>` 定位
 - 每个 artifactId 保持不变，Maven Central 发布不受影响
 - 聚合 POM 不产出 JAR，仅用于目录归类和批量构建
+- **框架适配 SDK 的命名自带版本线**：`sdk-<框架名><大版本号>`（如 `sdk-spring-ai1`，未来的 `sdk-spring-ai2`、`sdk-langchain4j1`）；starter 按 Boot 大版本命名（`spring-boot3-starter`）。一条大版本线一个模块，坐标自解释；同线内 patch/minor 靠二进制兼容，跨线**永不**在运行时嗅探版本做自动转发
 
 ### 2.2 模块分层与依赖方向（单向，上层依赖下层）
 
@@ -95,9 +96,9 @@ Layer 1: agentassert4j-core          ← 零外部依赖，纯 java.base
 Layer 2: agentassert4j-recorder      ← core + Disruptor + SLF4J API
            │
 Layer 3: agentassert4j-cli           ← core + recorder + Picocli
-         agentassert4j-sdk-spring    ← core + recorder + Spring AI
+         agentassert4j-sdk-spring-ai1 ← core + recorder + Spring AI 1.x
            │
-Layer 4: agentassert4j-spring-boot-starter ← 聚合 core + sdk-spring + storage-sqlite + 自动装配
+Layer 4: agentassert4j-spring-boot3-starter ← 聚合 core + sdk-spring-ai1 + storage-sqlite + 自动装配
 
 存储插件（独立，只依赖 core）：
   agentassert4j-storage-sqlite       ← core + SQLite JDBC（默认）

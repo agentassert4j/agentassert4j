@@ -5,6 +5,7 @@ import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.util.RecursiveJsonParser;
+import io.github.agentassert4j.util.TextUtil;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -42,8 +43,7 @@ public final class FingerprintExtractor {
 
         // ====== 维度 4：约束行为（从 rules 配置加载）======
         fp.setDeclaredBehaviors(Collections.emptySet());
-        fp.setHasError(record.getToolCalls() != null
-                && record.getToolCalls().stream().anyMatch(tc -> !tc.isSuccess()));
+        fp.setHasError(record.getToolCalls() != null && record.getToolCalls().stream().anyMatch(tc -> !tc.isSuccess()));
 
         return fp;
     }
@@ -57,9 +57,7 @@ public final class FingerprintExtractor {
      * @param skillId Skill 标识
      * @return 四维度确定性指纹
      */
-    public static DeterministicFingerprint extract(InteractionRecord record,
-                                                   SkillRulesConfig rules,
-                                                   String skillId) {
+    public static DeterministicFingerprint extract(InteractionRecord record, SkillRulesConfig rules, String skillId) {
         DeterministicFingerprint fp = extract(record);
         if (rules == null || skillId == null) {
             return fp;
@@ -81,9 +79,7 @@ public final class FingerprintExtractor {
         }
 
         // toolCallSet：忽略顺序
-        Set<String> toolCallSet = record.getToolCalls().stream()
-                .map(ToolCall::getToolName)
-                .collect(Collectors.toSet());
+        Set<String> toolCallSet = record.getToolCalls().stream().map(ToolCall::getToolName).collect(Collectors.toSet());
         fp.setToolCallSet(toolCallSet);
 
         // toolParamTypes：合并所有工具的参数类型
@@ -92,8 +88,7 @@ public final class FingerprintExtractor {
         Map<String, String> paramTypes = new HashMap<>();
         for (ToolCall tc : record.getToolCalls()) {
             if (tc.getArgTypes() != null) {
-                tc.getArgTypes().forEach((k, v) ->
-                        paramTypes.put(k.toLowerCase(), v.toLowerCase()));
+                tc.getArgTypes().forEach((k, v) -> paramTypes.put(k.toLowerCase(), v.toLowerCase()));
             }
         }
         fp.setToolParamTypes(paramTypes);
@@ -109,7 +104,7 @@ public final class FingerprintExtractor {
 
     private static void extractDimension2(InteractionRecord record, DeterministicFingerprint fp) {
         String response = record.getModelResponse();
-        if (response == null || response.isBlank()) {
+        if (TextUtil.isBlank(response)) {
             fp.setOutputContentType("text/plain");
             fp.setOutputFieldPaths(Collections.emptySet());
             fp.setOutputFieldTypeMap(Collections.emptyMap());

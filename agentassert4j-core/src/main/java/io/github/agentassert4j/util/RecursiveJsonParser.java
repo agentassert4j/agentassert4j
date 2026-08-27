@@ -26,7 +26,7 @@ public final class RecursiveJsonParser {
      * 输入 null / 空白 / 解析失败均返回 null（退化不中断）。
      */
     public static Object parse(String json) {
-        if (json == null || json.isBlank()) {
+        if (TextUtil.isBlank(json)) {
             return null;
         }
         try {
@@ -78,8 +78,7 @@ public final class RecursiveJsonParser {
 
     private static void collectPaths(Object node, String prefix, Set<String> paths) {
         if (node instanceof Map) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> map = (Map<String, Object>) node;
+            @SuppressWarnings("unchecked") Map<String, Object> map = (Map<String, Object>) node;
             for (Map.Entry<String, Object> entry : map.entrySet()) {
                 String key = entry.getKey();
                 Object val = entry.getValue();
@@ -92,8 +91,7 @@ public final class RecursiveJsonParser {
                 }
             }
         } else if (node instanceof List) {
-            @SuppressWarnings("unchecked")
-            List<Object> list = (List<Object>) node;
+            @SuppressWarnings("unchecked") List<Object> list = (List<Object>) node;
             String arrayPath = prefix + "[]";
             boolean hasComplex = false;
             for (Object item : list) {
@@ -111,8 +109,7 @@ public final class RecursiveJsonParser {
 
     private static void collectTypes(Object node, String prefix, Map<String, String> typeMap) {
         if (node instanceof Map) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> map = (Map<String, Object>) node;
+            @SuppressWarnings("unchecked") Map<String, Object> map = (Map<String, Object>) node;
             for (Map.Entry<String, Object> entry : map.entrySet()) {
                 String key = entry.getKey();
                 Object val = entry.getValue();
@@ -121,8 +118,7 @@ public final class RecursiveJsonParser {
                 if (val instanceof Map) {
                     collectTypes(val, path, typeMap);
                 } else if (val instanceof List) {
-                    @SuppressWarnings("unchecked")
-                    List<Object> list = (List<Object>) val;
+                    @SuppressWarnings("unchecked") List<Object> list = (List<Object>) val;
                     String arrayPath = path + "[]";
                     boolean hasComplex = false;
                     for (Object item : list) {
@@ -139,8 +135,7 @@ public final class RecursiveJsonParser {
                 }
             }
         } else if (node instanceof List) {
-            @SuppressWarnings("unchecked")
-            List<Object> list = (List<Object>) node;
+            @SuppressWarnings("unchecked") List<Object> list = (List<Object>) node;
             String arrayPath = prefix + "[]";
             boolean hasComplex = false;
             for (Object item : list) {

@@ -38,9 +38,7 @@ public class RegressionTestExecutor {
      * @param comparator      确定性对比器
      * @param baselineManager 基线管理器（可选，传 null 跳过基线操作）
      */
-    public RegressionTestExecutor(LlmClient llmClient,
-                                  DeterministicComparator comparator,
-                                  BaselineManager baselineManager) {
+    public RegressionTestExecutor(LlmClient llmClient, DeterministicComparator comparator, BaselineManager baselineManager) {
         this.llmClient = llmClient;
         this.comparator = comparator;
         this.baselineManager = baselineManager;
@@ -54,9 +52,7 @@ public class RegressionTestExecutor {
      * @param config          执行配置
      * @return 回归测试结果
      */
-    public RegressionTestResult execute(InteractionRecord baseline,
-                                        String newSystemPrompt,
-                                        TestExecutionConfig config) {
+    public RegressionTestResult execute(InteractionRecord baseline, String newSystemPrompt, TestExecutionConfig config) {
 
         // dryRun 模式：不调 LLM
         if (config.isDryRun()) {
@@ -88,8 +84,7 @@ public class RegressionTestExecutor {
         DeterministicFingerprint currentFp = FingerprintExtractor.extract(current);
 
         // 5. 对比
-        ComparisonResult comparison = comparator.compare(
-                baselineFp, currentFp, response.getContent());
+        ComparisonResult comparison = comparator.compare(baselineFp, currentFp, response.getContent());
 
         // 6. 封装结果
         RegressionTestResult result = new RegressionTestResult();
@@ -111,9 +106,7 @@ public class RegressionTestExecutor {
      *   <li>多模态原样复用</li>
      * </ul>
      */
-    LlmRequest buildReplayRequest(InteractionRecord baseline,
-                                  String newSystemPrompt,
-                                  TestExecutionConfig config) {
+    LlmRequest buildReplayRequest(InteractionRecord baseline, String newSystemPrompt, TestExecutionConfig config) {
         LlmRequest request = new LlmRequest();
 
         // 替换 System Prompt
@@ -127,7 +120,7 @@ public class RegressionTestExecutor {
 
         // 多轮对话：注入前序轮次
         if (baseline.getTurnIndex() > 0 && baseline.getPreviousTurns() != null) {
-            for (var turn : baseline.getPreviousTurns()) {
+            for (TurnContext turn : baseline.getPreviousTurns()) {
                 request.addTurn(turn.getRole(), turn.getContent());
             }
         }
@@ -144,9 +137,7 @@ public class RegressionTestExecutor {
     /**
      * 从 LLM 响应构建当前交互记录（不持久化，仅用于指纹提取和对比）。
      */
-    InteractionRecord buildCurrentRecord(InteractionRecord baseline,
-                                         LlmResponse response,
-                                         String newPrompt) {
+    InteractionRecord buildCurrentRecord(InteractionRecord baseline, LlmResponse response, String newPrompt) {
         InteractionRecord current = new InteractionRecord();
         current.setRecordId(UUID.randomUUID().toString());
         current.setTimestamp(System.currentTimeMillis());
@@ -158,9 +149,7 @@ public class RegressionTestExecutor {
         // 从 LLM 响应提取工具调用
         List<ToolCall> currentToolCalls = new ArrayList<>();
         if (response.getToolCalls() != null) {
-            currentToolCalls = response.getToolCalls().stream()
-                    .map(this::toolCallResultToToolCall)
-                    .collect(Collectors.toList());
+            currentToolCalls = response.getToolCalls().stream().map(this::toolCallResultToToolCall).collect(Collectors.toList());
         }
         current.setToolCalls(currentToolCalls);
         current.setHasToolCalls(!currentToolCalls.isEmpty());

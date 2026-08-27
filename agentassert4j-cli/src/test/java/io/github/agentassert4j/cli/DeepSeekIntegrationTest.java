@@ -1,11 +1,13 @@
-package io.github.agentassert4j.algorithm;
+package io.github.agentassert4j.cli;
 
+import io.github.agentassert4j.algorithm.*;
+import io.github.agentassert4j.cli.llm.OpenAiCompatibleClient;
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.result.ComparisonResult;
 import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
-import io.github.agentassert4j.spi.OpenAiCompatibleClient;
+import io.github.agentassert4j.util.HashUtil;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -14,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -44,37 +47,17 @@ class DeepSeekIntegrationTest {
     /**
      * 一个简单的 get_weather 工具定义
      */
-    private static final String WEATHER_TOOL = "{\"type\":\"function\",\"function\":{"
-            + "\"name\":\"get_weather\","
-            + "\"description\":\"获取指定城市的天气信息\","
-            + "\"parameters\":{"
-            + "\"type\":\"object\","
-            + "\"properties\":{"
-            + "\"city\":{\"type\":\"string\",\"description\":\"城市名称\"}"
-            + "},"
-            + "\"required\":[\"city\"]"
-            + "}}}";
+    private static final String WEATHER_TOOL = "{\"type\":\"function\",\"function\":{" + "\"name\":\"get_weather\"," + "\"description\":\"获取指定城市的天气信息\"," + "\"parameters\":{" + "\"type\":\"object\"," + "\"properties\":{" + "\"city\":{\"type\":\"string\",\"description\":\"城市名称\"}" + "}," + "\"required\":[\"city\"]" + "}}}";
     /**
      * 一个 search_orders 工具定义
      */
-    private static final String SEARCH_TOOL = "{\"type\":\"function\",\"function\":{"
-            + "\"name\":\"search_orders\","
-            + "\"description\":\"搜索订单\","
-            + "\"parameters\":{"
-            + "\"type\":\"object\","
-            + "\"properties\":{"
-            + "\"keyword\":{\"type\":\"string\",\"description\":\"搜索关键词\"},"
-            + "\"limit\":{\"type\":\"integer\",\"description\":\"返回数量限制\"}"
-            + "},"
-            + "\"required\":[\"keyword\"]"
-            + "}}}";
+    private static final String SEARCH_TOOL = "{\"type\":\"function\",\"function\":{" + "\"name\":\"search_orders\"," + "\"description\":\"搜索订单\"," + "\"parameters\":{" + "\"type\":\"object\"," + "\"properties\":{" + "\"keyword\":{\"type\":\"string\",\"description\":\"搜索关键词\"}," + "\"limit\":{\"type\":\"integer\",\"description\":\"返回数量限制\"}" + "}," + "\"required\":[\"keyword\"]" + "}}}";
     private static LlmClient client;
 
     @BeforeAll
     static void setUp() {
         String apiKey = System.getProperty("deepseek.api.key");
-        assumeTrue(apiKey != null && !apiKey.isBlank(),
-                "跳过：未提供 -Ddeepseek.api.key");
+        assumeTrue(apiKey != null && !apiKey.isBlank(), "跳过：未提供 -Ddeepseek.api.key");
         client = new OpenAiCompatibleClient(ENDPOINT, apiKey, "deepseek-chat");
     }
 
@@ -98,7 +81,7 @@ class DeepSeekIntegrationTest {
      */
     private InteractionRecord responseToRecord(LlmResponse response, LlmRequest request) {
         InteractionRecord r = new InteractionRecord();
-        r.setRecordId(java.util.UUID.randomUUID().toString());
+        r.setRecordId(UUID.randomUUID().toString());
         r.setTimestamp(System.currentTimeMillis());
         r.setUserInput(request != null ? request.getUserInput() : "test");
         r.setTurnIndex(0);
@@ -137,8 +120,7 @@ class DeepSeekIntegrationTest {
         return r;
     }
 
-    private InteractionRecord makeToolCallBaseline(String recordId, String userInput,
-                                                   String toolName, Map<String, Object> args) {
+    private InteractionRecord makeToolCallBaseline(String recordId, String userInput, String toolName, Map<String, Object> args) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(recordId);
         r.setSkillId("integration-skill");
@@ -185,16 +167,14 @@ class DeepSeekIntegrationTest {
             LlmResponse response = client.chat(request, 30000);
 
             assertNotNull(response.getContent());
-            assertTrue(response.getContent().contains("2"),
-                    "应包含答案 2，实际: " + response.getContent());
+            assertTrue(response.getContent().contains("2"), "应包含答案 2，实际: " + response.getContent());
             assertTrue(response.getInputTokens() > 0);
             assertTrue(response.getOutputTokens() > 0);
             assertNotNull(response.getToolCalls());
             assertTrue(response.getToolCalls().isEmpty());
             assertFalse(response.isHasError());
 
-            System.out.println("[1.3] content=" + response.getContent()
-                    + ", tokens=" + response.getInputTokens() + "/" + response.getOutputTokens());
+            System.out.println("[1.3] content=" + response.getContent() + ", tokens=" + response.getInputTokens() + "/" + response.getOutputTokens());
         }
 
         @Test
@@ -259,22 +239,16 @@ class DeepSeekIntegrationTest {
 
             // 验证 tool_calls
             assertNotNull(response.getToolCalls(), "toolCalls 不应为 null");
-            assertFalse(response.getToolCalls().isEmpty(),
-                    "应返回至少一个 tool_call");
+            assertFalse(response.getToolCalls().isEmpty(), "应返回至少一个 tool_call");
 
             ToolCallResult tc = response.getToolCalls().get(0);
-            assertEquals("get_weather", tc.getToolName(),
-                    "工具名应为 get_weather");
+            assertEquals("get_weather", tc.getToolName(), "工具名应为 get_weather");
             assertNotNull(tc.getToolCallId(), "toolCallId 不应为 null");
             assertFalse(tc.getToolCallId().isEmpty(), "toolCallId 不应为空");
             assertNotNull(tc.getArguments(), "arguments 不应为 null");
-            assertTrue(tc.getArguments().containsKey("city"),
-                    "arguments 应包含 city 参数");
+            assertTrue(tc.getArguments().containsKey("city"), "arguments 应包含 city 参数");
 
-            System.out.println("[2.1] toolName=" + tc.getToolName()
-                    + ", args=" + tc.getArguments()
-                    + ", content=" + response.getContent()
-                    + ", tokens=" + response.getInputTokens() + "/" + response.getOutputTokens());
+            System.out.println("[2.1] toolName=" + tc.getToolName() + ", args=" + tc.getArguments() + ", content=" + response.getContent() + ", tokens=" + response.getInputTokens() + "/" + response.getOutputTokens());
         }
 
         @Test
@@ -292,13 +266,10 @@ class DeepSeekIntegrationTest {
             assertFalse(response.getToolCalls().isEmpty());
 
             ToolCallResult tc = response.getToolCalls().get(0);
-            assertEquals("search_orders", tc.getToolName(),
-                    "LLM 应选择 search_orders 而非 get_weather");
-            assertNotNull(tc.getArguments().get("keyword"),
-                    "arguments 应包含 keyword");
+            assertEquals("search_orders", tc.getToolName(), "LLM 应选择 search_orders 而非 get_weather");
+            assertNotNull(tc.getArguments().get("keyword"), "arguments 应包含 keyword");
 
-            System.out.println("[2.2] toolName=" + tc.getToolName()
-                    + ", args=" + tc.getArguments());
+            System.out.println("[2.2] toolName=" + tc.getToolName() + ", args=" + tc.getArguments());
         }
 
         @Test
@@ -318,12 +289,10 @@ class DeepSeekIntegrationTest {
             // 验证 limit 参数是数字类型
             Object limit = tc.getArguments().get("limit");
             if (limit != null) {
-                assertTrue(limit instanceof Number,
-                        "limit 应为 Number 类型，实际: " + limit.getClass());
+                assertTrue(limit instanceof Number, "limit 应为 Number 类型，实际: " + limit.getClass());
             }
 
-            System.out.println("[2.3] args=" + tc.getArguments()
-                    + ", limit type=" + (limit != null ? limit.getClass().getSimpleName() : "null"));
+            System.out.println("[2.3] args=" + tc.getArguments() + ", limit type=" + (limit != null ? limit.getClass().getSimpleName() : "null"));
         }
 
         @Test
@@ -336,8 +305,7 @@ class DeepSeekIntegrationTest {
 
             LlmResponse response = client.chat(request, 30000);
 
-            assertTrue(response.getToolCalls().isEmpty(),
-                    "无 tools 定义时不应返回 tool_calls");
+            assertTrue(response.getToolCalls().isEmpty(), "无 tools 定义时不应返回 tool_calls");
             assertNotNull(response.getContent());
         }
     }
@@ -365,26 +333,21 @@ class DeepSeekIntegrationTest {
             // 维度 4：无错误
             assertFalse(fp.isHasError());
 
-            System.out.println("[3.1] contentType=" + fp.getOutputContentType()
-                    + ", textMagnitude=" + fp.getTextLengthMagnitude()
-                    + ", toolCallSet=" + fp.getToolCallSet());
+            System.out.println("[3.1] contentType=" + fp.getOutputContentType() + ", textMagnitude=" + fp.getTextLengthMagnitude() + ", toolCallSet=" + fp.getToolCallSet());
         }
 
         @Test
         @DisplayName("3.2 JSON 输出指纹")
         void testJsonFingerprint() throws Exception {
-            LlmResponse response = callLlm("你是数据助手，只返回JSON。不要任何其他文字。",
-                    "返回一个JSON：{\"name\":\"张三\",\"age\":25}");
+            LlmResponse response = callLlm("你是数据助手，只返回JSON。不要任何其他文字。", "返回一个JSON：{\"name\":\"张三\",\"age\":25}");
             InteractionRecord record = responseToRecord(response);
 
             DeterministicFingerprint fp = FingerprintExtractor.extract(record);
 
             // JSON 检测
             if ("application/json".equals(fp.getOutputContentType())) {
-                assertFalse(fp.getOutputFieldPaths().isEmpty(),
-                        "JSON 输出应有 fieldPaths");
-                assertFalse(fp.getOutputFieldTypeMap().isEmpty(),
-                        "JSON 输出应有 fieldTypeMap");
+                assertFalse(fp.getOutputFieldPaths().isEmpty(), "JSON 输出应有 fieldPaths");
+                assertFalse(fp.getOutputFieldTypeMap().isEmpty(), "JSON 输出应有 fieldTypeMap");
                 System.out.println("[3.2] fieldPaths=" + fp.getOutputFieldPaths());
                 System.out.println("[3.2] fieldTypeMap=" + fp.getOutputFieldTypeMap());
             } else {
@@ -407,13 +370,10 @@ class DeepSeekIntegrationTest {
             DeterministicFingerprint fp = FingerprintExtractor.extract(record);
 
             // 维度 1：有工具调用
-            assertFalse(fp.getToolCallSet().isEmpty(),
-                    "应有 toolCallSet");
-            assertTrue(fp.getToolCallSet().contains("get_weather"),
-                    "应包含 get_weather");
+            assertFalse(fp.getToolCallSet().isEmpty(), "应有 toolCallSet");
+            assertTrue(fp.getToolCallSet().contains("get_weather"), "应包含 get_weather");
 
-            System.out.println("[3.3] toolCallSet=" + fp.getToolCallSet()
-                    + ", hasToolCalls=" + record.isHasToolCalls());
+            System.out.println("[3.3] toolCallSet=" + fp.getToolCallSet() + ", hasToolCalls=" + record.isHasToolCalls());
         }
     }
 
@@ -431,9 +391,9 @@ class DeepSeekIntegrationTest {
             LlmResponse resp2 = callLlm(prompt, input);
 
             InteractionRecord rec1 = responseToRecord(resp1);
-            rec1.setTemplateHash(io.github.agentassert4j.util.HashUtil.sha256(prompt));
+            rec1.setTemplateHash(HashUtil.sha256(prompt));
             InteractionRecord rec2 = responseToRecord(resp2);
-            rec2.setTemplateHash(io.github.agentassert4j.util.HashUtil.sha256(prompt));
+            rec2.setTemplateHash(HashUtil.sha256(prompt));
 
             DeterministicFingerprint fp1 = FingerprintExtractor.extract(rec1);
             DeterministicFingerprint fp2 = FingerprintExtractor.extract(rec2);
@@ -442,13 +402,9 @@ class DeepSeekIntegrationTest {
             ComparisonResult result = comparator.compare(fp1, fp2, resp2.getContent());
 
             assertNotNull(result.getVerdict());
-            assertTrue(result.getScore() >= 0.7,
-                    "同一 prompt 两次调用 score 应 >= 0.7，实际: " + result.getScore());
+            assertTrue(result.getScore() >= 0.7, "同一 prompt 两次调用 score 应 >= 0.7，实际: " + result.getScore());
 
-            System.out.println("[4.1] Verdict=" + result.getVerdict()
-                    + ", Score=" + String.format("%.4f", result.getScore())
-                    + ", toolMatch=" + result.isToolCallMatch()
-                    + ", fieldMatch=" + result.isFieldTypeMatch());
+            System.out.println("[4.1] Verdict=" + result.getVerdict() + ", Score=" + String.format("%.4f", result.getScore()) + ", toolMatch=" + result.isToolCallMatch() + ", fieldMatch=" + result.isFieldTypeMatch());
         }
 
         @Test
@@ -474,12 +430,9 @@ class DeepSeekIntegrationTest {
             ComparisonResult result = comparator.compare(textFp, toolFp, toolResp.getContent());
 
             // 工具集变化 → 不匹配
-            assertFalse(result.isToolCallMatch(),
-                    "纯文本 vs 工具调用 → toolCallMatch 应为 false");
+            assertFalse(result.isToolCallMatch(), "纯文本 vs 工具调用 → toolCallMatch 应为 false");
 
-            System.out.println("[4.2] Verdict=" + result.getVerdict()
-                    + ", Score=" + String.format("%.4f", result.getScore())
-                    + ", toolMatch=" + result.isToolCallMatch());
+            System.out.println("[4.2] Verdict=" + result.getVerdict() + ", Score=" + String.format("%.4f", result.getScore()) + ", toolMatch=" + result.isToolCallMatch());
         }
     }
 
@@ -495,8 +448,7 @@ class DeepSeekIntegrationTest {
             DeterministicFingerprint fp = FingerprintExtractor.extract(rec);
 
             boolean result = BehaviorChecker.check("mustUseChinese", fp, resp.getContent());
-            System.out.println("[5.1] mustUseChinese=" + result
-                    + ", content=" + resp.getContent().substring(0, Math.min(80, resp.getContent().length())));
+            System.out.println("[5.1] mustUseChinese=" + result + ", content=" + resp.getContent().substring(0, Math.min(80, resp.getContent().length())));
             // 中文 prompt + 明确要求中文 → 极大概率通过，但不做硬断言（LLM 输出不确定）
             // 如果不通过，记录日志但不失败
             if (!result) {
@@ -518,14 +470,12 @@ class DeepSeekIntegrationTest {
         @Test
         @DisplayName("5.3 jsonOutput — JSON 输出检测")
         void testJsonOutput() throws Exception {
-            LlmResponse resp = callLlm("你是数据助手。只返回JSON格式数据，不要其他文字。",
-                    "返回 {\"status\":\"ok\",\"count\":5}");
+            LlmResponse resp = callLlm("你是数据助手。只返回JSON格式数据，不要其他文字。", "返回 {\"status\":\"ok\",\"count\":5}");
             InteractionRecord rec = responseToRecord(resp);
             DeterministicFingerprint fp = FingerprintExtractor.extract(rec);
 
             boolean isJson = BehaviorChecker.check("jsonOutput", fp, resp.getContent());
-            System.out.println("[5.3] jsonOutput=" + isJson
-                    + ", content=" + resp.getContent().substring(0, Math.min(80, resp.getContent().length())));
+            System.out.println("[5.3] jsonOutput=" + isJson + ", content=" + resp.getContent().substring(0, Math.min(80, resp.getContent().length())));
         }
     }
 
@@ -539,10 +489,8 @@ class DeepSeekIntegrationTest {
             InteractionRecord baseline = makeTextBaseline("exec-text-1", "5+3等于几？", "8");
             String newPrompt = "你是一个数学助手，简洁回答。";
 
-            RegressionTestExecutor executor = new RegressionTestExecutor(
-                    client, new DeterministicComparator(), null);
-            RegressionTestResult result = executor.execute(baseline, newPrompt,
-                    TestExecutionConfig.defaults());
+            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
+            RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
 
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
             assertNotNull(result.getComparison());
@@ -550,37 +498,29 @@ class DeepSeekIntegrationTest {
             assertTrue(result.getComparison().getScore() >= 0);
             assertNotNull(result.getCandidateFingerprint());
 
-            System.out.println("[6.1] Status=" + result.getStatus()
-                    + ", Verdict=" + result.getComparison().getVerdict()
-                    + ", Score=" + String.format("%.4f", result.getComparison().getScore()));
+            System.out.println("[6.1] Status=" + result.getStatus() + ", Verdict=" + result.getComparison().getVerdict() + ", Score=" + String.format("%.4f", result.getComparison().getScore()));
         }
 
         @Test
         @DisplayName("6.2 工具基线 → 工具重放（LLM 应再次调用工具）")
         void testToolCallReplay() throws Exception {
             // 构建带工具调用的基线
-            InteractionRecord baseline = makeToolCallBaseline("exec-tool-1",
-                    "北京天气怎么样？", "get_weather", Map.of("city", "北京"));
+            InteractionRecord baseline = makeToolCallBaseline("exec-tool-1", "北京天气怎么样？", "get_weather", Map.of("city", "北京"));
 
             // 新 prompt 里也告诉它用工具
             String newPrompt = "你是天气助手。用户问天气时必须调用 get_weather 工具。不要用文字回答天气问题。";
 
             // 需要在执行配置里传入 tools
-            TestExecutionConfig config = new TestExecutionConfig()
-                    .temperature(0.0)
-                    .timeoutMs(30000);
+            TestExecutionConfig config = new TestExecutionConfig().temperature(0.0).timeoutMs(30000);
 
-            RegressionTestExecutor executor = new RegressionTestExecutor(
-                    client, new DeterministicComparator(), null);
+            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
             RegressionTestResult result = executor.execute(baseline, newPrompt, config);
 
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
 
             // 验证新响应也有工具调用
             DeterministicFingerprint candidateFp = result.getCandidateFingerprint();
-            System.out.println("[6.2] toolCallSet=" + candidateFp.getToolCallSet()
-                    + ", Verdict=" + result.getComparison().getVerdict()
-                    + ", Score=" + String.format("%.4f", result.getComparison().getScore()));
+            System.out.println("[6.2] toolCallSet=" + candidateFp.getToolCallSet() + ", Verdict=" + result.getComparison().getVerdict() + ", Score=" + String.format("%.4f", result.getComparison().getScore()));
 
             // 注意：当前 buildReplayRequest 不传递 tools 定义
             // 因此 LLM 可能不会返回 tool_calls — 这是已知限制
@@ -597,25 +537,20 @@ class DeepSeekIntegrationTest {
             baseline.setPreviousTurns(turns);
 
             String newPrompt = "你是对话助手，记住用户信息。";
-            RegressionTestExecutor executor = new RegressionTestExecutor(
-                    client, new DeterministicComparator(), null);
-            RegressionTestResult result = executor.execute(baseline, newPrompt,
-                    TestExecutionConfig.defaults());
+            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
+            RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
 
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
-            System.out.println("[6.3] Verdict=" + result.getComparison().getVerdict()
-                    + ", Score=" + String.format("%.4f", result.getComparison().getScore()));
+            System.out.println("[6.3] Verdict=" + result.getComparison().getVerdict() + ", Score=" + String.format("%.4f", result.getComparison().getScore()));
         }
 
         @Test
         @DisplayName("6.4 dryRun 模式")
         void testDryRun() {
             InteractionRecord baseline = makeTextBaseline("dry-1", "test", "ok");
-            RegressionTestExecutor executor = new RegressionTestExecutor(
-                    client, new DeterministicComparator(), null);
+            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
 
-            RegressionTestResult result = executor.execute(baseline, "new prompt",
-                    new TestExecutionConfig().dryRun(true));
+            RegressionTestResult result = executor.execute(baseline, "new prompt", new TestExecutionConfig().dryRun(true));
 
             assertEquals(TestResultStatus.SKIP, result.getStatus());
         }
@@ -628,12 +563,10 @@ class DeepSeekIntegrationTest {
         @Test
         @DisplayName("7.1 串行采样 5 次 — 完整统计验证")
         void testSerialSampling5() throws Exception {
-            InteractionRecord baseline = makeTextBaseline("stat-serial-1",
-                    "7+8等于几？只回答数字。", "15");
+            InteractionRecord baseline = makeTextBaseline("stat-serial-1", "7+8等于几？只回答数字。", "15");
             String newPrompt = "你是数学助手，只回答数字。";
 
-            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(
-                    client, new DeterministicComparator());
+            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator());
 
             StatisticalTestConfig config = new StatisticalTestConfig();
             config.setSampleCount(5);
@@ -664,31 +597,21 @@ class DeepSeekIntegrationTest {
             // 统计判定
             assertNotNull(result.getStatisticalVerdict());
 
-            System.out.println("[7.1] Verdict=" + result.getStatisticalVerdict()
-                    + ", Avg=" + String.format("%.4f", result.getAverageScore())
-                    + ", StdDev=" + String.format("%.4f", result.getScoreStdDev())
-                    + ", Min=" + String.format("%.4f", result.getMinScore())
-                    + ", Latency=" + result.getTotalLatencyMs() + "ms"
-                    + ", Cost=$" + String.format("%.4f", result.getEstimatedCost()));
+            System.out.println("[7.1] Verdict=" + result.getStatisticalVerdict() + ", Avg=" + String.format("%.4f", result.getAverageScore()) + ", StdDev=" + String.format("%.4f", result.getScoreStdDev()) + ", Min=" + String.format("%.4f", result.getMinScore()) + ", Latency=" + result.getTotalLatencyMs() + "ms" + ", Cost=$" + String.format("%.4f", result.getEstimatedCost()));
             System.out.println("[7.1] Counts: " + result.getVerdictCounts());
 
             for (SampleResult s : result.getSamples()) {
-                System.out.println("  #" + s.getSampleIndex()
-                        + ": " + s.getVerdict() + " score=" + String.format("%.4f", s.getScore())
-                        + " latency=" + s.getLatencyMs() + "ms"
-                        + (s.getErrorMessage() != null ? " err=" + s.getErrorMessage() : ""));
+                System.out.println("  #" + s.getSampleIndex() + ": " + s.getVerdict() + " score=" + String.format("%.4f", s.getScore()) + " latency=" + s.getLatencyMs() + "ms" + (s.getErrorMessage() != null ? " err=" + s.getErrorMessage() : ""));
             }
         }
 
         @Test
         @DisplayName("7.2 并发采样 5 次")
         void testConcurrentSampling5() throws Exception {
-            InteractionRecord baseline = makeTextBaseline("stat-conc-1",
-                    "9*9等于几？只回答数字。", "81");
+            InteractionRecord baseline = makeTextBaseline("stat-conc-1", "9*9等于几？只回答数字。", "81");
             String newPrompt = "你是数学助手。";
 
-            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(
-                    client, new DeterministicComparator());
+            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator());
 
             StatisticalTestConfig config = new StatisticalTestConfig();
             config.setSampleCount(5);
@@ -700,8 +623,7 @@ class DeepSeekIntegrationTest {
             assertEquals(5, result.getActualSampleCount());
             assertNotNull(result.getStatisticalVerdict());
 
-            System.out.println("[7.2] Verdict=" + result.getStatisticalVerdict()
-                    + ", Latency=" + result.getTotalLatencyMs() + "ms (5 concurrent)");
+            System.out.println("[7.2] Verdict=" + result.getStatisticalVerdict() + ", Latency=" + result.getTotalLatencyMs() + "ms (5 concurrent)");
         }
 
         @Test
@@ -709,17 +631,14 @@ class DeepSeekIntegrationTest {
         void testSingleMode() throws Exception {
             InteractionRecord baseline = makeTextBaseline("stat-single-1", "10/2等于几？", "5");
 
-            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(
-                    client, new DeterministicComparator());
+            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator());
 
-            StatisticalRegressionResult result = executor.execute(baseline, "你是数学助手。",
-                    StatisticalTestConfig.defaults());
+            StatisticalRegressionResult result = executor.execute(baseline, "你是数学助手。", StatisticalTestConfig.defaults());
 
             assertEquals(1, result.getActualSampleCount());
             assertNotNull(result.getStatisticalVerdict());
 
-            System.out.println("[7.3] Single: Verdict=" + result.getStatisticalVerdict()
-                    + ", Score=" + String.format("%.4f", result.getAverageScore()));
+            System.out.println("[7.3] Single: Verdict=" + result.getStatisticalVerdict() + ", Score=" + String.format("%.4f", result.getAverageScore()));
         }
     }
 
@@ -741,13 +660,10 @@ class DeepSeekIntegrationTest {
             int outTokens = response.getOutputTokens();
 
             System.out.println("[8.1] Input tokens: " + inTokens + ", Output tokens: " + outTokens);
-            System.out.println("[8.1] Response: " + response.getContent().substring(
-                    0, Math.min(100, response.getContent().length())));
+            System.out.println("[8.1] Response: " + response.getContent().substring(0, Math.min(100, response.getContent().length())));
 
-            assertTrue(inTokens >= 10 && inTokens <= 200,
-                    "inputTokens 应在合理范围，实际: " + inTokens);
-            assertTrue(outTokens >= 10 && outTokens <= 500,
-                    "outputTokens 应在合理范围，实际: " + outTokens);
+            assertTrue(inTokens >= 10 && inTokens <= 200, "inputTokens 应在合理范围，实际: " + inTokens);
+            assertTrue(outTokens >= 10 && outTokens <= 500, "outputTokens 应在合理范围，实际: " + outTokens);
 
             double costPerCall = CostEstimator.estimateCostPerCall("deepseek-chat");
             assertTrue(costPerCall > 0);
@@ -792,25 +708,20 @@ class DeepSeekIntegrationTest {
             InteractionRecord baseline = responseToRecord(baselineResp);
             baseline.setRecordId("lifecycle-text-1");
             baseline.setSkillId("math-skill");
-            baseline.setTemplateHash(
-                    io.github.agentassert4j.util.HashUtil.sha256(originalPrompt));
+            baseline.setTemplateHash(HashUtil.sha256(originalPrompt));
 
             System.out.println("[9.1] 基线响应: " + baselineResp.getContent());
 
             // 2. 提取基线指纹
             DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline);
-            System.out.println("[9.1] 基线指纹: toolCallSet=" + baselineFp.getToolCallSet()
-                    + ", outputType=" + baselineFp.getOutputContentType()
-                    + ", textMagnitude=" + baselineFp.getTextLengthMagnitude());
+            System.out.println("[9.1] 基线指纹: toolCallSet=" + baselineFp.getToolCallSet() + ", outputType=" + baselineFp.getOutputContentType() + ", textMagnitude=" + baselineFp.getTextLengthMagnitude());
 
             // 3. Prompt 变更
             String newPrompt = "你是一个友好的数学老师，用完整句子回答数学问题。";
 
             // 4. 回归重放
-            RegressionTestExecutor executor = new RegressionTestExecutor(
-                    client, new DeterministicComparator(), null);
-            RegressionTestResult result = executor.execute(baseline, newPrompt,
-                    TestExecutionConfig.defaults());
+            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
+            RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
 
             // 5. 验证完整链路
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
@@ -844,8 +755,7 @@ class DeepSeekIntegrationTest {
             baseline.setRecordId("lifecycle-tool-1");
             baseline.setSkillId("weather-skill");
 
-            System.out.println("[9.2] 基线 toolCalls: "
-                    + (baselineResp.getToolCalls().isEmpty() ? "无" : baselineResp.getToolCalls().size()));
+            System.out.println("[9.2] 基线 toolCalls: " + (baselineResp.getToolCalls().isEmpty() ? "无" : baselineResp.getToolCalls().size()));
 
             if (!baselineResp.getToolCalls().isEmpty()) {
                 ToolCallResult tc = baselineResp.getToolCalls().get(0);
@@ -857,14 +767,10 @@ class DeepSeekIntegrationTest {
 
                 // 3. 用新 prompt 重放（但注意：当前不传递 tools，所以重放可能不返回工具调用）
                 String newPrompt = "你是一个天气专家。用 get_weather 工具查天气。";
-                RegressionTestExecutor executor = new RegressionTestExecutor(
-                        client, new DeterministicComparator(), null);
-                RegressionTestResult result = executor.execute(baseline, newPrompt,
-                        TestExecutionConfig.defaults());
+                RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
+                RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
 
-                System.out.println("[9.2] 重放结果: Verdict=" + result.getComparison().getVerdict()
-                        + ", Score=" + String.format("%.4f", result.getComparison().getScore())
-                        + ", toolMatch=" + result.getComparison().isToolCallMatch());
+                System.out.println("[9.2] 重放结果: Verdict=" + result.getComparison().getVerdict() + ", Score=" + String.format("%.4f", result.getComparison().getScore()) + ", toolMatch=" + result.getComparison().isToolCallMatch());
             } else {
                 System.out.println("[9.2] 基线未返回 tool_calls，跳过对比验证");
             }
@@ -895,14 +801,13 @@ class DeepSeekIntegrationTest {
             LlmResponse resp2 = client.chat(turn2, 30000);
 
             System.out.println("[9.3] 多轮对话最终回答: " + resp2.getContent());
-            assertTrue(resp2.getContent().contains("小红"),
-                    "LLM 应记住上下文中的 '小红'");
+            assertTrue(resp2.getContent().contains("小红"), "LLM 应记住上下文中的 '小红'");
 
             // 构建基线并重放
             InteractionRecord baseline = new InteractionRecord();
             baseline.setRecordId("lifecycle-multi-1");
             baseline.setSkillId("chat-skill");
-            baseline.setTemplateHash(io.github.agentassert4j.util.HashUtil.sha256(prompt));
+            baseline.setTemplateHash(HashUtil.sha256(prompt));
             baseline.setUserInput("我叫什么名字？只回答名字。");
             baseline.setTurnIndex(2);
             baseline.setModelResponse(resp2.getContent());
@@ -918,25 +823,20 @@ class DeepSeekIntegrationTest {
 
             // 用新 prompt 重放
             String newPrompt = "你是一个友好的助手，总是记住用户信息。";
-            RegressionTestExecutor executor = new RegressionTestExecutor(
-                    client, new DeterministicComparator(), null);
-            RegressionTestResult result = executor.execute(baseline, newPrompt,
-                    TestExecutionConfig.defaults());
+            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
+            RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
 
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
-            System.out.println("[9.3] 重放: Verdict=" + result.getComparison().getVerdict()
-                    + ", Score=" + String.format("%.4f", result.getComparison().getScore()));
+            System.out.println("[9.3] 重放: Verdict=" + result.getComparison().getVerdict() + ", Score=" + String.format("%.4f", result.getComparison().getScore()));
         }
 
         @Test
         @DisplayName("9.4 统计回归完整生命周期 — 5次采样 + STABLE/UNSTABLE/FLAKY")
         void testStatisticalLifecycle() throws Exception {
-            InteractionRecord baseline = makeTextBaseline("lifecycle-stat-1",
-                    "2的10次方等于多少？只回答数字。", "1024");
+            InteractionRecord baseline = makeTextBaseline("lifecycle-stat-1", "2的10次方等于多少？只回答数字。", "1024");
             String newPrompt = "你是数学助手，精确计算，只回答数字。";
 
-            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(
-                    client, new DeterministicComparator());
+            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator());
 
             StatisticalTestConfig config = new StatisticalTestConfig();
             config.setSampleCount(5);

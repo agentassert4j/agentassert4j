@@ -4,6 +4,7 @@ import io.github.agentassert4j.result.StatisticalVerdict;
 import io.github.agentassert4j.result.Verdict;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 统计回归测试结果 — 对同一基线执行 N 次重放后的聚合结果。
@@ -86,10 +87,7 @@ public class StatisticalRegressionResult {
      * @param regressionTolerance REGRESSION 比例上限
      * @return 聚合统计结果
      */
-    public static StatisticalRegressionResult aggregate(
-            String baselineRecordId, String skillId,
-            List<SampleResult> samples,
-            double passThreshold, double regressionTolerance) {
+    public static StatisticalRegressionResult aggregate(String baselineRecordId, String skillId, List<SampleResult> samples, double passThreshold, double regressionTolerance) {
 
         StatisticalRegressionResult result = new StatisticalRegressionResult();
         result.baselineRecordId = baselineRecordId;
@@ -136,9 +134,7 @@ public class StatisticalRegressionResult {
 
         // 3. score 均值和标准差
         result.averageScore = scoreSum / n;
-        result.scoreStdDev = n > 1
-                ? Math.sqrt(Math.max(0, (scoreSumSq - scoreSum * scoreSum / n) / (n - 1)))
-                : 0;
+        result.scoreStdDev = n > 1 ? Math.sqrt(Math.max(0, (scoreSumSq - scoreSum * scoreSum / n) / (n - 1))) : 0;
 
         // 4. 统计判定
         double passRate = rates.getOrDefault(Verdict.PASS, 0.0);
@@ -159,11 +155,7 @@ public class StatisticalRegressionResult {
                 diffFreq.merge(s.getDiffSummary(), 1, Integer::sum);
             }
         }
-        result.frequentDiffPatterns = diffFreq.entrySet().stream()
-                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                .limit(5)
-                .map(Map.Entry::getKey)
-                .toList();
+        result.frequentDiffPatterns = diffFreq.entrySet().stream().sorted(Map.Entry.<String, Integer>comparingByValue().reversed()).limit(5).map(Map.Entry::getKey).collect(Collectors.toList());
 
         return result;
     }

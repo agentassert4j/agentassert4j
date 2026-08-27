@@ -3,21 +3,19 @@ package io.github.agentassert4j.util;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 
 /**
  * SHA-256 哈希工具 — ThreadLocal 复用 MessageDigest 实例。
  */
 public final class HashUtil {
 
-    private static final ThreadLocal<MessageDigest> SHA256 =
-            ThreadLocal.withInitial(() -> {
-                try {
-                    return MessageDigest.getInstance("SHA-256");
-                } catch (NoSuchAlgorithmException e) {
-                    throw new RuntimeException("SHA-256 not available", e);
-                }
-            });
+    private static final ThreadLocal<MessageDigest> SHA256 = ThreadLocal.withInitial(() -> {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 not available", e);
+        }
+    });
 
     private HashUtil() {
     }
@@ -33,6 +31,17 @@ public final class HashUtil {
         MessageDigest md = SHA256.get();
         md.reset();
         byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
-        return HexFormat.of().formatHex(hash);
+        return toHex(hash);
+    }
+
+    private static String toHex(byte[] bytes) {
+        char[] hex = "0123456789abcdef".toCharArray();
+        char[] out = new char[bytes.length * 2];
+        for (int i = 0; i < bytes.length; i++) {
+            int v = bytes[i] & 0xFF;
+            out[i * 2] = hex[v >>> 4];
+            out[i * 2 + 1] = hex[v & 0x0F];
+        }
+        return new String(out);
     }
 }

@@ -1,9 +1,10 @@
 package io.github.agentassert4j.config;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -82,7 +83,8 @@ public final class ConfigLoader {
     public static String resolveEnvVars(String text) {
         if (text == null) return null;
         Matcher matcher = ENV_VAR_PATTERN.matcher(text);
-        StringBuilder sb = new StringBuilder();
+        // Matcher 的 appendReplacement/appendTail 在 JDK 8 只有 StringBuffer 重载
+        StringBuffer sb = new StringBuffer();
         while (matcher.find()) {
             String varName = matcher.group(1);
             String value = System.getenv(varName);
@@ -99,9 +101,15 @@ public final class ConfigLoader {
      * @return 文件内容，未找到返回 null
      */
     public static String loadFromClasspath(String filename) {
-        try (var is = ConfigLoader.class.getClassLoader().getResourceAsStream(filename)) {
+        try (InputStream is = ConfigLoader.class.getClassLoader().getResourceAsStream(filename)) {
             if (is == null) return null;
-            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            byte[] chunk = new byte[4096];
+            int read;
+            while ((read = is.read(chunk)) != -1) {
+                buffer.write(chunk, 0, read);
+            }
+            return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             return null;
         }
@@ -116,7 +124,7 @@ public final class ConfigLoader {
     public static String loadFromFile(String path) {
         if (path == null) return null;
         try {
-            return Files.readString(Path.of(path), StandardCharsets.UTF_8);
+            return new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
         } catch (IOException e) {
             return null;
         }

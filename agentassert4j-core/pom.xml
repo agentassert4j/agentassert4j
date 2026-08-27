@@ -19,7 +19,6 @@
         Depends on java.base ONLY. Must remain under 200KB.
     </description>
 
-    <!-- 铁律：零外部 Maven 依赖 -->
     <dependencies>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -27,4 +26,21 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default-compile</id>
+                        <configuration>
+                            <release>8</release>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

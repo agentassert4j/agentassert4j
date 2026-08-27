@@ -1,6 +1,7 @@
 package io.github.agentassert4j.config;
 
 import io.github.agentassert4j.util.RecursiveJsonParser;
+import io.github.agentassert4j.util.TextUtil;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -57,7 +58,7 @@ public class AgentAssert4jConfig {
     @SuppressWarnings("unchecked")
     public static AgentAssert4jConfig fromJson(String json) {
         AgentAssert4jConfig config = defaults();
-        if (json == null || json.isBlank()) return config;
+        if (TextUtil.isBlank(json)) return config;
 
         Object parsed = RecursiveJsonParser.parse(json);
         if (!(parsed instanceof Map)) return config;

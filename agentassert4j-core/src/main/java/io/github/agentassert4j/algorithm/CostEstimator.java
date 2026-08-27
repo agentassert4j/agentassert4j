@@ -2,6 +2,7 @@ package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.model.InteractionRecord;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +32,7 @@ public final class CostEstimator {
         map.put("deepseek-chat", 0.001);
         map.put("qwen-plus", 0.002);
         map.put("qwen-turbo", 0.0005);
-        MODEL_COST = Map.copyOf(map);
+        MODEL_COST = Collections.unmodifiableMap(map);
     }
 
     private CostEstimator() {
@@ -45,13 +46,10 @@ public final class CostEstimator {
      * @return 预估字符串，如 "预估 12 次 API 调用，约 $0.0480（模型：gpt-4o）"
      */
     public static String estimate(List<InteractionRecord> testCases, String model) {
-        int totalCalls = testCases.stream()
-                .mapToInt(r -> r.getTurnIndex() + 1)
-                .sum();
+        int totalCalls = testCases.stream().mapToInt(r -> r.getTurnIndex() + 1).sum();
         double costPerCall = getCostPerCall(model);
         double estimatedCost = totalCalls * costPerCall;
-        return String.format("预估 %d 次 API 调用，约 $%.4f（模型：%s）",
-                totalCalls, estimatedCost, model);
+        return String.format("预估 %d 次 API 调用，约 $%.4f（模型：%s）", totalCalls, estimatedCost, model);
     }
 
     /**
@@ -88,16 +86,12 @@ public final class CostEstimator {
      * @param sampleCount 采样次数
      * @return 预估字符串，如 "预估 5 用例 x 10 次 = 50 次 API 调用，约 $0.2000（模型：gpt-4o）"
      */
-    public static String estimateStatistical(List<InteractionRecord> testCases,
-                                             String model, int sampleCount) {
-        int totalCalls = testCases.stream()
-                .mapToInt(r -> r.getTurnIndex() + 1)
-                .sum();
+    public static String estimateStatistical(List<InteractionRecord> testCases, String model, int sampleCount) {
+        int totalCalls = testCases.stream().mapToInt(r -> r.getTurnIndex() + 1).sum();
         int totalSamples = totalCalls * sampleCount;
         double costPerCall = getCostPerCall(model);
         double estimatedCost = totalSamples * costPerCall;
-        return String.format("预估 %d 用例 x %d 次 = %d 次 API 调用，约 $%.4f（模型：%s）",
-                testCases.size(), sampleCount, totalSamples, estimatedCost, model);
+        return String.format("预估 %d 用例 x %d 次 = %d 次 API 调用，约 $%.4f（模型：%s）", testCases.size(), sampleCount, totalSamples, estimatedCost, model);
     }
 
     /**

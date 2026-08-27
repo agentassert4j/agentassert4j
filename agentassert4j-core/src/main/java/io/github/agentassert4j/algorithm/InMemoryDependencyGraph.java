@@ -3,6 +3,7 @@ package io.github.agentassert4j.algorithm;
 import io.github.agentassert4j.model.Confidence;
 import io.github.agentassert4j.model.GraphEdge;
 import io.github.agentassert4j.util.RecursiveJsonParser;
+import io.github.agentassert4j.util.TextUtil;
 
 import java.util.*;
 
@@ -36,7 +37,7 @@ public class InMemoryDependencyGraph {
     @SuppressWarnings("unchecked")
     public static InMemoryDependencyGraph fromJson(String json) {
         InMemoryDependencyGraph graph = new InMemoryDependencyGraph();
-        if (json == null || json.isBlank()) return graph;
+        if (TextUtil.isBlank(json)) return graph;
 
         Object parsed = RecursiveJsonParser.parse(json);
         if (!(parsed instanceof Map)) return graph;
@@ -149,8 +150,7 @@ public class InMemoryDependencyGraph {
         return cycleNodes;
     }
 
-    private void dfsCycle(String node, Set<String> white, Set<String> gray,
-                          Set<String> black, Set<String> cycleNodes) {
+    private void dfsCycle(String node, Set<String> white, Set<String> gray, Set<String> black, Set<String> cycleNodes) {
         white.remove(node);
         gray.add(node);
 
@@ -275,8 +275,7 @@ public class InMemoryDependencyGraph {
             for (String pred : nonExcludedPreds) {
                 for (String succ : nonExcludedSuccs) {
                     if (!pred.equals(succ)) {
-                        transparentEdges.add(new GraphEdge(pred, succ, Confidence.TRANSPARENT,
-                                List.of(excluded)));
+                        transparentEdges.add(new GraphEdge(pred, succ, Confidence.TRANSPARENT, Collections.singletonList(excluded)));
                     }
                 }
             }
@@ -302,9 +301,7 @@ public class InMemoryDependencyGraph {
         Set<String> visited = new HashSet<>();
 
         // 初始邻居
-        Set<String> neighbors = (dir == Direction.UP)
-                ? getPredecessors(start)
-                : getSuccessors(start);
+        Set<String> neighbors = (dir == Direction.UP) ? getPredecessors(start) : getSuccessors(start);
 
         queue.addAll(neighbors);
         while (!queue.isEmpty()) {
@@ -312,9 +309,7 @@ public class InMemoryDependencyGraph {
             if (!visited.add(node)) continue;
             if (excluded.contains(node)) {
                 // 继续穿透
-                Set<String> next = (dir == Direction.UP)
-                        ? getPredecessors(node)
-                        : getSuccessors(node);
+                Set<String> next = (dir == Direction.UP) ? getPredecessors(node) : getSuccessors(node);
                 queue.addAll(next);
             } else {
                 result.add(node);

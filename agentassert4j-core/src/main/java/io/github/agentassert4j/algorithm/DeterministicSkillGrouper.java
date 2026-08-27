@@ -39,28 +39,20 @@ public final class DeterministicSkillGrouper {
         SkillType skillType;
         String paramSignature = "";
 
-        if (record.isHasToolCalls() && record.getToolCalls() != null
-                && !record.getToolCalls().isEmpty()) {
+        if (record.isHasToolCalls() && record.getToolCalls() != null && !record.getToolCalls().isEmpty()) {
             // 有工具调用：TOOL_SKILL
             List<ToolCall> calls = record.getToolCalls();
 
             // 1. 提取所有工具名并排序（多工具调用顺序无关）
-            List<String> sortedNames = calls.stream()
-                    .map(ToolCall::getToolName)
-                    .sorted()
-                    .toList();
+            List<String> sortedNames = calls.stream().map(ToolCall::getToolName).sorted().collect(Collectors.toList());
 
             // 2. 构建参数类型签名（所有工具的参数类型合并排序）
             //    归一化 toLowerCase()：SDK 提供 "String"、JSON Schema 提供 "string"、
             //    LangChain4j 可能提供 "STRING" → 统一小写避免同一 Skill 被多分
-            paramSignature = calls.stream()
-                    .flatMap(tc -> {
-                        if (tc.getArgTypes() == null) return Stream.empty();
-                        return tc.getArgTypes().entrySet().stream()
-                                .map(e -> e.getKey().toLowerCase() + ":" + e.getValue().toLowerCase());
-                    })
-                    .sorted()
-                    .collect(Collectors.joining(","));
+            paramSignature = calls.stream().flatMap(tc -> {
+                if (tc.getArgTypes() == null) return Stream.empty();
+                return tc.getArgTypes().entrySet().stream().map(e -> e.getKey().toLowerCase() + ":" + e.getValue().toLowerCase());
+            }).sorted().collect(Collectors.joining(","));
 
             // 3. 组合键：toolNames[paramSignature]
             groupKey = String.join("+", sortedNames) + "[" + paramSignature + "]";
@@ -71,9 +63,7 @@ public final class DeterministicSkillGrouper {
             // template_hash（三元组语义主锚点）→ user_input hash（无模板时兜底）→ 稳定孤儿键
             String anchor = record.getTemplateHash();
             if (anchor == null || anchor.isEmpty()) {
-                anchor = record.getUserInput() != null && !record.getUserInput().isEmpty()
-                        ? HashUtil.sha256(record.getUserInput())
-                        : "no-anchor";
+                anchor = record.getUserInput() != null && !record.getUserInput().isEmpty() ? HashUtil.sha256(record.getUserInput()) : "no-anchor";
             }
             groupKey = "chat:" + anchor;
             skillName = "chat:" + anchor.substring(0, Math.min(8, anchor.length()));

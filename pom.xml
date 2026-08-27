@@ -35,7 +35,7 @@
 
         <!-- Dependency versions -->
         <junit.version>5.10.3</junit.version>
-        <disruptor.version>4.0.0</disruptor.version>
+        <disruptor.version>3.4.4</disruptor.version>
         <sqlite.version>3.46.0.0</sqlite.version>
         <spring-boot.version>3.3.1</spring-boot.version>
         <spring-ai.version>1.0.0-M6</spring-ai.version>
@@ -64,12 +64,12 @@
             </dependency>
             <dependency>
                 <groupId>io.github.agentassert4j</groupId>
-                <artifactId>agentassert4j-sdk-spring</artifactId>
+                <artifactId>agentassert4j-sdk-spring-ai1</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.github.agentassert4j</groupId>
-                <artifactId>agentassert4j-spring-boot-starter</artifactId>
+                <artifactId>agentassert4j-spring-boot3-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

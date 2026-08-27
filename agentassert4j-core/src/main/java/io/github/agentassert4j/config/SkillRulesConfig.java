@@ -2,6 +2,7 @@ package io.github.agentassert4j.config;
 
 import io.github.agentassert4j.model.RegexPattern;
 import io.github.agentassert4j.util.RecursiveJsonParser;
+import io.github.agentassert4j.util.TextUtil;
 
 import java.util.*;
 
@@ -49,7 +50,7 @@ public class SkillRulesConfig {
     @SuppressWarnings("unchecked")
     public static SkillRulesConfig fromJson(String json) {
         SkillRulesConfig config = new SkillRulesConfig();
-        if (json == null || json.isBlank()) return config;
+        if (TextUtil.isBlank(json)) return config;
 
         Object parsed = RecursiveJsonParser.parse(json);
         if (!(parsed instanceof Map)) return config;
@@ -62,8 +63,7 @@ public class SkillRulesConfig {
         for (Map.Entry<String, Object> entry : skillsMap.entrySet()) {
             String skillId = entry.getKey();
             if (entry.getValue() instanceof Map) {
-                config.rules.put(skillId,
-                        SkillRule.fromJson((Map<String, Object>) entry.getValue()));
+                config.rules.put(skillId, SkillRule.fromJson((Map<String, Object>) entry.getValue()));
             }
         }
         return config;

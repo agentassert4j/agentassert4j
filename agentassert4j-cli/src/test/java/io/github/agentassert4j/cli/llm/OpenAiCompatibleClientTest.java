@@ -1,4 +1,4 @@
-package io.github.agentassert4j.spi;
+package io.github.agentassert4j.cli.llm;
 
 import io.github.agentassert4j.model.LlmRequest;
 import io.github.agentassert4j.model.LlmResponse;
@@ -18,8 +18,7 @@ class OpenAiCompatibleClientTest {
 
     @BeforeEach
     void setUp() {
-        client = new OpenAiCompatibleClient(
-                "https://api.openai.com", "test-key", "gpt-4o");
+        client = new OpenAiCompatibleClient("https://api.openai.com", "test-key", "gpt-4o");
     }
 
     @Test
@@ -58,10 +57,7 @@ class OpenAiCompatibleClientTest {
         LlmRequest request = new LlmRequest();
         request.setSystemPrompt("System");
         request.setUserInput("Current");
-        request.setPreviousTurns(List.of(
-                new TurnContext("user", "Previous question"),
-                new TurnContext("assistant", "Previous answer")
-        ));
+        request.setPreviousTurns(List.of(new TurnContext("user", "Previous question"), new TurnContext("assistant", "Previous answer")));
 
         String body = client.buildRequestBody(request, "gpt-4o");
 
@@ -112,10 +108,7 @@ class OpenAiCompatibleClientTest {
 
     @Test
     void parseResponse_extractsContent() throws Exception {
-        String json = "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\"," +
-                "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\"," +
-                "\"content\":\"Hello! How can I help?\"},\"finish_reason\":\"stop\"}]," +
-                "\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}";
+        String json = "{\"id\":\"chatcmpl-1\",\"object\":\"chat.completion\"," + "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\"," + "\"content\":\"Hello! How can I help?\"},\"finish_reason\":\"stop\"}]," + "\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}";
 
         LlmResponse response = client.parseResponse(json);
 
@@ -127,11 +120,7 @@ class OpenAiCompatibleClientTest {
 
     @Test
     void parseResponse_extractsToolCalls() throws Exception {
-        String json = "{\"id\":\"chatcmpl-2\",\"choices\":[{\"message\":{" +
-                "\"role\":\"assistant\",\"content\":null," +
-                "\"tool_calls\":[{\"id\":\"call_abc\",\"type\":\"function\"," +
-                "\"function\":{\"name\":\"queryOrder\",\"arguments\":\"{\\\"orderId\\\":\\\"ORD-001\\\"}\"}}" +
-                "]}}],\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":10}}";
+        String json = "{\"id\":\"chatcmpl-2\",\"choices\":[{\"message\":{" + "\"role\":\"assistant\",\"content\":null," + "\"tool_calls\":[{\"id\":\"call_abc\",\"type\":\"function\"," + "\"function\":{\"name\":\"queryOrder\",\"arguments\":\"{\\\"orderId\\\":\\\"ORD-001\\\"}\"}}" + "]}}],\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":10}}";
 
         LlmResponse response = client.parseResponse(json);
 
@@ -147,10 +136,7 @@ class OpenAiCompatibleClientTest {
 
     @Test
     void parseResponse_multipleToolCalls() throws Exception {
-        String json = "{\"choices\":[{\"message\":{\"tool_calls\":[" +
-                "{\"id\":\"c1\",\"type\":\"function\",\"function\":{\"name\":\"tool1\",\"arguments\":\"{\\\"a\\\":1}\"}}," +
-                "{\"id\":\"c2\",\"type\":\"function\",\"function\":{\"name\":\"tool2\",\"arguments\":\"{\\\"b\\\":true}\"}}" +
-                "]}}]}";
+        String json = "{\"choices\":[{\"message\":{\"tool_calls\":[" + "{\"id\":\"c1\",\"type\":\"function\",\"function\":{\"name\":\"tool1\",\"arguments\":\"{\\\"a\\\":1}\"}}," + "{\"id\":\"c2\",\"type\":\"function\",\"function\":{\"name\":\"tool2\",\"arguments\":\"{\\\"b\\\":true}\"}}" + "]}}]}";
 
         LlmResponse response = client.parseResponse(json);
 
@@ -173,10 +159,7 @@ class OpenAiCompatibleClientTest {
 
     @Test
     void parseResponse_argumentsWithNestedObject_keptAsString() throws Exception {
-        String json = "{\"choices\":[{\"message\":{\"tool_calls\":[" +
-                "{\"id\":\"c1\",\"type\":\"function\",\"function\":{" +
-                "\"name\":\"search\",\"arguments\":\"{\\\"filter\\\":{\\\"status\\\":\\\"active\\\"}}\"}}" +
-                "]}}]}";
+        String json = "{\"choices\":[{\"message\":{\"tool_calls\":[" + "{\"id\":\"c1\",\"type\":\"function\",\"function\":{" + "\"name\":\"search\",\"arguments\":\"{\\\"filter\\\":{\\\"status\\\":\\\"active\\\"}}\"}}" + "]}}]}";
 
         LlmResponse response = client.parseResponse(json);
         Map<String, Object> args = response.getToolCalls().get(0).getArguments();
@@ -194,8 +177,7 @@ class OpenAiCompatibleClientTest {
 
     @Test
     void constructor_normalizesTrailingSlash() {
-        OpenAiCompatibleClient c = new OpenAiCompatibleClient(
-                "https://api.deepseek.com/", "key", "deepseek-chat");
+        OpenAiCompatibleClient c = new OpenAiCompatibleClient("https://api.deepseek.com/", "key", "deepseek-chat");
         // 内部 endpoint 已去尾斜杠，验证通过 buildRequestBody 不暴露
         // 直接验证 name()
         assertEquals("deepseek-chat", c.name());
@@ -203,17 +185,13 @@ class OpenAiCompatibleClientTest {
 
     @Test
     void isAvailable_unreachableEndpoint_returnsFalse() {
-        OpenAiCompatibleClient c = new OpenAiCompatibleClient(
-                "http://localhost:1", "fake-key", "test");
+        OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://localhost:1", "fake-key", "test");
         assertFalse(c.isAvailable());
     }
 
     @Test
     void parseResponse_argumentsWithNumberTypes() throws Exception {
-        String json = "{\"choices\":[{\"message\":{\"tool_calls\":[" +
-                "{\"id\":\"c1\",\"type\":\"function\",\"function\":{" +
-                "\"name\":\"paginate\",\"arguments\":\"{\\\"page\\\":1,\\\"limit\\\":20,\\\"price\\\":9.99}\"}}" +
-                "]}}]}";
+        String json = "{\"choices\":[{\"message\":{\"tool_calls\":[" + "{\"id\":\"c1\",\"type\":\"function\",\"function\":{" + "\"name\":\"paginate\",\"arguments\":\"{\\\"page\\\":1,\\\"limit\\\":20,\\\"price\\\":9.99}\"}}" + "]}}]}";
 
         LlmResponse response = client.parseResponse(json);
         Map<String, Object> args = response.getToolCalls().get(0).getArguments();
@@ -225,10 +203,7 @@ class OpenAiCompatibleClientTest {
 
     @Test
     void parseResponse_argumentsWithNull() throws Exception {
-        String json = "{\"choices\":[{\"message\":{\"tool_calls\":[" +
-                "{\"id\":\"c1\",\"type\":\"function\",\"function\":{" +
-                "\"name\":\"test\",\"arguments\":\"{\\\"field\\\":null}\"}}" +
-                "]}}]}";
+        String json = "{\"choices\":[{\"message\":{\"tool_calls\":[" + "{\"id\":\"c1\",\"type\":\"function\",\"function\":{" + "\"name\":\"test\",\"arguments\":\"{\\\"field\\\":null}\"}}" + "]}}]}";
 
         LlmResponse response = client.parseResponse(json);
         Map<String, Object> args = response.getToolCalls().get(0).getArguments();
@@ -246,13 +221,8 @@ class OpenAiCompatibleClientTest {
     @Test
     void parseResponse_retainsUsageRawAndNormalizesDialect() throws Exception {
         // DeepSeek 风格 usage：prompt_cache_hit_tokens + prompt_tokens_details.cached_tokens
-        String usage = "{\"prompt_tokens\":2048,\"completion_tokens\":100," +
-                "\"prompt_cache_hit_tokens\":1024," +
-                "\"prompt_tokens_details\":{\"cached_tokens\":1024}," +
-                "\"completion_tokens_details\":{\"reasoning_tokens\":64}}";
-        String json = "{\"id\":\"resp-1\",\"model\":\"deepseek-chat-V3.1-0806\"," +
-                "\"choices\":[{\"message\":{\"content\":\"ok\"},\"finish_reason\":\"tool_calls\"}]," +
-                "\"usage\":" + usage + "}";
+        String usage = "{\"prompt_tokens\":2048,\"completion_tokens\":100," + "\"prompt_cache_hit_tokens\":1024," + "\"prompt_tokens_details\":{\"cached_tokens\":1024}," + "\"completion_tokens_details\":{\"reasoning_tokens\":64}}";
+        String json = "{\"id\":\"resp-1\",\"model\":\"deepseek-chat-V3.1-0806\"," + "\"choices\":[{\"message\":{\"content\":\"ok\"},\"finish_reason\":\"tool_calls\"}]," + "\"usage\":" + usage + "}";
 
         LlmResponse response = client.parseResponse(json);
 
@@ -264,14 +234,12 @@ class OpenAiCompatibleClientTest {
         assertEquals("tool_calls", response.getFinishReason());
 
         assertNotNull(response.getUsageRaw(), "usage 子树必须逐字保留");
-        assertTrue(response.getUsageRaw().contains("prompt_cache_hit_tokens"),
-                "usage_raw 是逐字原文，未归一的方言字段也必须在其中（回填来源）");
+        assertTrue(response.getUsageRaw().contains("prompt_cache_hit_tokens"), "usage_raw 是逐字原文，未归一的方言字段也必须在其中（回填来源）");
     }
 
     @Test
     void parseResponse_absentOptionalTelemetry_staysNull() throws Exception {
-        String json = "{\"choices\":[{\"message\":{\"content\":\"hi\"},\"finish_reason\":\"stop\"}]," +
-                "\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2}}";
+        String json = "{\"choices\":[{\"message\":{\"content\":\"hi\"},\"finish_reason\":\"stop\"}]," + "\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2}}";
 
         LlmResponse response = client.parseResponse(json);
 
