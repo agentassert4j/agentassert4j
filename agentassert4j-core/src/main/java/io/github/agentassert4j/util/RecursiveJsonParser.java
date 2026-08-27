@@ -21,6 +21,13 @@ import java.util.*;
  */
 public final class RecursiveJsonParser {
 
+    /**
+     * 嵌套深度上限。递归下降没有限深时，恶意或异常的超深嵌套输入会耗尽
+     * 调用栈抛出 StackOverflowError——Error 不在 catch(Exception) 的拦截面内，
+     * 会穿透所有按"解析失败退化"设计的防御层。合法 JSON 业务结构远达不到此深度。
+     */
+    private static final int MAX_DEPTH = 128;
+
     private RecursiveJsonParser() {
     }
 
@@ -251,11 +258,13 @@ public final class RecursiveJsonParser {
         final String input;
         final int len;
         int pos;
+        int depth;
 
         Parser(String input) {
             this.input = input;
             this.len = input.length();
             this.pos = 0;
+            this.depth = 0;
         }
 
         Object parseValue() {
@@ -264,9 +273,31 @@ public final class RecursiveJsonParser {
             char c = input.charAt(pos);
             switch (c) {
                 case '{':
-                    return parseObject();
                 case '[':
-                    return parseArray();
+                    if (++depth > MAX_DEPTH) {
+                        throw new ParseException("JSON nesting exceeds " + MAX_DEPTH + " levels");
+                    }
+                    break;
+                default:
+                    break;
+            }
+            return parseDispatch(c);
+        }
+
+        private Object parseDispatch(char c) {
+            switch (c) {
+                case '{':
+                    try {
+                        return parseObject();
+                    } finally {
+                        depth--;
+                    }
+                case '[':
+                    try {
+                        return parseArray();
+                    } finally {
+                        depth--;
+                    }
                 case '"':
                     return parseString();
                 case 't':

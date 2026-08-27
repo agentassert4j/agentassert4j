@@ -18,8 +18,6 @@ import java.io.PrintStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -226,8 +224,8 @@ class ReplayFlowTest {
                 ToolCallResult tc = new ToolCallResult();
                 tc.setToolCallId("call-1");
                 tc.setToolName("queryOrder");
-                tc.setArguments(Map.of("orderId", "ORD-001"));
-                response.setToolCalls(List.of(tc));
+                tc.setArguments(Collections.singletonMap("orderId", "ORD-001"));
+                response.setToolCalls(Collections.singletonList(tc));
                 response.setContent(null);
             } else {
                 response.setContent(responseText);

@@ -4,6 +4,9 @@ import io.github.agentassert4j.model.DeterministicFingerprint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -190,19 +193,17 @@ class BehaviorCheckerTest {
 
     @Test
     void checkAll_allPass_returnsTrue() {
-        assertTrue(BehaviorChecker.checkAll(
-                Set.of("nonEmptyOutput", "noError"), fpNoError, "hello"));
+        assertTrue(BehaviorChecker.checkAll(new HashSet<>(Arrays.asList("nonEmptyOutput", "noError")), fpNoError, "hello"));
     }
 
     @Test
     void checkAll_oneFails_returnsFalse() {
-        assertFalse(BehaviorChecker.checkAll(
-                Set.of("nonEmptyOutput", "noError"), fpHasError, "hello"));
+        assertFalse(BehaviorChecker.checkAll(new HashSet<>(Arrays.asList("nonEmptyOutput", "noError")), fpHasError, "hello"));
     }
 
     @Test
     void checkAll_emptySet_returnsTrue() {
-        assertTrue(BehaviorChecker.checkAll(Set.of(), fpNoError, "hello"));
+        assertTrue(BehaviorChecker.checkAll(Collections.emptySet(), fpNoError, "hello"));
     }
 
     @Test

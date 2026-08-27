@@ -21,8 +21,8 @@ import java.util.Map;
  *   "storage": { "url": "~/.agentassert4j/agentassert4j.db" },
  *   "recorder": { "batchSize": 100, "flushIntervalMs": 5000 },
  *   "regression": { "ignorableFields": ["debugInfo", "timestamp"] },
- *   "llm": { "apiKey": "${AGENTASSERT_API_KEY}", "endpoint": "...", "model": "gpt-4o" },
- *   "tools": { "excludeFromGraph": ["read_file", "edit_file", "bash"] }
+ *   "llm": { "apiKey": "${AGENTASSERT_API_KEY}", "endpoint": "...", "model": "gpt-4o",
+ *            "extraBody": "\"thinking\":{\"type\":\"disabled\"}" }, *   "tools": { "excludeFromGraph": ["read_file", "edit_file", "bash"] }
  * }
  * </pre>
  *
@@ -261,6 +261,12 @@ public class AgentAssert4jConfig {
          * 超时时间（毫秒）
          */
         private int timeoutMs = 30000;
+        /**
+         * 厂商方言扩展字段——原样注入请求体顶层的 JSON 成员片段（如 DeepSeek V4 系
+         * 关闭思考态的 "thinking":{"type":"disabled"}），null/空白表示无扩展。
+         * 客户端不做任何按模型名的自动适配，方言差异由使用方经此字段显式声明
+         */
+        private String extraBody;
 
         @SuppressWarnings("unchecked")
         static LlmConfig fromJson(Map<String, Object> map, LlmConfig defaults) {
@@ -270,6 +276,7 @@ public class AgentAssert4jConfig {
             c.endpoint = getString(map, "endpoint", defaults.endpoint);
             c.model = getString(map, "model", defaults.model);
             c.timeoutMs = getInt(map, "timeoutMs", defaults.timeoutMs);
+            c.extraBody = getString(map, "extraBody", defaults.extraBody);
             return c;
         }
 
@@ -303,6 +310,14 @@ public class AgentAssert4jConfig {
 
         public void setTimeoutMs(int timeoutMs) {
             this.timeoutMs = timeoutMs;
+        }
+
+        public String getExtraBody() {
+            return extraBody;
+        }
+
+        public void setExtraBody(String extraBody) {
+            this.extraBody = extraBody;
         }
     }
 

@@ -49,40 +49,27 @@ class SimpleTestRepo implements StorageRepository {
 
     @Override
     public List<InteractionRecord> findBySkillId(String skillId) {
-        return interactions.stream()
-                .filter(r -> skillId.equals(r.getSkillId()))
-                .collect(Collectors.toList());
+        return interactions.stream().filter(r -> skillId.equals(r.getSkillId())).collect(Collectors.toList());
     }
 
     @Override
     public List<InteractionRecord> findByTemplateHash(String hash) {
-        return interactions.stream()
-                .filter(r -> hash.equals(r.getTemplateHash()))
-                .collect(Collectors.toList());
+        return interactions.stream().filter(r -> hash.equals(r.getTemplateHash())).collect(Collectors.toList());
     }
 
     @Override
     public Set<String> findSkillIdsByTemplateHash(String hash) {
-        return interactions.stream()
-                .filter(r -> hash.equals(r.getTemplateHash()))
-                .map(InteractionRecord::getSkillId)
-                .filter(id -> id != null && !id.isEmpty())
-                .collect(Collectors.toSet());
+        return interactions.stream().filter(r -> hash.equals(r.getTemplateHash())).map(InteractionRecord::getSkillId).filter(id -> id != null && !id.isEmpty()).collect(Collectors.toSet());
     }
 
     @Override
     public List<InteractionRecord> findBySessionId(String sessionId) {
-        return interactions.stream()
-                .filter(r -> sessionId.equals(r.getSessionId()))
-                .collect(Collectors.toList());
+        return interactions.stream().filter(r -> sessionId.equals(r.getSessionId())).collect(Collectors.toList());
     }
 
     @Override
     public List<String> findAllSessionIds() {
-        return interactions.stream()
-                .map(InteractionRecord::getSessionId)
-                .distinct()
-                .collect(Collectors.toList());
+        return interactions.stream().map(InteractionRecord::getSessionId).distinct().collect(Collectors.toList());
     }
 
     @Override
@@ -132,10 +119,7 @@ class SimpleTestRepo implements StorageRepository {
 
     @Override
     public ArchivedBaseline findArchivedBaseline(String skillId, String versionTag) {
-        return archivedBaselines.stream()
-                .filter(ab -> skillId.equals(ab.getSkillId()) && versionTag.equals(ab.getVersionTag()))
-                .findFirst()
-                .orElse(null);
+        return archivedBaselines.stream().filter(ab -> skillId.equals(ab.getSkillId()) && versionTag.equals(ab.getVersionTag())).findFirst().orElse(null);
     }
 
 }

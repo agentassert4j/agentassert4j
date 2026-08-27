@@ -7,10 +7,7 @@ import io.github.agentassert4j.spi.StorageRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -29,8 +26,7 @@ class ParameterValueTracerTest {
         tracer = new ParameterValueTracer();
     }
 
-    private InteractionRecord record(String skillId, String modelResponse,
-                                     List<ToolCall> toolCalls) {
+    private InteractionRecord record(String skillId, String modelResponse, List<ToolCall> toolCalls) {
         InteractionRecord r = new InteractionRecord();
         r.setSkillId(skillId);
         r.setModelResponse(modelResponse);
@@ -40,8 +36,7 @@ class ParameterValueTracerTest {
         return r;
     }
 
-    private InteractionRecord record(String skillId, String modelResponse,
-                                     List<ToolCall> toolCalls, long timestamp) {
+    private InteractionRecord record(String skillId, String modelResponse, List<ToolCall> toolCalls, long timestamp) {
         InteractionRecord r = record(skillId, modelResponse, toolCalls);
         r.setTimestamp(timestamp);
         return r;
@@ -122,8 +117,7 @@ class ParameterValueTracerTest {
 
     @Test
     void extractFieldValues_jsonObject() {
-        InteractionRecord r = record("s1",
-                "{\"orderId\":\"ORD-001\",\"amount\":99.9}", null);
+        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-001\",\"amount\":99.9}", null);
         Set<String> values = tracer.extractFieldValues(r);
 
         assertTrue(values.contains("ORD-001"));
@@ -133,8 +127,7 @@ class ParameterValueTracerTest {
 
     @Test
     void extractFieldValues_nestedJson() {
-        InteractionRecord r = record("s1",
-                "{\"user\":{\"name\":\"Bob\",\"address\":{\"city\":\"NYC\"}}}", null);
+        InteractionRecord r = record("s1", "{\"user\":{\"name\":\"Bob\",\"address\":{\"city\":\"NYC\"}}}", null);
         Set<String> values = tracer.extractFieldValues(r);
 
         assertTrue(values.contains("Bob"));
@@ -158,8 +151,7 @@ class ParameterValueTracerTest {
 
     @Test
     void extractFieldValues_jsonArray() {
-        InteractionRecord r = record("s1",
-                "[{\"id\":\"A1\"},{\"id\":\"B2\"}]", null);
+        InteractionRecord r = record("s1", "[{\"id\":\"A1\"},{\"id\":\"B2\"}]", null);
         Set<String> values = tracer.extractFieldValues(r);
 
         assertTrue(values.contains("A1"));
@@ -173,8 +165,7 @@ class ParameterValueTracerTest {
 
     @Test
     void extractArgValues_withArguments() {
-        InteractionRecord r = record("s1", null,
-                List.of(tc("tool", Map.of("orderId", (Object) "ORD-001", "limit", 10))));
+        InteractionRecord r = record("s1", null, Arrays.asList(tc("tool", objectMap("orderId", "ORD-001", "limit", 10))));
 
         Set<String> values = tracer.extractArgValues(r);
         assertTrue(values.contains("ORD-001"));
@@ -192,14 +183,13 @@ class ParameterValueTracerTest {
         ToolCall tc = new ToolCall();
         tc.setToolName("tool");
         tc.setArguments(null);
-        InteractionRecord r = record("s1", null, List.of(tc));
+        InteractionRecord r = record("s1", null, Collections.singletonList(tc));
         assertTrue(tracer.extractArgValues(r).isEmpty());
     }
 
     @Test
     void extractFieldNames_jsonObject() {
-        InteractionRecord r = record("s1",
-                "{\"orderId\":\"ORD-001\",\"amount\":100}", null);
+        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-001\",\"amount\":100}", null);
         Set<String> names = tracer.extractFieldNames(r);
 
         assertTrue(names.contains("orderId"));
@@ -208,8 +198,7 @@ class ParameterValueTracerTest {
 
     @Test
     void extractFieldNames_nestedJson() {
-        InteractionRecord r = record("s1",
-                "{\"user\":{\"name\":\"Bob\"}}", null);
+        InteractionRecord r = record("s1", "{\"user\":{\"name\":\"Bob\"}}", null);
         Set<String> names = tracer.extractFieldNames(r);
 
         assertTrue(names.contains("user"));
@@ -224,8 +213,7 @@ class ParameterValueTracerTest {
 
     @Test
     void extractArgNames_withArguments() {
-        InteractionRecord r = record("s1", null,
-                List.of(tc("tool", Map.of("orderId", (Object) "x", "limit", 10))));
+        InteractionRecord r = record("s1", null, Arrays.asList(tc("tool", objectMap("orderId", "x", "limit", 10))));
 
         Set<String> names = tracer.extractArgNames(r);
         assertTrue(names.contains("orderId"));
@@ -241,12 +229,10 @@ class ParameterValueTracerTest {
     @Test
     void traceDependency_valueMatch_highConfidence() {
         // prev 返回 {"orderId":"ORD-001"}，curr 参数 {orderRef: "ORD-001"}
-        InteractionRecord prev = record("skillA",
-                "{\"orderId\":\"ORD-001\"}", List.of(tc("toolA", null)), 1000);
-        InteractionRecord curr = record("skillB", "ok",
-                List.of(tc("toolB", Map.of("orderRef", (Object) "ORD-001"))), 2000);
+        InteractionRecord prev = record("skillA", "{\"orderId\":\"ORD-001\"}", Collections.singletonList(tc("toolA", null)), 1000);
+        InteractionRecord curr = record("skillB", "ok", Collections.singletonList(tc("toolB", Collections.singletonMap("orderRef", (Object) "ORD-001"))), 2000);
 
-        tracer.traceDependency(List.of(prev, curr));
+        tracer.traceDependency(Arrays.asList(prev, curr));
 
         assertTrue(tracer.getGraph().getSuccessors("skillA").contains("skillB"));
         assertEquals(1, tracer.getGraph().edgeCount());
@@ -257,12 +243,10 @@ class ParameterValueTracerTest {
     void traceDependency_namePrefixMatch_lowConfidence() {
         // prev 返回 {"orderId":"ORD-001"}，curr 参数 {orderRef: "SOMETHING_ELSE"}
         // 值不匹配但前缀 "order" 匹配
-        InteractionRecord prev = record("skillA",
-                "{\"orderId\":\"ORD-001\"}", List.of(tc("toolA", null)), 1000);
-        InteractionRecord curr = record("skillB", "ok",
-                List.of(tc("toolB", Map.of("orderRef", (Object) "SOMETHING_ELSE"))), 2000);
+        InteractionRecord prev = record("skillA", "{\"orderId\":\"ORD-001\"}", Collections.singletonList(tc("toolA", null)), 1000);
+        InteractionRecord curr = record("skillB", "ok", Collections.singletonList(tc("toolB", Collections.singletonMap("orderRef", (Object) "SOMETHING_ELSE"))), 2000);
 
-        tracer.traceDependency(List.of(prev, curr));
+        tracer.traceDependency(Arrays.asList(prev, curr));
 
         assertTrue(tracer.getGraph().getSuccessors("skillA").contains("skillB"));
         assertEquals(Confidence.LOW, tracer.getGraph().getAllEdges().get(0).getConfidence());
@@ -272,24 +256,20 @@ class ParameterValueTracerTest {
     void traceDependency_noMatch_noEdge() {
         // prev 返回 {"amount":100}，curr 参数 {name: "test"}
         // 值不匹配，前缀不匹配
-        InteractionRecord prev = record("skillA",
-                "{\"amount\":100}", List.of(tc("toolA", null)), 1000);
-        InteractionRecord curr = record("skillB", "ok",
-                List.of(tc("toolB", Map.of("name", (Object) "test"))), 2000);
+        InteractionRecord prev = record("skillA", "{\"amount\":100}", Collections.singletonList(tc("toolA", null)), 1000);
+        InteractionRecord curr = record("skillB", "ok", Collections.singletonList(tc("toolB", Collections.singletonMap("name", (Object) "test"))), 2000);
 
-        tracer.traceDependency(List.of(prev, curr));
+        tracer.traceDependency(Arrays.asList(prev, curr));
 
         assertEquals(0, tracer.getGraph().edgeCount());
     }
 
     @Test
     void traceDependency_sameSkill_noEdge() {
-        InteractionRecord r1 = record("skillA", "{}",
-                List.of(tc("tool", null)), 1000);
-        InteractionRecord r2 = record("skillA", "{}",
-                List.of(tc("tool", null)), 2000);
+        InteractionRecord r1 = record("skillA", "{}", Collections.singletonList(tc("tool", null)), 1000);
+        InteractionRecord r2 = record("skillA", "{}", Collections.singletonList(tc("tool", null)), 2000);
 
-        tracer.traceDependency(List.of(r1, r2));
+        tracer.traceDependency(Arrays.asList(r1, r2));
 
         assertEquals(0, tracer.getGraph().edgeCount());
     }
@@ -302,7 +282,7 @@ class ParameterValueTracerTest {
     @Test
     void traceDependency_singleRecord() {
         InteractionRecord r = record("skillA", "{}", null, 1000);
-        assertDoesNotThrow(() -> tracer.traceDependency(List.of(r)));
+        assertDoesNotThrow(() -> tracer.traceDependency(Collections.singletonList(r)));
     }
 
     @Test
@@ -313,15 +293,11 @@ class ParameterValueTracerTest {
     @Test
     void traceDependency_chain_multipleSteps() {
         // A → B → C，A 返回值在 B 参数中使用，B 返回值在 C 参数中使用
-        InteractionRecord rA = record("skillA",
-                "{\"orderId\":\"ORD-001\"}", List.of(tc("tA", null)), 1000);
-        InteractionRecord rB = record("skillB",
-                "{\"shipId\":\"SHIP-001\"}",
-                List.of(tc("tB", Map.of("orderId", (Object) "ORD-001"))), 2000);
-        InteractionRecord rC = record("skillC", "ok",
-                List.of(tc("tC", Map.of("shipId", (Object) "SHIP-001"))), 3000);
+        InteractionRecord rA = record("skillA", "{\"orderId\":\"ORD-001\"}", Collections.singletonList(tc("tA", null)), 1000);
+        InteractionRecord rB = record("skillB", "{\"shipId\":\"SHIP-001\"}", Collections.singletonList(tc("tB", Collections.singletonMap("orderId", (Object) "ORD-001"))), 2000);
+        InteractionRecord rC = record("skillC", "ok", Collections.singletonList(tc("tC", Collections.singletonMap("shipId", (Object) "SHIP-001"))), 3000);
 
-        tracer.traceDependency(List.of(rA, rB, rC));
+        tracer.traceDependency(Arrays.asList(rA, rB, rC));
 
         // A → B, B → C
         assertEquals(2, tracer.getGraph().edgeCount());
@@ -332,15 +308,7 @@ class ParameterValueTracerTest {
     @Test
     void rebuildGraph_withSimpleRepository() {
         // 创建简单内存仓库
-        StorageRepository repo = new SimpleTestRepo(
-                List.of("session1"),
-                Map.of("session1", List.of(
-                        record("skillA", "{\"orderId\":\"ORD-001\"}",
-                                List.of(tc("tA", null)), 1000),
-                        record("skillB", "ok",
-                                List.of(tc("tB", Map.of("orderId", (Object) "ORD-001"))), 2000)
-                ))
-        );
+        StorageRepository repo = new SimpleTestRepo(Collections.singletonList("session1"), Collections.singletonMap("session1", Arrays.asList(record("skillA", "{\"orderId\":\"ORD-001\"}", Collections.singletonList(tc("tA", null)), 1000), record("skillB", "ok", Collections.singletonList(tc("tB", Collections.singletonMap("orderId", (Object) "ORD-001"))), 2000))));
 
         tracer.rebuildGraph(repo);
 
@@ -358,21 +326,24 @@ class ParameterValueTracerTest {
     void rebuildGraph_sameTimestamp_orderDeterministicByRecordId() {
         // 同毫秒交互必须可复现：时间戳相同则由记录 ID 决定次序；
         // 存储返回顺序故意与 ID 次序相反，证明排序与返回顺序无关。
-        InteractionRecord first = record("skillA", "{\"orderId\":\"ORD-001\"}",
-                List.of(tc("tA", null)), 1000);
+        InteractionRecord first = record("skillA", "{\"orderId\":\"ORD-001\"}", Collections.singletonList(tc("tA", null)), 1000);
         first.setRecordId("a-first");
-        InteractionRecord second = record("skillB", "ok",
-                List.of(tc("tB", Map.of("orderId", (Object) "ORD-001"))), 1000);
+        InteractionRecord second = record("skillB", "ok", Collections.singletonList(tc("tB", Collections.singletonMap("orderId", (Object) "ORD-001"))), 1000);
         second.setRecordId("b-second");
 
-        StorageRepository repo = new SimpleTestRepo(
-                List.of("session1"),
-                Map.of("session1", List.of(second, first)));
+        StorageRepository repo = new SimpleTestRepo(Collections.singletonList("session1"), Collections.singletonMap("session1", Arrays.asList(second, first)));
 
         tracer.rebuildGraph(repo);
 
-        assertTrue(tracer.getGraph().getSuccessors("skillA").contains("skillB"),
-                "同 timestamp 时必须按 recordId 平局决胜，保证依赖边方向确定");
+        assertTrue(tracer.getGraph().getSuccessors("skillA").contains("skillB"), "同 timestamp 时必须按 recordId 平局决胜，保证依赖边方向确定");
+    }
+
+    private static Map<String, Object> objectMap(Object... kv) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        for (int i = 0; i + 1 < kv.length; i += 2) {
+            m.put(String.valueOf(kv[i]), kv[i + 1]);
+        }
+        return m;
     }
 
     private static class SimpleTestRepo implements StorageRepository {

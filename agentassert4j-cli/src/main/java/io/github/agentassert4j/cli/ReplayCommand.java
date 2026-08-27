@@ -78,7 +78,7 @@ public class ReplayCommand implements Callable<Integer> {
             if (TextUtil.isBlank(config.getLlm().getApiKey())) {
                 System.out.println("警告：未配置 API Key（agentassert4j.json 的 llm.apiKey 或其 ${ENV} 引用），LLM 调用将失败。");
             }
-            LlmClient client = new OpenAiCompatibleClient(config.getLlm().getEndpoint(), config.getLlm().getApiKey(), config.getLlm().getModel());
+            LlmClient client = new OpenAiCompatibleClient(config.getLlm().getEndpoint(), config.getLlm().getApiKey(), config.getLlm().getModel(), OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, config.getLlm().getExtraBody());
 
             TestExecutionConfig executionConfig = new TestExecutionConfig().timeoutMs(config.getLlm().getTimeoutMs());
             SkillRulesConfig rules = ConfigLoader.loadRulesConfig();

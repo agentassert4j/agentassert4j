@@ -6,10 +6,7 @@ import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.ToolCall;
 import org.junit.jupiter.api.Test;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -42,45 +39,34 @@ class FingerprintExtractorTest {
 
     @Test
     void dim1_singleTool_extractsToolCallSet() {
-        InteractionRecord r = record(
-                List.of(tc("queryOrder", Map.of("orderId", "String"))),
-                "{\"result\":\"ok\"}");
+        InteractionRecord r = record(Collections.singletonList(tc("queryOrder", Collections.singletonMap("orderId", "String"))), "{\"result\":\"ok\"}");
 
         DeterministicFingerprint fp = FingerprintExtractor.extract(r);
 
-        assertEquals(Set.of("queryOrder"), fp.getToolCallSet());
+        assertEquals(Collections.singleton("queryOrder"), fp.getToolCallSet());
     }
 
     @Test
     void dim1_multiTool_extractsAllNames() {
-        InteractionRecord r = record(
-                List.of(tc("toolA", null), tc("toolB", null)),
-                "{}");
+        InteractionRecord r = record(Arrays.asList(tc("toolA", null), tc("toolB", null)), "{}");
 
         DeterministicFingerprint fp = FingerprintExtractor.extract(r);
 
-        assertEquals(Set.of("toolA", "toolB"), fp.getToolCallSet());
+        assertEquals(new HashSet<>(Arrays.asList("toolA", "toolB")), fp.getToolCallSet());
     }
 
     @Test
     void dim1_extractsParamTypes() {
-        InteractionRecord r = record(
-                List.of(tc("tool", Map.of("orderId", "String", "limit", "Integer"))),
-                "{}");
+        InteractionRecord r = record(Arrays.asList(tc("tool", stringMap("orderId", "String", "limit", "Integer"))), "{}");
 
         DeterministicFingerprint fp = FingerprintExtractor.extract(r);
 
-        assertEquals(Map.of("orderid", "string", "limit", "integer"), fp.getToolParamTypes());
+        assertEquals(stringMap("orderid", "string", "limit", "integer"), fp.getToolParamTypes());
     }
 
     @Test
     void dim1_multiTool_mergesParamTypes() {
-        InteractionRecord r = record(
-                List.of(
-                        tc("toolA", Map.of("a", "String")),
-                        tc("toolB", Map.of("b", "Integer"))
-                ),
-                "{}");
+        InteractionRecord r = record(Arrays.asList(tc("toolA", Collections.singletonMap("a", "String")), tc("toolB", Collections.singletonMap("b", "Integer"))), "{}");
 
         DeterministicFingerprint fp = FingerprintExtractor.extract(r);
 
@@ -91,9 +77,7 @@ class FingerprintExtractorTest {
 
     @Test
     void dim1_paramRequired_allFalseByDefault() {
-        InteractionRecord r = record(
-                List.of(tc("tool", Map.of("x", "String", "y", "Integer"))),
-                "{}");
+        InteractionRecord r = record(Arrays.asList(tc("tool", stringMap("x", "String", "y", "Integer"))), "{}");
 
         DeterministicFingerprint fp = FingerprintExtractor.extract(r);
 
@@ -125,9 +109,7 @@ class FingerprintExtractorTest {
 
     @Test
     void dim1_toolCallNoArgTypes_emptyParamTypes() {
-        InteractionRecord r = record(
-                List.of(tc("toolA", null)),
-                "{}");
+        InteractionRecord r = record(Collections.singletonList(tc("toolA", null)), "{}");
 
         DeterministicFingerprint fp = FingerprintExtractor.extract(r);
 
@@ -188,15 +170,15 @@ class FingerprintExtractorTest {
         assertEquals(1, FingerprintExtractor.extract(r1).getTextLengthMagnitude());
 
         // 10-99 字 → magnitude 2
-        InteractionRecord r2 = record(null, "a".repeat(50));
+        InteractionRecord r2 = record(null, repeat("a", 50));
         assertEquals(2, FingerprintExtractor.extract(r2).getTextLengthMagnitude());
 
         // 100-999 字 → magnitude 3
-        InteractionRecord r3 = record(null, "a".repeat(500));
+        InteractionRecord r3 = record(null, repeat("a", 500));
         assertEquals(3, FingerprintExtractor.extract(r3).getTextLengthMagnitude());
 
         // 1000+ 字 → magnitude 4
-        InteractionRecord r4 = record(null, "a".repeat(1000));
+        InteractionRecord r4 = record(null, repeat("a", 1000));
         assertEquals(4, FingerprintExtractor.extract(r4).getTextLengthMagnitude());
     }
 
@@ -253,8 +235,7 @@ class FingerprintExtractorTest {
 
     @Test
     void hasError_trueWhenToolCallFailed() {
-        InteractionRecord r = record(
-                List.of(tc("tool", null, false)), // success = false
+        InteractionRecord r = record(Collections.singletonList(tc("tool", null, false)), // success = false
                 "error");
 
         DeterministicFingerprint fp = FingerprintExtractor.extract(r);
@@ -264,9 +245,7 @@ class FingerprintExtractorTest {
 
     @Test
     void hasError_falseWhenAllToolCallsSucceed() {
-        InteractionRecord r = record(
-                List.of(tc("tool", null, true)),
-                "ok");
+        InteractionRecord r = record(Collections.singletonList(tc("tool", null, true)), "ok");
 
         DeterministicFingerprint fp = FingerprintExtractor.extract(r);
 
@@ -287,17 +266,14 @@ class FingerprintExtractorTest {
         InteractionRecord r = record(null, "hello");
 
         // 构建 SkillRulesConfig
-        String rulesJson = "{\"skills\":{\"testSkill\":{"
-                + "\"requiredKeywords\":[\"keyword1\"],"
-                + "\"forbiddenKeywords\":[\"badword\"],"
-                + "\"behaviors\":[\"nonEmptyOutput\"]}}}";
+        String rulesJson = "{\"skills\":{\"testSkill\":{" + "\"requiredKeywords\":[\"keyword1\"]," + "\"forbiddenKeywords\":[\"badword\"]," + "\"behaviors\":[\"nonEmptyOutput\"]}}}";
         SkillRulesConfig rules = SkillRulesConfig.fromJson(rulesJson);
 
         DeterministicFingerprint fp = FingerprintExtractor.extract(r, rules, "testSkill");
 
-        assertEquals(Set.of("keyword1"), fp.getRequiredKeywords());
-        assertEquals(Set.of("badword"), fp.getForbiddenKeywords());
-        assertEquals(Set.of("nonEmptyOutput"), fp.getDeclaredBehaviors());
+        assertEquals(Collections.singleton("keyword1"), fp.getRequiredKeywords());
+        assertEquals(Collections.singleton("badword"), fp.getForbiddenKeywords());
+        assertEquals(Collections.singleton("nonEmptyOutput"), fp.getDeclaredBehaviors());
     }
 
     @Test
@@ -313,15 +289,13 @@ class FingerprintExtractorTest {
 
     @Test
     void fullExtraction_toolSkill_jsonOutput() {
-        InteractionRecord r = record(
-                List.of(tc("queryOrder", Map.of("orderId", "String"), true)),
-                "{\"orderId\":\"ORD-001\",\"amount\":99.9,\"items\":[{\"name\":\"Widget\"}]}");
+        InteractionRecord r = record(Collections.singletonList(tc("queryOrder", Collections.singletonMap("orderId", "String"), true)), "{\"orderId\":\"ORD-001\",\"amount\":99.9,\"items\":[{\"name\":\"Widget\"}]}");
 
         DeterministicFingerprint fp = FingerprintExtractor.extract(r);
 
         // 维度 1
-        assertEquals(Set.of("queryOrder"), fp.getToolCallSet());
-        assertEquals(Map.of("orderid", "string"), fp.getToolParamTypes());
+        assertEquals(Collections.singleton("queryOrder"), fp.getToolCallSet());
+        assertEquals(Collections.singletonMap("orderid", "string"), fp.getToolParamTypes());
 
         // 维度 2
         assertEquals("application/json", fp.getOutputContentType());
@@ -335,4 +309,21 @@ class FingerprintExtractorTest {
         // hasError
         assertFalse(fp.isHasError());
     }
+
+    private static String repeat(String s, int n) {
+        StringBuilder sb = new StringBuilder(s.length() * n);
+        for (int i = 0; i < n; i++) {
+            sb.append(s);
+        }
+        return sb.toString();
+    }
+
+    private static Map<String, String> stringMap(String... kv) {
+        Map<String, String> m = new LinkedHashMap<>();
+        for (int i = 0; i + 1 < kv.length; i += 2) {
+            m.put(kv[i], kv[i + 1]);
+        }
+        return m;
+    }
+
 }

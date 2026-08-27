@@ -4,7 +4,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.util.Set;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -21,12 +23,12 @@ class SkillRulesConfigTest {
     void addRule() {
         SkillRulesConfig config = new SkillRulesConfig();
         SkillRulesConfig.SkillRule rule = new SkillRulesConfig.SkillRule();
-        rule.setBehaviors(Set.of("testBehavior"));
+        rule.setBehaviors(Collections.singleton("testBehavior"));
         config.addRule("mySkill", rule);
 
         assertTrue(config.hasRules());
         assertEquals(1, config.getDeclaredSkillIds().size());
-        assertEquals(Set.of("testBehavior"), config.getRulesForSkill("mySkill").getBehaviors());
+        assertEquals(Collections.singleton("testBehavior"), config.getRulesForSkill("mySkill").getBehaviors());
     }
 
     @Test
@@ -34,25 +36,19 @@ class SkillRulesConfigTest {
     void declaredSkillIds_immutable() {
         SkillRulesConfig config = new SkillRulesConfig();
         config.addRule("skill1", new SkillRulesConfig.SkillRule());
-        assertThrows(UnsupportedOperationException.class, () ->
-                config.getDeclaredSkillIds().add("hacked"));
+        assertThrows(UnsupportedOperationException.class, () -> config.getDeclaredSkillIds().add("hacked"));
     }
 
     @Test
     @DisplayName("SkillRule 的集合不可修改")
     void ruleCollections_immutable() {
-        String json = """
-                {"skills":{"s":{"requiredKeywords":["a"],"forbiddenKeywords":["b"],"behaviors":["c"]}}}
-                """;
+        String json = "{\"skills\":{\"s\":{\"requiredKeywords\":[\"a\"],\"forbiddenKeywords\":[\"b\"],\"behaviors\":[\"c\"]}}}";
         SkillRulesConfig config = SkillRulesConfig.fromJson(json);
         SkillRulesConfig.SkillRule rule = config.getRulesForSkill("s");
 
-        assertThrows(UnsupportedOperationException.class, () ->
-                rule.getRequiredKeywords().add("x"));
-        assertThrows(UnsupportedOperationException.class, () ->
-                rule.getForbiddenKeywords().add("x"));
-        assertThrows(UnsupportedOperationException.class, () ->
-                rule.getBehaviors().add("x"));
+        assertThrows(UnsupportedOperationException.class, () -> rule.getRequiredKeywords().add("x"));
+        assertThrows(UnsupportedOperationException.class, () -> rule.getForbiddenKeywords().add("x"));
+        assertThrows(UnsupportedOperationException.class, () -> rule.getBehaviors().add("x"));
     }
 
     @Nested
@@ -87,21 +83,7 @@ class SkillRulesConfigTest {
         @Test
         @DisplayName("完整规则解析")
         void fullRules() {
-            String json = """
-                    {
-                      "skills": {
-                        "queryOrderDB": {
-                          "requiredKeywords": ["订单号", "金额"],
-                          "forbiddenKeywords": ["密码", "身份证号"],
-                          "regexPatterns": [
-                            {"pattern": "\\\\d{4}-\\\\d{2}-\\\\d{2}", "description": "日期格式"},
-                            {"pattern": "ORD-\\\\d{4}", "description": "订单号格式"}
-                          ],
-                          "behaviors": ["returnsEmptyOnInvalid", "truncatesLongText"]
-                        }
-                      }
-                    }
-                    """;
+            String json = "{\n" + "  \"skills\": {\n" + "    \"queryOrderDB\": {\n" + "      \"requiredKeywords\": [\"订单号\", \"金额\"],\n" + "      \"forbiddenKeywords\": [\"密码\", \"身份证号\"],\n" + "      \"regexPatterns\": [\n" + "        {\"pattern\": \"\\\\d{4}-\\\\d{2}-\\\\d{2}\", \"description\": \"日期格式\"},\n" + "        {\"pattern\": \"ORD-\\\\d{4}\", \"description\": \"订单号格式\"}\n" + "      ],\n" + "      \"behaviors\": [\"returnsEmptyOnInvalid\", \"truncatesLongText\"]\n" + "    }\n" + "  }\n" + "}";
 
             SkillRulesConfig config = SkillRulesConfig.fromJson(json);
 
@@ -110,53 +92,31 @@ class SkillRulesConfigTest {
             assertTrue(config.getDeclaredSkillIds().contains("queryOrderDB"));
 
             SkillRulesConfig.SkillRule rule = config.getRulesForSkill("queryOrderDB");
-            assertEquals(Set.of("订单号", "金额"), rule.getRequiredKeywords());
-            assertEquals(Set.of("密码", "身份证号"), rule.getForbiddenKeywords());
+            assertEquals(new HashSet<>(Arrays.asList("订单号", "金额")), rule.getRequiredKeywords());
+            assertEquals(new HashSet<>(Arrays.asList("密码", "身份证号")), rule.getForbiddenKeywords());
             assertEquals(2, rule.getRegexPatterns().size());
             assertEquals("\\d{4}-\\d{2}-\\d{2}", rule.getRegexPatterns().get(0).getPattern());
             assertEquals("日期格式", rule.getRegexPatterns().get(0).getDescription());
-            assertEquals(Set.of("returnsEmptyOnInvalid", "truncatesLongText"), rule.getBehaviors());
+            assertEquals(new HashSet<>(Arrays.asList("returnsEmptyOnInvalid", "truncatesLongText")), rule.getBehaviors());
         }
 
         @Test
         @DisplayName("多 Skill 规则")
         void multiSkillRules() {
-            String json = """
-                    {
-                      "skills": {
-                        "queryOrderDB": {
-                          "requiredKeywords": ["订单号"],
-                          "behaviors": ["returnsEmptyOnInvalid"]
-                        },
-                        "sendSms": {
-                          "requiredKeywords": ["尊敬的用户"],
-                          "forbiddenKeywords": ["password"],
-                          "behaviors": ["mustUseChinese"]
-                        }
-                      }
-                    }
-                    """;
+            String json = "{\n" + "  \"skills\": {\n" + "    \"queryOrderDB\": {\n" + "      \"requiredKeywords\": [\"订单号\"],\n" + "      \"behaviors\": [\"returnsEmptyOnInvalid\"]\n" + "    },\n" + "    \"sendSms\": {\n" + "      \"requiredKeywords\": [\"尊敬的用户\"],\n" + "      \"forbiddenKeywords\": [\"password\"],\n" + "      \"behaviors\": [\"mustUseChinese\"]\n" + "    }\n" + "  }\n" + "}";
 
             SkillRulesConfig config = SkillRulesConfig.fromJson(json);
 
             assertEquals(2, config.getDeclaredSkillIds().size());
-            assertEquals(Set.of("订单号"), config.getRulesForSkill("queryOrderDB").getRequiredKeywords());
-            assertEquals(Set.of("尊敬的用户"), config.getRulesForSkill("sendSms").getRequiredKeywords());
-            assertEquals(Set.of("password"), config.getRulesForSkill("sendSms").getForbiddenKeywords());
+            assertEquals(Collections.singleton("订单号"), config.getRulesForSkill("queryOrderDB").getRequiredKeywords());
+            assertEquals(Collections.singleton("尊敬的用户"), config.getRulesForSkill("sendSms").getRequiredKeywords());
+            assertEquals(Collections.singleton("password"), config.getRulesForSkill("sendSms").getForbiddenKeywords());
         }
 
         @Test
         @DisplayName("部分规则 — 缺失维度为空")
         void partialRule() {
-            String json = """
-                    {
-                      "skills": {
-                        "simpleSkill": {
-                          "behaviors": ["requiresConfirmation"]
-                        }
-                      }
-                    }
-                    """;
+            String json = "{\n" + "  \"skills\": {\n" + "    \"simpleSkill\": {\n" + "      \"behaviors\": [\"requiresConfirmation\"]\n" + "    }\n" + "  }\n" + "}";
 
             SkillRulesConfig config = SkillRulesConfig.fromJson(json);
             SkillRulesConfig.SkillRule rule = config.getRulesForSkill("simpleSkill");

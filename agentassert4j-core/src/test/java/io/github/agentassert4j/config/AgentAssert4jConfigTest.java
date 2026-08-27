@@ -53,6 +53,19 @@ class AgentAssert4jConfigTest {
             assertEquals("gpt-4o", llm.getModel());
             assertEquals(30000, llm.getTimeoutMs());
             assertNull(llm.getApiKey());
+            assertNull(llm.getExtraBody(), "默认无方言扩展");
+        }
+
+        @Test
+        @DisplayName("Llm extraBody 方言片段可从 JSON 装载并逐字保留")
+        void llmExtraBody() {
+            String fragment = "\"thinking\":{\"type\":\"disabled\"}";
+            String embedded = fragment.replace("\\", "\\\\").replace("\"", "\\\"");
+            String json = "{\"llm\":{\"apiKey\":\"sk-test\",\"model\":\"deepseek-v4-flash\",\"extraBody\":\"" + embedded + "\"}}";
+
+            AgentAssert4jConfig.LlmConfig llm = AgentAssert4jConfig.fromJson(json).getLlm();
+
+            assertEquals(fragment, llm.getExtraBody(), "方言扩展片段必须逐字往返保留，客户端按原样注入请求体");
         }
 
         @Test
@@ -79,15 +92,7 @@ class AgentAssert4jConfigTest {
         @Test
         @DisplayName("完整 JSON 解析")
         void fullJson() {
-            String json = """
-                    {
-                      "storage": {"url": "/data/agentassert4j.db"},
-                      "recorder": {"batchSize": 200, "flushIntervalMs": 10000},
-                      "regression": {"ignorableFields": ["debugInfo", "timestamp"]},
-                      "llm": {"apiKey": "sk-test", "endpoint": "https://api.deepseek.com", "model": "deepseek-chat", "timeoutMs": 60000},
-                      "tools": {"excludeFromGraph": ["read_file", "bash"]}
-                    }
-                    """;
+            String json = "{\n" + "  \"storage\": {\"url\": \"/data/agentassert4j.db\"},\n" + "  \"recorder\": {\"batchSize\": 200, \"flushIntervalMs\": 10000},\n" + "  \"regression\": {\"ignorableFields\": [\"debugInfo\", \"timestamp\"]},\n" + "  \"llm\": {\"apiKey\": \"sk-test\", \"endpoint\": \"https://api.deepseek.com\", \"model\": \"deepseek-chat\", \"timeoutMs\": 60000},\n" + "  \"tools\": {\"excludeFromGraph\": [\"read_file\", \"bash\"]}\n" + "}";
 
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
 
@@ -105,9 +110,7 @@ class AgentAssert4jConfigTest {
         @Test
         @DisplayName("部分 JSON — 缺失字段使用默认值")
         void partialJson_usesDefaults() {
-            String json = """
-                    {"storage": {"url": "/custom/path.db"}}
-                    """;
+            String json = "{\"storage\": {\"url\": \"/custom/path.db\"}}";
 
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
 
@@ -141,9 +144,7 @@ class AgentAssert4jConfigTest {
         @Test
         @DisplayName("数字字符串的 int 字段解析")
         void intField_fromString() {
-            String json = """
-                    {"recorder": {"batchSize": "50"}}
-                    """;
+            String json = "{\"recorder\": {\"batchSize\": \"50\"}}";
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
             assertEquals(50, config.getRecorder().getBatchSize());
         }
@@ -151,9 +152,7 @@ class AgentAssert4jConfigTest {
         @Test
         @DisplayName("非数字字符串的 int 字段退化为默认值")
         void intField_invalidString_defaults() {
-            String json = """
-                    {"recorder": {"batchSize": "abc"}}
-                    """;
+            String json = "{\"recorder\": {\"batchSize\": \"abc\"}}";
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
             assertEquals(100, config.getRecorder().getBatchSize());
         }

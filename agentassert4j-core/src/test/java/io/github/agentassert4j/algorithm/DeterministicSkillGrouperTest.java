@@ -7,8 +7,7 @@ import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.util.HashUtil;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -37,8 +36,7 @@ class DeterministicSkillGrouperTest {
 
     @Test
     void singleTool_groupKey() {
-        InteractionRecord r = record("abc123",
-                List.of(tc("queryOrderDB", Map.of("orderId", "String"))), true);
+        InteractionRecord r = record("abc123", Collections.singletonList(tc("queryOrderDB", Collections.singletonMap("orderId", "String"))), true);
         SkillProfile p = DeterministicSkillGrouper.group(r);
 
         assertEquals("queryOrderDB[orderid:string]", p.getGroupKey());
@@ -50,8 +48,7 @@ class DeterministicSkillGrouperTest {
 
     @Test
     void singleTool_noArgTypes_emptySignature() {
-        InteractionRecord r = record("abc123",
-                List.of(tc("queryOrderDB", null)), true);
+        InteractionRecord r = record("abc123", Collections.singletonList(tc("queryOrderDB", null)), true);
         SkillProfile p = DeterministicSkillGrouper.group(r);
 
         assertEquals("queryOrderDB[]", p.getGroupKey());
@@ -60,9 +57,7 @@ class DeterministicSkillGrouperTest {
 
     @Test
     void multiTool_sortedNames() {
-        InteractionRecord r = record("abc123",
-                List.of(tc("queryOrderDB", Map.of("orderId", "String")),
-                        tc("checkInventory", Map.of("skuId", "String"))), true);
+        InteractionRecord r = record("abc123", Arrays.asList(tc("queryOrderDB", Collections.singletonMap("orderId", "String")), tc("checkInventory", Collections.singletonMap("skuId", "String"))), true);
         SkillProfile p = DeterministicSkillGrouper.group(r);
 
         // sorted: checkInventory < queryOrderDB
@@ -72,10 +67,8 @@ class DeterministicSkillGrouperTest {
 
     @Test
     void multiTool_orderInsensitive() {
-        InteractionRecord r1 = record("abc",
-                List.of(tc("B", Map.of("x", "int")), tc("A", Map.of("y", "string"))), true);
-        InteractionRecord r2 = record("abc",
-                List.of(tc("A", Map.of("y", "string")), tc("B", Map.of("x", "int"))), true);
+        InteractionRecord r1 = record("abc", Arrays.asList(tc("B", Collections.singletonMap("x", "int")), tc("A", Collections.singletonMap("y", "string"))), true);
+        InteractionRecord r2 = record("abc", Arrays.asList(tc("A", Collections.singletonMap("y", "string")), tc("B", Collections.singletonMap("x", "int"))), true);
 
         SkillProfile p1 = DeterministicSkillGrouper.group(r1);
         SkillProfile p2 = DeterministicSkillGrouper.group(r2);
@@ -87,25 +80,19 @@ class DeterministicSkillGrouperTest {
     @Test
     void paramSignature_normalizeCase() {
         // "String" vs "string" → 相同
-        InteractionRecord r1 = record("abc",
-                List.of(tc("tool", Map.of("id", "String"))), true);
-        InteractionRecord r2 = record("abc",
-                List.of(tc("tool", Map.of("id", "string"))), true);
+        InteractionRecord r1 = record("abc", Collections.singletonList(tc("tool", Collections.singletonMap("id", "String"))), true);
+        InteractionRecord r2 = record("abc", Collections.singletonList(tc("tool", Collections.singletonMap("id", "string"))), true);
 
-        assertEquals(DeterministicSkillGrouper.group(r1).getGroupKey(),
-                DeterministicSkillGrouper.group(r2).getGroupKey());
+        assertEquals(DeterministicSkillGrouper.group(r1).getGroupKey(), DeterministicSkillGrouper.group(r2).getGroupKey());
     }
 
     @Test
     void paramSignature_normalizeCaseKey() {
         // "OrderId" vs "orderid" → 相同（key 也 toLowerCase）
-        InteractionRecord r1 = record("abc",
-                List.of(tc("tool", Map.of("OrderId", "String"))), true);
-        InteractionRecord r2 = record("abc",
-                List.of(tc("tool", Map.of("orderid", "string"))), true);
+        InteractionRecord r1 = record("abc", Collections.singletonList(tc("tool", Collections.singletonMap("OrderId", "String"))), true);
+        InteractionRecord r2 = record("abc", Collections.singletonList(tc("tool", Collections.singletonMap("orderid", "string"))), true);
 
-        assertEquals(DeterministicSkillGrouper.group(r1).getGroupKey(),
-                DeterministicSkillGrouper.group(r2).getGroupKey());
+        assertEquals(DeterministicSkillGrouper.group(r1).getGroupKey(), DeterministicSkillGrouper.group(r2).getGroupKey());
     }
 
     @Test
@@ -123,8 +110,7 @@ class DeterministicSkillGrouperTest {
         InteractionRecord r1 = record("hash1", null, false);
         InteractionRecord r2 = record("hash1", null, false);
 
-        assertEquals(DeterministicSkillGrouper.group(r1).getSkillId(),
-                DeterministicSkillGrouper.group(r2).getSkillId());
+        assertEquals(DeterministicSkillGrouper.group(r1).getSkillId(), DeterministicSkillGrouper.group(r2).getSkillId());
     }
 
     @Test
@@ -132,8 +118,7 @@ class DeterministicSkillGrouperTest {
         InteractionRecord r1 = record("hash1", null, false);
         InteractionRecord r2 = record("hash2", null, false);
 
-        assertNotEquals(DeterministicSkillGrouper.group(r1).getGroupKey(),
-                DeterministicSkillGrouper.group(r2).getGroupKey());
+        assertNotEquals(DeterministicSkillGrouper.group(r1).getGroupKey(), DeterministicSkillGrouper.group(r2).getGroupKey());
     }
 
     @Test
@@ -147,8 +132,7 @@ class DeterministicSkillGrouperTest {
         SkillProfile p1 = DeterministicSkillGrouper.group(r1);
         SkillProfile p2 = DeterministicSkillGrouper.group(r2);
 
-        assertNotEquals(p1.getGroupKey(), p2.getGroupKey(),
-                "无模板时必须按 user_input hash 回退分组，不同输入不得坍缩为 chat:null");
+        assertNotEquals(p1.getGroupKey(), p2.getGroupKey(), "无模板时必须按 user_input hash 回退分组，不同输入不得坍缩为 chat:null");
         assertNotEquals(p1.getSkillId(), p2.getSkillId());
         assertFalse(p1.getGroupKey().contains("null"), "groupKey 不得出现字面 null 坍缩");
     }
@@ -160,9 +144,7 @@ class DeterministicSkillGrouperTest {
         InteractionRecord r2 = record(null, null, false);
         r2.setUserInput("相同的问题");
 
-        assertEquals(DeterministicSkillGrouper.group(r1).getGroupKey(),
-                DeterministicSkillGrouper.group(r2).getGroupKey(),
-                "同输入同无模板 → 同组（确定性不因回退而破坏）");
+        assertEquals(DeterministicSkillGrouper.group(r1).getGroupKey(), DeterministicSkillGrouper.group(r2).getGroupKey(), "同输入同无模板 → 同组（确定性不因回退而破坏）");
     }
 
     @Test
@@ -181,18 +163,23 @@ class DeterministicSkillGrouperTest {
 
         SkillProfile p = DeterministicSkillGrouper.group(r);
 
-        assertEquals("chat:template-hash-1", p.getGroupKey(),
-                "模板 hash 存在时优先作为锚点（三元组语义），user_input 仅兜底");
+        assertEquals("chat:template-hash-1", p.getGroupKey(), "模板 hash 存在时优先作为锚点（三元组语义），user_input 仅兜底");
     }
 
     @Test
     void multiTool_differentParamSignature_differentSkill() {
-        InteractionRecord r1 = record("abc",
-                List.of(tc("tool", Map.of("id", "String"))), true);
-        InteractionRecord r2 = record("abc",
-                List.of(tc("tool", Map.of("id", "String", "limit", "Integer"))), true);
+        InteractionRecord r1 = record("abc", Collections.singletonList(tc("tool", Collections.singletonMap("id", "String"))), true);
+        InteractionRecord r2 = record("abc", Arrays.asList(tc("tool", stringMap("id", "String", "limit", "Integer"))), true);
 
-        assertNotEquals(DeterministicSkillGrouper.group(r1).getGroupKey(),
-                DeterministicSkillGrouper.group(r2).getGroupKey());
+        assertNotEquals(DeterministicSkillGrouper.group(r1).getGroupKey(), DeterministicSkillGrouper.group(r2).getGroupKey());
     }
+
+    private static Map<String, String> stringMap(String... kv) {
+        Map<String, String> m = new LinkedHashMap<>();
+        for (int i = 0; i + 1 < kv.length; i += 2) {
+            m.put(kv[i], kv[i + 1]);
+        }
+        return m;
+    }
+
 }

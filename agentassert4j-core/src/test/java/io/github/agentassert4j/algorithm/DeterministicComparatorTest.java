@@ -6,10 +6,7 @@ import io.github.agentassert4j.result.ComparisonResult;
 import io.github.agentassert4j.result.Verdict;
 import org.junit.jupiter.api.Test;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -27,12 +24,15 @@ class DeterministicComparatorTest {
         return fp(null, null, "text/plain", null, null, 1, null, null, false);
     }
 
-    private DeterministicFingerprint fp(Set<String> toolCallSet,
-                                        Map<String, String> toolParamTypes,
-                                        String contentType,
-                                        Set<String> fieldPaths,
-                                        Map<String, String> fieldTypeMap,
-                                        int textLengthMagnitude) {
+    private static Map<String, String> stringMap(String... kv) {
+        Map<String, String> m = new LinkedHashMap<>();
+        for (int i = 0; i + 1 < kv.length; i += 2) {
+            m.put(kv[i], kv[i + 1]);
+        }
+        return m;
+    }
+
+    private DeterministicFingerprint fp(Set<String> toolCallSet, Map<String, String> toolParamTypes, String contentType, Set<String> fieldPaths, Map<String, String> fieldTypeMap, int textLengthMagnitude) {
         DeterministicFingerprint fp = new DeterministicFingerprint();
         fp.setToolCallSet(toolCallSet != null ? toolCallSet : Collections.emptySet());
         fp.setToolParamTypes(toolParamTypes != null ? toolParamTypes : Collections.emptyMap());
@@ -48,15 +48,7 @@ class DeterministicComparatorTest {
         return fp;
     }
 
-    private DeterministicFingerprint fp(Set<String> toolCallSet,
-                                        Map<String, String> toolParamTypes,
-                                        String contentType,
-                                        Set<String> fieldPaths,
-                                        Map<String, String> fieldTypeMap,
-                                        int textLengthMagnitude,
-                                        Set<String> requiredKeywords,
-                                        Set<String> forbiddenKeywords,
-                                        boolean hasError) {
+    private DeterministicFingerprint fp(Set<String> toolCallSet, Map<String, String> toolParamTypes, String contentType, Set<String> fieldPaths, Map<String, String> fieldTypeMap, int textLengthMagnitude, Set<String> requiredKeywords, Set<String> forbiddenKeywords, boolean hasError) {
         DeterministicFingerprint f = new DeterministicFingerprint();
         f.setToolCallSet(toolCallSet != null ? toolCallSet : Collections.emptySet());
         f.setToolParamTypes(toolParamTypes != null ? toolParamTypes : Collections.emptyMap());
@@ -105,11 +97,8 @@ class DeterministicComparatorTest {
     }
 
     private DeterministicFingerprint identicalJsonFp() {
-        Map<String, String> typeMap = Map.of("name", "String", "age", "Integer");
-        return fp(Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("name", "age"),
-                typeMap, 0);
+        Map<String, String> typeMap = stringMap("name", "String", "age", "Integer");
+        return fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("name", "age")), typeMap, 0);
     }
 
     @Test
@@ -129,16 +118,8 @@ class DeterministicComparatorTest {
     @Test
     void passVerdict_scoreExactly095() {
         // 完全匹配 → 1.0 * 权重 → score = 1.0 → PASS
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("field1"),
-                Map.of("field1", "String"), 0);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("field1"),
-                Map.of("field1", "String"), 0);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("field1"), Collections.singletonMap("field1", "String"), 0);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("field1"), Collections.singletonMap("field1", "String"), 0);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
@@ -151,11 +132,8 @@ class DeterministicComparatorTest {
         // 工具匹配但参数类型不匹配 → d1 = 0.7 → 0.7*0.60 = 0.42
         // d2 = 1.0, w2 = 0.40 → 0.40
         // total = 0.42 + 0.40 = 0.82 → DIFF
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 2);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "Integer"),  // param type mismatch
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 2);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "Integer"),  // param type mismatch
                 "text/plain", null, null, 2);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
@@ -171,17 +149,9 @@ class DeterministicComparatorTest {
     void diffVerdict_addedFieldsOnly() {
         // 工具/参数完全匹配，仅新增字段（不触发 REGRESSION）
         // d2 将因 added fields 而降低（removed 为空 → 0.5 分）
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("field1"),
-                Map.of("field1", "String"), 0);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("field1"), Collections.singletonMap("field1", "String"), 0);
         // current 多了 field2
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("field1", "field2"),
-                Map.of("field1", "String", "field2", "String"), 0);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("field1", "field2")), stringMap("field1", "String", "field2", "String"), 0);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
@@ -197,11 +167,8 @@ class DeterministicComparatorTest {
 
     @Test
     void regression_toolSetChanged() {
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 1);
-        DeterministicFingerprint current = fp(
-                Set.of("toolB"), Map.of("id", "String"),  // 不同工具
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1);
+        DeterministicFingerprint current = fp(Collections.singleton("toolB"), Collections.singletonMap("id", "String"),  // 不同工具
                 "text/plain", null, null, 1);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
@@ -212,11 +179,8 @@ class DeterministicComparatorTest {
 
     @Test
     void regression_paramTypesChanged() {
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 1);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "Integer"),  // 类型变化
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "Integer"),  // 类型变化
                 "text/plain", null, null, 1);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
@@ -227,16 +191,9 @@ class DeterministicComparatorTest {
 
     @Test
     void regression_fieldsRemoved() {
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("field1", "field2"),
-                Map.of("field1", "String", "field2", "String"), 0);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("field1"),  // field2 被删除
-                Map.of("field1", "String"), 0);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("field1", "field2")), stringMap("field1", "String", "field2", "String"), 0);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("field1"),  // field2 被删除
+                Collections.singletonMap("field1", "String"), 0);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
@@ -247,16 +204,9 @@ class DeterministicComparatorTest {
     @Test
     void regression_errorFieldAdded() {
         // AUTO_REGRESSION_FIELDS: 新增 error 类字段 → 自动 REGRESSION
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("name"),
-                Map.of("name", "String"), 0);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("name", "error"),  // 新增 error 字段
-                Map.of("name", "String", "error", "String"), 0);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("name"), Collections.singletonMap("name", "String"), 0);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("name", "error")),  // 新增 error 字段
+                stringMap("name", "String", "error", "String"), 0);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
@@ -266,16 +216,8 @@ class DeterministicComparatorTest {
 
     @Test
     void regression_errorCodeFieldAdded() {
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("name"),
-                Map.of("name", "String"), 0);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("name", "error_code"),
-                Map.of("name", "String", "error_code", "Integer"), 0);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("name"), Collections.singletonMap("name", "String"), 0);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("name", "error_code")), stringMap("name", "String", "error_code", "Integer"), 0);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
@@ -286,16 +228,8 @@ class DeterministicComparatorTest {
     @Test
     void regression_nestedErrorField() {
         // 嵌套字段 data.error → 取最后一段 "error"
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("data"),
-                Map.of("data", "Object"), 0);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("data", "data.error"),
-                Map.of("data", "Object", "data.error", "String"), 0);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("data"), Collections.singletonMap("data", "Object"), 0);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("data", "data.error")), stringMap("data", "Object", "data.error", "String"), 0);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
@@ -305,12 +239,8 @@ class DeterministicComparatorTest {
     @Test
     void regression_lowScore() {
         // 工具集变化 + 参数类型变化 → d1=0 → score 非常低 → REGRESSION
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 1);
-        DeterministicFingerprint current = fp(
-                Set.of("toolB"), Map.of("id2", "Integer"),
-                "text/plain", null, null, 1);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1);
+        DeterministicFingerprint current = fp(Collections.singleton("toolB"), Collections.singletonMap("id2", "Integer"), "text/plain", null, null, 1);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
@@ -321,12 +251,8 @@ class DeterministicComparatorTest {
     @Test
     void dynamicWeight_noRulesNoBehaviors_weightRedistributes() {
         // 无规则无行为 → w1=0.60, w2=0.40, w3=0, w4=0
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 2);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 2);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 2);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 2);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
@@ -338,7 +264,7 @@ class DeterministicComparatorTest {
     @Test
     void dynamicWeight_withBehaviors_weightShifts() {
         // 有行为声明但无规则 → w1=0.50, w2=0.30, w3=0, w4=0.20
-        DeterministicFingerprint baseline = fpWithBehaviors(Set.of("nonEmptyOutput"));
+        DeterministicFingerprint baseline = fpWithBehaviors(Collections.singleton("nonEmptyOutput"));
         DeterministicFingerprint current = fpWithBehaviors(null); // current doesn't need behaviors declared
         current.setDeclaredBehaviors(Collections.emptySet());
 
@@ -393,8 +319,7 @@ class DeterministicComparatorTest {
     @Test
     void contentTypeMismatch_d2isZero() {
         DeterministicFingerprint baseline = fp(null, null, "text/plain", null, null, 1);
-        DeterministicFingerprint current = fp(null, null, "application/json",
-                Set.of("field1"), Map.of("field1", "String"), 0);
+        DeterministicFingerprint current = fp(null, null, "application/json", Collections.singleton("field1"), Collections.singletonMap("field1", "String"), 0);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
@@ -405,13 +330,8 @@ class DeterministicComparatorTest {
 
     @Test
     void dimension3_requiredKeywordsPresent_passes() {
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 1,
-                Set.of("success"), null, false);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 1);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1, Collections.singleton("success"), null, false);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1);
 
         ComparisonResult r = comparator.compare(baseline, current, "Operation was a success");
 
@@ -420,13 +340,8 @@ class DeterministicComparatorTest {
 
     @Test
     void dimension3_requiredKeywordsMissing_fails() {
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 1,
-                Set.of("required_word"), null, false);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 1);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1, Collections.singleton("required_word"), null, false);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1);
 
         ComparisonResult r = comparator.compare(baseline, current, "no keyword here");
 
@@ -435,13 +350,8 @@ class DeterministicComparatorTest {
 
     @Test
     void dimension3_forbiddenKeywordsPresent_fails() {
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 1,
-                null, Set.of("forbidden"), false);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 1);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1, null, Collections.singleton("forbidden"), false);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1);
 
         ComparisonResult r = comparator.compare(baseline, current, "contains forbidden word");
 
@@ -450,11 +360,8 @@ class DeterministicComparatorTest {
 
     @Test
     void dimension3_regexPattern_match() {
-        DeterministicFingerprint baseline = fpWithRegex(
-                List.of(new RegexPattern("ORD-\\d+", "order ID pattern")));
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 1);
+        DeterministicFingerprint baseline = fpWithRegex(Collections.singletonList(new RegexPattern("ORD-\\d+", "order ID pattern")));
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1);
 
         ComparisonResult r = comparator.compare(baseline, current, "Order: ORD-12345");
 
@@ -463,11 +370,8 @@ class DeterministicComparatorTest {
 
     @Test
     void dimension3_regexPattern_noMatch_fails() {
-        DeterministicFingerprint baseline = fpWithRegex(
-                List.of(new RegexPattern("ORD-\\d+", "order ID pattern")));
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 1);
+        DeterministicFingerprint baseline = fpWithRegex(Collections.singletonList(new RegexPattern("ORD-\\d+", "order ID pattern")));
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1);
 
         ComparisonResult r = comparator.compare(baseline, current, "No order here");
 
@@ -476,9 +380,8 @@ class DeterministicComparatorTest {
 
     @Test
     void dimension4_behaviorPass_contributesToScore() {
-        DeterministicFingerprint baseline = fpWithBehaviors(Set.of("nonEmptyOutput"));
-        DeterministicFingerprint current = fp(
-                null, null, "text/plain", null, null, 1);
+        DeterministicFingerprint baseline = fpWithBehaviors(Collections.singleton("nonEmptyOutput"));
+        DeterministicFingerprint current = fp(null, null, "text/plain", null, null, 1);
         current.setDeclaredBehaviors(Collections.emptySet());
 
         ComparisonResult r = comparator.compare(baseline, current, "non-empty output");
@@ -488,9 +391,8 @@ class DeterministicComparatorTest {
 
     @Test
     void dimension4_behaviorFail_reducesScore() {
-        DeterministicFingerprint baseline = fpWithBehaviors(Set.of("jsonOutput"));
-        DeterministicFingerprint current = fp(
-                null, null, "text/plain", null, null, 1);
+        DeterministicFingerprint baseline = fpWithBehaviors(Collections.singleton("jsonOutput"));
+        DeterministicFingerprint current = fp(null, null, "text/plain", null, null, 1);
         current.setDeclaredBehaviors(Collections.emptySet());
 
         ComparisonResult r = comparator.compare(baseline, current, "plain text output");
@@ -501,21 +403,13 @@ class DeterministicComparatorTest {
     @Test
     void ignorableFields_removedFieldsNotCounted() {
         ComparatorConfig config = new ComparatorConfig();
-        config.setIgnorableFields(Set.of("field2"));
+        config.setIgnorableFields(Collections.singleton("field2"));
 
         DeterministicComparator cmp = new DeterministicComparator(config);
 
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("field1", "field2"),
-                Map.of("field1", "String", "field2", "String"), 0);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("field1", "field2")), stringMap("field1", "String", "field2", "String"), 0);
         // field2 被删除，但它是 ignorable → 不应触发 REGRESSION
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("field1"),
-                Map.of("field1", "String"), 0);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("field1"), Collections.singletonMap("field1", "String"), 0);
 
         ComparisonResult r = cmp.compare(baseline, current, "output");
 
@@ -539,51 +433,33 @@ class DeterministicComparatorTest {
     @Test
     void addedErrorField_triggersRegression_evenWhenIgnorable() {
         ComparatorConfig config = new ComparatorConfig();
-        config.setIgnorableFields(Set.of("error"));
+        config.setIgnorableFields(Collections.singleton("error"));
 
         DeterministicComparator cmp = new DeterministicComparator(config);
 
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("field1"),
-                Map.of("field1", "String"), 0);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("field1"), Collections.singletonMap("field1", "String"), 0);
         // 当前指纹新增了 error 字段——即使用户把 error 配置为可忽略，
         // 类字段自动回归的不变量不因 ignorable 配置而放宽
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("field1", "error"),
-                Map.of("field1", "String", "error", "String"), 0);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("field1", "error")), stringMap("field1", "String", "error", "String"), 0);
 
         ComparisonResult r = cmp.compare(baseline, current, "output");
 
-        assertEquals(Verdict.REGRESSION, r.getVerdict(),
-                "error 字段自动回归与用户 ignorable 配置互斥，ignorable 不得击穿该不变量");
+        assertEquals(Verdict.REGRESSION, r.getVerdict(), "error 字段自动回归与用户 ignorable 配置互斥，ignorable 不得击穿该不变量");
     }
 
     @Test
     void addedNestedErrorField_triggersRegression_evenWhenIgnorable() {
         ComparatorConfig config = new ComparatorConfig();
-        config.setIgnorableFields(Set.of("data.error"));
+        config.setIgnorableFields(Collections.singleton("data.error"));
 
         DeterministicComparator cmp = new DeterministicComparator(config);
 
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("data.status"),
-                Map.of("data.status", "String"), 0);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("data.status", "data.error"),
-                Map.of("data.status", "String", "data.error", "String"), 0);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("data.status"), Collections.singletonMap("data.status", "String"), 0);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("data.status", "data.error")), stringMap("data.status", "String", "data.error", "String"), 0);
 
         ComparisonResult r = cmp.compare(baseline, current, "output");
 
-        assertEquals(Verdict.REGRESSION, r.getVerdict(),
-                "嵌套路径 data.error 的叶子名 error 同样受自动回归不变量保护");
+        assertEquals(Verdict.REGRESSION, r.getVerdict(), "嵌套路径 data.error 的叶子名 error 同样受自动回归不变量保护");
     }
 
     @Test
@@ -601,12 +477,8 @@ class DeterministicComparatorTest {
 
     @Test
     void summary_toolMismatch_showsToolChange() {
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 1);
-        DeterministicFingerprint current = fp(
-                Set.of("toolB"), Map.of("id", "String"),
-                "text/plain", null, null, 1);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1);
+        DeterministicFingerprint current = fp(Collections.singleton("toolB"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
@@ -615,12 +487,8 @@ class DeterministicComparatorTest {
 
     @Test
     void summary_paramMismatch_showsParamChange() {
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "text/plain", null, null, 1);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "Integer"),
-                "text/plain", null, null, 1);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "Integer"), "text/plain", null, null, 1);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
@@ -629,16 +497,8 @@ class DeterministicComparatorTest {
 
     @Test
     void summary_addedFields_showsAddedFields() {
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("field1"),
-                Map.of("field1", "String"), 0);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("field1", "newField"),
-                Map.of("field1", "String", "newField", "String"), 0);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("field1"), Collections.singletonMap("field1", "String"), 0);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("field1", "newField")), stringMap("field1", "String", "newField", "String"), 0);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
@@ -647,16 +507,8 @@ class DeterministicComparatorTest {
 
     @Test
     void summary_removedFields_showsRemovedFields() {
-        DeterministicFingerprint baseline = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("field1", "field2"),
-                Map.of("field1", "String", "field2", "String"), 0);
-        DeterministicFingerprint current = fp(
-                Set.of("toolA"), Map.of("id", "String"),
-                "application/json",
-                Set.of("field1"),
-                Map.of("field1", "String"), 0);
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("field1", "field2")), stringMap("field1", "String", "field2", "String"), 0);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("field1"), Collections.singletonMap("field1", "String"), 0);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 

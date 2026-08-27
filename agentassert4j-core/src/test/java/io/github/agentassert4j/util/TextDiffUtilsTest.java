@@ -2,8 +2,7 @@ package io.github.agentassert4j.util;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -75,8 +74,8 @@ class TextDiffUtilsTest {
 
     @Test
     void computeAddedRemoved_noChange() {
-        Set<String> old = Set.of("a", "b");
-        Set<String> nw = Set.of("a", "b");
+        Set<String> old = new HashSet<>(Arrays.asList("a", "b"));
+        Set<String> nw = new HashSet<>(Arrays.asList("a", "b"));
         Map<String, Set<String>> result = TextDiffUtils.computeAddedRemoved(old, nw);
         assertTrue(result.get("added").isEmpty());
         assertTrue(result.get("removed").isEmpty());
@@ -84,45 +83,45 @@ class TextDiffUtilsTest {
 
     @Test
     void computeAddedRemoved_addedOnly() {
-        Set<String> old = Set.of("a");
-        Set<String> nw = Set.of("a", "b", "c");
+        Set<String> old = Collections.singleton("a");
+        Set<String> nw = new HashSet<>(Arrays.asList("a", "b", "c"));
         Map<String, Set<String>> result = TextDiffUtils.computeAddedRemoved(old, nw);
-        assertEquals(Set.of("b", "c"), result.get("added"));
+        assertEquals(new HashSet<>(Arrays.asList("b", "c")), result.get("added"));
         assertTrue(result.get("removed").isEmpty());
     }
 
     @Test
     void computeAddedRemoved_removedOnly() {
-        Set<String> old = Set.of("a", "b", "c");
-        Set<String> nw = Set.of("a");
+        Set<String> old = new HashSet<>(Arrays.asList("a", "b", "c"));
+        Set<String> nw = Collections.singleton("a");
         Map<String, Set<String>> result = TextDiffUtils.computeAddedRemoved(old, nw);
         assertTrue(result.get("added").isEmpty());
-        assertEquals(Set.of("b", "c"), result.get("removed"));
+        assertEquals(new HashSet<>(Arrays.asList("b", "c")), result.get("removed"));
     }
 
     @Test
     void computeAddedRemoved_addedAndRemoved() {
-        Set<String> old = Set.of("a", "b");
-        Set<String> nw = Set.of("b", "c");
+        Set<String> old = new HashSet<>(Arrays.asList("a", "b"));
+        Set<String> nw = new HashSet<>(Arrays.asList("b", "c"));
         Map<String, Set<String>> result = TextDiffUtils.computeAddedRemoved(old, nw);
-        assertEquals(Set.of("c"), result.get("added"));
-        assertEquals(Set.of("a"), result.get("removed"));
+        assertEquals(Collections.singleton("c"), result.get("added"));
+        assertEquals(Collections.singleton("a"), result.get("removed"));
     }
 
     @Test
     void computeAddedRemoved_nullOld() {
-        Set<String> nw = Set.of("a", "b");
+        Set<String> nw = new HashSet<>(Arrays.asList("a", "b"));
         Map<String, Set<String>> result = TextDiffUtils.computeAddedRemoved(null, nw);
-        assertEquals(Set.of("a", "b"), result.get("added"));
+        assertEquals(new HashSet<>(Arrays.asList("a", "b")), result.get("added"));
         assertTrue(result.get("removed").isEmpty());
     }
 
     @Test
     void computeAddedRemoved_nullNew() {
-        Set<String> old = Set.of("a", "b");
+        Set<String> old = new HashSet<>(Arrays.asList("a", "b"));
         Map<String, Set<String>> result = TextDiffUtils.computeAddedRemoved(old, null);
         assertTrue(result.get("added").isEmpty());
-        assertEquals(Set.of("a", "b"), result.get("removed"));
+        assertEquals(new HashSet<>(Arrays.asList("a", "b")), result.get("removed"));
     }
 
     @Test
@@ -134,74 +133,74 @@ class TextDiffUtilsTest {
 
     @Test
     void computeAddedRemoved_emptySets() {
-        Map<String, Set<String>> result = TextDiffUtils.computeAddedRemoved(Set.of(), Set.of());
+        Map<String, Set<String>> result = TextDiffUtils.computeAddedRemoved(Collections.emptySet(), Collections.emptySet());
         assertTrue(result.get("added").isEmpty());
         assertTrue(result.get("removed").isEmpty());
     }
 
     @Test
     void intersectionSize_overlap() {
-        Set<String> a = Set.of("x", "y", "z");
-        Set<String> b = Set.of("y", "z", "w");
+        Set<String> a = new HashSet<>(Arrays.asList("x", "y", "z"));
+        Set<String> b = new HashSet<>(Arrays.asList("y", "z", "w"));
         assertEquals(2, TextDiffUtils.intersectionSize(a, b));
     }
 
     @Test
     void intersectionSize_identical() {
-        Set<String> a = Set.of("x", "y");
+        Set<String> a = new HashSet<>(Arrays.asList("x", "y"));
         assertEquals(2, TextDiffUtils.intersectionSize(a, a));
     }
 
     @Test
     void intersectionSize_disjoint() {
-        Set<String> a = Set.of("a");
-        Set<String> b = Set.of("b");
+        Set<String> a = Collections.singleton("a");
+        Set<String> b = Collections.singleton("b");
         assertEquals(0, TextDiffUtils.intersectionSize(a, b));
     }
 
     @Test
     void intersectionSize_nullSet() {
-        assertEquals(0, TextDiffUtils.intersectionSize(null, Set.of("a")));
-        assertEquals(0, TextDiffUtils.intersectionSize(Set.of("a"), null));
+        assertEquals(0, TextDiffUtils.intersectionSize(null, Collections.singleton("a")));
+        assertEquals(0, TextDiffUtils.intersectionSize(Collections.singleton("a"), null));
         assertEquals(0, TextDiffUtils.intersectionSize(null, null));
     }
 
     @Test
     void jaccardSimilarity_identical() {
-        Set<String> a = Set.of("a", "b", "c");
+        Set<String> a = new HashSet<>(Arrays.asList("a", "b", "c"));
         assertEquals(1.0, TextDiffUtils.jaccardSimilarity(a, a), 0.001);
     }
 
     @Test
     void jaccardSimilarity_disjoint() {
-        Set<String> a = Set.of("a", "b");
-        Set<String> b = Set.of("c", "d");
+        Set<String> a = new HashSet<>(Arrays.asList("a", "b"));
+        Set<String> b = new HashSet<>(Arrays.asList("c", "d"));
         assertEquals(0.0, TextDiffUtils.jaccardSimilarity(a, b), 0.001);
     }
 
     @Test
     void jaccardSimilarity_partial() {
-        Set<String> a = Set.of("a", "b", "c");
-        Set<String> b = Set.of("b", "c", "d");
+        Set<String> a = new HashSet<>(Arrays.asList("a", "b", "c"));
+        Set<String> b = new HashSet<>(Arrays.asList("b", "c", "d"));
         // intersection=2, union=4 → 0.5
         assertEquals(0.5, TextDiffUtils.jaccardSimilarity(a, b), 0.001);
     }
 
     @Test
     void jaccardSimilarity_bothEmpty() {
-        assertEquals(1.0, TextDiffUtils.jaccardSimilarity(Set.of(), Set.of()), 0.001);
+        assertEquals(1.0, TextDiffUtils.jaccardSimilarity(Collections.emptySet(), Collections.emptySet()), 0.001);
     }
 
     @Test
     void jaccardSimilarity_oneEmpty() {
-        assertEquals(0.0, TextDiffUtils.jaccardSimilarity(Set.of("a"), Set.of()), 0.001);
-        assertEquals(0.0, TextDiffUtils.jaccardSimilarity(Set.of(), Set.of("a")), 0.001);
+        assertEquals(0.0, TextDiffUtils.jaccardSimilarity(Collections.singleton("a"), Collections.emptySet()), 0.001);
+        assertEquals(0.0, TextDiffUtils.jaccardSimilarity(Collections.emptySet(), Collections.singleton("a")), 0.001);
     }
 
     @Test
     void jaccardSimilarity_nullSets() {
         assertEquals(1.0, TextDiffUtils.jaccardSimilarity(null, null), 0.001);
-        assertEquals(0.0, TextDiffUtils.jaccardSimilarity(null, Set.of("a")), 0.001);
-        assertEquals(0.0, TextDiffUtils.jaccardSimilarity(Set.of("a"), null), 0.001);
+        assertEquals(0.0, TextDiffUtils.jaccardSimilarity(null, Collections.singleton("a")), 0.001);
+        assertEquals(0.0, TextDiffUtils.jaccardSimilarity(Collections.singleton("a"), null), 0.001);
     }
 }

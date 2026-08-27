@@ -20,8 +20,7 @@ import java.util.Set;
  */
 class InMemoryStorageRepository implements StorageRepository {
 
-    private final List<InteractionRecord> store =
-            Collections.synchronizedList(new ArrayList<>());
+    private final List<InteractionRecord> store = Collections.synchronizedList(new ArrayList<>());
     private volatile boolean throwOnSave = false;
 
     void setThrowOnSave(boolean throwOnSave) {
@@ -63,27 +62,27 @@ class InMemoryStorageRepository implements StorageRepository {
 
     @Override
     public List<InteractionRecord> findBySkillId(String skillId) {
-        return List.of();
+        return Collections.emptyList();
     }
 
     @Override
     public List<InteractionRecord> findByTemplateHash(String hash) {
-        return List.of();
+        return Collections.emptyList();
     }
 
     @Override
     public Set<String> findSkillIdsByTemplateHash(String hash) {
-        return Set.of();
+        return Collections.emptySet();
     }
 
     @Override
     public List<InteractionRecord> findBySessionId(String sessionId) {
-        return List.of();
+        return Collections.emptyList();
     }
 
     @Override
     public List<String> findAllSessionIds() {
-        return List.of();
+        return Collections.emptyList();
     }
 
     @Override
@@ -97,7 +96,7 @@ class InMemoryStorageRepository implements StorageRepository {
 
     @Override
     public List<SkillProfile> findAllSkills() {
-        return List.of();
+        return Collections.emptyList();
     }
 
     @Override

@@ -4,7 +4,9 @@ import io.github.agentassert4j.model.Confidence;
 import io.github.agentassert4j.model.GraphEdge;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -50,18 +52,18 @@ class InMemoryDependencyGraphTest {
     @Test
     void addEdge_transparentWithThroughNodes() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "C", Confidence.TRANSPARENT, List.of("B"));
+        g.addEdge("A", "C", Confidence.TRANSPARENT, Collections.singletonList("B"));
 
         GraphEdge edge = g.getAllEdges().get(0);
         assertEquals(Confidence.TRANSPARENT, edge.getConfidence());
-        assertEquals(List.of("B"), edge.getThroughNodes());
+        assertEquals(Collections.singletonList("B"), edge.getThroughNodes());
     }
 
     @Test
     void addEdge_mergesThroughNodes() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "D", Confidence.TRANSPARENT, List.of("B"));
-        g.addEdge("A", "D", Confidence.TRANSPARENT, List.of("C"));
+        g.addEdge("A", "D", Confidence.TRANSPARENT, Collections.singletonList("B"));
+        g.addEdge("A", "D", Confidence.TRANSPARENT, Collections.singletonList("C"));
 
         assertEquals(1, g.edgeCount());
         GraphEdge edge = g.getAllEdges().get(0);
@@ -76,7 +78,7 @@ class InMemoryDependencyGraphTest {
         g.addEdge("A", "B");
 
         Set<String> result = g.traverseDownstream("A");
-        assertEquals(Set.of("B"), result);
+        assertEquals(Collections.singleton("B"), result);
     }
 
     @Test
@@ -87,7 +89,7 @@ class InMemoryDependencyGraphTest {
         g.addEdge("C", "D");
 
         Set<String> result = g.traverseDownstream("A");
-        assertEquals(Set.of("B", "C", "D"), result);
+        assertEquals(new HashSet<>(Arrays.asList("B", "C", "D")), result);
     }
 
     @Test
@@ -107,7 +109,7 @@ class InMemoryDependencyGraphTest {
         g.addEdge("C", "A"); // 环
 
         Set<String> result = g.traverseDownstream("A");
-        assertEquals(Set.of("B", "C"), result);
+        assertEquals(new HashSet<>(Arrays.asList("B", "C")), result);
     }
 
     @Test
@@ -161,7 +163,7 @@ class InMemoryDependencyGraphTest {
         g.addEdge("A", "C");
         g.addEdge("B", "C");
 
-        assertEquals(Set.of("A", "B"), g.getPredecessors("C"));
+        assertEquals(new HashSet<>(Arrays.asList("A", "B")), g.getPredecessors("C"));
     }
 
     @Test
@@ -170,7 +172,7 @@ class InMemoryDependencyGraphTest {
         g.addEdge("A", "B");
         g.addEdge("A", "C");
 
-        assertEquals(Set.of("B", "C"), g.getSuccessors("A"));
+        assertEquals(new HashSet<>(Arrays.asList("B", "C")), g.getSuccessors("A"));
     }
 
     @Test
@@ -212,7 +214,7 @@ class InMemoryDependencyGraphTest {
         g.addEdge("A", "B");
         g.addEdge("B", "C");
 
-        g.compressExcludedNodes(Set.of());
+        g.compressExcludedNodes(Collections.emptySet());
 
         assertEquals(2, g.edgeCount());
         assertTrue(g.getSuccessors("A").contains("B"));
@@ -225,7 +227,7 @@ class InMemoryDependencyGraphTest {
         g.addEdge("A", "infra");
         g.addEdge("infra", "C");
 
-        g.compressExcludedNodes(Set.of("infra"));
+        g.compressExcludedNodes(Collections.singleton("infra"));
 
         // infra 被移除，A → C 穿透边建立
         assertFalse(g.getAllNodes().contains("infra"));
@@ -245,7 +247,7 @@ class InMemoryDependencyGraphTest {
         g.addEdge("infra1", "infra2");
         g.addEdge("infra2", "D");
 
-        g.compressExcludedNodes(Set.of("infra1", "infra2"));
+        g.compressExcludedNodes(new HashSet<>(Arrays.asList("infra1", "infra2")));
 
         assertFalse(g.getAllNodes().contains("infra1"));
         assertFalse(g.getAllNodes().contains("infra2"));
@@ -261,7 +263,7 @@ class InMemoryDependencyGraphTest {
         g.addEdge("B", "C");
         g.addEdge("A", "D");
 
-        g.compressExcludedNodes(Set.of("B"));
+        g.compressExcludedNodes(Collections.singleton("B"));
 
         // A → C 穿透边 + A → D 保留
         assertTrue(g.getSuccessors("A").contains("C"));
@@ -281,7 +283,7 @@ class InMemoryDependencyGraphTest {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
         g.addEdge("A", "B", Confidence.HIGH);
         g.addEdge("B", "C", Confidence.LOW);
-        g.addEdge("X", "Y", Confidence.TRANSPARENT, List.of("Z"));
+        g.addEdge("X", "Y", Confidence.TRANSPARENT, Collections.singletonList("Z"));
 
         String json = g.toJson();
         assertNotNull(json);

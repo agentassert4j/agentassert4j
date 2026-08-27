@@ -6,8 +6,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -51,12 +51,10 @@ class BaselineManagerTest {
         r.setSkillId(skillId);
         r.setTemplateHash("hash-" + skillId);
         r.setModelResponse("{\"result\":\"ok\"}");
-        r.setToolCalls(List.of(
-                new ToolCall() {{
-                    setToolName(toolName);
-                    setArguments(Map.of("arg1", "val1"));
-                }}
-        ));
+        r.setToolCalls(Collections.singletonList(new ToolCall() {{
+            setToolName(toolName);
+            setArguments(Collections.singletonMap("arg1", "val1"));
+        }}));
         return r;
     }
 
@@ -93,16 +91,14 @@ class BaselineManagerTest {
             SkillProfile profile = makeProfileWithBaseline("gk-1", "skill-1");
             repo.saveSkillProfile(profile);
 
-            IllegalStateException ex = assertThrows(IllegalStateException.class,
-                    () -> manager.approve("gk-1"));
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () -> manager.approve("gk-1"));
             assertTrue(ex.getMessage().contains("No candidate"));
         }
 
         @Test
         @DisplayName("Skill profile 不存在 → 抛出 IllegalStateException")
         void profileNotFound_throwsException() {
-            assertThrows(IllegalStateException.class,
-                    () -> manager.approve("nonexistent"));
+            assertThrows(IllegalStateException.class, () -> manager.approve("nonexistent"));
         }
 
         @Test
@@ -168,8 +164,7 @@ class BaselineManagerTest {
         @Test
         @DisplayName("Skill profile 不存在 → 抛出 IllegalStateException")
         void profileNotFound_throwsException() {
-            assertThrows(IllegalStateException.class,
-                    () -> manager.reject("nonexistent"));
+            assertThrows(IllegalStateException.class, () -> manager.reject("nonexistent"));
         }
 
         @Test
@@ -178,8 +173,7 @@ class BaselineManagerTest {
             SkillProfile profile = makeProfileWithBaseline("gk-1", "skill-1");
             repo.saveSkillProfile(profile);
 
-            assertThrows(IllegalStateException.class,
-                    () -> manager.reject("gk-1"));
+            assertThrows(IllegalStateException.class, () -> manager.reject("gk-1"));
         }
     }
 
@@ -219,15 +213,13 @@ class BaselineManagerTest {
             SkillProfile profile = makeProfileWithBaseline("gk-1", "skill-1");
             repo.saveSkillProfile(profile);
 
-            assertThrows(IllegalStateException.class,
-                    () -> manager.rollback("gk-1", "v99"));
+            assertThrows(IllegalStateException.class, () -> manager.rollback("gk-1", "v99"));
         }
 
         @Test
         @DisplayName("Skill profile 不存在 → 抛出 IllegalStateException")
         void profileNotFound_throwsException() {
-            assertThrows(IllegalStateException.class,
-                    () -> manager.rollback("nonexistent", "v1"));
+            assertThrows(IllegalStateException.class, () -> manager.rollback("nonexistent", "v1"));
         }
 
         @Test
@@ -274,10 +266,7 @@ class BaselineManagerTest {
 
             // v2/v3 已在归档中，新基线必须跳到 v4——否则 rollback("v2") 无法区分两个不同指纹
             assertEquals("v4", repo.findSkillByGroupKey("gk-1").getVersionTag());
-            long distinctTags = repo.archivedBaselines.stream()
-                    .map(ArchivedBaseline::getVersionTag)
-                    .distinct()
-                    .count();
+            long distinctTags = repo.archivedBaselines.stream().map(ArchivedBaseline::getVersionTag).distinct().count();
             assertEquals(repo.archivedBaselines.size(), distinctTags);
             // 回滚恢复的 v1 基线已在归档中，不得重复归档
             assertEquals(3, repo.archivedBaselines.size());
@@ -410,8 +399,7 @@ class BaselineManagerTest {
         void profileNotFound_throwsException() {
             InteractionRecord record = makeToolRecord("skill-x", "queryOrder");
 
-            assertThrows(IllegalStateException.class,
-                    () -> manager.recordCandidate(record, new DeterministicFingerprint()));
+            assertThrows(IllegalStateException.class, () -> manager.recordCandidate(record, new DeterministicFingerprint()));
         }
 
         @Test

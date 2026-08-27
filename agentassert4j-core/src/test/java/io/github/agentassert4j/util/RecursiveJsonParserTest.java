@@ -2,19 +2,18 @@ package io.github.agentassert4j.util;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SuppressWarnings("unchecked")
+
 /**
  * RecursiveJsonParser 的单元测试。
  *
  * @author axy-yxa
  * @since 2026-08-26
  */
+@SuppressWarnings("unchecked")
 class RecursiveJsonParserTest {
 
     @Test
@@ -127,7 +126,7 @@ class RecursiveJsonParserTest {
     void parse_numberArray() {
         Object result = RecursiveJsonParser.parse("[1, 2, 3]");
         List<Object> list = (List<Object>) result;
-        assertEquals(List.of(1L, 2L, 3L), list);
+        assertEquals(Arrays.asList(1L, 2L, 3L), list);
     }
 
     @Test
@@ -168,7 +167,7 @@ class RecursiveJsonParserTest {
         Object result = RecursiveJsonParser.parse(json);
         Map<String, Object> map = (Map<String, Object>) result;
         List<Object> items = (List<Object>) map.get("items");
-        assertEquals(List.of(1L, 2L, 3L), items);
+        assertEquals(Arrays.asList(1L, 2L, 3L), items);
     }
 
     @Test
@@ -190,7 +189,7 @@ class RecursiveJsonParserTest {
         Map<String, Object> types = (Map<String, Object>) map.get("toolParamTypes");
         assertEquals("String", types.get("orderId"));
         List<Object> fields = (List<Object>) map.get("outputFields");
-        assertEquals(List.of("orderId", "amount"), fields);
+        assertEquals(Arrays.asList("orderId", "amount"), fields);
     }
 
     @Test
@@ -268,7 +267,7 @@ class RecursiveJsonParserTest {
 
     @Test
     void serialize_list() {
-        assertEquals("[1,2,3]", RecursiveJsonParser.serialize(List.of(1L, 2L, 3L)));
+        assertEquals("[1,2,3]", RecursiveJsonParser.serialize(Arrays.asList(1L, 2L, 3L)));
     }
 
     @Test
@@ -318,14 +317,14 @@ class RecursiveJsonParserTest {
     void extractFieldPaths_flatObject() {
         Object parsed = RecursiveJsonParser.parse("{\"name\":\"test\",\"count\":42}");
         Set<String> paths = RecursiveJsonParser.extractFieldPaths(parsed);
-        assertEquals(Set.of("count", "name"), paths);
+        assertEquals(new HashSet<>(Arrays.asList("count", "name")), paths);
     }
 
     @Test
     void extractFieldPaths_nestedObject() {
         Object parsed = RecursiveJsonParser.parse("{\"a\":{\"b\":1}}");
         Set<String> paths = RecursiveJsonParser.extractFieldPaths(parsed);
-        assertEquals(Set.of("a.b"), paths);
+        assertEquals(Collections.singleton("a.b"), paths);
     }
 
     @Test
@@ -375,5 +374,36 @@ class RecursiveJsonParserTest {
     void extractFieldTypeMap_emptyInput() {
         assertTrue(RecursiveJsonParser.extractFieldTypeMap(null).isEmpty());
         assertTrue(RecursiveJsonParser.extractFieldTypeMap("string").isEmpty());
+    }
+
+    /**
+     * 深度攻击防护：超限嵌套必须按解析失败契约安全退化为 null，
+     * 绝不能以 StackOverflowError 逃逸——Error 不在 catch(Exception) 的拦截面内，
+     * 一旦穿透会击穿 RegressionTestExecutor 的单条记录异常隔离。
+     */
+    @Test
+    void parse_deepNestingBeyondLimit_degradesToNullWithoutStackOverflow() {
+        StringBuilder json = new StringBuilder();
+        int depth = 100_000;
+        for (int i = 0; i < depth; i++) json.append('[');
+        for (int i = 0; i < depth; i++) json.append(']');
+        assertNull(RecursiveJsonParser.parse(json.toString()), "超过深度上限的嵌套必须安全返回 null，而不是抛 StackOverflowError");
+    }
+
+    @Test
+    void parse_deepNestingWithinLimit_parsesCorrectly() {
+        int depth = 64;
+        StringBuilder json = new StringBuilder();
+        for (int i = 0; i < depth; i++) json.append("{\"a\":");
+        json.append("\"leaf\"");
+        for (int i = 0; i < depth; i++) json.append('}');
+
+        Map<String, Object> parsed = (Map<String, Object>) RecursiveJsonParser.parse(json.toString());
+        assertNotNull(parsed, "上限内的合法嵌套必须正常解析");
+        for (int i = 0; i < depth - 1; i++) {
+            parsed = (Map<String, Object>) parsed.get("a");
+            assertNotNull(parsed);
+        }
+        assertEquals("leaf", parsed.get("a"));
     }
 }

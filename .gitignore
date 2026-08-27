@@ -11,3 +11,6 @@ Thumbs.db
 
 # 内部工作文档（不入公开仓库）
 /AgentAssert*.md
+
+# 真实 LLM 端到端验证套件
+/agentassert4j-cli/src/test/java/io/github/agentassert4j/e2e/

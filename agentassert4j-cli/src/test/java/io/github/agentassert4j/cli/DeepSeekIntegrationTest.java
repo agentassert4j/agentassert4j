@@ -13,10 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -60,7 +57,7 @@ class DeepSeekIntegrationTest {
     @BeforeAll
     static void setUp() {
         String apiKey = System.getProperty("deepseek.api.key");
-        assumeTrue(apiKey != null && !apiKey.isBlank(), "跳过：未提供 -Ddeepseek.api.key");
+        assumeTrue(apiKey != null && !apiKey.trim().isEmpty(), "跳过：未提供 -Ddeepseek.api.key");
         client = new OpenAiCompatibleClient(ENDPOINT, apiKey, "deepseek-chat");
     }
 
@@ -138,7 +135,7 @@ class DeepSeekIntegrationTest {
         tc.setToolCallId("call_baseline");
         tc.setArguments(args);
         tc.setSuccess(true);
-        r.setToolCalls(List.of(tc));
+        r.setToolCalls(Collections.singletonList(tc));
         r.setHasToolCalls(true);
         return r;
     }
@@ -236,7 +233,7 @@ class DeepSeekIntegrationTest {
             request.setSystemPrompt("你是一个天气助手，用户问天气时调用 get_weather 工具。");
             request.setUserInput("北京今天天气怎么样？");
             request.setTemperature(0.0);
-            request.setToolDefinitions(List.of(WEATHER_TOOL));
+            request.setToolDefinitions(Collections.singletonList(WEATHER_TOOL));
 
             LlmResponse response = client.chat(request, 30000);
 
@@ -261,7 +258,7 @@ class DeepSeekIntegrationTest {
             request.setSystemPrompt("你是一个助手，可以查天气和搜订单。用户问天气用 get_weather，问订单用 search_orders。");
             request.setUserInput("帮我搜一下最近的订单，关键词是手机");
             request.setTemperature(0.0);
-            request.setToolDefinitions(List.of(WEATHER_TOOL, SEARCH_TOOL));
+            request.setToolDefinitions(Arrays.asList(WEATHER_TOOL, SEARCH_TOOL));
 
             LlmResponse response = client.chat(request, 30000);
 
@@ -282,7 +279,7 @@ class DeepSeekIntegrationTest {
             request.setSystemPrompt("你是一个订单助手。");
             request.setUserInput("搜订单关键词是电脑，限制返回3条");
             request.setTemperature(0.0);
-            request.setToolDefinitions(List.of(SEARCH_TOOL));
+            request.setToolDefinitions(Collections.singletonList(SEARCH_TOOL));
 
             LlmResponse response = client.chat(request, 30000);
 
@@ -365,7 +362,7 @@ class DeepSeekIntegrationTest {
             request.setSystemPrompt("你是天气助手，问天气就调 get_weather。");
             request.setUserInput("上海天气如何？");
             request.setTemperature(0.0);
-            request.setToolDefinitions(List.of(WEATHER_TOOL));
+            request.setToolDefinitions(Collections.singletonList(WEATHER_TOOL));
 
             LlmResponse response = client.chat(request, 30000);
             InteractionRecord record = responseToRecord(response, request);
@@ -422,7 +419,7 @@ class DeepSeekIntegrationTest {
             toolReq.setSystemPrompt("你是天气助手，问天气就调 get_weather。");
             toolReq.setUserInput("北京天气如何？");
             toolReq.setTemperature(0.0);
-            toolReq.setToolDefinitions(List.of(WEATHER_TOOL));
+            toolReq.setToolDefinitions(Collections.singletonList(WEATHER_TOOL));
             LlmResponse toolResp = client.chat(toolReq, 30000);
             InteractionRecord toolRec = responseToRecord(toolResp, toolReq);
 
@@ -508,7 +505,7 @@ class DeepSeekIntegrationTest {
         @DisplayName("6.2 工具基线 → 工具重放（LLM 应再次调用工具）")
         void testToolCallReplay() throws Exception {
             // 构建带工具调用的基线
-            InteractionRecord baseline = makeToolCallBaseline("exec-tool-1", "北京天气怎么样？", "get_weather", Map.of("city", "北京"));
+            InteractionRecord baseline = makeToolCallBaseline("exec-tool-1", "北京天气怎么样？", "get_weather", Collections.singletonMap("city", "北京"));
 
             // 新 prompt 里也告诉它用工具
             String newPrompt = "你是天气助手。用户问天气时必须调用 get_weather 工具。不要用文字回答天气问题。";
@@ -751,7 +748,7 @@ class DeepSeekIntegrationTest {
             baselineReq.setSystemPrompt("你是天气助手，问天气就调 get_weather。");
             baselineReq.setUserInput("深圳天气怎么样？");
             baselineReq.setTemperature(0.0);
-            baselineReq.setToolDefinitions(List.of(WEATHER_TOOL));
+            baselineReq.setToolDefinitions(Collections.singletonList(WEATHER_TOOL));
 
             LlmResponse baselineResp = client.chat(baselineReq, 30000);
             InteractionRecord baseline = responseToRecord(baselineResp, baselineReq);

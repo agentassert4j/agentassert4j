@@ -344,6 +344,13 @@ wait on the recording pipeline.
 2. bug 修复——先写失败复现测试再修复，两者同一 PR（评审可看到测试由红转绿）。
 3. 行为、配置、默认值变更——同步更新受影响的既有测试。
 
+**语言级别**：core/recorder/storage-sqlite/cli 四模块的**测试代码与主代码同为 Java 8**
+（POM 为单一 plugin 级 `release 8`）。只有 JDK 8 的贡献者也必须能 clone 后直接跑全部单元测试。
+禁止在测试中使用 9+ 语法与 API：文本块、`var`、`List.of`/`Map.of`/`Set.of`、`String.repeat`/
+`isBlank`、无参 `orElseThrow()`、`Stream.toList()`、`Path.of`、switch 箭头——
+用 `Arrays.asList`/`Collections.singleton*`/`Collectors.toList()`/`Paths.get` 等 8 时代的等价写法。
+sdk-spring-ai1 与 spring-boot3-starter 随 Spring AI 保持 17，不受此条约束。
+
 **针对什么写**（测契约，不测实现）：
 
 - 断言「输入 → 可观察行为」：返回值、状态变迁、异常类型、副作用（落库/计数/回调）；不测私有方法与内部结构，禁止反射白盒。

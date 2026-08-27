@@ -11,7 +11,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -30,8 +32,7 @@ class StatisticalRegressionExecutorTest {
     @BeforeEach
     void setUp() {
         stubClient = new CountingLlmClient();
-        executor = new StatisticalRegressionExecutor(
-                stubClient, new DeterministicComparator());
+        executor = new StatisticalRegressionExecutor(stubClient, new DeterministicComparator());
     }
 
     @Test
@@ -99,7 +100,7 @@ class StatisticalRegressionExecutorTest {
 
     @Test
     void execute_timeoutOnThirdSample_othersContinue() {
-        stubClient.failOnCallNumber = Set.of(3);
+        stubClient.failOnCallNumber = Collections.singleton(3);
         stubClient.failType = "timeout";
 
         StatisticalTestConfig config = new StatisticalTestConfig();
@@ -110,14 +111,13 @@ class StatisticalRegressionExecutorTest {
         assertEquals(5, result.getActualSampleCount());
         assertEquals(5, stubClient.callCount);
         // 第 3 次采样应该有 errorMessage
-        boolean hasErrorSample = result.getSamples().stream()
-                .anyMatch(s -> s.getErrorMessage() != null);
+        boolean hasErrorSample = result.getSamples().stream().anyMatch(s -> s.getErrorMessage() != null);
         assertTrue(hasErrorSample);
     }
 
     @Test
     void execute_apiErrorOnSecondSample_othersContinue() {
-        stubClient.failOnCallNumber = Set.of(2);
+        stubClient.failOnCallNumber = Collections.singleton(2);
         stubClient.failType = "api_error";
 
         StatisticalTestConfig config = new StatisticalTestConfig();
@@ -126,8 +126,7 @@ class StatisticalRegressionExecutorTest {
         StatisticalRegressionResult result = executor.execute(makeBaseline(), "prompt", config);
 
         assertEquals(4, result.getActualSampleCount());
-        boolean hasErrorSample = result.getSamples().stream()
-                .anyMatch(s -> s.getErrorMessage() != null);
+        boolean hasErrorSample = result.getSamples().stream().anyMatch(s -> s.getErrorMessage() != null);
         assertTrue(hasErrorSample);
     }
 
@@ -160,10 +159,8 @@ class StatisticalRegressionExecutorTest {
         @Test
         @DisplayName("规则经构造器传入 → 每次采样都按 skillId 应用规则")
         void rulesApplied_toEverySample() {
-            SkillRulesConfig rules = SkillRulesConfig.fromJson(
-                    "{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
-            StatisticalRegressionExecutor wired =
-                    new StatisticalRegressionExecutor(stubClient, new DeterministicComparator(), rules);
+            SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
+            StatisticalRegressionExecutor wired = new StatisticalRegressionExecutor(stubClient, new DeterministicComparator(), rules);
             StatisticalTestConfig config = new StatisticalTestConfig();
             config.setSampleCount(3);
 
@@ -171,8 +168,7 @@ class StatisticalRegressionExecutorTest {
             StatisticalRegressionResult result = wired.execute(makeBaseline(), "prompt", config);
 
             assertEquals(3, result.getActualSampleCount());
-            assertTrue(result.getSamples().stream().allMatch(s -> s.getVerdict() != Verdict.PASS),
-                    "规则必须作用于全部采样，而非只有第一次");
+            assertTrue(result.getSamples().stream().allMatch(s -> s.getVerdict() != Verdict.PASS), "规则必须作用于全部采样，而非只有第一次");
         }
     }
 
@@ -183,16 +179,14 @@ class StatisticalRegressionExecutorTest {
         @Test
         @DisplayName("对比阶段抛异常 → 每次采样转为错误样本，批量不中断")
         void processingError_isolatedPerSample() {
-            StatisticalRegressionExecutor wired = new StatisticalRegressionExecutor(
-                    stubClient, new RegressionTestExecutorTest.ThrowingComparator());
+            StatisticalRegressionExecutor wired = new StatisticalRegressionExecutor(stubClient, new RegressionTestExecutorTest.ThrowingComparator());
             StatisticalTestConfig config = new StatisticalTestConfig();
             config.setSampleCount(3);
 
             StatisticalRegressionResult result = wired.execute(makeBaseline(), "prompt", config);
 
             assertEquals(3, result.getActualSampleCount());
-            assertTrue(result.getSamples().stream()
-                    .allMatch(s -> s.getErrorMessage() != null && s.getErrorMessage().contains("Processing error")));
+            assertTrue(result.getSamples().stream().allMatch(s -> s.getErrorMessage() != null && s.getErrorMessage().contains("Processing error")));
         }
     }
 
@@ -215,9 +209,9 @@ class StatisticalRegressionExecutorTest {
         ToolCall tc = new ToolCall();
         tc.setToolName("queryOrder");
         tc.setToolCallId("tc-1");
-        tc.setArguments(Map.of("orderId", "ORD-001"));
+        tc.setArguments(Collections.singletonMap("orderId", "ORD-001"));
         tc.setSuccess(true);
-        r.setToolCalls(List.of(tc));
+        r.setToolCalls(Collections.singletonList(tc));
         r.setHasToolCalls(true);
         return r;
     }
@@ -229,8 +223,7 @@ class StatisticalRegressionExecutorTest {
         String failType = "timeout";
 
         @Override
-        public LlmResponse chat(LlmRequest request, long timeoutMs)
-                throws LlmTimeoutException, LlmApiException {
+        public LlmResponse chat(LlmRequest request, long timeoutMs) throws LlmTimeoutException, LlmApiException {
             callCount++;
             if (failOnCallNumber.contains(callCount)) {
                 if ("timeout".equals(failType)) throw new LlmTimeoutException("timeout");
@@ -246,8 +239,8 @@ class StatisticalRegressionExecutorTest {
                 ToolCallResult tc = new ToolCallResult();
                 tc.setToolCallId("call-" + callCount);
                 tc.setToolName("queryOrder");
-                tc.setArguments(Map.of("orderId", "ORD-001"));
-                response.setToolCalls(List.of(tc));
+                tc.setArguments(Collections.singletonMap("orderId", "ORD-001"));
+                response.setToolCalls(Collections.singletonList(tc));
             } else {
                 response.setToolCalls(Collections.emptyList());
             }

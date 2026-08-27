@@ -39,27 +39,36 @@ import java.util.Map;
 public class OpenAiCompatibleClient implements LlmClient {
 
     /**
-     * 默认重试次数
+     * 默认重试次数（传输层失败的最大重试），供组装根构造客户端时引用
      */
-    private static final int DEFAULT_MAX_RETRIES = 2;
+    public static final int DEFAULT_MAX_RETRIES = 2;
     private final String endpoint;
     private final String apiKey;
     private final String defaultModel;
     private final int maxRetries;
+    /**
+     * 厂商方言扩展字段——原样注入请求体顶层的 JSON 成员片段。
+     * 例：DeepSeek V4 系模型默认开启思考态且思考 token 与输出共享预算，
+     * 需注入 "thinking":{"type":"disabled"} 才能拿到非空正文。
+     * 客户端保持供应商中立，不做任何按模型名的硬编码分支，
+     * 由使用方按所接厂商在构造时声明；片段必须为合法 JSON 成员序列，
+     * 非法时服务端以 400 拒绝——错误显式可见，不做静默修正。
+     */
+    private final String extraBodyFields;
 
     /**
-     * 构造客户端（默认重试 2 次）。
+     * 构造客户端（默认重试 2 次，无厂商方言扩展）。
      *
      * @param endpoint     API 端点，如 "https://api.openai.com"
      * @param apiKey       API Key
      * @param defaultModel 默认模型，如 "gpt-4o"
      */
     public OpenAiCompatibleClient(String endpoint, String apiKey, String defaultModel) {
-        this(endpoint, apiKey, defaultModel, DEFAULT_MAX_RETRIES);
+        this(endpoint, apiKey, defaultModel, DEFAULT_MAX_RETRIES, null);
     }
 
     /**
-     * 构造客户端。
+     * 构造客户端（无厂商方言扩展）。
      *
      * @param endpoint     API 端点，如 "https://api.openai.com"
      * @param apiKey       API Key
@@ -67,10 +76,25 @@ public class OpenAiCompatibleClient implements LlmClient {
      * @param maxRetries   传输层失败（429/5xx/连接被拒）的最大重试次数，负数按 0 处理
      */
     public OpenAiCompatibleClient(String endpoint, String apiKey, String defaultModel, int maxRetries) {
+        this(endpoint, apiKey, defaultModel, maxRetries, null);
+    }
+
+    /**
+     * 构造客户端。
+     *
+     * @param endpoint        API 端点，如 "https://api.deepseek.com"
+     * @param apiKey          API Key
+     * @param defaultModel    默认模型，如 "gpt-4o"
+     * @param maxRetries      传输层失败（429/5xx/连接被拒）的最大重试次数，负数按 0 处理
+     * @param extraBodyFields 原样注入请求体顶层的 JSON 成员片段（如 "thinking":{"type":"disabled"}），
+     *                        null 或空白表示无扩展；须为合法 JSON 成员序列，否则请求将被服务端拒绝
+     */
+    public OpenAiCompatibleClient(String endpoint, String apiKey, String defaultModel, int maxRetries, String extraBodyFields) {
         this.endpoint = normalizeEndpoint(endpoint);
         this.apiKey = apiKey;
         this.defaultModel = defaultModel;
         this.maxRetries = Math.max(0, maxRetries);
+        this.extraBodyFields = extraBodyFields != null && !extraBodyFields.trim().isEmpty() ? extraBodyFields.trim() : null;
     }
 
     /**
@@ -224,6 +248,17 @@ public class OpenAiCompatibleClient implements LlmClient {
     }
 
     /**
+     * 合成"assistant 发起工具调用"消息帧：历史录制没有该轮的独立载体，
+     * arguments 以空对象占位（协议校验只看结构与 id/name 的对应关系），
+     * 待 SDK 接入层为历史轮保存完整调用参数后可替换为真实值。
+     */
+    private static void appendSyntheticAssistantToolCall(StringBuilder sb, TurnContext toolTurn) {
+        String callId = toolTurn.getToolCallId() != null ? toolTurn.getToolCallId() : "";
+        String name = toolTurn.getToolName() != null ? toolTurn.getToolName() : "";
+        sb.append("{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"").append(escapeJson(callId)).append("\",\"type\":\"function\",\"function\":{\"name\":\"").append(escapeJson(name)).append("\",\"arguments\":\"{}\"}}]}");
+    }
+
+    /**
      * 构建 OpenAI Chat Completion 请求体。
      *
      * <p>消息格式：</p>
@@ -248,44 +283,59 @@ public class OpenAiCompatibleClient implements LlmClient {
         sb.append(",\"temperature\":").append(request.getTemperature());
 
         // messages
-        sb.append(",\"messages\":[");
-
-        boolean first = true;
+        StringBuilder messages = new StringBuilder();
+        boolean wroteAny = false;
 
         // system message
         if (request.getSystemPrompt() != null && !request.getSystemPrompt().isEmpty()) {
-            sb.append("{\"role\":\"system\",\"content\":\"").append(escapeJson(request.getSystemPrompt())).append("\"}");
-            first = false;
+            messages.append("{\"role\":\"system\",\"content\":\"").append(escapeJson(request.getSystemPrompt())).append("\"}");
+            wroteAny = true;
         }
 
         // previousTurns（多轮上下文）
         if (request.getPreviousTurns() != null) {
+            String lastEmittedToolCallId = null;
             for (TurnContext turn : request.getPreviousTurns()) {
-                if (!first) sb.append(",");
                 String role = turn.getRole();
-                sb.append("{\"role\":\"").append(escapeJson(role)).append("\"");
+                if ("tool".equals(role)) {
+                    String callId = turn.getToolCallId();
+                    // OpenAI 方言的硬约束：tool 消息必须紧跟在携带同 id tool_calls 的
+                    // assistant 消息之后，否则服务端以 400 拒绝整个请求。
+                    // 录制模型的历史轮没有"assistant 发起调用"的独立载体（无处存放
+                    // arguments），渲染层按已知 id/toolName 合成最小合法请求帧补齐协议
+                    if (callId == null || callId.isEmpty() || !callId.equals(lastEmittedToolCallId)) {
+                        if (wroteAny) messages.append(",");
+                        appendSyntheticAssistantToolCall(messages, turn);
+                        wroteAny = true;
+                        lastEmittedToolCallId = callId;
+                    }
+                } else {
+                    lastEmittedToolCallId = null;
+                }
+                if (wroteAny) messages.append(",");
+                messages.append("{\"role\":\"").append(escapeJson(role)).append("\"");
                 // tool 角色消息必须携带 tool_call_id 才能关联到前序 assistant 的调用决策，
                 // 缺失时服务端以 400 拒绝整个请求
                 if ("tool".equals(role) && turn.getToolCallId() != null) {
-                    sb.append(",\"tool_call_id\":\"").append(escapeJson(turn.getToolCallId())).append("\"");
+                    messages.append(",\"tool_call_id\":\"").append(escapeJson(turn.getToolCallId())).append("\"");
                 }
-                sb.append(",\"content\":\"").append(escapeJson(turn.getContent())).append("\"}");
-                first = false;
+                messages.append(",\"content\":\"").append(escapeJson(turn.getContent())).append("\"}");
+                wroteAny = true;
             }
         }
 
         // user message
         if (request.getUserInput() != null) {
-            if (!first) sb.append(",");
+            if (wroteAny) messages.append(",");
             if (request.isMultimodalInput()) {
                 // 多模态：userInput 存储的是 JSON 数组，原样注入
-                sb.append("{\"role\":\"user\",\"content\":").append(request.getUserInput()).append("}");
+                messages.append("{\"role\":\"user\",\"content\":").append(request.getUserInput()).append("}");
             } else {
-                sb.append("{\"role\":\"user\",\"content\":\"").append(escapeJson(request.getUserInput())).append("\"}");
+                messages.append("{\"role\":\"user\",\"content\":\"").append(escapeJson(request.getUserInput())).append("\"}");
             }
         }
 
-        sb.append("]");
+        sb.append(",\"messages\":[").append(messages).append("]");
 
         // tools 定义 — 允许 LLM 返回 tool_calls
         if (request.getToolDefinitions() != null && !request.getToolDefinitions().isEmpty()) {
@@ -297,6 +347,11 @@ public class OpenAiCompatibleClient implements LlmClient {
                 firstTool = false;
             }
             sb.append("]");
+        }
+
+        // 厂商方言扩展字段：位于全部标准成员之后，原样注入（model/messages 至少存在，逗号恒安全）
+        if (extraBodyFields != null) {
+            sb.append(",").append(extraBodyFields);
         }
 
         // 关闭外层 JSON 对象

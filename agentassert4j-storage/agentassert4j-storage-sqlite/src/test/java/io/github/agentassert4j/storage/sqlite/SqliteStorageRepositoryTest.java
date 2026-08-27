@@ -297,7 +297,7 @@ class SqliteStorageRepositoryTest {
         Map<String, Object> args = new HashMap<>();
         args.put("note", argValueWithNewline);
         tc.setArguments(args);
-        r.setToolCalls(new ArrayList<>(List.of(tc)));
+        r.setToolCalls(new ArrayList<>(Collections.singletonList(tc)));
 
         repo.saveInteraction(r);
 
@@ -312,7 +312,7 @@ class SqliteStorageRepositoryTest {
         repo.saveInteraction(r2);
         List<InteractionRecord> all = repo.findBySkillId("sk-e");
         assertEquals(2, all.size(), "esc-2 是新 record_id，必须正常落库");
-        TurnContext loadedTurn = all.stream().filter(x -> "esc-2".equals(x.getRecordId())).findFirst().orElseThrow().getPreviousTurns().get(0);
+        TurnContext loadedTurn = all.stream().filter(x -> "esc-2".equals(x.getRecordId())).findFirst().get().getPreviousTurns().get(0);
         assertEquals("内容\"引号\"\n换行", loadedTurn.getContent(), "previousTurns 内容读回必须反转义");
     }
 
@@ -486,7 +486,7 @@ class SqliteStorageRepositoryTest {
         r.setModelResponse("m");
 
         assertThrows(StorageException.class, () -> repo.saveInteraction(r));
-        assertThrows(StorageException.class, () -> repo.saveInteractions(List.of(r)));
+        assertThrows(StorageException.class, () -> repo.saveInteractions(Collections.singletonList(r)));
         assertThrows(StorageException.class, () -> repo.findSkillIdsByTemplateHash("h"));
         assertThrows(StorageException.class, () -> repo.findAllSessionIds());
         assertThrows(StorageException.class, () -> repo.findAllSkills());
@@ -521,14 +521,14 @@ class SqliteStorageRepositoryTest {
         argTypes.put("id", "String");
         argTypes.put("count", "Integer");
         tc.setArgTypes(argTypes);
-        r.setToolCalls(List.of(tc));
+        r.setToolCalls(Collections.singletonList(tc));
         r.setHasToolCalls(true);
 
         TurnContext t1 = new TurnContext("user", "问题\"一\"\n");
         TurnContext t2 = new TurnContext("tool", "结果\\两");
         t2.setToolCallId("call\\1");
         t2.setToolName("tool\"");
-        r.setPreviousTurns(List.of(t1, t2));
+        r.setPreviousTurns(Arrays.asList(t1, t2));
 
         repo.saveInteraction(r);
 
@@ -568,7 +568,7 @@ class SqliteStorageRepositoryTest {
         p.setVersionTag("v1");
 
         DeterministicFingerprint fp = new DeterministicFingerprint();
-        fp.setToolCallSet(new LinkedHashSet<>(List.of("tool\"A", "tool\\B", "工具\nC")));
+        fp.setToolCallSet(new LinkedHashSet<>(Arrays.asList("tool\"A", "tool\\B", "工具\nC")));
         Map<String, String> paramTypes = new LinkedHashMap<>();
         paramTypes.put("k\"1", "String");
         fp.setToolParamTypes(paramTypes);
@@ -576,11 +576,11 @@ class SqliteStorageRepositoryTest {
         required.put("k\"1", true);
         fp.setToolParamRequired(required);
         fp.setOutputContentType("text/plain");
-        fp.setOutputFieldPaths(new LinkedHashSet<>(List.of("a.b\"c")));
+        fp.setOutputFieldPaths(new LinkedHashSet<>(Collections.singletonList("a.b\"c")));
         fp.setTextLengthMagnitude(3);
-        fp.setRequiredKeywords(new LinkedHashSet<>(List.of("必\"需", "关键字\n")));
-        fp.setRegexPatterns(List.of(new RegexPattern("^\\d+\"$", "描述\"一")));
-        fp.setDeclaredBehaviors(new LinkedHashSet<>(List.of("行为\"X")));
+        fp.setRequiredKeywords(new LinkedHashSet<>(Arrays.asList("必\"需", "关键字\n")));
+        fp.setRegexPatterns(Collections.singletonList(new RegexPattern("^\\d+\"$", "描述\"一")));
+        fp.setDeclaredBehaviors(new LinkedHashSet<>(Collections.singletonList("行为\"X")));
         fp.setHasError(false);
         p.setFingerprint(fp);
 

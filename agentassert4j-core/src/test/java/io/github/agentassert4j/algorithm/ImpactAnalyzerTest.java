@@ -9,8 +9,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -52,10 +52,9 @@ class ImpactAnalyzerTest {
     }
 
     /**
-     * 显式指定 timestamp 与 recordId 的记录构造（M5 测试专用）
+     * 显式指定 timestamp 与 recordId 的记录构造（排序键平局决胜测试用）
      */
-    private InteractionRecord scopedRecord(String skillId, String hash, String session,
-                                           long ts, String recordId) {
+    private InteractionRecord scopedRecord(String skillId, String hash, String session, long ts, String recordId) {
         InteractionRecord r = makeRecord(skillId, hash, session);
         r.setRecordId(recordId);
         r.setTimestamp(ts);
@@ -102,7 +101,7 @@ class ImpactAnalyzerTest {
             AnalysisResult result = analyzer.analyzeChange("hash-old", "hash-new");
 
             assertTrue(result.isHasBaseline());
-            assertEquals(Set.of("skill-1"), result.getDirectSkills());
+            assertEquals(Collections.singleton("skill-1"), result.getDirectSkills());
             // allAffectedSkills 包含自身，无下游则只有自身
             assertEquals(1, result.getAllAffectedSkills().size());
             assertTrue(result.getAllAffectedSkills().contains("skill-1"));
@@ -148,7 +147,7 @@ class ImpactAnalyzerTest {
             AnalysisResult result = analyzer.analyzeChange("hash-old", "hash-new");
 
             assertTrue(result.isHasBaseline());
-            assertEquals(Set.of("skill-a", "skill-b"), result.getDirectSkills());
+            assertEquals(new HashSet<>(Arrays.asList("skill-a", "skill-b")), result.getDirectSkills());
             assertTrue(result.getAllAffectedSkills().contains("skill-c"));
             assertEquals(3, result.getAllAffectedSkills().size());
         }
@@ -183,7 +182,7 @@ class ImpactAnalyzerTest {
 
             AnalysisResult result = analyzer.analyzeChange("hash-old", "hash-new");
 
-            assertEquals(Set.of("skill-a"), result.getDirectSkills());
+            assertEquals(Collections.singleton("skill-a"), result.getDirectSkills());
             assertEquals(3, result.getAllAffectedSkills().size());
             assertTrue(result.getAllAffectedSkills().contains("skill-b"));
             assertTrue(result.getAllAffectedSkills().contains("skill-c"));
@@ -273,7 +272,7 @@ class ImpactAnalyzerTest {
 
             AnalysisResult result = analyzer.analyzeChange("hash-old", "hash-new");
 
-            assertEquals(Set.of("skill-1"), result.getDirectSkills());
+            assertEquals(Collections.singleton("skill-1"), result.getDirectSkills());
         }
 
         @Test
@@ -335,13 +334,8 @@ class ImpactAnalyzerTest {
 
             AnalysisResult result = analyzer.analyzeChange("hash-old", "hash-new");
 
-            List<String> pickedForSkill0 = result.getTestCases().stream()
-                    .filter(r -> "skill-0".equals(r.getSkillId()))
-                    .map(InteractionRecord::getRecordId)
-                    .sorted()
-                    .toList();
-            assertEquals(List.of("r-100", "r-200", "r-300"), pickedForSkill0,
-                    "top3 必须是规范序（timestamp,recordId）的前三条，两次分析选例必须一致");
+            List<String> pickedForSkill0 = result.getTestCases().stream().filter(r -> "skill-0".equals(r.getSkillId())).map(InteractionRecord::getRecordId).sorted().collect(Collectors.toList());
+            assertEquals(Arrays.asList("r-100", "r-200", "r-300"), pickedForSkill0, "top3 必须是规范序（timestamp,recordId）的前三条，两次分析选例必须一致");
         }
     }
 

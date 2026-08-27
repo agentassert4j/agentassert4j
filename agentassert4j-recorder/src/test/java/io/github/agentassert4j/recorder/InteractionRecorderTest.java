@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -255,7 +256,7 @@ class InteractionRecorderTest {
         Thread.sleep(300);
         recorder.stop();
 
-        List<Long> seqs = repo.getStore().stream().map(InteractionRecord::getSeq).sorted().toList();
+        List<Long> seqs = repo.getStore().stream().map(InteractionRecord::getSeq).sorted().collect(Collectors.toList());
         assertEquals(5, seqs.size());
         for (int i = 1; i < seqs.size(); i++) {
             assertTrue(seqs.get(i) > seqs.get(i - 1), "同录制器内 seq 必须严格单调：(session_id, seq) 是确定性排序键");

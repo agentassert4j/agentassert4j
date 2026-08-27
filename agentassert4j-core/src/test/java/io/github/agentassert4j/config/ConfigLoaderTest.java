@@ -80,9 +80,7 @@ class ConfigLoaderTest {
         @Test
         @DisplayName("JSON 内的环境变量替换")
         void jsonWithEnvVars() {
-            String json = """
-                    {"llm": {"apiKey": "${AGENTASSERT_NONEXISTENT_KEY}", "model": "gpt-4o"}}
-                    """;
+            String json = "{\"llm\": {\"apiKey\": \"${AGENTASSERT_NONEXISTENT_KEY}\", \"model\": \"gpt-4o\"}}";
             String result = ConfigLoader.resolveEnvVars(json);
             assertEquals("gpt-4o", result.contains("gpt-4o") ? "gpt-4o" : "fail");
             assertTrue(result.contains("\"apiKey\": \"\""));
@@ -111,7 +109,7 @@ class ConfigLoaderTest {
             Path tempFile = Files.createTempFile("agentassert4j-test", ".json");
             try {
                 String content = "{\"test\": true}";
-                Files.writeString(tempFile, content, StandardCharsets.UTF_8);
+                Files.write(tempFile, content.getBytes(StandardCharsets.UTF_8));
                 String loaded = ConfigLoader.loadFromFile(tempFile.toString());
                 assertEquals(content, loaded);
             } finally {
@@ -148,10 +146,8 @@ class ConfigLoaderTest {
         void systemPropertyFile_loaded() throws IOException {
             Path tempFile = Files.createTempFile("agentassert4j-test", ".json");
             try {
-                String content = """
-                        {"storage": {"url": "/from/system/property.db"}}
-                        """;
-                Files.writeString(tempFile, content, StandardCharsets.UTF_8);
+                String content = "{\"storage\": {\"url\": \"/from/system/property.db\"}}";
+                Files.write(tempFile, content.getBytes(StandardCharsets.UTF_8));
                 System.setProperty(ConfigLoader.CONFIG_PATH_PROPERTY, tempFile.toString());
 
                 AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
@@ -166,10 +162,8 @@ class ConfigLoaderTest {
         void envVarsResolvedOnLoad() throws IOException {
             Path tempFile = Files.createTempFile("agentassert4j-test", ".json");
             try {
-                String content = """
-                        {"llm": {"apiKey": "${AGENTASSERT_NONEXISTENT_KEY}", "model": "gpt-4o"}}
-                        """;
-                Files.writeString(tempFile, content, StandardCharsets.UTF_8);
+                String content = "{\"llm\": {\"apiKey\": \"${AGENTASSERT_NONEXISTENT_KEY}\", \"model\": \"gpt-4o\"}}";
+                Files.write(tempFile, content.getBytes(StandardCharsets.UTF_8));
                 System.setProperty(ConfigLoader.CONFIG_PATH_PROPERTY, tempFile.toString());
 
                 AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
@@ -198,10 +192,8 @@ class ConfigLoaderTest {
         void validRulesFile() throws IOException {
             Path tempFile = Files.createTempFile("agentassert4j-rules", ".json");
             try {
-                String content = """
-                        {"skills":{"queryOrder":{"requiredKeywords":["订单号"]}}}
-                        """;
-                Files.writeString(tempFile, content, StandardCharsets.UTF_8);
+                String content = "{\"skills\":{\"queryOrder\":{\"requiredKeywords\":[\"订单号\"]}}}";
+                Files.write(tempFile, content.getBytes(StandardCharsets.UTF_8));
                 System.setProperty(ConfigLoader.RULES_PATH_PROPERTY, tempFile.toString());
 
                 SkillRulesConfig config = ConfigLoader.loadRulesConfig();

@@ -11,10 +11,7 @@ import io.github.agentassert4j.spi.LlmTimeoutException;
 import io.github.agentassert4j.util.HashUtil;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -252,7 +249,40 @@ public class RegressionTestExecutor {
         call.setToolName(tc.getToolName());
         call.setToolCallId(tc.getToolCallId());
         call.setArguments(tc.getArguments());
+        // 捕获路径的 argTypes 由接入层填写；重放路径的核心自身就是当前记录的
+        // 组装方，必须按同一词表补齐参数类型，否则与基线指纹比对必失配
+        call.setArgTypes(deriveArgTypes(tc.getArguments()));
         call.setSuccess(true); // 重放不执行工具，默认成功
         return call;
+    }
+
+    /**
+     * 从运行时参数值推导参数类型词表：string/number/boolean/object/array/null。
+     * 与捕获侧约定一致——key 与 value 均小写化，指纹层的归一化策略对两侧同构。
+     */
+    static Map<String, String> deriveArgTypes(Map<String, Object> arguments) {
+        Map<String, String> types = new LinkedHashMap<>();
+        if (arguments == null) {
+            return types;
+        }
+        for (Map.Entry<String, Object> entry : arguments.entrySet()) {
+            Object value = entry.getValue();
+            String type;
+            if (value instanceof String) {
+                type = "string";
+            } else if (value instanceof Number) {
+                type = "number";
+            } else if (value instanceof Boolean) {
+                type = "boolean";
+            } else if (value instanceof Map) {
+                type = "object";
+            } else if (value instanceof List) {
+                type = "array";
+            } else {
+                type = "null";
+            }
+            types.put(entry.getKey().toLowerCase(), type);
+        }
+        return types;
     }
 }

@@ -8,8 +8,8 @@ import io.github.agentassert4j.util.RecursiveJsonParser;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -52,7 +52,7 @@ class DataSanitizerTest {
 
         tc.setResult("{\"status\":\"ok\",\"token\":\"tok_abc\",\"data\":\"visible\"}");
 
-        record.setToolCalls(List.of(tc));
+        record.setToolCalls(Collections.singletonList(tc));
         return record;
     }
 
@@ -104,7 +104,7 @@ class DataSanitizerTest {
         InteractionRecord record = createTestRecord();
         TurnContext turn = new TurnContext("user", "q1");
         turn.setToolCallId("call-1");
-        record.setPreviousTurns(List.of(turn));
+        record.setPreviousTurns(Collections.singletonList(turn));
 
         InteractionRecord result = sanitizer.sanitize(record);
 
@@ -267,7 +267,7 @@ class DataSanitizerTest {
 
         InteractionRecord record = new InteractionRecord();
         record.setRecordId("test-004");
-        record.setToolCalls(List.of());
+        record.setToolCalls(Collections.emptyList());
 
         InteractionRecord result = sanitizer.sanitize(record);
         assertNotNull(result);
@@ -284,7 +284,7 @@ class DataSanitizerTest {
 
         InteractionRecord record = new InteractionRecord();
         record.setRecordId("test-005");
-        record.setToolCalls(List.of(tc));
+        record.setToolCalls(Collections.singletonList(tc));
 
         InteractionRecord result = sanitizer.sanitize(record);
         assertNotNull(result);
@@ -301,7 +301,7 @@ class DataSanitizerTest {
 
         InteractionRecord record = new InteractionRecord();
         record.setRecordId("test-006");
-        record.setToolCalls(List.of(tc));
+        record.setToolCalls(Collections.singletonList(tc));
 
         InteractionRecord result = sanitizer.sanitize(record);
         assertNotNull(result);

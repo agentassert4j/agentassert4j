@@ -3,6 +3,8 @@ package io.github.agentassert4j.algorithm;
 import io.github.agentassert4j.model.InteractionRecord;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,7 +26,7 @@ class CostEstimatorTest {
 
     @Test
     void estimate_singleTestCase_turnIndex0() {
-        List<InteractionRecord> cases = List.of(makeRecord(0));
+        List<InteractionRecord> cases = Collections.singletonList(makeRecord(0));
         String result = CostEstimator.estimate(cases, "gpt-4o");
 
         assertTrue(result.contains("预估 1 次 API 调用"));
@@ -35,10 +37,7 @@ class CostEstimatorTest {
     @Test
     void estimate_multiTurnRecord_countsAsSingleCall() {
         // 重放一条记录恰好一次调用：多轮上下文在同一次请求内携带
-        List<InteractionRecord> cases = List.of(
-                makeRecord(0),
-                makeRecord(2)
-        );
+        List<InteractionRecord> cases = Arrays.asList(makeRecord(0), makeRecord(2));
         String result = CostEstimator.estimate(cases, "gpt-4o");
 
         assertTrue(result.contains("预估 2 次 API 调用"));
@@ -47,7 +46,7 @@ class CostEstimatorTest {
 
     @Test
     void estimate_deepseekModel() {
-        List<InteractionRecord> cases = List.of(makeRecord(0));
+        List<InteractionRecord> cases = Collections.singletonList(makeRecord(0));
         String result = CostEstimator.estimate(cases, "deepseek-chat");
 
         assertTrue(result.contains("$0.0010"));
@@ -55,7 +54,7 @@ class CostEstimatorTest {
 
     @Test
     void estimate_unknownModel_usesDefault() {
-        List<InteractionRecord> cases = List.of(makeRecord(0));
+        List<InteractionRecord> cases = Collections.singletonList(makeRecord(0));
         String result = CostEstimator.estimate(cases, "unknown-model");
 
         assertTrue(result.contains("$0.0030"));
@@ -63,7 +62,7 @@ class CostEstimatorTest {
 
     @Test
     void estimate_nullModel_usesDefault() {
-        List<InteractionRecord> cases = List.of(makeRecord(0));
+        List<InteractionRecord> cases = Collections.singletonList(makeRecord(0));
         String result = CostEstimator.estimate(cases, null);
 
         assertTrue(result.contains("$0.0030"));
@@ -106,7 +105,7 @@ class CostEstimatorTest {
 
     @Test
     void estimateStatistical_correctCalculation() {
-        List<InteractionRecord> cases = List.of(makeRecord(0), makeRecord(0));
+        List<InteractionRecord> cases = Arrays.asList(makeRecord(0), makeRecord(0));
         String result = CostEstimator.estimateStatistical(cases, "gpt-4o", 10);
 
         assertTrue(result.contains("预估 2 用例 x 10 次 = 20 次 API 调用"));
@@ -115,7 +114,7 @@ class CostEstimatorTest {
 
     @Test
     void estimateStatistical_multiTurnRecord_countsAsSingleCall() {
-        List<InteractionRecord> cases = List.of(makeRecord(1));
+        List<InteractionRecord> cases = Collections.singletonList(makeRecord(1));
         String result = CostEstimator.estimateStatistical(cases, "deepseek-chat", 5);
 
         // 1 用例 x 5 采样 = 5 次调用（轮次不放大调用数）
@@ -125,7 +124,7 @@ class CostEstimatorTest {
 
     @Test
     void estimateStatistical_format() {
-        List<InteractionRecord> cases = List.of(makeRecord(0));
+        List<InteractionRecord> cases = Collections.singletonList(makeRecord(0));
         String result = CostEstimator.estimateStatistical(cases, "gpt-4", 3);
 
         // 格式："预估 N 用例 x M 次 = T 次 API 调用，约 $X.XXXX（模型：xxx）"
