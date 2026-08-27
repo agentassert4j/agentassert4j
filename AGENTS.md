@@ -282,26 +282,34 @@ CHANGELOG）：
 - **type（必填，白名单）**：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
 - **scope（可选，受影响模块）**：`core` `recorder` `storage` `cli` `sdk` `starter` `build` `release`
 - **description（必填）**：英文祈使句（"add" 不是 "added"/"adds"），建议 ≤ 72 字符，结尾不加句号
-- **body（可选）**：说明**动机与实现要点**——为什么改，而不是改了什么（diff 自己会说话）；英文
+- **body（可选）**：仅在动机与背景从主题行看不出来时写，保持简短，只讲**为什么改**（怎么改 diff 自己会说话）；英文，且必须满足 §11.2 精简要求
 - **footer（可选）**：
     - `Closes #N`：关联并自动关闭 issue
     - `BREAKING CHANGE: <说明>`：破坏性变更（同时 type 后加 `!`，如 `feat(core)!: ...`）
     - `Assisted-by: AI coding agent`：AI 代理参与生成的提交**必标**，固定取值，不写具体代理名称与邮箱（见 §十三-5）
 - **语言**：提交信息一律英文（国际化开源共识；README/用户文档走中英双语，与此不冲突）
 
-### 11.2 原子提交
+### 11.2 提交信息精简原则
+
+提交信息是给未来读者的语义摘要，不是变更报告。**主题行能说清的不写 body，一行能说清的不用两行**：
+
+1. **主题行讲语义**：一行讲清这个提交做了什么——在 `git log` 里扫主题行就能定位到目标提交，不需要点开 body。
+2. **body 只写动机**：仅在「为什么改」从主题行看不出来时补 1–3 行；讲动机与背景，不展开实现。
+3. **不写过程细节**：文件清单、实现步骤、逐项枚举、内部评审编号（H6/M4 之类）、内部设计文档章节引用，一律不进提交信息——仓库外读者没有这些上下文，也无法核实。
+4. **少用内部术语**：用仓库外工程师也能读懂的通俗语义描述，不堆项目黑话。
+5. **自检**：删掉 body 只剩主题行，信息损失可接受吗？可接受就删。body 总是写很长，通常说明该提交该拆（§11.3）或该开 issue 记录。
+
+### 11.3 原子提交
 
 一个提交一个意图。禁止在同一提交中混合功能变更、格式化重排、无关顺手修改。发现任务外问题时：记 TODO（§八）或开 issue，不顺手修。
 
-### 11.3 示例
+### 11.4 示例
 
 ```
-feat(core): carry recorded tool definitions in replay requests
+feat(core): include recorded tool definitions in replay requests
 
-Replay requests previously omitted the tools array captured at
-recording time, making dimension-1 tool-set comparison always
-mismatch. InteractionRecord now stores the tools schema and
-RegressionTestExecutor passes it through to LlmRequest.
+Replay previously dropped the captured tools array, so tool-set
+comparison always mismatched.
 
 Closes #12
 Assisted-by: AI coding agent
@@ -450,7 +458,7 @@ wait on the recording pipeline.
 
 ### 13.3 范围纪律
 
-只做任务范围内的事。范围外的发现（坏味道、可优化点、疑似 bug）记 TODO（§八）或开 issue 通报，不顺手修——顺手修破坏原子提交（§十一-2），也剥夺了维护者的评审权。
+只做任务范围内的事。范围外的发现（坏味道、可优化点、疑似 bug）记 TODO（§八）或开 issue 通报，不顺手修——顺手修破坏原子提交（§十一-3），也剥夺了维护者的评审权。
 
 ### 13.4 提交与推送权限
 
