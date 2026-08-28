@@ -536,4 +536,16 @@ class DeterministicComparatorTest {
         assertEquals(Verdict.PASS, r.getVerdict());
         assertEquals(1.0, r.getScore(), 0.001);
     }
+
+    @Test
+    void summary_includesFieldTypeMismatch() {
+        // 字段类型变化参与打分就必须出现在摘要里——否则用户只拿到一个不可解释的分数
+        DeterministicFingerprint baseline = fp(null, null, "application/json", Collections.singleton("$.orderId"), stringMap("$.orderId", "string"), 1);
+        DeterministicFingerprint current = fp(null, null, "application/json", Collections.singleton("$.orderId"), stringMap("$.orderId", "integer"), 1);
+
+        ComparisonResult r = comparator.compare(baseline, current, "output");
+
+        assertFalse(r.isFieldTypeMatch());
+        assertTrue(r.getSummary().contains("字段类型变化"), "类型不匹配必须可见于摘要: " + r.getSummary());
+    }
 }

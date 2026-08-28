@@ -27,8 +27,8 @@ import java.util.*;
 public final class CostEstimator {
 
     /**
-     * 未知模型的预估兜底单价（美元/次）——仅用于执行前预估文案；
-     * 捕获计价对未知模型返回 null，绝不编造费用
+     * 未知模型的兜底单价（美元/次）——仅供预算截断等内部算术使用，
+     * 绝不出现在面向用户的预估文案与捕获计价中（无价格不出货币数）
      */
     private static final double UNKNOWN_MODEL_PREVIEW_COST = 0.003;
     /**
@@ -53,7 +53,8 @@ public final class CostEstimator {
      * 成本预估（单次模式）。
      *
      * <p>重放一条交互记录恰好发起一次 LLM 调用：多轮上下文（previousTurns）
-     * 作为请求的一部分携带，不产生额外调用。</p>
+     * 作为请求的一部分携带，不产生额外调用。模型不在价格快照中时只报调用
+     * 次数、不编造费用——预估文案与捕获计价遵守同一条「无价格不出货币数」原则。</p>
      *
      * @param testCases 待测用例列表
      * @param model     模型名称
@@ -61,15 +62,19 @@ public final class CostEstimator {
      */
     public static String estimate(List<InteractionRecord> testCases, String model) {
         int totalCalls = testCases.size();
-        double costPerCall = estimateCostPerCall(model);
+        Double costPerCall = estimateCallCostUsd(model, PREVIEW_INPUT_TOKENS, PREVIEW_OUTPUT_TOKENS);
+        if (costPerCall == null) {
+            return String.format("预估 %d 次 API 调用（模型：%s 不在价格快照中，费用未知）", totalCalls, model);
+        }
         double estimatedCost = totalCalls * costPerCall;
         return String.format("预估 %d 次 API 调用，约 $%.4f（模型：%s）", totalCalls, estimatedCost, model);
     }
 
     /**
      * 按客户端名称（通常是模型名）估算单次调用成本（美元）——固定「1000 输入
-     * 500 输出 token」的预估口径，未知模型退回兜底单价。用于执行前预估文案
-     * 与成本截断计算；捕获时刻的精确计价走 {@link #estimateCallCostUsd}。
+     * 500 输出 token」的预估口径，未知模型退回兜底单价。仅供预算截断等内部
+     * 算术使用；面向用户的预估文案走 {@link #estimate}（无价格不出货币数），
+     * 捕获时刻的精确计价走 {@link #estimateCallCostUsd}。
      *
      * @param clientName 客户端名称（通常是模型名称）
      * @return 单次调用成本（美元）
@@ -81,6 +86,7 @@ public final class CostEstimator {
 
     /**
      * 统计模式成本预估 — 每条用例重放 sampleCount 次，每次一条恰好一次调用。
+     * 模型不在价格快照中时只报调用次数、不编造费用（与 {@link #estimate} 同口径）。
      *
      * @param testCases   待测用例列表
      * @param model       模型名称
@@ -89,7 +95,10 @@ public final class CostEstimator {
      */
     public static String estimateStatistical(List<InteractionRecord> testCases, String model, int sampleCount) {
         int totalSamples = testCases.size() * sampleCount;
-        double costPerCall = estimateCostPerCall(model);
+        Double costPerCall = estimateCallCostUsd(model, PREVIEW_INPUT_TOKENS, PREVIEW_OUTPUT_TOKENS);
+        if (costPerCall == null) {
+            return String.format("预估 %d 用例 x %d 次 = %d 次 API 调用（模型：%s 不在价格快照中，费用未知）", testCases.size(), sampleCount, totalSamples, model);
+        }
         double estimatedCost = totalSamples * costPerCall;
         return String.format("预估 %d 用例 x %d 次 = %d 次 API 调用，约 $%.4f（模型：%s）", testCases.size(), sampleCount, totalSamples, estimatedCost, model);
     }

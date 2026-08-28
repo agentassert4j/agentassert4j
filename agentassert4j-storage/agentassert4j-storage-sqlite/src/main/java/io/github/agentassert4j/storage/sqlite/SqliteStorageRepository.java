@@ -428,6 +428,24 @@ public class SqliteStorageRepository implements StorageRepository {
         return null;
     }
 
+    @Override
+    public synchronized List<ArchivedBaseline> findArchivedBaselines(String skillId) {
+        String sql = "SELECT * FROM archived_baselines WHERE skill_id = ? ORDER BY archived_at DESC, rowid DESC";
+        List<ArchivedBaseline> result = new ArrayList<>();
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, skillId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.add(JsonMapper.toArchivedBaseline(rs));
+                }
+            }
+        } catch (SQLException e) {
+            LOG.log(Level.SEVERE, "findArchivedBaselines failed", e);
+            throw new StorageException("findArchivedBaselines", e);
+        }
+        return result;
+    }
+
     private List<InteractionRecord> queryInteractions(String sql, String param) {
         List<InteractionRecord> result = new ArrayList<>();
         try (PreparedStatement ps = connection.prepareStatement(sql)) {

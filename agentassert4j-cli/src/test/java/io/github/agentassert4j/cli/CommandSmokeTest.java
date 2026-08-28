@@ -119,6 +119,44 @@ class CommandSmokeTest {
         assertTrue(out.toString().contains("未调用 LLM"));
     }
 
+    @Test
+    @DisplayName("子命令支持 --help（mixin 逐命令声明，最常见的第一动作）")
+    void subcommandHelpOptions() {
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--help");
+
+        assertEquals(0, exit, "replay --help 必须展示帮助并返回 0");
+        assertTrue(out.toString().contains("--max-cases"), "帮助文本必须包含选项列表: " + out);
+    }
+
+    @Test
+    @DisplayName("rules 命令列出内置行为目录")
+    void rulesCommand_listsBehaviors() {
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("rules");
+
+        assertEquals(0, exit);
+        String text = out.toString();
+        assertTrue(text.contains("mustUseChinese"), "行为目录必须完整列出合法名: " + text);
+        assertTrue(text.contains("jsonOutput"));
+    }
+
+    @Test
+    @DisplayName("status 展示归档版本列与业务标签列")
+    void status_showsArchiveAndBusinessColumns() {
+        seedOneRecord();
+        new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
+
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath);
+
+        assertEquals(0, exit);
+        String text = out.toString();
+        assertTrue(text.contains("归档版本"), "rollback 的可选值来源必须可见: " + text);
+        assertTrue(text.contains("业务标签"), "groupKey 与业务标签的对照必须就地可见: " + text);
+        assertTrue(text.contains("queryOrder"), "业务标签列应展示用户代码里的标识: " + text);
+    }
+
     /**
      * 临时接管 stdout，返回捕获缓冲（命令直接写 System.out）；tearDown 统一恢复。
      */

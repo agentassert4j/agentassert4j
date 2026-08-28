@@ -12,11 +12,14 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "baseline", description = "为已录制的交互建立基线（幂等，可重复执行）")
+@Command(name = "baseline", description = "为已录制的交互建立基线（幂等，可重复执行）", mixinStandardHelpOptions = true)
 public class BaselineCommand implements Callable<Integer> {
 
     @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
     String db;
+
+    @Option(names = {"--skill"}, description = "只处理该 skill：业务 skillId 或 groupKey 唯一前缀（缺省全部 skill）")
+    String skill;
 
     @Option(names = {"--approver"}, description = "操作者身份，随基线审批留痕（缺省取当前系统用户）")
     String approver;
@@ -30,9 +33,13 @@ public class BaselineCommand implements Callable<Integer> {
         try {
             repository = CliSupport.openRepository(db);
             String actor = approver != null && !approver.trim().isEmpty() ? approver.trim() : CliSupport.currentActor();
-            int established = new BaselineService(repository).establishMissing(System.out, actor, force);
+            String resolvedSkill = CliSupport.resolveBusinessSkillFilter(repository, skill, System.out);
+            int established = new BaselineService(repository).establishMissing(System.out, actor, force, resolvedSkill);
             System.out.println(established > 0 ? "完成：" + established + " 个 skill " + (force ? "重建" : "新建") + "基线。" : "完成：所有 skill 均已有基线。");
             return 0;
+        } catch (IllegalStateException e) {
+            System.err.println(e.getMessage());
+            return 2;
         } catch (RuntimeException e) {
             System.err.println("baseline 失败：" + e.getMessage());
             return 2;

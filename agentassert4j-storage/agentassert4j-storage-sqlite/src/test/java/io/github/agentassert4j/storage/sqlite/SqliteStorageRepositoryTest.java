@@ -291,6 +291,29 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
+    void findArchivedBaselines_listsBySkillLatestFirst() {
+        // 列表查询是 rollback 版本发现的数据源：只含目标 skill，且最近归档在前
+        ArchivedBaseline older = new ArchivedBaseline();
+        older.setSkillId("sk-list");
+        older.setVersionTag("v1");
+        repo.archiveBaseline(older);
+        ArchivedBaseline newer = new ArchivedBaseline();
+        newer.setSkillId("sk-list");
+        newer.setVersionTag("v2");
+        repo.archiveBaseline(newer);
+        ArchivedBaseline otherSkill = new ArchivedBaseline();
+        otherSkill.setSkillId("sk-other");
+        otherSkill.setVersionTag("v1");
+        repo.archiveBaseline(otherSkill);
+
+        List<ArchivedBaseline> rows = repo.findArchivedBaselines("sk-list");
+        assertEquals(2, rows.size());
+        assertEquals("v2", rows.get(0).getVersionTag(), "最近归档的行必须排在最前");
+        assertEquals("v1", rows.get(1).getVersionTag());
+        assertTrue(repo.findArchivedBaselines("no-such-skill").isEmpty());
+    }
+
+    @Test
     void findArchivedBaseline_duplicateTag_latestArchiveWins() {
         // 同 skill 同版本多行归档时最近归档者胜（生产实现的 tiebreaker 契约）
         ArchivedBaseline first = new ArchivedBaseline();

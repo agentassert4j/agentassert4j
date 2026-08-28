@@ -441,5 +441,10 @@ class ParameterValueTracerTest {
         public io.github.agentassert4j.model.ArchivedBaseline findArchivedBaseline(String skillId, String tag) {
             return null;
         }
+
+        @Override
+        public List<io.github.agentassert4j.model.ArchivedBaseline> findArchivedBaselines(String skillId) {
+            return Collections.emptyList();
+        }
     }
 }

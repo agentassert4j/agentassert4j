@@ -224,6 +224,7 @@ public class DeterministicComparator {
         if (r.getRemovedFields() != null && !r.getRemovedFields().isEmpty()) {
             sb.append(" | 删除字段: ").append(r.getRemovedFields());
         }
+        if (!r.isFieldTypeMatch()) sb.append(" | 字段类型变化");
         if (!r.isKeywordMatch()) sb.append(" | 内容规则不匹配");
         if (!r.isRegexMatch()) sb.append(" | 正则规则不匹配");
         if (!r.isBehaviorMatch()) sb.append(" | 行为约束不满足");

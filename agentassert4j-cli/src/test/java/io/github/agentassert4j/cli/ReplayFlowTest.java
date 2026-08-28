@@ -90,7 +90,7 @@ class ReplayFlowTest {
             seedOneSkill();
             stubClient.responseText = "same answer";
 
-            int exit = runner.run("new prompt", null, 3, null, false);
+            int exit = runner.run("new prompt", null, 3, null, false, false, true);
 
             assertEquals(0, exit, "全部 PASS 时退出码必须为 0（CI gating 契约）");
             String report = output.toString();
@@ -118,7 +118,7 @@ class ReplayFlowTest {
             seedOneSkill();
             stubClient.toolCallResponse = true;
 
-            int exit = runner.run("new prompt", null, 3, null, false);
+            int exit = runner.run("new prompt", null, 3, null, false, false, true);
 
             assertEquals(1, exit, "存在非 PASS 时退出码必须为 1");
             SkillProfile profile = repository.findSkillByGroupKey(groupKeyOf("skill-1"));
@@ -128,9 +128,18 @@ class ReplayFlowTest {
             ApproveCommand approve = new ApproveCommand();
             approve.db = tempDir.resolve("flow.db").toString();
             approve.skill = "chat:hash-old";
-            int approveExit = approve.call();
+            PrintStream originalOut = System.out;
+            ByteArrayOutputStream approveOut = new ByteArrayOutputStream();
+            System.setOut(new PrintStream(approveOut, true));
+            int approveExit;
+            try {
+                approveExit = approve.call();
+            } finally {
+                System.setOut(originalOut);
+            }
 
             assertEquals(0, approveExit);
+            assertTrue(approveOut.toString().contains("候选差异"), "裁决时必须渲染候选与基线的差异证据: " + approveOut);
             SkillProfile approved = repository.findSkillByGroupKey(groupKeyOf("skill-1"));
             assertEquals(BaselineStatus.BASELINE, approved.getBaselineStatus());
             assertEquals("v2", approved.getVersionTag(), "approve 后版本递增");
@@ -142,7 +151,7 @@ class ReplayFlowTest {
         void replayDiff_thenReject() {
             seedOneSkill();
             stubClient.toolCallResponse = true;
-            runner.run("new prompt", null, 3, null, false);
+            runner.run("new prompt", null, 3, null, false, false, true);
 
             RejectCommand reject = new RejectCommand();
             reject.db = tempDir.resolve("flow.db").toString();
@@ -165,7 +174,7 @@ class ReplayFlowTest {
         void dryRun_noLlmCalls() {
             seedOneSkill();
 
-            int exit = runner.run("new prompt", null, 3, null, true);
+            int exit = runner.run("new prompt", null, 3, null, true, false, true);
 
             assertEquals(0, exit);
             assertEquals(0, stubClient.callCount);
@@ -182,7 +191,7 @@ class ReplayFlowTest {
             }
             stubClient.responseText = "same answer";
 
-            runner.run("new prompt", null, 2, null, false);
+            runner.run("new prompt", null, 2, null, false, false, true);
 
             assertEquals(2, stubClient.callCount, "每 skill 选例上限必须生效");
         }
@@ -192,7 +201,7 @@ class ReplayFlowTest {
         void unknownSkill_guidanceExitTwo() {
             seedOneSkill();
 
-            int exit = runner.run("new prompt", "no-such-skill", 3, null, false);
+            int exit = runner.run("new prompt", "no-such-skill", 3, null, false, false, true);
 
             assertEquals(2, exit);
             assertTrue(output.toString().contains("no-such-skill"));
@@ -202,7 +211,7 @@ class ReplayFlowTest {
         @Test
         @DisplayName("空库 → 冷启动指导 + 退出码 2")
         void emptyDb_coldStartGuidance() {
-            int exit = runner.run("new prompt", null, 3, null, false);
+            int exit = runner.run("new prompt", null, 3, null, false, false, true);
 
             assertEquals(2, exit);
             assertTrue(output.toString().contains("未找到可重放用例"));
@@ -215,7 +224,7 @@ class ReplayFlowTest {
             stubClient.responseText = "same answer";
 
             String prefix = groupKeyOf("skill-1").substring(0, 10);
-            int exit = runner.run("new prompt", prefix, 3, null, false);
+            int exit = runner.run("new prompt", prefix, 3, null, false, false, true);
 
             assertEquals(0, exit, "groupKey 前缀必须解析到对应 skill: " + output);
             assertTrue(output.toString().contains("按 groupKey 前缀匹配到"));
@@ -232,7 +241,7 @@ class ReplayFlowTest {
             // 两 skill 共用同一 templateHash → 同一 groupKey，任何前缀都同时命中两个标签
             String prefix = groupKeyOf("skill-A").substring(0, 8);
             // 歧义在 run 内部显式抛出（生产侧由 ReplayCommand 兜底转退出码 2）
-            assertThrows(IllegalStateException.class, () -> runner.run("new prompt", prefix, 3, null, false));
+            assertThrows(IllegalStateException.class, () -> runner.run("new prompt", prefix, 3, null, false, false, true));
             assertEquals(0, stubClient.callCount, "歧义路径不得发起任何 LLM 调用");
         }
 
@@ -241,7 +250,7 @@ class ReplayFlowTest {
         void prefixNoMatch_fallsThroughToNoCases() {
             seedOneSkill();
 
-            int exit = runner.run("new prompt", "chat:zzzz", 3, null, false);
+            int exit = runner.run("new prompt", "chat:zzzz", 3, null, false, false, true);
 
             assertEquals(2, exit);
             assertTrue(output.toString().contains("chat:zzzz"));
@@ -258,7 +267,7 @@ class ReplayFlowTest {
         void staleAlgoVersion_refusesJudgment() {
             seedOneSkill();
             stubClient.responseText = "same answer";
-            runner.run("new prompt", null, 3, null, false);
+            runner.run("new prompt", null, 3, null, false, false, true);
             int callsAfterFirstRun = stubClient.callCount;
 
             SkillProfile profile = repository.findSkillByGroupKey(groupKeyOf("skill-1"));
@@ -266,7 +275,7 @@ class ReplayFlowTest {
             repository.saveSkillProfile(profile);
 
             output.reset();
-            int exit = runner.run("new prompt", null, 3, null, false);
+            int exit = runner.run("new prompt", null, 3, null, false, false, true);
 
             assertEquals(2, exit, "跨语义版本的判定必须被拒绝");
             assertTrue(output.toString().contains("判定语义版本不一致"));
@@ -278,13 +287,13 @@ class ReplayFlowTest {
         void unstampedAlgoVersion_refusesJudgment() {
             seedOneSkill();
             stubClient.responseText = "same answer";
-            runner.run("new prompt", null, 3, null, false);
+            runner.run("new prompt", null, 3, null, false, false, true);
 
             SkillProfile profile = repository.findSkillByGroupKey(groupKeyOf("skill-1"));
             profile.setAlgoVersion(null);
             repository.saveSkillProfile(profile);
 
-            int exit = runner.run("new prompt", null, 3, null, false);
+            int exit = runner.run("new prompt", null, 3, null, false, false, true);
 
             assertEquals(2, exit);
         }
@@ -294,7 +303,7 @@ class ReplayFlowTest {
         void forceRebuild_restoresReplayability() {
             seedOneSkill();
             stubClient.responseText = "same answer";
-            runner.run("new prompt", null, 3, null, false);
+            runner.run("new prompt", null, 3, null, false, false, true);
             String groupKey = groupKeyOf("skill-1");
 
             SkillProfile profile = repository.findSkillByGroupKey(groupKey);
@@ -313,7 +322,7 @@ class ReplayFlowTest {
             assertEquals("v2", rebuilt.getVersionTag(), "重建版本顺延，不与既有 tag 冲突");
 
             output.reset();
-            int exit = runner.run("new prompt", null, 3, null, false);
+            int exit = runner.run("new prompt", null, 3, null, false, false, true);
             assertEquals(0, exit, "重建后重放恢复全绿: " + output);
         }
 
@@ -335,7 +344,7 @@ class ReplayFlowTest {
             repository.saveInteraction(poisoned);
             stubClient.responseText = "same answer";
 
-            int exit = runner.run("new prompt", null, 3, null, false);
+            int exit = runner.run("new prompt", null, 3, null, false, false, true);
 
             String report = output.toString();
             assertTrue(report.contains("分组失败"), "无法核验语义的记录必须显式告警: " + report);
@@ -352,7 +361,7 @@ class ReplayFlowTest {
             repository.saveInteraction(r);
             stubClient.responseText = "same answer";
 
-            runner.run("new prompt", null, 3, null, false);
+            runner.run("new prompt", null, 3, null, false, false, true);
 
             assertTrue(output.toString().contains("警告：重放模型"), "config.model 缺省时必须以客户端默认模型参与比对（此前该场景是告警盲区）: " + output);
         }
@@ -366,7 +375,7 @@ class ReplayFlowTest {
             stubClient.responseText = "same answer";
             stubClient.servedModel = "different-served-model";
 
-            runner.run("new prompt", null, 3, null, false);
+            runner.run("new prompt", null, 3, null, false, false, true);
 
             assertTrue(output.toString().contains("served 模型 different-served-model ≠ 录制 recorded-snapshot-model"), "served 模型漂移必须就地标注: " + output);
         }
@@ -380,7 +389,7 @@ class ReplayFlowTest {
             stubClient.responseText = "same answer";
             stubClient.servedModel = "stub-served";
 
-            runner.run("new prompt", null, 3, null, false);
+            runner.run("new prompt", null, 3, null, false, false, true);
 
             assertFalse(output.toString().contains("served 模型"), "一致时不得误报: " + output);
         }
@@ -390,7 +399,7 @@ class ReplayFlowTest {
         void forceRebuild_thenRollbackRestoresOutgoing() {
             seedOneSkill();
             stubClient.responseText = "same answer";
-            runner.run("new prompt", null, 3, null, false);
+            runner.run("new prompt", null, 3, null, false, false, true);
             String groupKey = groupKeyOf("skill-1");
             String originalApprover = repository.findSkillByGroupKey(groupKey).getApprovedBy();
 
@@ -413,6 +422,179 @@ class ReplayFlowTest {
         }
     }
 
+    @Nested
+    @DisplayName("CI 模式与只读性")
+    class CiModeAndReadonly {
+
+        @Test
+        @DisplayName("CI 模式：无基线 skill 拒绝判定且不自动建档")
+        void ciMode_refusesUnbaselinedSkill() {
+            seedOneSkill();
+
+            int exit = runner.run("new prompt", null, 3, null, false, true, true);
+
+            assertEquals(2, exit, "无人审的自动基线不允许在 CI 产绿灯");
+            String report = output.toString();
+            assertTrue(report.contains("尚无基线"), "必须点名未建档 skill: " + report);
+            assertTrue(report.contains("chat:"), "拒绝名单按 groupKey 列出: " + report);
+            assertEquals(0, stubClient.callCount, "拒绝判定不得发起 LLM 调用");
+            assertNull(repository.findSkillByGroupKey(groupKeyOf("skill-1")), "CI 模式不得自动建档");
+        }
+
+        @Test
+        @DisplayName("CI 模式：基线齐备时正常判定放行")
+        void ciMode_passesWhenBaselinesExist() {
+            seedOneSkill();
+            new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null);
+            stubClient.responseText = "same answer";
+
+            int exit = runner.run("new prompt", null, 3, null, false, true, true);
+
+            assertEquals(0, exit, "基线齐备时 CI 模式必须照常判定");
+        }
+
+        @Test
+        @DisplayName("dry-run 只读：不建档不落图快照")
+        void dryRun_leavesNoSideEffects() {
+            seedOneSkill();
+
+            int exit = runner.run("new prompt", null, 3, null, true, false, true);
+
+            assertEquals(0, exit);
+            assertNull(repository.findSkillByGroupKey(groupKeyOf("skill-1")), "dry-run 不得建档");
+            assertTrue(repository.loadGraph() == null || repository.loadGraph().isEmpty(), "dry-run 不得写图快照");
+        }
+
+        @Test
+        @DisplayName("全部用例执行失败（无比对结果）→ 退出码 2 而非误报回归")
+        void allInfraFailures_exitTwo() {
+            seedOneSkill();
+            stubClient.throwApiError = true;
+
+            int exit = runner.run("new prompt", null, 3, null, false, false, true);
+
+            assertEquals(2, exit, "基础设施故障不是行为回归，按用法/数据问题退出");
+            assertTrue(output.toString().contains("无任何比对结果"), "必须点明是执行故障而非回归: " + output);
+        }
+    }
+
+    @Nested
+    @DisplayName("选例策略与报告完整性")
+    class SelectionAndReporting {
+
+        @Test
+        @DisplayName("默认选例取每 skill 最新录制且策略就地披露")
+        void defaultSelection_takesNewestRecords() {
+            for (int i = 1; i <= 5; i++) {
+                repository.saveInteraction(makeRecord("rec-" + i, "skill-1", 1000L * i, "same answer"));
+            }
+            stubClient.responseText = "same answer";
+
+            int exit = runner.run("new prompt", null, 2, null, false, false, true);
+
+            assertEquals(0, exit);
+            String report = output.toString();
+            assertTrue(report.contains("最新 2 条"), "选例策略必须就地披露: " + report);
+            assertTrue(report.contains("rec-5") && report.contains("rec-4"), "默认取最新录制: " + report);
+            assertFalse(report.contains("rec-1"), "最旧记录不得入选: " + report);
+        }
+
+        @Test
+        @DisplayName("oldest 策略取最旧 N 条")
+        void oldestSelection_takesOldestRecords() {
+            for (int i = 1; i <= 5; i++) {
+                repository.saveInteraction(makeRecord("rec-" + i, "skill-1", 1000L * i, "same answer"));
+            }
+            stubClient.responseText = "same answer";
+
+            runner.run("new prompt", null, 2, null, false, false, false);
+
+            String report = output.toString();
+            assertTrue(report.contains("最旧 2 条"));
+            assertTrue(report.contains("rec-1") && report.contains("rec-2"), "oldest 取头部: " + report);
+            assertFalse(report.contains("rec-5"), "最新记录不得入选: " + report);
+        }
+
+        @Test
+        @DisplayName("汇总行聚合每用例真实 token 消耗")
+        void summary_reportsRealTokens() {
+            seedOneSkill();
+            stubClient.responseText = "same answer";
+
+            runner.run("new prompt", null, 3, null, false, false, true);
+
+            String report = output.toString();
+            assertTrue(report.contains("[tokens 10/5]"), "每用例真实 token 必须可见: " + report);
+            assertTrue(report.contains("tokens 输入 20 / 输出 10"), "汇总必须聚合真实 token: " + report);
+        }
+
+        @Test
+        @DisplayName("old-prompt 影响分析打印波及面")
+        void oldPromptPath_printsImpactSummary() {
+            seedOneSkill();
+            stubClient.responseText = "same answer";
+
+            int exit = runner.run("new prompt", null, 3, "hash-old", false, false, true);
+
+            assertTrue(output.toString().contains("影响分析"), "影响集是裁剪依据，必须报告给使用者: " + output);
+            assertEquals(0, exit);
+        }
+
+        @Test
+        @DisplayName("baseline --skill 只处理目标 skill")
+        void baselineSkillFilter_scopedToSingleSkill() {
+            InteractionRecord a = makeRecord("rec-a", "skill-a", 1000L, "ans");
+            a.setTemplateHash("hash-a");
+            repository.saveInteraction(a);
+            InteractionRecord b = makeRecord("rec-b", "skill-b", 1000L, "ans");
+            b.setTemplateHash("hash-b");
+            repository.saveInteraction(b);
+
+            int established = new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, "skill-a");
+
+            assertEquals(1, established);
+            assertNotNull(repository.findSkillByGroupKey(groupKeyOf("skill-a")), "目标 skill 必须建档");
+            assertNull(repository.findSkillByGroupKey(groupKeyOf("skill-b")), "非目标 skill 不得被波及");
+        }
+    }
+
+    @Nested
+    @DisplayName("回滚版本发现")
+    class RollbackDiscovery {
+
+        @Test
+        @DisplayName("rollback 版本不存在时列出全部可选归档版本")
+        void rollback_unknownVersion_listsAvailableVersions() {
+            seedOneSkill();
+            stubClient.toolCallResponse = true;
+            runner.run("new prompt", null, 3, null, false, false, true);
+
+            ApproveCommand approve = new ApproveCommand();
+            approve.db = tempDir.resolve("flow.db").toString();
+            approve.skill = groupKeyOf("skill-1");
+            assertEquals(0, approve.call(), "先 approve 制造归档 v1");
+
+            RollbackCommand rollback = new RollbackCommand();
+            rollback.db = tempDir.resolve("flow.db").toString();
+            rollback.skill = groupKeyOf("skill-1");
+            rollback.version = "v9";
+            PrintStream originalErr = System.err;
+            ByteArrayOutputStream errOut = new ByteArrayOutputStream();
+            System.setErr(new PrintStream(errOut, true));
+            int exit;
+            try {
+                exit = rollback.call();
+            } finally {
+                System.setErr(originalErr);
+            }
+
+            assertEquals(2, exit);
+            String message = errOut.toString();
+            assertTrue(message.contains("v9"), "错误信息必须复述请求的版本: " + message);
+            assertTrue(message.contains("v1"), "必须列出可选归档版本: " + message);
+        }
+    }
+
     /**
      * 可编程桩 LLM 客户端——responseText 与 toolCallResponse 二选一。
      */
@@ -421,10 +603,14 @@ class ReplayFlowTest {
         boolean toolCallResponse;
         int callCount;
         String servedModel;
+        boolean throwApiError;
 
         @Override
         public LlmResponse chat(LlmRequest request, long timeoutMs) throws LlmTimeoutException, LlmApiException {
             callCount++;
+            if (throwApiError) {
+                throw new LlmApiException("endpoint down");
+            }
             LlmResponse response = new LlmResponse();
             response.setInputTokens(10);
             response.setOutputTokens(5);

@@ -125,4 +125,9 @@ class InMemoryStorageRepository implements StorageRepository {
         return null;
     }
 
+    @Override
+    public List<ArchivedBaseline> findArchivedBaselines(String skillId) {
+        return Collections.emptyList();
+    }
+
 }

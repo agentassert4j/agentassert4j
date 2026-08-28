@@ -51,26 +51,33 @@ public class ReplayRunner {
      * @param skillFilter      仅重放该业务 skillId 或 groupKey 唯一前缀（null = 全部已录制 skill）
      * @param maxCasesPerSkill 默认选例模式下每 skill 的用例上限
      * @param oldPromptHash    变更前 Prompt 的 hash（null = 默认全量选例模式）
-     * @param dryRun           只打印选例与成本预估，不调 LLM
+     * @param dryRun           只打印选例与成本预估，不调 LLM（只读：不建档、不落图快照）
+     * @param ciMode           CI 模式：不自动建档，存在无基线 skill 时拒绝判定——
+     *                         防止「新 skill 自建基线再自比」产出无人审的绿灯
+     * @param newestFirst      选例取每 skill 最新录制（false = 最旧，历史行为）
      * @return 进程退出码
      */
-    public int run(String newSystemPrompt, String skillFilter, int maxCasesPerSkill, String oldPromptHash, boolean dryRun) {
+    public int run(String newSystemPrompt, String skillFilter, int maxCasesPerSkill, String oldPromptHash, boolean dryRun, boolean ciMode, boolean newestFirst) {
         // 超时下限钳位：0 在 HttpURLConnection 语义里是无限等待（CI 挂死），
         // 负数会被当可重试错误重试后洗白成笼统失败
         executionConfig.validate();
 
         warnIfModelDiffers();
 
-        new BaselineService(repository).establishMissing(out, CliSupport.currentActor(), false);
+        if (!ciMode && !dryRun) {
+            new BaselineService(repository).establishMissing(out, CliSupport.currentActor(), false, null);
+        }
 
         // --skill 支持业务 skillId 与 groupKey 前缀两种写法（status/approve 展示的都是
         // groupKey，直接粘贴是高频操作）；歧义前缀在这里显式报错
-        String resolvedSkill = resolveSkillFilter(skillFilter);
+        String resolvedSkill = CliSupport.resolveBusinessSkillFilter(repository, skillFilter, out);
 
-        // 图是派生数据：每次重放现场重建并刷新快照（CLI 单进程单写者，
-        // last-writer-wins 语义安全）；分析直接用内存图，快照供 status 巡检留档
+        // 图是派生数据：每次重放现场重建；快照留档供 status 巡检（dry-run 只读不落盘）；
+        // 分析直接用内存图，ImpactAnalyzer 不再读快照
         InMemoryDependencyGraph graph = CliSupport.rebuildGraph(repository);
-        saveGraphQuietly(graph);
+        if (!dryRun) {
+            saveGraphQuietly(graph);
+        }
         out.println("依赖图：" + graph.nodeCount() + " 节点 / " + graph.edgeCount() + " 边" + (graph.edgeCount() == 0 ? "（无多轮会话数据时图为空，仅直接影响裁剪）" : ""));
 
         List<InteractionRecord> cases;
@@ -80,14 +87,30 @@ public class ReplayRunner {
                 out.println(analysis.getMessage());
                 return 2;
             }
+            printImpactSummary(analysis);
             cases = filterBySkill(analysis.getTestCases(), resolvedSkill);
         } else {
-            cases = selectTopPerSkill(resolvedSkill, maxCasesPerSkill);
+            cases = selectTopPerSkill(resolvedSkill, maxCasesPerSkill, newestFirst);
+            out.println("选例：每 skill " + (newestFirst ? "最新" : "最旧") + " " + maxCasesPerSkill + " 条，共 " + cases.size() + " 条用例。");
         }
 
         if (cases.isEmpty()) {
             out.println(skillFilter != null ? "未找到 skill " + skillFilter + " 的可重放用例（先录制交互或核对 skillId）。" : "未找到可重放用例（先录制交互数据）。");
             return 2;
+        }
+
+        // CI 模式守卫：无基线的 skill 不允许进入判定——自动建档后的「自建自比」
+        // 也能出 PASS，那种绿灯未经任何人审，不配作 gating 依据
+        if (ciMode) {
+            Set<String> unbaselined = unbaselinedGroupKeys(cases);
+            if (!unbaselined.isEmpty()) {
+                out.println("以下 skill 尚无基线，CI 模式拒绝判定：");
+                for (String groupKey : unbaselined) {
+                    out.println("  " + groupKey);
+                }
+                out.println("先在本地执行 `agentassert4j baseline` 人工确认后重试，或去掉 --ci 以自动建档。");
+                return 2;
+            }
         }
 
         // 判定语义守卫：基线由不同版本的判定引擎批准时拒绝判定——
@@ -119,9 +142,18 @@ public class ReplayRunner {
         int diff = 0;
         int regression = 0;
         int failed = 0;
+        long totalInputTokens = 0;
+        long totalOutputTokens = 0;
+        boolean hasTokens = false;
         for (InteractionRecord testCase : cases) {
             RegressionTestResult result = executor.execute(testCase, newSystemPrompt, executionConfig);
             out.println("  [" + displayId(testCase) + "] " + testCase.getRecordId() + "  " + describe(result, testCase));
+
+            if (result.getInputTokens() != null && result.getOutputTokens() != null) {
+                hasTokens = true;
+                totalInputTokens += result.getInputTokens();
+                totalOutputTokens += result.getOutputTokens();
+            }
 
             ComparisonResult comparison = result.getComparison();
             if (comparison != null && result.getStatus() == TestResultStatus.SUCCESS) {
@@ -137,13 +169,54 @@ public class ReplayRunner {
             }
         }
 
-        out.println("汇总: PASS " + pass + " | DIFF " + diff + " | REGRESSION " + regression + " | 失败 " + failed + "（共 " + cases.size() + "）");
+        StringBuilder summary = new StringBuilder("汇总: PASS ").append(pass).append(" | DIFF ").append(diff).append(" | REGRESSION ").append(regression).append(" | 失败 ").append(failed).append("（共 ").append(cases.size()).append("）");
+        if (hasTokens) {
+            summary.append("，tokens 输入 ").append(totalInputTokens).append(" / 输出 ").append(totalOutputTokens);
+        }
+        out.println(summary.toString());
+        // 全部用例都没有产出比对结果（超时风暴/凭据失效/网络中断）是基础设施故障
+        // 而非行为回归——按「用法/数据问题」退出，防止 CI 把环境故障误读成回归
+        if (failed > 0 && pass + diff + regression == 0) {
+            out.println("所有用例均执行失败、无任何比对结果——疑似配置/凭据/网络问题，请检查 llm 配置后重试。");
+            return 2;
+        }
         if (diff + regression > 0) {
             List<String> pending = pendingGroupKeys();
             out.println("待裁决: " + String.join(", ", pending));
             out.println("用 `agentassert4j approve --skill <groupKey 前缀>` 接受，或 `agentassert4j reject --skill <groupKey 前缀>` 拒绝。");
         }
         return diff + regression + failed == 0 ? 0 : 1;
+    }
+
+    /**
+     * 影响集摘要——依赖图裁剪算出的波及面必须报告给使用者，
+     * 否则分析成本花了、裁剪依据却不可见。
+     */
+    private void printImpactSummary(AnalysisResult analysis) {
+        Set<String> direct = analysis.getDirectSkills();
+        Set<String> affected = analysis.getAllAffectedSkills();
+        out.println("影响分析：直接影响 " + (direct == null ? 0 : direct.size()) + " 个 skill，传递波及 " + (affected == null ? 0 : affected.size()) + " 个。");
+        if (affected != null && !affected.isEmpty()) {
+            out.println("  波及范围: " + String.join(", ", affected));
+        }
+    }
+
+    /**
+     * 用例集中尚无基线画像的分组键（CI 模式守卫的拒绝名单）。
+     */
+    private Set<String> unbaselinedGroupKeys(List<InteractionRecord> cases) {
+        Set<String> checked = new TreeSet<>();
+        Set<String> missing = new TreeSet<>();
+        for (InteractionRecord testCase : cases) {
+            String groupKey = groupKeyOfCase(testCase);
+            if (groupKey == null || !checked.add(groupKey)) {
+                continue;
+            }
+            if (repository.findSkillByGroupKey(groupKey) == null) {
+                missing.add(groupKey);
+            }
+        }
+        return missing;
     }
 
     /**
@@ -160,54 +233,6 @@ public class ReplayRunner {
     }
 
     /**
-     * 解析 --skill 过滤值：与某业务 skillId 精确相等时按原义使用；
-     * 否则尝试 groupKey 唯一前缀匹配并换算回业务标签（画像上的 skillId 是
-     * 分组器派生的内部标识，与记录上的业务标签是两套体系）。完全无命中时
-     * 原样返回，由后续「未找到用例」路径兜底。
-     */
-    private String resolveSkillFilter(String filter) {
-        if (filter == null || filter.isEmpty()) {
-            return null;
-        }
-        Set<String> businessIds = CliSupport.recordedSkillIds(repository);
-        if (businessIds.contains(filter)) {
-            return filter;
-        }
-        List<SkillProfile> prefixMatches = new ArrayList<>();
-        for (SkillProfile profile : repository.findAllSkills()) {
-            if (profile.getGroupKey() != null && profile.getGroupKey().startsWith(filter)) {
-                prefixMatches.add(profile);
-            }
-        }
-        if (prefixMatches.size() > 1) {
-            List<String> keys = new ArrayList<>();
-            for (SkillProfile profile : prefixMatches) {
-                keys.add(profile.getGroupKey());
-            }
-            throw new IllegalStateException("--skill " + filter + " 前缀匹配到多个 skill：" + String.join(", ", keys) + "，请提供更长前缀。");
-        }
-        if (prefixMatches.isEmpty()) {
-            return filter;
-        }
-        String targetGroupKey = prefixMatches.get(0).getGroupKey();
-        List<String> businessMatches = new ArrayList<>();
-        for (String skillId : businessIds) {
-            List<InteractionRecord> records = repository.findBySkillId(skillId);
-            if (!records.isEmpty() && targetGroupKey.equals(DeterministicSkillGrouper.group(records.get(0)).getGroupKey())) {
-                businessMatches.add(skillId);
-            }
-        }
-        if (businessMatches.size() == 1) {
-            out.println("提示：--skill " + filter + " 按 groupKey 前缀匹配到 " + targetGroupKey + "（业务标签 " + businessMatches.get(0) + "）");
-            return businessMatches.get(0);
-        }
-        if (businessMatches.size() > 1) {
-            throw new IllegalStateException("--skill " + filter + " 对应分组覆盖多个业务标签：" + String.join(", ", businessMatches) + "，请使用确切的业务标签。");
-        }
-        return filter;
-    }
-
-    /**
      * 校验受影响基线的判定语义版本。返回 null 表示全部一致；
      * 否则返回拒绝信息——基线由其他版本（含未标记的历史行）批准时，
      * 判定结论不可信，重跑 baseline --force 以当前语义重建是唯一恢复路径。
@@ -217,19 +242,14 @@ public class ReplayRunner {
         List<String> problems = new ArrayList<>();
         List<InteractionRecord> ungroupable = new ArrayList<>();
         for (InteractionRecord testCase : cases) {
-            String groupKey = testCase.getGroupKey();
-            if (groupKey == null || groupKey.isEmpty()) {
-                // 未富化的记录不带 groupKey——与 recordCandidate 一致，按分组器现算
-                try {
-                    groupKey = DeterministicSkillGrouper.group(testCase).getGroupKey();
-                } catch (RuntimeException e) {
-                    // 分组失败的记录连语义校验都无法挂靠——保留在判定集里就是无守卫判定，
-                    // 按「证据不完整不允许出结论」原则剔除
-                    ungroupable.add(testCase);
-                    continue;
-                }
+            String groupKey = groupKeyOfCase(testCase);
+            if (groupKey == null) {
+                // 分组失败的记录连语义校验都无法挂靠——保留在判定集里就是无守卫判定，
+                // 按「证据不完整不允许出结论」原则剔除
+                ungroupable.add(testCase);
+                continue;
             }
-            if (groupKey == null || groupKey.isEmpty() || !checked.add(groupKey)) {
+            if (!checked.add(groupKey)) {
                 continue;
             }
             SkillProfile profile = repository.findSkillByGroupKey(groupKey);
@@ -249,15 +269,33 @@ public class ReplayRunner {
         return problems.isEmpty() ? null : String.join(System.lineSeparator(), problems);
     }
 
-    private List<InteractionRecord> selectTopPerSkill(String skillFilter, int maxCasesPerSkill) {
+    /**
+     * 用例的分组键：记录已富化时用存储值，缺失时按分组器现算；
+     * 分组失败的记录返回 null。CI 模式守卫与语义守卫共用本口径。
+     */
+    private String groupKeyOfCase(InteractionRecord record) {
+        if (record.getGroupKey() != null && !record.getGroupKey().isEmpty()) {
+            return record.getGroupKey();
+        }
+        try {
+            return DeterministicSkillGrouper.group(record).getGroupKey();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private List<InteractionRecord> selectTopPerSkill(String skillFilter, int maxCasesPerSkill, boolean newestFirst) {
         List<InteractionRecord> selected = new ArrayList<>();
         for (String skillId : CliSupport.recordedSkillIds(repository)) {
             if (skillFilter != null && !skillFilter.equals(skillId)) {
                 continue;
             }
             List<InteractionRecord> records = repository.findBySkillId(skillId);
-            int limit = Math.min(maxCasesPerSkill, records.size());
-            selected.addAll(records.subList(0, limit));
+            // 存储返回规范序（时间升序）：最新选例取尾部 N 条，最旧选例取头部 N 条
+            int size = records.size();
+            int limit = Math.min(maxCasesPerSkill, size);
+            int from = newestFirst ? Math.max(0, size - limit) : 0;
+            selected.addAll(records.subList(from, from + limit));
         }
         return selected;
     }
@@ -289,9 +327,19 @@ public class ReplayRunner {
         ComparisonResult comparison = result.getComparison();
         if (comparison != null) {
             String line = String.format("%s  score=%.2f  %s", comparison.getVerdict(), comparison.getScore(), comparison.getSummary());
-            return line + servedModelNote(result, baseline);
+            return line + servedModelNote(result, baseline) + tokenNote(result);
         }
         return result.getStatus() + "  " + (result.getErrorMessage() != null ? result.getErrorMessage() : "");
+    }
+
+    /**
+     * 用例的真实 token 消耗（响应报告值）——预估之外给用户实际花费的证据。
+     */
+    private static String tokenNote(RegressionTestResult result) {
+        if (result.getInputTokens() == null || result.getOutputTokens() == null) {
+            return "";
+        }
+        return String.format("  [tokens %d/%d]", result.getInputTokens(), result.getOutputTokens());
     }
 
     /**

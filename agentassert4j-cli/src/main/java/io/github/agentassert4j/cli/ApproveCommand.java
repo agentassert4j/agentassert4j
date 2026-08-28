@@ -11,7 +11,7 @@ import picocli.CommandLine.Option;
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "approve", description = "接受候选指纹为新基线（旧基线归档，可 rollback）")
+@Command(name = "approve", description = "接受候选指纹为新基线（旧基线归档，可 rollback）", mixinStandardHelpOptions = true)
 public class ApproveCommand extends AdjudicateCommand {
 
     @Option(names = {"--approver"}, description = "审批人身份，随基线与归档留痕（缺省取当前系统用户）")

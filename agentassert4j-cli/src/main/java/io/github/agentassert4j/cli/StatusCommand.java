@@ -1,13 +1,16 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.InMemoryDependencyGraph;
+import io.github.agentassert4j.model.ArchivedBaseline;
 import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 /**
@@ -19,11 +22,14 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "status", description = "查看已录制 Skill 与基线状态")
+@Command(name = "status", description = "查看已录制 Skill 与基线状态", mixinStandardHelpOptions = true)
 public class StatusCommand implements Callable<Integer> {
 
     @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
     String db;
+
+    @Option(names = {"--diff"}, description = "对存在候选指纹的 skill 渲染候选与基线的逐维差异")
+    boolean diff;
 
     @Override
     public Integer call() {
@@ -31,11 +37,16 @@ public class StatusCommand implements Callable<Integer> {
         try {
             repository = CliSupport.openRepository(db);
             List<SkillProfile> profiles = repository.findAllSkills();
+            Map<String, String> labelsByGroupKey = businessLabelsByGroupKey(repository);
 
-            System.out.println("groupKey                                              状态       版本   候选");
+            System.out.println("groupKey                                              状态       版本   候选  归档版本      业务标签");
             for (SkillProfile profile : profiles) {
-                System.out.printf("  %-50s %-9s %-6s %s%n", profile.getGroupKey(), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "有" : "-");
+                String archivedTags = archivedVersionTags(repository, profile.getGroupKey());
+                System.out.printf("  %-50s %-9s %-6s %-4s %-12s %s%n", profile.getGroupKey(), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "有" : "-", archivedTags.isEmpty() ? "-" : archivedTags, labelsByGroupKey.getOrDefault(profile.getGroupKey(), "-"));
                 printTemplateText(repository, profile.getGroupKey());
+                if (diff) {
+                    printCandidateDiff(profile);
+                }
             }
 
             List<String> uncovered = uncoveredBusinessTags(repository, profiles);
@@ -52,6 +63,61 @@ public class StatusCommand implements Callable<Integer> {
             if (repository != null) {
                 repository.close();
             }
+        }
+    }
+
+    /**
+     * groupKey → 业务标签（逗号连接）。业务标签是用户代码里的标识，
+     * groupKey 是分组器派生键——两套体系的对照必须就地可见，
+     * 否则用户对着自己的代码认不出哪行是哪个 skill。
+     */
+    private static Map<String, String> businessLabelsByGroupKey(StorageRepository repository) {
+        Map<String, List<String>> mapping = new LinkedHashMap<>();
+        for (String skillId : CliSupport.recordedSkillIds(repository)) {
+            String groupKey = new BaselineService(repository).groupKeyOfFirstRecord(skillId);
+            if (groupKey == null) {
+                continue;
+            }
+            List<String> labels = mapping.get(groupKey);
+            if (labels == null) {
+                labels = new ArrayList<>();
+                mapping.put(groupKey, labels);
+            }
+            labels.add(skillId);
+        }
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Map.Entry<String, List<String>> entry : mapping.entrySet()) {
+            result.put(entry.getKey(), String.join(",", entry.getValue()));
+        }
+        return result;
+    }
+
+    /**
+     * 归档版本标签列表（最近归档在前）——rollback --version 的可选值来源。
+     */
+    private static String archivedVersionTags(StorageRepository repository, String groupKey) {
+        try {
+            List<String> tags = new ArrayList<>();
+            for (ArchivedBaseline archived : repository.findArchivedBaselines(groupKey)) {
+                tags.add(archived.getVersionTag());
+            }
+            return String.join(",", tags);
+        } catch (RuntimeException e) {
+            // 归档查询失败不阻断巡检
+            return "-";
+        }
+    }
+
+    /**
+     * 候选差异渲染（与 approve/reject 输出同源）——巡检时预览裁决证据。
+     */
+    private static void printCandidateDiff(SkillProfile profile) {
+        if (profile.getCandidateFingerprint() == null) {
+            return;
+        }
+        System.out.println("      └ 候选差异（基线 → 候选）:");
+        for (String line : FingerprintDiffRenderer.render(profile.getFingerprint(), profile.getCandidateFingerprint())) {
+            System.out.println("        " + line);
         }
     }
 

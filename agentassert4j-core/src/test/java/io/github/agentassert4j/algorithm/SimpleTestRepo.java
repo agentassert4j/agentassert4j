@@ -125,4 +125,17 @@ class SimpleTestRepo implements StorageRepository {
         return latest;
     }
 
+    @Override
+    public List<ArchivedBaseline> findArchivedBaselines(String skillId) {
+        // 与 SQLite 实现一致：最近归档在前（插入序反向）
+        List<ArchivedBaseline> result = new ArrayList<>();
+        for (int i = archivedBaselines.size() - 1; i >= 0; i--) {
+            ArchivedBaseline ab = archivedBaselines.get(i);
+            if (skillId.equals(ab.getSkillId())) {
+                result.add(ab);
+            }
+        }
+        return result;
+    }
+
 }

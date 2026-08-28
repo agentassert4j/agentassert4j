@@ -1,6 +1,7 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.BaselineManager;
+import io.github.agentassert4j.model.ArchivedBaseline;
 import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 import picocli.CommandLine.Command;
@@ -19,16 +20,16 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-08-28
  */
-@Command(name = "rollback", description = "把活跃基线恢复到指定版本的归档基线")
+@Command(name = "rollback", description = "把活跃基线恢复到指定版本的归档基线", mixinStandardHelpOptions = true)
 public class RollbackCommand implements Callable<Integer> {
 
     @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
     String db;
 
-    @Option(names = {"--skill"}, required = true, description = "目标 skill 的 groupKey 或其唯一前缀（完整列表见 status 命令）")
+    @Option(names = {"--skill"}, required = true, description = "目标 skill：业务 skillId、groupKey 或其唯一前缀（完整列表见 status 命令）")
     String skill;
 
-    @Option(names = {"--version"}, required = true, description = "目标归档版本标签（如 v1）")
+    @Option(names = {"--version"}, required = true, description = "目标归档版本标签（可选值见 status 的归档版本列）")
     String version;
 
     @Override
@@ -36,10 +37,15 @@ public class RollbackCommand implements Callable<Integer> {
         StorageRepository repository = null;
         try {
             repository = CliSupport.openRepository(db);
-            SkillProfile target = resolveTarget(repository);
-            new BaselineManager(repository).rollback(target.getGroupKey(), version);
-            SkillProfile reloaded = repository.findSkillByGroupKey(target.getGroupKey());
-            System.out.println("  " + target.getGroupKey() + " → " + version + "（审批人 " + reloaded.getApprovedBy() + "）");
+            String groupKey = CliSupport.resolveGroupKeyTarget(repository, skill);
+            SkillProfile target = repository.findSkillByGroupKey(groupKey);
+            if (target == null) {
+                throw new IllegalStateException("skill " + groupKey + " 尚无基线画像。");
+            }
+            ensureVersionExists(repository, groupKey, version);
+            new BaselineManager(repository).rollback(groupKey, version);
+            SkillProfile reloaded = repository.findSkillByGroupKey(groupKey);
+            System.out.println("  " + groupKey + " → " + version + "（审批人 " + reloaded.getApprovedBy() + "）");
             return 0;
         } catch (IllegalStateException e) {
             System.err.println(e.getMessage());
@@ -54,23 +60,20 @@ public class RollbackCommand implements Callable<Integer> {
         }
     }
 
-    private SkillProfile resolveTarget(StorageRepository repository) {
-        List<SkillProfile> matches = new ArrayList<>();
-        for (SkillProfile profile : repository.findAllSkills()) {
-            if (profile.getGroupKey() != null && profile.getGroupKey().startsWith(skill)) {
-                matches.add(profile);
+    /**
+     * 版本不存在时列出全部可选归档版本——rollback 的 --version 是必填值，
+     * 可选值没有发现渠道时用户只能猜，这里是猜错的出口。
+     */
+    private static void ensureVersionExists(StorageRepository repository, String groupKey, String version) {
+        for (ArchivedBaseline archived : repository.findArchivedBaselines(groupKey)) {
+            if (version.equals(archived.getVersionTag())) {
+                return;
             }
         }
-        if (matches.isEmpty()) {
-            throw new IllegalStateException("没有匹配前缀 " + skill + " 的 skill（完整列表见 status 命令）。");
+        List<String> available = new ArrayList<>();
+        for (ArchivedBaseline archived : repository.findArchivedBaselines(groupKey)) {
+            available.add(archived.getVersionTag());
         }
-        if (matches.size() > 1) {
-            List<String> keys = new ArrayList<>();
-            for (SkillProfile p : matches) {
-                keys.add(p.getGroupKey());
-            }
-            throw new IllegalStateException("前缀匹配到多个 skill：" + String.join(", ", keys) + "，请提供更长的前缀。");
-        }
-        return matches.get(0);
+        throw new IllegalStateException("skill " + groupKey + " 没有归档版本 " + version + (available.isEmpty() ? "，且没有任何归档（从未 approve 过或基线未经替换）。" : "。可选版本：" + String.join(", ", available)));
     }
 }

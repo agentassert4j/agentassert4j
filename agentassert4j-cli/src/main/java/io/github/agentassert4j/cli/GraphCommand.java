@@ -8,6 +8,6 @@ import picocli.CommandLine.Command;
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "graph", description = "依赖图谱查看", subcommands = {GraphShowCommand.class})
+@Command(name = "graph", description = "依赖图谱查看", subcommands = {GraphShowCommand.class}, mixinStandardHelpOptions = true)
 public class GraphCommand {
 }

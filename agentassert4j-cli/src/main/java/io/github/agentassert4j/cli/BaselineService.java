@@ -28,19 +28,24 @@ public class BaselineService {
     }
 
     /**
-     * 为所有已录制且尚无基线的 skill 建立基线。
+     * 为已录制且尚无基线的 skill 建立基线。
      *
-     * @param out   报告输出流
-     * @param actor 操作者身份（审批留痕）
-     * @param force 以当前判定语义重建基线：已有基线也被当前算法新指纹覆盖
-     *              （判定语义版本升级后的恢复路径），版本标签按归档占用顺延
+     * @param out         报告输出流
+     * @param actor       操作者身份（审批留痕）
+     * @param force       以当前判定语义重建基线：已有基线也被当前算法新指纹覆盖
+     *                    （判定语义版本升级后的恢复路径），版本标签按归档占用顺延
+     * @param skillFilter 仅处理该业务 skillId（null = 全部；调用方经 CliSupport
+     *                    预解析，groupKey 前缀已在解析层换算成业务标签）
      * @return 本次新建/重建基线的 skill 数
      */
-    public int establishMissing(PrintStream out, String actor, boolean force) {
+    public int establishMissing(PrintStream out, String actor, boolean force, String skillFilter) {
         BaselineManager manager = new BaselineManager(repository);
         int established = 0;
 
         for (String skillId : CliSupport.recordedSkillIds(repository)) {
+            if (skillFilter != null && !skillFilter.equals(skillId)) {
+                continue;
+            }
             String groupKey = groupKeyOfFirstRecord(skillId);
             if (groupKey == null) {
                 continue;

@@ -28,7 +28,7 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "replay", description = "用新 System Prompt 重放录制用例并对比基线（非 PASS 退出码非 0，可作 CI gating）")
+@Command(name = "replay", description = "用新 System Prompt 重放录制用例并对比基线（非 PASS 退出码非 0，可作 CI gating）", mixinStandardHelpOptions = true)
 public class ReplayCommand implements Callable<Integer> {
 
     @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
@@ -46,7 +46,13 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--max-cases"}, defaultValue = "3", description = "默认选例模式下每 skill 的用例上限（默认 3）")
     int maxCases;
 
-    @Option(names = {"--dry-run"}, description = "只打印选例与成本预估，不调用 LLM")
+    @Option(names = {"--selection"}, defaultValue = "newest", description = "选例策略：newest=每 skill 最新录制（默认），oldest=最旧录制")
+    String selection;
+
+    @Option(names = {"--ci", "--no-establish"}, description = "CI 模式：不为无基线的 skill 自动建档，存在未建档 skill 时拒绝判定（退出码 2）——防止无人审的自动基线产出绿灯")
+    boolean ciMode;
+
+    @Option(names = {"--dry-run"}, description = "只打印选例与成本预估，不调用 LLM（只读：不建档、不写图快照）")
     boolean dryRun;
 
     @Override
@@ -65,6 +71,10 @@ public class ReplayCommand implements Callable<Integer> {
             }
             oldPromptHash = HashUtil.sha256(oldPrompt);
         }
+        if (!"newest".equals(selection) && !"oldest".equals(selection)) {
+            System.err.println("--selection 只接受 newest 或 oldest，当前值：" + selection);
+            return 2;
+        }
 
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
         StorageRepository repository = null;
@@ -82,8 +92,10 @@ public class ReplayCommand implements Callable<Integer> {
 
             TestExecutionConfig executionConfig = new TestExecutionConfig().timeoutMs(config.getLlm().getTimeoutMs()).temperature(config.getLlm().getTemperature());
             SkillRulesConfig rules = ConfigLoader.loadRulesConfig();
+            CliSupport.warnUnknownBehaviors(rules, System.out);
 
-            return new ReplayRunner(repository, client, comparator, rules, executionConfig, System.out).run(newPrompt, skill, maxCases, oldPromptHash, dryRun);
+            boolean newestFirst = "newest".equals(selection);
+            return new ReplayRunner(repository, client, comparator, rules, executionConfig, System.out).run(newPrompt, skill, maxCases, oldPromptHash, dryRun, ciMode, newestFirst);
         } catch (RuntimeException e) {
             System.err.println("replay 失败：" + e.getMessage());
             return 2;

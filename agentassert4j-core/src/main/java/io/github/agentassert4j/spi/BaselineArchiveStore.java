@@ -2,6 +2,8 @@ package io.github.agentassert4j.spi;
 
 import io.github.agentassert4j.model.ArchivedBaseline;
 
+import java.util.List;
+
 /**
  * 基线归档域 SPI — approve/rollback 中被替换的基线移入归档，支持回滚到任意历史版本。
  *
@@ -23,4 +25,10 @@ public interface BaselineArchiveStore {
      * （实现方按写入序决出确定性结果）。
      */
     ArchivedBaseline findArchivedBaseline(String skillId, String versionTag);
+
+    /**
+     * 列出该 skill 的全部归档行，最近归档的在前。
+     * rollback 的版本发现（可选版本列表）依赖本查询。
+     */
+    List<ArchivedBaseline> findArchivedBaselines(String skillId);
 }

@@ -22,7 +22,7 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "show", description = "现场重建并查看依赖图谱（节点/边/置信度/环）")
+@Command(name = "show", description = "现场重建并查看依赖图谱（节点/边/置信度/环）", mixinStandardHelpOptions = true)
 public class GraphShowCommand implements Callable<Integer> {
 
     @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
