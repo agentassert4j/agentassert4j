@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.*;
+import java.util.concurrent.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -197,6 +198,30 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
+    void savePromptText_sameHash_firstWriteWins() {
+        // 模板文本由内容哈希定键：同 hash 重复写入必须首写为准（幂等），
+        // 覆盖写会让「同 hash 不同文本」在物理上不可能成立
+        repo.saveTemplateText("hash-dup", "first version");
+        repo.saveTemplateText("hash-dup", "second version");
+        assertEquals("first version", repo.findTemplateText("hash-dup"));
+    }
+
+    @Test
+    void saveInteraction_carriesTemplateTextIntoPromptTexts() {
+        // 模板原文随记录落库的捕获契约：templateHash+templateText 双全时，
+        // 交互写路径顺带把原文归档进 prompt_texts（status 巡检展示的数据源）
+        InteractionRecord r = createSampleRecord("rec-tpl-1", "session-tpl", "skill-tpl", "hash-from-capture");
+        r.setTemplateText("你是订单查询助手。");
+        repo.saveInteraction(r);
+        assertEquals("你是订单查询助手。", repo.findTemplateText("hash-from-capture"));
+
+        // 缺一不可：有 hash 无文本时不落任何行
+        InteractionRecord half = createSampleRecord("rec-tpl-2", "session-tpl", "skill-tpl", "hash-orphan");
+        repo.saveInteraction(half);
+        assertNull(repo.findTemplateText("hash-orphan"));
+    }
+
+    @Test
     void findTemplateText_notFound() {
         assertNull(repo.findTemplateText("nonexistent"));
     }
@@ -244,8 +269,105 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
+    void archiveAndFindBaseline_nullApprovedAtRoundTripsAsNull() {
+        // 可空治理列的写读对称：approvedAt=null 绑定与读回的 wasNull 两侧都要钉住
+        ArchivedBaseline archived = new ArchivedBaseline();
+        archived.setSkillId("sk-null-at");
+        archived.setVersionTag("v1");
+        archived.setAlgoVersion("det-v1");
+        archived.setApprovedBy("alice");
+        archived.setApprovedAt(null);
+        repo.archiveBaseline(archived);
+
+        ArchivedBaseline loaded = repo.findArchivedBaseline("sk-null-at", "v1");
+        assertNotNull(loaded);
+        assertEquals("alice", loaded.getApprovedBy());
+        assertNull(loaded.getApprovedAt());
+    }
+
+    @Test
     void findArchivedBaseline_notFound() {
         assertNull(repo.findArchivedBaseline("nonexistent", "v99"));
+    }
+
+    @Test
+    void findArchivedBaseline_duplicateTag_latestArchiveWins() {
+        // 同 skill 同版本多行归档时最近归档者胜（生产实现的 tiebreaker 契约）
+        ArchivedBaseline first = new ArchivedBaseline();
+        first.setSkillId("sk-dup");
+        first.setVersionTag("v1");
+        first.setApprovedBy("older");
+        first.setApprovedAt(1L);
+        repo.archiveBaseline(first);
+        ArchivedBaseline second = new ArchivedBaseline();
+        second.setSkillId("sk-dup");
+        second.setVersionTag("v1");
+        second.setApprovedBy("newer");
+        second.setApprovedAt(2L);
+        repo.archiveBaseline(second);
+
+        assertEquals("newer", repo.findArchivedBaseline("sk-dup", "v1").getApprovedBy());
+    }
+
+    @Test
+    void saveInteractions_runtimeExceptionMidBatch_rollsBackWholeBatch() {
+        // RuntimeException 路径必须先显式回滚：finally 恢复 autoCommit 对未决事务
+        // 是隐式提交，不回滚就会把半批数据落盘、破坏整批原子性
+        SqliteStorageRepository failing = new SqliteStorageRepository(":memory:") {
+            private int calls = 0;
+
+            @Override
+            public synchronized void saveInteraction(InteractionRecord r) {
+                if (++calls == 2) {
+                    throw new IllegalStateException("second record exploded");
+                }
+                super.saveInteraction(r);
+            }
+        };
+        failing.initialize();
+        try {
+            List<InteractionRecord> batch = Arrays.asList(createSampleRecord("rec-atom-1", "s-atom", "sk-atom", "h1"), createSampleRecord("rec-atom-2", "s-atom", "sk-atom", "h1"), createSampleRecord("rec-atom-3", "s-atom", "sk-atom", "h1"));
+
+            assertThrows(IllegalStateException.class, () -> failing.saveInteractions(batch));
+            assertTrue(failing.findBySkillId("sk-atom").isEmpty(), "半批不得落盘——失败批次必须整批回滚");
+        } finally {
+            failing.close();
+        }
+    }
+
+    @Test
+    void saveInteractions_concurrentBatches_allRowsPersisted() throws Exception {
+        // 多线程 flush 汇聚同一连接：写路径串行化后不得丢批、不得交织回滚
+        int threads = 4;
+        int batchesPerThread = 25;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<?>> futures = new ArrayList<>();
+        for (int t = 0; t < threads; t++) {
+            final int tid = t;
+            futures.add(pool.submit(() -> {
+                start.await();
+                for (int b = 0; b < batchesPerThread; b++) {
+                    List<InteractionRecord> batch = new ArrayList<>();
+                    for (int i = 0; i < 5; i++) {
+                        batch.add(createSampleRecord("rec-c" + tid + "-" + b + "-" + i, "s-c" + tid, "sk-c" + tid, "h" + tid));
+                    }
+                    repo.saveInteractions(batch);
+                }
+                return null;
+            }));
+        }
+        start.countDown();
+        for (Future<?> f : futures) {
+            f.get(30, TimeUnit.SECONDS);
+        }
+        pool.shutdownNow();
+
+        int total = 0;
+        for (int t = 0; t < threads; t++) {
+            total += repo.findBySkillId("sk-c" + t).size();
+        }
+        assertEquals(threads * batchesPerThread * 5, total, "并发批量写入必须全量落库（缺行=事务交织丢批）");
     }
 
     @Test

@@ -37,6 +37,18 @@ class BehaviorCheckerTest {
     }
 
     @Test
+    void mustUseChinese_multilineOutput_cjkOnLaterLine() {
+        // LLM 输出几乎必然多行：语言判定必须跨换行生效，中文在第二行同样要检出
+        assertTrue(BehaviorChecker.check("mustUseChinese", fpNoError, "first line\n第二行中文"));
+    }
+
+    @Test
+    void mustUseEnglish_multilineOutput_latinOnLaterLine() {
+        // 拉丁字母只出现在第二行且全文无中文：判定必须跨换行生效
+        assertTrue(BehaviorChecker.check("mustUseEnglish", fpNoError, "12345\nsecond line"));
+    }
+
+    @Test
     void mustUseChinese_negative() {
         assertFalse(BehaviorChecker.check("mustUseChinese", fpNoError, "Hello World"));
     }

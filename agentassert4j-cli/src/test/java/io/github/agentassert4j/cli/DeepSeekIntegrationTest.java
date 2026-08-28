@@ -510,7 +510,7 @@ class DeepSeekIntegrationTest {
             // 新 prompt 里也告诉它用工具
             String newPrompt = "你是天气助手。用户问天气时必须调用 get_weather 工具。不要用文字回答天气问题。";
 
-            // 需要在执行配置里传入 tools
+            // tools 定义由基线记录原样携带（重放请求自动复用），执行配置无需传入
             TestExecutionConfig config = new TestExecutionConfig().temperature(0.0).timeoutMs(30000);
 
             RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);

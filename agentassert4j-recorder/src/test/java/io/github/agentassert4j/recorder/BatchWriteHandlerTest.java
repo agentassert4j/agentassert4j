@@ -3,10 +3,13 @@ package io.github.agentassert4j.recorder;
 import io.github.agentassert4j.algorithm.DeterministicSkillGrouper;
 import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.ToolCall;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -56,6 +59,37 @@ class BatchWriteHandlerTest {
             assertEquals(DeterministicSkillGrouper.group(saved).getGroupKey(), saved.getGroupKey(), "groupKey 必须由分组器补全，存储与画像才可关联");
             assertNotNull(saved.getFingerprint(), "指纹快照必须落库前提取");
             assertEquals("application/json", saved.getFingerprint().getOutputContentType());
+        }
+
+        @Test
+        @DisplayName("enrich 单条失败不炸批：损坏记录以缺失派生字段落库")
+        void flush_enrichFailureRecordStillSaved() {
+            // 两个无工具名的工具调用让分组器在排序比较时抛异常——单条损坏
+            // 不得拦截整批落库（SQLite 侧对空派生列有空串兜底 NOT NULL）
+            InMemoryStorageRepository repo = new InMemoryStorageRepository();
+            RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
+            BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
+
+            InteractionRecord good = enrichableRecord("r-good");
+            InteractionRecord broken = enrichableRecord("r-broken");
+            List<ToolCall> brokenCalls = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                brokenCalls.add(new ToolCall());
+            }
+            broken.setToolCalls(brokenCalls);
+            broken.setHasToolCalls(true);
+
+            InteractionEvent goodEvent = new InteractionEvent();
+            goodEvent.setRecord(good);
+            InteractionEvent brokenEvent = new InteractionEvent();
+            brokenEvent.setRecord(broken);
+            handler.onEvent(goodEvent, 0, false);
+            handler.onEvent(brokenEvent, 1, true);
+
+            assertEquals(2, repo.getStore().size(), "enrich 单条失败不得拦截整批落库");
+            InteractionRecord savedBroken = repo.getStore().get(1);
+            assertNull(savedBroken.getGroupKey(), "损坏记录的派生字段保持缺失，由存储层空串兜底");
+            assertNull(savedBroken.getFingerprint());
         }
 
         @Test

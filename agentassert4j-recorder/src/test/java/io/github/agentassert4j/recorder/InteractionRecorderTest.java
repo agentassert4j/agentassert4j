@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -295,5 +296,32 @@ class InteractionRecorderTest {
         assertTrue(recorder.getDroppedCount() > 0, "RingBuffer(1024) + 8192 条突发且消费阻塞，生产侧丢弃必须计入总丢弃数");
         assertEquals(total, recorder.getRecordedCount());
         assertEquals(total, recorder.getWrittenCount() + recorder.getDroppedCount(), "written + dropped 必须闭合到 recorded");
+    }
+
+    @Test
+    void stop_concurrentIntercept_countsStayClosed() throws Exception {
+        // intercept 与 stop 互斥：关停窗口内的并发发布既不得滞留为幽灵事件，
+        // 也不得破坏 written + dropped == recorded 的计数闭合
+        InMemoryStorageRepository repo = new InMemoryStorageRepository();
+        RecorderConfig config = RecorderConfig.builder().batchSize(100).flushIntervalMs(1000).ringBufferSize(4096).build();
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        AtomicBoolean running = new AtomicBoolean(true);
+        Thread producer = new Thread(() -> {
+            int i = 0;
+            while (running.get()) {
+                recorder.intercept(createRecord("race-" + i++));
+            }
+        });
+        producer.start();
+        Thread.sleep(150);
+        recorder.stop();
+        running.set(false);
+        producer.join(5000);
+        assertFalse(producer.isAlive(), "生产线程必须在有界时间内退出");
+
+        long recorded = recorder.getRecordedCount();
+        assertEquals(recorded, recorder.getWrittenCount() + recorder.getDroppedCount(), "关停窗口的并发发布不得破坏计数闭合");
     }
 }

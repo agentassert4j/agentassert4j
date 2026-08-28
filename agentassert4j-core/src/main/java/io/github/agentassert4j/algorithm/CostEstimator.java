@@ -101,10 +101,10 @@ public final class CostEstimator {
     }
 
     /**
-     * 获取模型的单次调用成本。
+     * 获取模型的单次调用成本——与 {@link #estimateCostPerCall} 共用同一匹配口径，
+     * 预估文案与执行器截断两个入口对同一模型名必须给出同一价格。
      */
     private static double getCostPerCall(String model) {
-        if (model == null) return DEFAULT_COST_PER_CALL;
-        return MODEL_COST.getOrDefault(model.toLowerCase(Locale.ROOT), DEFAULT_COST_PER_CALL);
+        return estimateCostPerCall(model);
     }
 }

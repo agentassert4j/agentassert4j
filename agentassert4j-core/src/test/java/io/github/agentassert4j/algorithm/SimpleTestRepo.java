@@ -114,7 +114,15 @@ class SimpleTestRepo implements StorageRepository {
 
     @Override
     public ArchivedBaseline findArchivedBaseline(String skillId, String versionTag) {
-        return archivedBaselines.stream().filter(ab -> skillId.equals(ab.getSkillId()) && versionTag.equals(ab.getVersionTag())).findFirst().orElse(null);
+        // 与 SQLite 实现的 tiebreaker 语义一致：同 skill 同版本多行归档时最近归档者胜，
+        // 避免 Core 单测结论与生产实现方向相反
+        ArchivedBaseline latest = null;
+        for (ArchivedBaseline ab : archivedBaselines) {
+            if (skillId.equals(ab.getSkillId()) && versionTag.equals(ab.getVersionTag())) {
+                latest = ab;
+            }
+        }
+        return latest;
     }
 
 }

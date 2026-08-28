@@ -42,8 +42,7 @@ final class SpringAiRecordMapper {
      * 组装一次调用的完整交互记录；response 为 null 时只落请求面字段。
      * context 由调用方在业务线程捕获传入——异步回调线程的 ThreadLocal 不可达。
      */
-    static InteractionRecord toRecord(Prompt prompt, ChatResponse response, long latencyMs, Long ttftMs,
-                                      RecordingContext context) {
+    static InteractionRecord toRecord(Prompt prompt, ChatResponse response, long latencyMs, Long ttftMs, RecordingContext context) {
         InteractionRecord record = new InteractionRecord();
         record.setTimestamp(System.currentTimeMillis());
         record.setRecorderVersion(SDK_VERSION);
@@ -75,8 +74,10 @@ final class SpringAiRecordMapper {
             Message message = instructions.get(i);
             if (message instanceof SystemMessage) {
                 // 系统提示即模板：哈希进 templateHash 作为模板锚点，
-                // 依赖图的 prompt 变更检测以此为节点
+                // 依赖图的 prompt 变更检测以此为节点；
+                // 原文随记录携带，存储侧归档进 prompt_texts 供 status 巡检展示
                 record.setTemplateHash(HashUtil.sha256(message.getText()));
+                record.setTemplateText(message.getText());
             }
             if (message.getMessageType() == MessageType.USER) {
                 userMessageCount++;

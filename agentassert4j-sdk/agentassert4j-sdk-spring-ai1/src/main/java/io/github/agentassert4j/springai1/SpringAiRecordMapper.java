@@ -75,8 +75,10 @@ final class SpringAiRecordMapper {
             Message message = instructions.get(i);
             if (message instanceof SystemMessage) {
                 // 系统提示即模板：哈希进 templateHash 作为模板锚点，
-                // 依赖图的 prompt 变更检测以此为节点
+                // 依赖图的 prompt 变更检测以此为节点；
+                // 原文随记录携带，存储侧归档进 prompt_texts 供 status 巡检展示
                 record.setTemplateHash(HashUtil.sha256(message.getText()));
+                record.setTemplateText(message.getText());
             }
             if (message.getMessageType() == MessageType.USER) {
                 userMessageCount++;

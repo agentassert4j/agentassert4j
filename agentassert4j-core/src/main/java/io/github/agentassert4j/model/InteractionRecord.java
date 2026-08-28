@@ -34,13 +34,21 @@ public class InteractionRecord {
      */
     private String templateHash;
     /**
+     * 模板原文（瞬态字段）：捕获侧随记录携带到存储侧，以 templateHash 为键
+     * 归档进 prompt_texts 表（模板文本库），不对应 interactions 列——
+     * 是本类字段集与 interactions 列一一对应规则的唯一例外
+     */
+    private String templateText;
+    /**
      * 变量取值指纹（同模板不同变量形态的区分键）
      */
+    // TODO: 捕获侧未接线——该列暂恒为 null，待 SDK 捕获层补齐模板变量指纹的口径与写入，接线后移除本标注
     private String variablesFingerprint;
 
     /**
      * 协议枚举（TEXT）：openai-chat / anthropic-messages / openai-responses / gemini-native
      */
+    // TODO: 捕获侧未接线——该列暂恒为 null，待 SDK 捕获层按适配线补写协议标识，接线后移除本标注
     private String apiProtocol;
     /**
      * 供应商标识：openai / anthropic / deepseek / qwen / ollama / vllm / custom
@@ -57,6 +65,7 @@ public class InteractionRecord {
     /**
      * API base URL——同模型不同部署点行为可不同
      */
+    // TODO: 捕获侧未接线——该列暂恒为 null，待 SDK 捕获层从请求配置提取端点地址，接线后移除本标注
     private String endpoint;
 
     private String userInput;
@@ -117,6 +126,7 @@ public class InteractionRecord {
     /**
      * 调用时刻冻结的费用（USD）；无价格表时为 null
      */
+    // TODO: 捕获侧未接线——该列暂恒为 null，费用计算依赖随版本刷新的价格快照，待价格数据链接线后移除本标注
     private Double costUsd;
 
     private List<ToolCall> toolCalls;
@@ -201,6 +211,14 @@ public class InteractionRecord {
 
     public void setTemplateHash(String templateHash) {
         this.templateHash = templateHash;
+    }
+
+    public String getTemplateText() {
+        return templateText;
+    }
+
+    public void setTemplateText(String templateText) {
+        this.templateText = templateText;
     }
 
     public String getVariablesFingerprint() {

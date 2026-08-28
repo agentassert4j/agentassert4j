@@ -27,6 +27,7 @@ import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.util.MimeType;
 
 import java.net.URI;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -65,13 +66,15 @@ class SpringAiRecordMapperTest {
     class RequestMapping {
 
         @Test
-        @DisplayName("系统消息映射为 templateHash，不进入轮次")
+        @DisplayName("系统消息映射为 templateHash 并携带原文，不进入轮次")
         void systemMessageBecomesTemplateHash() {
             Prompt prompt = new Prompt(List.of(new SystemMessage("你是售后客服助手"), user("订单 SO-1 在哪")));
 
             InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null, null);
 
             assertEquals(HashUtil.sha256("你是售后客服助手"), record.getTemplateHash());
+            // 原文随记录携带，存储侧归档进 prompt_texts 供 status 巡检展示
+            assertEquals("你是售后客服助手", record.getTemplateText());
             assertTrue(record.getPreviousTurns() == null || record.getPreviousTurns().isEmpty(), "系统消息不得混入 previousTurns");
             assertEquals("订单 SO-1 在哪", record.getUserInput());
         }
@@ -186,6 +189,47 @@ class SpringAiRecordMapperTest {
             assertEquals("image_url", imagePart.get("type"));
             Map<String, Object> url = (Map<String, Object>) imagePart.get("image_url");
             assertEquals("https://cdn.example.com/a.png", url.get("url"));
+        }
+
+        @Test
+        @DisplayName("byte[] 音频映射为 input_audio：data 为裸 base64，format 取 mime 子类型")
+        void audioBytesMapToInputAudioWithBareBase64() {
+            // 字节序列刻意包含 0x00 与 0xFF，证明二进制载荷逐字节往返不变形
+            byte[] audioBytes = new byte[]{0x00, 0x01, (byte) 0xFF, 0x10, 'A', 'G'};
+            UserMessage multimodal = UserMessage.builder().text("请听这段音频").media(Media.builder().mimeType(new MimeType("audio", "wav")).data(audioBytes).build()).build();
+            Prompt prompt = new Prompt(List.of(new SystemMessage("sys"), multimodal));
+
+            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null, null);
+
+            List<Object> content = (List<Object>) RecursiveJsonParser.parse(record.getUserInput());
+            assertEquals(2, content.size(), "预期 text + input_audio 两个片段，实际 " + content.size());
+            Map<String, Object> audioPart = (Map<String, Object>) content.get(1);
+            assertEquals("input_audio", audioPart.get("type"), "预期 type=input_audio，实际 " + audioPart.get("type"));
+            Map<String, Object> audio = (Map<String, Object>) audioPart.get("input_audio");
+            assertEquals(2, audio.size(), "input_audio 预期只含 data 与 format 两个键，实际键集 " + audio.keySet());
+            String audioData = String.valueOf(audio.get("data"));
+            assertEquals(Base64.getEncoder().encodeToString(audioBytes), audioData, "data 预期为原始字节的裸 base64，实际 " + audioData);
+            assertFalse(audioData.contains(":"), "data 不得携带 data: URI 前缀，实际 " + audioData);
+            assertArrayEquals(audioBytes, Base64.getDecoder().decode(audioData), "data 解码必须还原原始音频字节");
+            assertEquals("wav", audio.get("format"), "format 预期取 mime 子类型 wav，实际 " + audio.get("format"));
+        }
+
+        @Test
+        @DisplayName("URI 音频不进入 input_audio，降级为 mimeType+name 描述片段")
+        void nonByteAudioUriDegradesToDescriptiveMedia() {
+            UserMessage multimodal = UserMessage.builder().text("请听这段音频").media(new Media(new MimeType("audio", "wav"), URI.create("https://cdn.example.com/greeting.wav"))).build();
+            Prompt prompt = new Prompt(List.of(new SystemMessage("sys"), multimodal));
+
+            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null, null);
+
+            List<Object> content = (List<Object>) RecursiveJsonParser.parse(record.getUserInput());
+            assertEquals(2, content.size(), "预期 text + media 两个片段，实际 " + content.size());
+            Map<String, Object> mediaPart = (Map<String, Object>) content.get(1);
+            assertFalse(mediaPart.containsKey("input_audio"), "非 byte[] 音频不得进入 input_audio 结构，实际键集 " + mediaPart.keySet());
+            assertFalse(mediaPart.containsKey("data"), "描述片段不得携带音频负载字段，实际键集 " + mediaPart.keySet());
+            assertEquals("media", mediaPart.get("type"), "预期 type=media，实际 " + mediaPart.get("type"));
+            assertEquals("audio/wav", mediaPart.get("mimeType"), "预期 mimeType=audio/wav，实际 " + mediaPart.get("mimeType"));
+            assertTrue(mediaPart.containsKey("name"), "描述片段应携带 name，实际键集 " + mediaPart.keySet());
         }
     }
 

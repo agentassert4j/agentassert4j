@@ -8,6 +8,11 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -435,6 +440,28 @@ class BaselineManagerTest {
         }
 
         @Test
+        @DisplayName("空白审批人归一为 null——null 是「未经审批链盖章」的异常信号")
+        void blankApprover_normalizedToNull() {
+            SkillProfile profile = makeProfileWithCandidate("gk-blank", "skill-blank");
+            repo.saveSkillProfile(profile);
+
+            manager.approve("gk-blank", "   ");
+
+            assertNull(repo.findSkillByGroupKey("gk-blank").getApprovedBy());
+        }
+
+        @Test
+        @DisplayName("审批人首尾空白被裁剪")
+        void approver_trimmed() {
+            SkillProfile profile = makeProfileWithCandidate("gk-trim", "skill-trim");
+            repo.saveSkillProfile(profile);
+
+            manager.approve("gk-trim", "  bob  ");
+
+            assertEquals("bob", repo.findSkillByGroupKey("gk-trim").getApprovedBy());
+        }
+
+        @Test
         @DisplayName("归档行携带旧基线自身的审批事实，新基线携带新审批人")
         void archiveCarriesOutgoingApproval() {
             InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
@@ -491,6 +518,7 @@ class BaselineManagerTest {
             SkillProfile updated = repo.findSkillByGroupKey(groupKey);
             assertEquals("alice", updated.getApprovedBy());
             assertEquals(before, updated.getApprovedAt());
+            assertEquals(JudgmentSemantics.VERSION, updated.getAlgoVersion());
         }
 
         @Test
@@ -507,6 +535,11 @@ class BaselineManagerTest {
             assertEquals("bob", reestablished.getApprovedBy());
             assertEquals(JudgmentSemantics.VERSION, reestablished.getAlgoVersion());
             assertNotEquals(firstVersion, reestablished.getVersionTag());
+            // 重建必须以当前算法重新提取指纹：与对同一记录的现算结果逐维一致
+            DeterministicFingerprint expected = FingerprintExtractor.extract(record);
+            assertEquals(expected.getToolCallSet(), reestablished.getFingerprint().getToolCallSet());
+            assertEquals(expected.getOutputContentType(), reestablished.getFingerprint().getOutputContentType());
+            assertEquals(expected.getOutputFieldPaths(), reestablished.getFingerprint().getOutputFieldPaths());
             // 首个基线被覆盖前未归档（无候选路径），此处活跃 tag 必须不与任何归档行同指纹冲突
             assertNull(repo.findArchivedBaseline(groupKey, reestablished.getVersionTag()));
         }
@@ -521,6 +554,59 @@ class BaselineManagerTest {
             String groupKey = DeterministicSkillGrouper.group(record).getGroupKey();
             assertEquals("ci-bot", repo.findSkillByGroupKey(groupKey).getApprovedBy());
             assertEquals(JudgmentSemantics.VERSION, repo.findSkillByGroupKey(groupKey).getAlgoVersion());
+        }
+    }
+
+    @Nested
+    @DisplayName("并发契约 - 同一 JVM 内生命周期方法互斥")
+    class Concurrency {
+
+        @Test
+        @DisplayName("approve 与 recordCandidate 并发交织后版本号与成功次数严格一致")
+        void interleavedApproveAndRecordCandidate_versionAdvancesOncePerSuccess() throws Exception {
+            InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
+            manager.autoEstablishBaseline(record, "owner");
+            String groupKey = DeterministicSkillGrouper.group(record).getGroupKey();
+
+            int threads = 8;
+            int iterations = 40;
+            AtomicInteger successfulApproves = new AtomicInteger();
+            ExecutorService pool = Executors.newFixedThreadPool(threads);
+            CountDownLatch start = new CountDownLatch(1);
+            CountDownLatch done = new CountDownLatch(threads);
+            for (int i = 0; i < threads; i++) {
+                final String actor = "actor-" + i;
+                pool.submit(() -> {
+                    try {
+                        start.await();
+                        for (int j = 0; j < iterations; j++) {
+                            // 先补候选再批准；候选被其他线程先消费时 approve 按契约抛出
+                            manager.recordCandidate(record, new DeterministicFingerprint());
+                            try {
+                                manager.approve(groupKey, actor);
+                                successfulApproves.incrementAndGet();
+                            } catch (IllegalStateException noCandidate) {
+                                // 并发下候选缺席属正常分支
+                            }
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        done.countDown();
+                    }
+                });
+            }
+            start.countDown();
+            assertTrue(done.await(30, TimeUnit.SECONDS), "并发生命周期操作必须在有界时间内完成");
+            pool.shutdownNow();
+
+            // 互斥下的确定性不变量：每次成功的 approve 恰好推进一个版本，
+            // 交织读改写（丢更新）会让版本推进数落后于成功次数
+            SkillProfile latest = repo.findSkillByGroupKey(groupKey);
+            assertNotNull(latest);
+            assertEquals("v" + (1 + successfulApproves.get()), latest.getVersionTag(), "版本推进数必须与成功的 approve 次数严格一致");
+            assertEquals(JudgmentSemantics.VERSION, latest.getAlgoVersion());
+            assertNotNull(latest.getApprovedBy());
         }
     }
 }

@@ -41,9 +41,9 @@ import io.github.agentassert4j.spi.StorageRepository;
  *         候选升为基线       保留旧基线
  * </pre>
  *
- * <p><b>线程契约</b>：本类非线程安全——生命周期操作（approve/reject/rollback/
- * recordCandidate）是无锁读改写，并发调用会丢失更新。CLI 单进程单线程使用
- * 安全；并发场景需调用方自行串行化（SkillStore 无版本号，乐观锁待真实需求）。</p>
+ * <p><b>线程契约</b>：生命周期方法以实例监视器互斥，同一 JVM 内并发调用安全
+ * （统计执行器并发采样、SDK 多线程接入均落在此契约内）；跨进程并发写同一存储
+ * 不受此保护，仍需调用方自行保证排他。</p>
  *
  * @author axy-yxa
  * @since 2026-08-26
@@ -66,7 +66,7 @@ public class BaselineManager {
      * @param approver 审批人身份，随活跃画像与归档行留痕（纯治理元数据，永不参与判定）
      * @throws IllegalStateException 无候选指纹时抛出
      */
-    public void approve(String groupKey, String approver) {
+    public synchronized void approve(String groupKey, String approver) {
         SkillProfile profile = repository.findSkillByGroupKey(groupKey);
         if (profile == null) {
             throw new IllegalStateException("Skill profile not found: " + groupKey);
@@ -98,7 +98,7 @@ public class BaselineManager {
      * @param groupKey Skill 的分组键
      * @throws IllegalStateException 无候选指纹时抛出（与 approve 对称）
      */
-    public void reject(String groupKey) {
+    public synchronized void reject(String groupKey) {
         SkillProfile profile = repository.findSkillByGroupKey(groupKey);
         if (profile == null) {
             throw new IllegalStateException("Skill profile not found: " + groupKey);
@@ -119,7 +119,7 @@ public class BaselineManager {
      * @param versionTag 目标版本标签
      * @throws IllegalStateException 无归档基线时抛出
      */
-    public void rollback(String groupKey, String versionTag) {
+    public synchronized void rollback(String groupKey, String versionTag) {
         ArchivedBaseline archived = repository.findArchivedBaseline(groupKey, versionTag);
         if (archived == null) {
             throw new IllegalStateException("No archived baseline found for skill: " + groupKey + ", version: " + versionTag);
@@ -154,7 +154,7 @@ public class BaselineManager {
      * @param candidate 回归测试提取的新指纹
      * @throws IllegalStateException 该 Skill 无画像时抛出（先录制建立基线）
      */
-    public void recordCandidate(InteractionRecord baseline, DeterministicFingerprint candidate) {
+    public synchronized void recordCandidate(InteractionRecord baseline, DeterministicFingerprint candidate) {
         if (baseline == null || candidate == null) {
             return;
         }
@@ -177,7 +177,7 @@ public class BaselineManager {
      * @param record   首次录制的交互记录
      * @param approver 使该基线成为基线的操作者身份（自动建立同样留痕，纯治理元数据）
      */
-    public void autoEstablishBaseline(InteractionRecord record, String approver) {
+    public synchronized void autoEstablishBaseline(InteractionRecord record, String approver) {
         establish(record, approver, false);
     }
 
@@ -190,7 +190,7 @@ public class BaselineManager {
      * @param approver 重建操作者身份
      * @throws IllegalStateException 该 Skill 无画像且无录制数据可分组时抛出
      */
-    public void reestablishBaseline(InteractionRecord record, String approver) {
+    public synchronized void reestablishBaseline(InteractionRecord record, String approver) {
         establish(record, approver, true);
     }
 
@@ -228,7 +228,9 @@ public class BaselineManager {
      */
     private void stampApproval(SkillProfile profile, String approver) {
         profile.setAlgoVersion(JudgmentSemantics.VERSION);
-        profile.setApprovedBy(approver);
+        // 空白身份归一为 null：approvedBy=null 是「未经审批链盖章」的异常信号，
+        // 空白串落库会稀释该信号。core 只归一调用方传入的身份，不嗅探环境
+        profile.setApprovedBy(approver == null || approver.trim().isEmpty() ? null : approver.trim());
         profile.setApprovedAt(System.currentTimeMillis());
     }
 

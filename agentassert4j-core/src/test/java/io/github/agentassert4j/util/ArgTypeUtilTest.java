@@ -3,9 +3,7 @@ package io.github.agentassert4j.util;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -57,5 +55,18 @@ class ArgTypeUtilTest {
     void derive_nullOrEmpty_returnsEmptyMap() {
         assertTrue(ArgTypeUtil.derive(null).isEmpty());
         assertTrue(ArgTypeUtil.derive(new LinkedHashMap<String, Object>()).isEmpty());
+    }
+
+    @Test
+    @DisplayName("土耳其 locale 下键小写化不发生 i→ı 替换（跨环境分组一致）")
+    void derive_turkishLocale_keysMatchRootLowercasing() {
+        Locale original = Locale.getDefault();
+        try {
+            Locale.setDefault(new Locale("tr", "TR"));
+            Map<String, String> types = ArgTypeUtil.derive(Collections.singletonMap((String) "userID", (Object) "SO-1"));
+            assertTrue(types.containsKey("userid"), "tr-TR 下必须与 Locale.ROOT 口径一致，实际键集: " + types.keySet());
+        } finally {
+            Locale.setDefault(original);
+        }
     }
 }

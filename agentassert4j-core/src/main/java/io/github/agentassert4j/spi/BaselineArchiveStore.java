@@ -3,7 +3,7 @@ package io.github.agentassert4j.spi;
 import io.github.agentassert4j.model.ArchivedBaseline;
 
 /**
- * 基线归档域 SPI — approve 时旧基线移入归档，支持回滚到任意历史版本。
+ * 基线归档域 SPI — approve/rollback 中被替换的基线移入归档，支持回滚到任意历史版本。
  *
  * <p>归档以 {@link ArchivedBaseline} 值对象整体写入：指纹、版本标签之外，
  * 语义版本与审批事实随行快照，将来归档字段扩展只动模型不动本接口。</p>
@@ -18,5 +18,9 @@ public interface BaselineArchiveStore {
      */
     void archiveBaseline(ArchivedBaseline archived);
 
+    /**
+     * 读取归档行。同 skill 同版本存在多行归档时返回最近归档的一行
+     * （实现方按写入序决出确定性结果）。
+     */
     ArchivedBaseline findArchivedBaseline(String skillId, String versionTag);
 }

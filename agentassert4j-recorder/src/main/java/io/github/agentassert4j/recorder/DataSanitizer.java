@@ -484,6 +484,7 @@ public class DataSanitizer {
         copy.setSeq(original.getSeq());
         copy.setTemplateId(original.getTemplateId());
         copy.setTemplateHash(original.getTemplateHash());
+        copy.setTemplateText(original.getTemplateText());
         copy.setVariablesFingerprint(original.getVariablesFingerprint());
         copy.setApiProtocol(original.getApiProtocol());
         copy.setProvider(original.getProvider());

@@ -27,7 +27,7 @@ public final class RecorderConfig {
      */
     private final int maxBufferSize;
     /**
-     * Disruptor RingBuffer 大小（必须是 2 的幂）
+     * Disruptor RingBuffer 大小（非 2 的幂在构造时向上钳位到最近的 2 的幂）
      */
     private final int ringBufferSize;
     /**
@@ -55,7 +55,9 @@ public final class RecorderConfig {
         // 钳位：maxBufferSize < batchSize 时批量阈值永远达不到，超限记录会被
         // 持续丢弃而非攒批刷盘——按较大者执行
         this.maxBufferSize = Math.max(Math.max(1, builder.maxBufferSize), this.batchSize);
-        this.ringBufferSize = builder.ringBufferSize;
+        // 钳位：Disruptor RingBuffer 要求 2 的幂，非幂值原本要到 start() 才抛
+        // IllegalArgumentException——向上取整把失败前移到构造期
+        this.ringBufferSize = clampToPowerOfTwo(builder.ringBufferSize);
         this.sensitiveFields = Collections.unmodifiableList(new ArrayList<>(builder.sensitiveFields));
         this.sanitizeStrategy = builder.sanitizeStrategy;
         this.sanitizeUserInput = builder.sanitizeUserInput;
@@ -73,6 +75,18 @@ public final class RecorderConfig {
 
     public static Builder builder() {
         return new Builder();
+    }
+
+    /**
+     * 向上取整到不小于 value 的最小 2 的幂（下限 1，上限 2^30 防 int 溢出）。
+     */
+    private static int clampToPowerOfTwo(int value) {
+        int v = Math.max(1, Math.min(value, 1 << 30));
+        if (v <= 1) {
+            return 1;
+        }
+        int rounded = Integer.highestOneBit(v - 1) << 1;
+        return Math.min(rounded, 1 << 30);
     }
 
     public int getBatchSize() {

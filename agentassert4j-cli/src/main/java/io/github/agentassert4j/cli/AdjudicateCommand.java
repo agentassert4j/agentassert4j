@@ -32,7 +32,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         if (skill == null && !all) {
-            System.err.println("需要 --skill <skillId> 或 --all。");
+            System.err.println("需要 --skill <groupKey 或唯一前缀> 或 --all。");
             return 2;
         }
         StorageRepository repository = null;

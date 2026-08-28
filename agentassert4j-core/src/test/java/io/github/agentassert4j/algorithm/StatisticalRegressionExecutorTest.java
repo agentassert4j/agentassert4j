@@ -168,6 +168,8 @@ class StatisticalRegressionExecutorTest {
         StatisticalRegressionResult result = executor.execute(makeBaseline(), "prompt", config);
 
         assertEquals(0, stubClient.callCount.get());
+        // 全 SKIP 聚合不允许产出任何判定（fail-open 的 STABLE 同样不允许）
+        assertEquals(StatisticalVerdict.INSUFFICIENT_SAMPLES, result.getStatisticalVerdict());
     }
 
     @Nested

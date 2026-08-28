@@ -6,7 +6,8 @@ package io.github.agentassert4j.model;
  * <p>groupKey 确定性分组规则：
  * <ul>
  *   <li>有工具调用：sorted(toolNames).join("+") + "[" + paramSignature + "]"</li>
- *   <li>无工具调用：SHA-256(systemPrompt)</li>
+ *   <li>无工具调用："chat:" + templateHash（无模板时回退 SHA-256(userInput)，
+ *       双缺失为 "chat:no-anchor"）</li>
  * </ul></p>
  *
  * @author axy-yxa

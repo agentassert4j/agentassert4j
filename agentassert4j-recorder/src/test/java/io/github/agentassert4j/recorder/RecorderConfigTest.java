@@ -39,6 +39,23 @@ class RecorderConfigTest {
     }
 
     @Test
+    void builder_batchSizeZeroOrNegative_clampedToOne() {
+        // batchSize<=0 会让超限判断恒真、全部记录走丢弃分支——下限 1 保住「尽快刷盘」的配置意图
+        assertEquals(1, RecorderConfig.builder().batchSize(0).build().getBatchSize());
+        assertEquals(1, RecorderConfig.builder().batchSize(-5).build().getBatchSize());
+    }
+
+    @Test
+    void builder_ringBufferSize_roundedUpToPowerOfTwo() {
+        // Disruptor RingBuffer 要求 2 的幂：非幂值向上取整，把失败前移到构造期而非 start()
+        assertEquals(1024, RecorderConfig.builder().ringBufferSize(1000).build().getRingBufferSize());
+        assertEquals(4, RecorderConfig.builder().ringBufferSize(3).build().getRingBufferSize());
+        assertEquals(16384, RecorderConfig.builder().ringBufferSize(16384).build().getRingBufferSize());
+        assertEquals(1, RecorderConfig.builder().ringBufferSize(-5).build().getRingBufferSize());
+        assertEquals(1 << 30, RecorderConfig.builder().ringBufferSize(Integer.MAX_VALUE).build().getRingBufferSize());
+    }
+
+    @Test
     void builder_customValues() {
         RecorderConfig config = RecorderConfig.builder().batchSize(50).flushIntervalMs(3000).maxBufferSize(200).ringBufferSize(8192).sensitiveFields(Arrays.asList("password", "token")).sanitizeStrategy(SanitizeStrategy.HASH).sanitizeUserInput(true).sanitizeModelResponse(true).build();
 

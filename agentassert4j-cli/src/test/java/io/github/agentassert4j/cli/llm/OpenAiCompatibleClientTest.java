@@ -5,6 +5,7 @@ import io.github.agentassert4j.model.LlmRequest;
 import io.github.agentassert4j.model.LlmResponse;
 import io.github.agentassert4j.model.ToolCallResult;
 import io.github.agentassert4j.model.TurnContext;
+import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmTimeoutException;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,10 +14,12 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -219,19 +222,87 @@ class OpenAiCompatibleClientTest {
     }
 
     @Test
-    void chat_retriesOnServerError() throws Exception {
-        // 这个测试验证重试计数 — 通过 mock HttpClient 实现较复杂
-        // 核心逻辑：DEFAULT_MAX_RETRIES = 2，总共最多执行 3 次（1 + 2 retries）
-        // 此处验证 client 配置正确
-        assertEquals("gpt-4o", client.name());
+    @DisplayName("5xx 触发重试：首次 500、第二次 200 → 成功返回且总尝试 2 次")
+    void chat_retriesOnServerError_thenSucceeds() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicInteger hits = new AtomicInteger();
+        String okBody = "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1}}";
+        server.createContext("/v1/chat/completions", exchange -> {
+            if (hits.incrementAndGet() == 1) {
+                exchange.sendResponseHeaders(500, -1);
+            } else {
+                byte[] body = okBody.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, body.length);
+                exchange.getResponseBody().write(body);
+            }
+            exchange.close();
+        });
+        server.start();
+        try {
+            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 1);
+            LlmRequest request = new LlmRequest();
+            request.setUserInput("hi");
+
+            LlmResponse response = c.chat(request, 5000);
+
+            assertEquals("ok", response.getContent(), "5xx 后恢复必须返回成功响应");
+            assertEquals(2, hits.get(), "首次 5xx 后必须恰好重试一次");
+        } finally {
+            server.stop(0);
+        }
     }
 
     @Test
-    void constructor_normalizesTrailingSlash() {
-        OpenAiCompatibleClient c = new OpenAiCompatibleClient("https://api.deepseek.com/", "key", "deepseek-chat");
-        // 内部 endpoint 已去尾斜杠，验证通过 buildRequestBody 不暴露
-        // 直接验证 name()
-        assertEquals("deepseek-chat", c.name());
+    @DisplayName("maxRetries=0 时 5xx 直接上抛 LlmApiException，不重试")
+    void chat_serverError_zeroRetries_throwsImmediately() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicInteger hits = new AtomicInteger();
+        server.createContext("/v1/chat/completions", exchange -> {
+            hits.incrementAndGet();
+            exchange.sendResponseHeaders(500, -1);
+            exchange.close();
+        });
+        server.start();
+        try {
+            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 0);
+            LlmRequest request = new LlmRequest();
+            request.setUserInput("hi");
+
+            assertThrows(LlmApiException.class, () -> c.chat(request, 5000));
+            assertEquals(1, hits.get(), "零重试配置不得发起第二次尝试");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("endpoint 带尾斜杠时请求路径归一为 /v1/chat/completions")
+    void constructor_trailingSlash_normalizedInRequestPath() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        String[] seenPath = new String[1];
+        String okBody = "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}";
+        server.createContext("/v1/chat/completions", exchange -> {
+            seenPath[0] = exchange.getRequestURI().getPath();
+            byte[] body = okBody.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        try {
+            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort() + "/", "key", "test", 0);
+            LlmRequest request = new LlmRequest();
+            request.setUserInput("hi");
+
+            LlmResponse response = c.chat(request, 5000);
+
+            assertEquals("ok", response.getContent());
+            assertEquals("/v1/chat/completions", seenPath[0], "尾斜杠必须归一，不得产生 //v1 双斜杠路径");
+        } finally {
+            server.stop(0);
+        }
     }
 
     @Test

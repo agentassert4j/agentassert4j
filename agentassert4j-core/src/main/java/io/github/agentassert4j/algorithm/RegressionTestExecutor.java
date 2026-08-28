@@ -99,7 +99,7 @@ public class RegressionTestExecutor {
             return RegressionTestResult.error(baseline.getRecordId(), "LLM 客户端未捕获异常：" + e.getClass().getSimpleName() + "：" + e.getMessage());
         }
 
-        // 3-7. LLM 调用成功后的处理（指纹提取/对比/候选落库/结果封装）。
+        // 3-5. LLM 调用成功后的处理（构建当前记录/提取指纹/对比与候选落库/结果封装）。
         //    任何处理失败转为 ERROR 结果，不向批量调用方逃逸——批量回归不允许单条记录中断整体
         try {
             InteractionRecord current = buildCurrentRecord(baseline, response, newSystemPrompt);
@@ -161,6 +161,11 @@ public class RegressionTestExecutor {
         // turnIndex 为 0，但历史轮次同样必须参与重放
         if (baseline.getPreviousTurns() != null && !baseline.getPreviousTurns().isEmpty()) {
             for (TurnContext turn : baseline.getPreviousTurns()) {
+                // system 帧不注入：系统提示属模板域由 systemPrompt 承载，
+                // 重复入列会产生第二条 system 消息（渲染侧已有同款跳过，此处补纵深）
+                if ("system".equalsIgnoreCase(turn.getRole())) {
+                    continue;
+                }
                 request.addTurn(copyTurn(turn));
             }
         }
@@ -230,8 +235,8 @@ public class RegressionTestExecutor {
         current.setOutputTokens(response.getOutputTokens());
 
         // 调用时刻遥测——只在此刻可知，事后无法重建。
-        // 模型身份（provider/endpoint 等）由持有客户端配置的持久化管道回填，
-        // 算法层不持有供应商方言知识，归一在捕获层完成
+        // 模型身份列（provider/endpoint/apiProtocol 等）捕获侧尚未填充，
+        // 算法层不持有供应商方言知识，响应侧遥测在此就地落位
         current.setServedModel(response.getServedModel());
         current.setFinishReason(response.getFinishReason());
         current.setUsageRaw(response.getUsageRaw());

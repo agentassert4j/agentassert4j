@@ -18,6 +18,7 @@ import java.io.PrintStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -220,6 +221,32 @@ class ReplayFlowTest {
             assertTrue(output.toString().contains("按 groupKey 前缀匹配到"));
             assertEquals(2, stubClient.callCount);
         }
+
+        @Test
+        @DisplayName("前缀命中覆盖多个业务标签 → 报错退出码 2，零 LLM 调用")
+        void prefixCoveringMultipleBusinessLabels_exitTwo() {
+            repository.saveInteraction(makeRecord("rec-a", "skill-A", 1000L, "same answer"));
+            repository.saveInteraction(makeRecord("rec-b", "skill-B", 2000L, "same answer"));
+            stubClient.responseText = "same answer";
+
+            // 两 skill 共用同一 templateHash → 同一 groupKey，任何前缀都同时命中两个标签
+            String prefix = groupKeyOf("skill-A").substring(0, 8);
+            // 歧义在 run 内部显式抛出（生产侧由 ReplayCommand 兜底转退出码 2）
+            assertThrows(IllegalStateException.class, () -> runner.run("new prompt", prefix, 3, null, false));
+            assertEquals(0, stubClient.callCount, "歧义路径不得发起任何 LLM 调用");
+        }
+
+        @Test
+        @DisplayName("groupKey 前缀零命中 → 走「未找到用例」退出码 2")
+        void prefixNoMatch_fallsThroughToNoCases() {
+            seedOneSkill();
+
+            int exit = runner.run("new prompt", "chat:zzzz", 3, null, false);
+
+            assertEquals(2, exit);
+            assertTrue(output.toString().contains("chat:zzzz"));
+            assertEquals(0, stubClient.callCount);
+        }
     }
 
     @Nested
@@ -288,6 +315,46 @@ class ReplayFlowTest {
             output.reset();
             int exit = runner.run("new prompt", null, 3, null, false);
             assertEquals(0, exit, "重建后重放恢复全绿: " + output);
+        }
+
+        @Test
+        @DisplayName("分组失败的记录被告警并剔出判定集，不产生无守卫判定")
+        void ungroupableRecord_warnedAndExcluded() {
+            // 正常记录在前，损坏记录在后（两个无工具名的工具调用会让分组器在排序比较时抛异常）
+            repository.saveInteraction(makeRecord("rec-good-1", "skill-1", 1000L, "same answer"));
+            repository.saveInteraction(makeRecord("rec-good-2", "skill-1", 1500L, "same answer"));
+            InteractionRecord poisoned = makeRecord("rec-bad-1", "skill-1", 3000L, "same answer");
+            List<ToolCall> brokenCalls = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                ToolCall broken = new ToolCall();
+                broken.setArguments(Collections.<String, Object>emptyMap());
+                brokenCalls.add(broken);
+            }
+            poisoned.setToolCalls(brokenCalls);
+            poisoned.setHasToolCalls(true);
+            repository.saveInteraction(poisoned);
+            stubClient.responseText = "same answer";
+
+            int exit = runner.run("new prompt", null, 3, null, false);
+
+            String report = output.toString();
+            assertTrue(report.contains("分组失败"), "无法核验语义的记录必须显式告警: " + report);
+            assertTrue(report.contains("rec-bad-1"), "告警必须点名被剔除的记录");
+            assertEquals(0, exit, "剩余可判定用例应全 PASS");
+            assertEquals(2, stubClient.callCount, "被剔除记录不得参与判定");
+        }
+
+        @Test
+        @DisplayName("配置未指定模型时按客户端默认模型比对——默认模型与录制模型不一致必须告警")
+        void modelWarn_coversDefaultModelWhenConfigNull() {
+            InteractionRecord r = makeRecord("rec-m1", "skill-1", 1000L, "same answer");
+            r.setModel("gpt-4o-recorded");
+            repository.saveInteraction(r);
+            stubClient.responseText = "same answer";
+
+            runner.run("new prompt", null, 3, null, false);
+
+            assertTrue(output.toString().contains("警告：重放模型"), "config.model 缺省时必须以客户端默认模型参与比对（此前该场景是告警盲区）: " + output);
         }
     }
 

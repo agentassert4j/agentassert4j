@@ -48,7 +48,7 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     private static void setNullableLong(PreparedStatement ps, int index, Long value) throws SQLException {
-        if (value == null) ps.setNull(index, Types.INTEGER);
+        if (value == null) ps.setNull(index, Types.BIGINT);
         else ps.setLong(index, value);
     }
 
@@ -84,8 +84,10 @@ public class SqliteStorageRepository implements StorageRepository {
         return connection;
     }
 
+    // initialize/close 与写路径共用实例监视器：flush 进行中不得关闭或置换连接，
+    // 否则并发线程会在 prepareStatement 处踩到 null 连接
     @Override
-    public void initialize() {
+    public synchronized void initialize() {
         try {
             if (dbPath != null && !dbPath.startsWith(":")) {
                 File parent = new File(dbPath).getParentFile();
@@ -111,7 +113,7 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         if (connection != null) {
             try {
                 connection.close();
@@ -170,9 +172,27 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setString(i++, r.getMetadata());
             ps.setString(i++, r.getRecorderVersion());
             ps.executeUpdate();
+            persistTemplateTextQuietly(r);
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "saveInteraction failed", e);
             throw new StorageException("saveInteraction", e);
+        }
+    }
+
+    /**
+     * 模板文本随行归档：捕获侧在记录上携带的模板原文（瞬态字段，不对应
+     * interactions 列）以 templateHash 为键写入 prompt_texts，供 status 巡检
+     * 展示基线面对的模板原文。同 hash 首写为准；文本写失败只降级不拖累
+     * 交互记录本身——旁路数据永不阻塞主数据。
+     */
+    private void persistTemplateTextQuietly(InteractionRecord r) {
+        if (r.getTemplateText() == null || r.getTemplateText().isEmpty() || r.getTemplateHash() == null || r.getTemplateHash().isEmpty()) {
+            return;
+        }
+        try {
+            saveTemplateText(r.getTemplateHash(), r.getTemplateText());
+        } catch (RuntimeException e) {
+            LOG.log(Level.WARNING, "template text persist skipped for " + r.getRecordId(), e);
         }
     }
 
@@ -193,6 +213,11 @@ public class SqliteStorageRepository implements StorageRepository {
             throw new StorageException("saveInteractions", e);
         } catch (StorageException e) {
             // 子操作已带失败语义；整批回滚后原样上抛，避免双重包装丢失定位信息
+            rollbackQuietly();
+            throw e;
+        } catch (RuntimeException e) {
+            // 运行时异常同样必须先显式回滚：finally 恢复 autoCommit 在 sqlite-jdbc
+            // 下对未决事务是隐式提交，不回滚就会把半批数据落盘、破坏整批原子性
             rollbackQuietly();
             throw e;
         } finally {
@@ -315,7 +340,9 @@ public class SqliteStorageRepository implements StorageRepository {
 
     @Override
     public synchronized void saveTemplateText(String hash, String templateText) {
-        String sql = "INSERT OR REPLACE INTO prompt_texts (prompt_hash, prompt_text, created_at) VALUES (?,?,?)";
+        // INSERT OR IGNORE：同 hash 首写为准（模板文本由内容哈希定键，覆盖写只会
+        // 带来逐批写放大与 created_at 漂移），交互主数据的落库不受影响
+        String sql = "INSERT OR IGNORE INTO prompt_texts (prompt_hash, prompt_text, created_at) VALUES (?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, hash);
             ps.setString(2, templateText);

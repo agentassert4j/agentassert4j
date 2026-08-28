@@ -54,12 +54,24 @@ public class BaselineService {
 
             List<InteractionRecord> records = repository.findBySkillId(skillId);
             if (force) {
-                // 重建只需任一该 skill 的录制（取存储规范序首条，与首次建立的取材一致）；
+                if (hadBaseline) {
+                    // 破坏性操作必须留痕：被覆盖的旧基线不进入归档，事后无法回滚
+                    out.println("  警告：skill " + skillId + " 的既有基线 " + existing.getVersionTag() + "（审批人 " + existing.getApprovedBy() + "）将被覆盖，旧基线不进入归档、无法回滚。");
+                }
+                // 重建只需任一该 skill 的可分组录制（取存储规范序，与首次建立的取材一致）；
                 // 逐条调用会让版本标签随记录数连跳
-                manager.reestablishBaseline(records.get(0), actor);
+                InteractionRecord material = firstGroupableRecord(records);
+                if (material != null) {
+                    manager.reestablishBaseline(material, actor);
+                }
             } else {
                 for (InteractionRecord record : records) {
-                    manager.autoEstablishBaseline(record, actor);
+                    try {
+                        manager.autoEstablishBaseline(record, actor);
+                    } catch (RuntimeException e) {
+                        // 单条分组失败不拦截其余记录——与录制 enrich 的单条容错同哲学，
+                        // 无法归组的记录由重放守卫统一告警并剔除
+                    }
                 }
             }
 
@@ -76,13 +88,27 @@ public class BaselineService {
     }
 
     /**
-     * 该业务标签下首条记录（存储规范序）对应的分组键；无记录返回 null。
+     * 该业务标签下首条可分组记录（存储规范序）对应的分组键；无可分组记录返回 null。
      */
     String groupKeyOfFirstRecord(String skillId) {
         List<InteractionRecord> records = repository.findBySkillId(skillId);
-        if (records.isEmpty()) {
-            return null;
+        InteractionRecord first = firstGroupableRecord(records);
+        return first != null ? DeterministicSkillGrouper.group(first).getGroupKey() : null;
+    }
+
+    /**
+     * 返回列表中第一条能被分组器处理的记录——个别损坏记录（如工具名缺失）
+     * 跳过处理，不让单条数据问题中断整个 skill 的建档。
+     */
+    private static InteractionRecord firstGroupableRecord(List<InteractionRecord> records) {
+        for (InteractionRecord record : records) {
+            try {
+                DeterministicSkillGrouper.group(record);
+                return record;
+            } catch (RuntimeException e) {
+                // 单条分组失败，试下一条
+            }
         }
-        return DeterministicSkillGrouper.group(records.get(0)).getGroupKey();
+        return null;
     }
 }

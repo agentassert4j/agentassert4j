@@ -35,6 +35,7 @@ public class StatusCommand implements Callable<Integer> {
             System.out.println("groupKey                                              状态       版本   候选");
             for (SkillProfile profile : profiles) {
                 System.out.printf("  %-50s %-9s %-6s %s%n", profile.getGroupKey(), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "有" : "-");
+                printTemplateText(repository, profile.getGroupKey());
             }
 
             List<String> uncovered = uncoveredBusinessTags(repository, profiles);
@@ -51,6 +52,30 @@ public class StatusCommand implements Callable<Integer> {
             if (repository != null) {
                 repository.close();
             }
+        }
+    }
+
+    /**
+     * 模板文本巡检：chat 类基线的模板原文在录制时随记录归档进 prompt_texts
+     * （以 templateHash 为键），这里回放给审阅者——审批面对的模板一目了然。
+     * 文本缺席（老数据或 userInput 锚点的会话）静默跳过，不阻断巡检。
+     */
+    private static void printTemplateText(StorageRepository repository, String groupKey) {
+        if (groupKey == null || !groupKey.startsWith("chat:")) {
+            return;
+        }
+        String text;
+        try {
+            text = repository.findTemplateText(groupKey.substring("chat:".length()));
+        } catch (RuntimeException e) {
+            return;
+        }
+        if (text == null || text.trim().isEmpty()) {
+            return;
+        }
+        System.out.println("      └ 模板原文：");
+        for (String line : text.replace("\r\n", "\n").split("\n", -1)) {
+            System.out.println("        " + line);
         }
     }
 

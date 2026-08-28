@@ -22,7 +22,8 @@ import java.util.Map;
  *   "recorder": { "batchSize": 100, "flushIntervalMs": 5000 },
  *   "regression": { "ignorableFields": ["debugInfo", "timestamp"] },
  *   "llm": { "apiKey": "${AGENTASSERT_API_KEY}", "endpoint": "...", "model": "gpt-4o",
- *            "extraBody": "\"thinking\":{\"type\":\"disabled\"}" }, *   "tools": { "excludeFromGraph": ["read_file", "edit_file", "bash"] }
+ *            "extraBody": "\"thinking\":{\"type\":\"disabled\"}" },
+ *   "tools": { "excludeFromGraph": ["read_file", "edit_file", "bash"] }
  * }
  * </pre>
  *

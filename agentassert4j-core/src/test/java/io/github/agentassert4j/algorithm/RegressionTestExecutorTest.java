@@ -63,6 +63,20 @@ class RegressionTestExecutorTest {
     }
 
     @Test
+    void buildReplayRequest_skipsSystemTurns() {
+        // 系统提示属模板域由 systemPrompt 承载：历史轮里的 system 帧注入会产生第二条 system 消息
+        InteractionRecord baseline = makeBaseline("hash", "input");
+        baseline.setPreviousTurns(Arrays.asList(new TurnContext("user", "q1"), new TurnContext("system", "old system prompt"), new TurnContext("assistant", "a1")));
+
+        LlmRequest request = executor.buildReplayRequest(baseline, "prompt", TestExecutionConfig.defaults());
+
+        assertNotNull(request.getPreviousTurns());
+        assertEquals(2, request.getPreviousTurns().size());
+        assertEquals("user", request.getPreviousTurns().get(0).getRole());
+        assertEquals("assistant", request.getPreviousTurns().get(1).getRole());
+    }
+
+    @Test
     void buildReplayRequest_setsModelFromConfig() {
         InteractionRecord baseline = makeBaseline("hash", "input");
         TestExecutionConfig config = new TestExecutionConfig().model("deepseek-chat");
@@ -171,6 +185,20 @@ class RegressionTestExecutorTest {
         assertEquals(TestResultStatus.API_ERROR, result.getStatus());
         assertEquals("rec-1", result.getBaselineRecordId());
         assertTrue(result.getErrorMessage().contains("API error"));
+    }
+
+    @Test
+    void execute_clientRuntimeException_returnsErrorResultNotEscaped() {
+        // 客户端实现的编程错误（NPE/非法状态等）同样转单条 ERROR，不向批量调用方逃逸
+        InteractionRecord baseline = makeBaseline("hash", "input");
+        stubClient.throwRuntime = true;
+
+        TestExecutionConfig config = TestExecutionConfig.defaults();
+        RegressionTestResult result = executor.execute(baseline, "new prompt", config);
+
+        assertEquals(TestResultStatus.ERROR, result.getStatus());
+        assertEquals("rec-1", result.getBaselineRecordId());
+        assertTrue(result.getErrorMessage().contains("IllegalStateException"), "错误消息必须携带异常类型: " + result.getErrorMessage());
     }
 
     @Test
@@ -483,6 +511,7 @@ class RegressionTestExecutorTest {
         LlmResponse response;
         boolean throwTimeout = false;
         boolean throwApiError = false;
+        boolean throwRuntime = false;
         int callCount = 0;
         long lastTimeoutMs = 0;
 
@@ -492,6 +521,7 @@ class RegressionTestExecutorTest {
             lastTimeoutMs = timeoutMs;
             if (throwTimeout) throw new LlmTimeoutException("timeout");
             if (throwApiError) throw new LlmApiException("API error");
+            if (throwRuntime) throw new IllegalStateException("client bug");
             return response;
         }
 

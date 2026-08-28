@@ -97,6 +97,10 @@ public class ReplayRunner {
             out.println(semanticProblem);
             return 2;
         }
+        if (cases.isEmpty()) {
+            out.println("候选记录均无法归组，未形成可判定用例集（检查录制数据的工具调用完整性）。");
+            return 2;
+        }
 
         out.println(CostEstimator.estimate(cases, llmClient.name()));
 
@@ -211,6 +215,7 @@ public class ReplayRunner {
     private String checkJudgmentSemantics(List<InteractionRecord> cases) {
         Set<String> checked = new TreeSet<>();
         List<String> problems = new ArrayList<>();
+        List<InteractionRecord> ungroupable = new ArrayList<>();
         for (InteractionRecord testCase : cases) {
             String groupKey = testCase.getGroupKey();
             if (groupKey == null || groupKey.isEmpty()) {
@@ -218,6 +223,9 @@ public class ReplayRunner {
                 try {
                     groupKey = DeterministicSkillGrouper.group(testCase).getGroupKey();
                 } catch (RuntimeException e) {
+                    // 分组失败的记录连语义校验都无法挂靠——保留在判定集里就是无守卫判定，
+                    // 按「证据不完整不允许出结论」原则剔除
+                    ungroupable.add(testCase);
                     continue;
                 }
             }
@@ -229,6 +237,14 @@ public class ReplayRunner {
                 continue;
             }
             problems.add("判定语义版本不一致：" + groupKey + " 的基线由 " + (profile.getAlgoVersion() == null ? "未标记版本" : profile.getAlgoVersion()) + " 批准，当前引擎为 " + JudgmentSemantics.VERSION + "。拒绝判定以防止静默重解释历史基线，" + "请执行 `agentassert4j baseline --force` 以当前语义重建基线。");
+        }
+        if (!ungroupable.isEmpty()) {
+            cases.removeAll(ungroupable);
+            List<String> ids = new ArrayList<>();
+            for (int i = 0; i < ungroupable.size() && i < 3; i++) {
+                ids.add(ungroupable.get(i).getRecordId());
+            }
+            out.println("警告：" + ungroupable.size() + " 条记录分组失败、无法核验其基线语义，已剔除出本次判定集：" + String.join(", ", ids) + (ungroupable.size() > ids.size() ? " 等" : ""));
         }
         return problems.isEmpty() ? null : String.join(System.lineSeparator(), problems);
     }
@@ -284,7 +300,9 @@ public class ReplayRunner {
     private void warnIfModelDiffers() {
         String configModel = executionConfig.getModel();
         if (configModel == null || configModel.isEmpty()) {
-            return;
+            // 配置未指定模型时客户端按其默认模型执行——必须比对实际生效值，
+            // 否则「默认模型 ≠ 录制模型」这一最常见换模型场景恰成告警盲区
+            configModel = llmClient.name();
         }
         Set<String> baselineModels = new TreeSet<>();
         try {
