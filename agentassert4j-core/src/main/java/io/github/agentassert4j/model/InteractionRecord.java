@@ -144,11 +144,6 @@ public class InteractionRecord {
      * 确定性分组键（DeterministicSkillGrouper 生成）
      */
     private String groupKey;
-    /**
-     * 录制时刻的确定性指纹快照（录制管道在批量写入前提取；诊断与巡检用，
-     * 重放对比时始终按当前规则重新提取，不读此快照）
-     */
-    private DeterministicFingerprint fingerprint;
 
     /**
      * 是否包含多模态输入（图片/音频/视频）
@@ -445,13 +440,6 @@ public class InteractionRecord {
         this.groupKey = groupKey;
     }
 
-    public DeterministicFingerprint getFingerprint() {
-        return fingerprint;
-    }
-
-    public void setFingerprint(DeterministicFingerprint fingerprint) {
-        this.fingerprint = fingerprint;
-    }
 
     public boolean isMultimodalInput() {
         return multimodalInput;

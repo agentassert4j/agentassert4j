@@ -68,7 +68,6 @@ final class Schema {
                     "  multimodal_input      INTEGER DEFAULT 0," +
                     "  multimodal_content    TEXT," +
                     "  previous_turns        TEXT," +
-                    "  fingerprint           TEXT," +
                     // metadata 为通用扩展列；recorder_version 标记写入方版本
                     "  metadata              TEXT," +
                     "  recorder_version      TEXT" +
@@ -100,7 +99,6 @@ final class Schema {
                     "  version_tag           TEXT," +
                     "  algo_version          TEXT," +
                     "  param_signature       TEXT," +
-                    "  sample_count          INTEGER," +
                     "  approved_by           TEXT," +
                     "  approved_at           INTEGER," +
                     "  total_records         INTEGER DEFAULT 0," +

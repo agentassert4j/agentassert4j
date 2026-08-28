@@ -2,7 +2,6 @@ package io.github.agentassert4j.recorder;
 
 import com.lmax.disruptor.EventHandler;
 import io.github.agentassert4j.algorithm.DeterministicSkillGrouper;
-import io.github.agentassert4j.algorithm.FingerprintExtractor;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.InteractionWriteStore;
@@ -176,9 +175,6 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
                     if (TextUtil.isBlank(record.getSkillId())) {
                         record.setSkillId(grouping.getSkillId());
                     }
-                }
-                if (record.getFingerprint() == null) {
-                    record.setFingerprint(FingerprintExtractor.extract(record));
                 }
             } catch (RuntimeException e) {
                 log.warn("Enrichment incomplete, record saved without derived fields: {} ({})", record.getRecordId(), e.getMessage());

@@ -1,6 +1,5 @@
 package io.github.agentassert4j.recorder;
 
-import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.model.TurnContext;
@@ -68,17 +67,12 @@ class DataSanitizerTest {
         InteractionRecord record = createTestRecord();
         record.setSkillId("skill-1");
         record.setGroupKey("gk-1");
-        DeterministicFingerprint fp = new DeterministicFingerprint();
-        fp.setOutputContentType("application/json");
-        record.setFingerprint(fp);
 
         InteractionRecord result = sanitizer.sanitize(record);
 
         assertNotSame(record, result, "有脱敏配置时必须拷贝隔离");
         assertEquals("skill-1", result.getSkillId());
         assertEquals("gk-1", result.getGroupKey(), "拷贝不得丢失分组键");
-        assertNotNull(result.getFingerprint(), "拷贝不得丢失指纹快照");
-        assertEquals("application/json", result.getFingerprint().getOutputContentType());
     }
 
     @Test

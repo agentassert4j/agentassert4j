@@ -112,7 +112,7 @@ public class ReplayRunner {
         warnIfModelDiffers();
 
         if (!ciMode && !dryRun) {
-            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), false, null);
+            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), false, null, rules);
         }
 
         // --skill 支持业务 skillId 与 groupKey 前缀两种写法（status/approve 展示的都是

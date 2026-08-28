@@ -62,7 +62,7 @@ class CliSupportResolverTest {
     }
 
     private void establishAll() {
-        new BaselineService(repository).establishMissing(new PrintStream(output), "tester", false, null);
+        new BaselineService(repository).establishMissing(new PrintStream(output), "tester", false, null, null);
     }
 
     @Test

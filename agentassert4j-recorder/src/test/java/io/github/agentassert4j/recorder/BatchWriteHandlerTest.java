@@ -1,7 +1,6 @@
 package io.github.agentassert4j.recorder;
 
 import io.github.agentassert4j.algorithm.DeterministicSkillGrouper;
-import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.ToolCall;
 import org.junit.jupiter.api.DisplayName;
@@ -45,7 +44,7 @@ class BatchWriteHandlerTest {
         }
 
         @Test
-        @DisplayName("缺失的 groupKey/指纹在落库前补全")
+        @DisplayName("缺失的 groupKey 在落库前补全")
         void flush_enrichesMissingDerivedFields() {
             InMemoryStorageRepository repo = new InMemoryStorageRepository();
             RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
@@ -57,8 +56,6 @@ class BatchWriteHandlerTest {
 
             InteractionRecord saved = repo.getStore().get(0);
             assertEquals(DeterministicSkillGrouper.group(saved).getGroupKey(), saved.getGroupKey(), "groupKey 必须由分组器补全，存储与画像才可关联");
-            assertNotNull(saved.getFingerprint(), "指纹快照必须落库前提取");
-            assertEquals("application/json", saved.getFingerprint().getOutputContentType());
         }
 
         @Test
@@ -89,7 +86,6 @@ class BatchWriteHandlerTest {
             assertEquals(2, repo.getStore().size(), "enrich 单条失败不得拦截整批落库");
             InteractionRecord savedBroken = repo.getStore().get(1);
             assertNull(savedBroken.getGroupKey(), "损坏记录的派生字段保持缺失，由存储层空串兜底");
-            assertNull(savedBroken.getFingerprint());
         }
 
         @Test
@@ -101,10 +97,6 @@ class BatchWriteHandlerTest {
 
             InteractionRecord record = enrichableRecord("r1");
             record.setGroupKey("custom-group-key");
-            DeterministicFingerprint preset = new DeterministicFingerprint();
-            preset.setOutputContentType("text/plain");
-            preset.setTextLengthMagnitude(7);
-            record.setFingerprint(preset);
 
             InteractionEvent event = new InteractionEvent();
             event.setRecord(record);
@@ -112,8 +104,6 @@ class BatchWriteHandlerTest {
 
             InteractionRecord saved = repo.getStore().get(0);
             assertEquals("custom-group-key", saved.getGroupKey());
-            assertEquals("text/plain", saved.getFingerprint().getOutputContentType());
-            assertEquals(7, saved.getFingerprint().getTextLengthMagnitude());
         }
 
         @Test
@@ -133,7 +123,6 @@ class BatchWriteHandlerTest {
             assertNotNull(saved.getSkillId(), "skillId 必须回充分组器派生 id");
             assertEquals(DeterministicSkillGrouper.group(saved).getSkillId(), saved.getSkillId());
             assertNotNull(saved.getGroupKey());
-            assertNotNull(saved.getFingerprint());
         }
     }
 

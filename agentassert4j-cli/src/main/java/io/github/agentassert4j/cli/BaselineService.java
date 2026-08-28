@@ -2,6 +2,7 @@ package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.BaselineManager;
 import io.github.agentassert4j.algorithm.DeterministicSkillGrouper;
+import io.github.agentassert4j.config.SkillRulesConfig;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageRepository;
@@ -36,9 +37,10 @@ public class BaselineService {
      *                    （判定语义版本升级后的恢复路径），版本标签按归档占用顺延
      * @param skillFilter 仅处理该业务 skillId（null = 全部；调用方经 CliSupport
      *                    预解析，groupKey 前缀已在解析层换算成业务标签）
+     * @param rules       规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
      * @return 本次新建/重建基线的 skill 数
      */
-    public int establishMissing(PrintStream out, String actor, boolean force, String skillFilter) {
+    public int establishMissing(PrintStream out, String actor, boolean force, String skillFilter, SkillRulesConfig rules) {
         BaselineManager manager = new BaselineManager(repository);
         int established = 0;
 
@@ -67,12 +69,12 @@ public class BaselineService {
                 // 逐条调用会让版本标签随记录数连跳
                 InteractionRecord material = firstGroupableRecord(records);
                 if (material != null) {
-                    manager.reestablishBaseline(material, actor);
+                    manager.reestablishBaseline(material, actor, rules);
                 }
             } else {
                 for (InteractionRecord record : records) {
                     try {
-                        manager.autoEstablishBaseline(record, actor);
+                        manager.autoEstablishBaseline(record, actor, rules);
                     } catch (RuntimeException e) {
                         // 单条分组失败不拦截其余记录——与录制 enrich 的单条容错同哲学，
                         // 无法归组的记录由重放守卫统一告警并剔除

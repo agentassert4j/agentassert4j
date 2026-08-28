@@ -1,5 +1,6 @@
 package io.github.agentassert4j.algorithm;
 
+import io.github.agentassert4j.config.SkillRulesConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.spi.StorageRepository;
 
@@ -177,8 +178,8 @@ public class BaselineManager {
      * @param record   首次录制的交互记录
      * @param approver 使该基线成为基线的操作者身份（自动建立同样留痕，纯治理元数据）
      */
-    public synchronized void autoEstablishBaseline(InteractionRecord record, String approver) {
-        establish(record, approver, false);
+    public synchronized void autoEstablishBaseline(InteractionRecord record, String approver, SkillRulesConfig rules) {
+        establish(record, approver, false, rules);
     }
 
     /**
@@ -189,13 +190,14 @@ public class BaselineManager {
      *
      * @param record   该 skill 的任一已录制交互
      * @param approver 重建操作者身份
+     * @param rules    规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
      * @throws IllegalStateException 该 Skill 无画像且无录制数据可分组时抛出
      */
-    public synchronized void reestablishBaseline(InteractionRecord record, String approver) {
-        establish(record, approver, true);
+    public synchronized void reestablishBaseline(InteractionRecord record, String approver, SkillRulesConfig rules) {
+        establish(record, approver, true, rules);
     }
 
-    private void establish(InteractionRecord record, String approver, boolean overwrite) {
+    private void establish(InteractionRecord record, String approver, boolean overwrite, SkillRulesConfig rules) {
         if (record == null || record.getSkillId() == null || record.getSkillId().isEmpty()) {
             return;
         }
@@ -214,7 +216,9 @@ public class BaselineManager {
         }
 
         // 提取指纹作为基线
-        DeterministicFingerprint fingerprint = FingerprintExtractor.extract(record);
+        // 规则口径必须与重放判定同源（三参提取注入维度 3-4）；
+        // 存档指纹只作展示与审计，任何对比一律现场重提，不消费存档值
+        DeterministicFingerprint fingerprint = FingerprintExtractor.extract(record, rules, record.getSkillId());
 
         // 以分组器产出为基底：skill_name/skill_type 等展示列来自分组的派生结果，
         // 裸画像会违反存储层的 NOT NULL 契约

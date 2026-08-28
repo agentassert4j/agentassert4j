@@ -447,7 +447,7 @@ class ReplayFlowTest {
         @DisplayName("CI 模式：基线齐备时正常判定放行")
         void ciMode_passesWhenBaselinesExist() {
             seedOneSkill();
-            new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null);
+            new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null);
             stubClient.responseText = "same answer";
 
             int exit = runner.run("new prompt", null, 3, null, false, true, true);
@@ -552,7 +552,7 @@ class ReplayFlowTest {
             b.setTemplateHash("hash-b");
             repository.saveInteraction(b);
 
-            int established = new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, "skill-a");
+            int established = new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, "skill-a", null);
 
             assertEquals(1, established);
             assertNotNull(repository.findSkillByGroupKey(groupKeyOf("skill-a")), "目标 skill 必须建档");

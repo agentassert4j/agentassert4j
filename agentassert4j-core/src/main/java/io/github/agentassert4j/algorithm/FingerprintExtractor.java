@@ -27,7 +27,7 @@ public final class FingerprintExtractor {
      * 从交互记录中提取确定性行为指纹。
      *
      * @param record 交互记录
-     * @return 四维度确定性指纹
+     * @return 四维度确定性指纹（规则维度 3-4 为空集口径）
      */
     public static DeterministicFingerprint extract(InteractionRecord record) {
         DeterministicFingerprint fp = new DeterministicFingerprint();

@@ -9,7 +9,6 @@ import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.SkillRulesConfig;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
-import io.github.agentassert4j.spi.GraphStore;
 import io.github.agentassert4j.spi.InteractionQueryStore;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
@@ -85,20 +84,6 @@ final class CliSupport {
         return skillIds;
     }
 
-    /**
-     * 加载依赖图快照；无快照或解析失败返回空图。
-     */
-    static InMemoryDependencyGraph loadGraphOrDefault(GraphStore repository) {
-        try {
-            String json = repository.loadGraph();
-            if (json != null && !json.isEmpty()) {
-                return InMemoryDependencyGraph.fromJson(json);
-            }
-        } catch (RuntimeException e) {
-            // 图是派生数据：坏快照不阻断影响分析，退化为空图（仅直接受影响 Skill）
-        }
-        return new InMemoryDependencyGraph();
-    }
 
     /**
      * 从交互记录现场重建依赖图（只读，不落盘）。

@@ -42,29 +42,6 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
-    void fingerprintColumn_roundTripsThroughStorage() {
-        InteractionRecord r = createSampleRecord("rec-fp", "session-1", "skill-1", "hash-abc");
-        DeterministicFingerprint fp = new DeterministicFingerprint();
-        fp.setOutputContentType("application/json");
-        fp.setOutputFieldPaths(new LinkedHashSet<>(Arrays.asList("data.orderId", "data.amount")));
-        fp.setTextLengthMagnitude(0);
-        r.setFingerprint(fp);
-        repo.saveInteraction(r);
-
-        InteractionRecord loaded = repo.findBySkillId("skill-1").get(0);
-        assertNotNull(loaded.getFingerprint(), "指纹快照列必须写读对称");
-        assertEquals("application/json", loaded.getFingerprint().getOutputContentType());
-        assertEquals(new LinkedHashSet<>(Arrays.asList("data.orderId", "data.amount")), loaded.getFingerprint().getOutputFieldPaths());
-    }
-
-    @Test
-    void fingerprintColumn_absentStaysNull() {
-        repo.saveInteraction(createSampleRecord("rec-nfp", "session-1", "skill-1", "hash-abc"));
-
-        assertNull(repo.findBySkillId("skill-1").get(0).getFingerprint());
-    }
-
-    @Test
     void nullModelResponse_withToolCalls_savesAndReloads() {
         // 纯工具调用的响应没有文本内容（content=null），必须可录入可重读
         InteractionRecord r = createSampleRecord("rec-toolonly", "session-1", "skill-1", "hash-abc");
@@ -583,7 +560,6 @@ class SqliteStorageRepositoryTest {
         p.setVersionTag("v2");
         p.setAlgoVersion("1.0");
         p.setParamSignature("orderId:string");
-        p.setSampleCount(7);
         p.setApprovedBy("axy-yxa");
         p.setApprovedAt(1735689600000L);
         p.setTotalRecords(10);
@@ -595,7 +571,6 @@ class SqliteStorageRepositoryTest {
         SkillProfile loaded = repo.findSkillByGroupKey("gov-key");
         assertEquals("1.0", loaded.getAlgoVersion());
         assertEquals("orderId:string", loaded.getParamSignature());
-        assertEquals(Integer.valueOf(7), loaded.getSampleCount());
         assertEquals("axy-yxa", loaded.getApprovedBy());
         assertEquals(Long.valueOf(1735689600000L), loaded.getApprovedAt());
     }

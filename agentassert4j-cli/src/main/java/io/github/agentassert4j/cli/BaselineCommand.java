@@ -1,5 +1,7 @@
 package io.github.agentassert4j.cli;
 
+import io.github.agentassert4j.config.ConfigLoader;
+import io.github.agentassert4j.config.SkillRulesConfig;
 import io.github.agentassert4j.spi.StorageRepository;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -34,7 +36,9 @@ public class BaselineCommand implements Callable<Integer> {
             repository = CliSupport.openRepository(db);
             String actor = approver != null && !approver.trim().isEmpty() ? approver.trim() : CliSupport.currentActor();
             String resolvedSkill = CliSupport.resolveBusinessSkillFilter(repository, skill, System.out);
-            int established = new BaselineService(repository).establishMissing(System.out, actor, force, resolvedSkill);
+            SkillRulesConfig rules = ConfigLoader.loadRulesConfig();
+            CliSupport.warnUnknownBehaviors(rules, System.out);
+            int established = new BaselineService(repository).establishMissing(System.out, actor, force, resolvedSkill, rules);
             System.out.println(established > 0 ? "完成：" + established + " 个 skill " + (force ? "重建" : "新建") + "基线。" : "完成：所有 skill 均已有基线。");
             return 0;
         } catch (IllegalStateException e) {

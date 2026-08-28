@@ -28,10 +28,6 @@ public class SkillProfile {
     private String paramSignature;
     private int totalRecords;
     /**
-     * 采样记录数（不加载完整记录，按需查询）
-     */
-    private int sampleCount;
-    /**
      * 当前基线指纹
      */
     private DeterministicFingerprint fingerprint;
@@ -105,13 +101,6 @@ public class SkillProfile {
         this.totalRecords = totalRecords;
     }
 
-    public int getSampleCount() {
-        return sampleCount;
-    }
-
-    public void setSampleCount(int sampleCount) {
-        this.sampleCount = sampleCount;
-    }
 
     public DeterministicFingerprint getFingerprint() {
         return fingerprint;

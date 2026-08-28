@@ -149,8 +149,6 @@ final class JsonMapper {
         p.setVersionTag(rs.getString("version_tag"));
         p.setAlgoVersion(rs.getString("algo_version"));
         p.setParamSignature(rs.getString("param_signature"));
-        int sampleCount = rs.getInt("sample_count");
-        p.setSampleCount(rs.wasNull() ? 0 : sampleCount);
         p.setApprovedBy(rs.getString("approved_by"));
         long approvedAt = rs.getLong("approved_at");
         p.setApprovedAt(rs.wasNull() ? null : approvedAt);

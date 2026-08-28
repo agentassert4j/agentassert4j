@@ -126,7 +126,7 @@ public class SqliteStorageRepository implements StorageRepository {
     @Override
     public synchronized void saveInteraction(InteractionRecord r) {
         // INSERT OR IGNORE：interactions 是只追加历史，record_id 冲突（崩溃重放双写）静默跳过
-        String sql = "INSERT OR IGNORE INTO interactions" + " (record_id, session_id, timestamp, seq," + "  template_id, template_hash, variables_fingerprint," + "  api_protocol, provider, model, served_model, endpoint," + "  skill_id, group_key, user_input, turn_index," + "  tools_definition, sampling_params, model_request_raw," + "  finish_reason, model_response, model_response_raw," + "  tool_calls, has_tool_calls," + "  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens," + "  reasoning_tokens, usage_raw, latency_ms, ttft_ms, cost_usd," + "  multimodal_input, multimodal_content, previous_turns, fingerprint," + "  metadata, recorder_version)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        String sql = "INSERT OR IGNORE INTO interactions" + " (record_id, session_id, timestamp, seq," + "  template_id, template_hash, variables_fingerprint," + "  api_protocol, provider, model, served_model, endpoint," + "  skill_id, group_key, user_input, turn_index," + "  tools_definition, sampling_params, model_request_raw," + "  finish_reason, model_response, model_response_raw," + "  tool_calls, has_tool_calls," + "  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens," + "  reasoning_tokens, usage_raw, latency_ms, ttft_ms, cost_usd," + "  multimodal_input, multimodal_content, previous_turns," + "  metadata, recorder_version)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             int i = 1;
             ps.setString(i++, r.getRecordId());
@@ -167,8 +167,6 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setInt(i++, r.isMultimodalInput() ? 1 : 0);
             ps.setString(i++, r.getMultimodalContent());
             ps.setString(i++, JsonMapper.turnsToJson(r.getPreviousTurns()));
-            // 无指纹快照保持 SQL NULL（列可空）；有则序列化存储
-            ps.setString(i++, r.getFingerprint() != null ? JsonMapper.fingerprintToJson(r.getFingerprint()) : null);
             ps.setString(i++, r.getMetadata());
             ps.setString(i++, r.getRecorderVersion());
             ps.executeUpdate();
@@ -285,7 +283,7 @@ public class SqliteStorageRepository implements StorageRepository {
 
     @Override
     public synchronized void saveSkillProfile(SkillProfile p) {
-        String sql = "INSERT OR REPLACE INTO skill_profiles" + " (skill_id, group_key, skill_name, skill_type, fingerprint," + "  candidate_fingerprint, baseline_status, version_tag," + "  algo_version, param_signature, sample_count, approved_by, approved_at," + "  total_records, updated_at)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        String sql = "INSERT OR REPLACE INTO skill_profiles" + " (skill_id, group_key, skill_name, skill_type, fingerprint," + "  candidate_fingerprint, baseline_status, version_tag," + "  algo_version, param_signature, approved_by, approved_at," + "  total_records, updated_at)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             int i = 1;
             ps.setString(i++, p.getSkillId());
@@ -298,7 +296,6 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setString(i++, p.getVersionTag());
             ps.setString(i++, p.getAlgoVersion());
             ps.setString(i++, p.getParamSignature());
-            setNullableInt(ps, i++, p.getSampleCount());
             ps.setString(i++, p.getApprovedBy());
             setNullableLong(ps, i++, p.getApprovedAt());
             ps.setInt(i++, p.getTotalRecords());
@@ -510,11 +507,6 @@ public class SqliteStorageRepository implements StorageRepository {
         String turnsJson = rs.getString("previous_turns");
         if (turnsJson != null && !turnsJson.isEmpty()) {
             r.setPreviousTurns(JsonMapper.turnsFromDb(turnsJson));
-        }
-
-        String fingerprintJson = rs.getString("fingerprint");
-        if (fingerprintJson != null && !fingerprintJson.isEmpty()) {
-            r.setFingerprint(JsonMapper.fingerprintFromDb(fingerprintJson));
         }
 
         return r;

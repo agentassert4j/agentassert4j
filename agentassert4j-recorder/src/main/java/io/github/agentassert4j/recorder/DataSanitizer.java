@@ -454,27 +454,6 @@ public class DataSanitizer {
         return value;
     }
 
-    /**
-     * 指纹深拷贝（全 setter 可变对象，共享引用会让上游事后修改穿透副本）。
-     */
-    private static io.github.agentassert4j.model.DeterministicFingerprint deepCopyFingerprint(io.github.agentassert4j.model.DeterministicFingerprint fp) {
-        if (fp == null) {
-            return null;
-        }
-        io.github.agentassert4j.model.DeterministicFingerprint copy = new io.github.agentassert4j.model.DeterministicFingerprint();
-        copy.setToolCallSet(fp.getToolCallSet() != null ? new LinkedHashSet<>(fp.getToolCallSet()) : null);
-        copy.setToolParamTypes(fp.getToolParamTypes() != null ? new LinkedHashMap<>(fp.getToolParamTypes()) : null);
-        copy.setOutputContentType(fp.getOutputContentType());
-        copy.setOutputFieldPaths(fp.getOutputFieldPaths() != null ? new LinkedHashSet<>(fp.getOutputFieldPaths()) : null);
-        copy.setOutputFieldTypeMap(fp.getOutputFieldTypeMap() != null ? new LinkedHashMap<>(fp.getOutputFieldTypeMap()) : null);
-        copy.setTextLengthMagnitude(fp.getTextLengthMagnitude());
-        copy.setRequiredKeywords(fp.getRequiredKeywords() != null ? new LinkedHashSet<>(fp.getRequiredKeywords()) : null);
-        copy.setForbiddenKeywords(fp.getForbiddenKeywords() != null ? new LinkedHashSet<>(fp.getForbiddenKeywords()) : null);
-        copy.setRegexPatterns(fp.getRegexPatterns() != null ? new ArrayList<>(fp.getRegexPatterns()) : null);
-        copy.setDeclaredBehaviors(fp.getDeclaredBehaviors() != null ? new LinkedHashSet<>(fp.getDeclaredBehaviors()) : null);
-        copy.setHasError(fp.isHasError());
-        return copy;
-    }
 
     InteractionRecord copyRecord(InteractionRecord original) {
         InteractionRecord copy = new InteractionRecord();
@@ -511,7 +490,6 @@ public class DataSanitizer {
         copy.setSessionId(original.getSessionId());
         copy.setSkillId(original.getSkillId());
         copy.setGroupKey(original.getGroupKey());
-        copy.setFingerprint(deepCopyFingerprint(original.getFingerprint()));
         copy.setMultimodalInput(original.isMultimodalInput());
         copy.setMultimodalContent(original.getMultimodalContent());
         copy.setMetadata(original.getMetadata());
