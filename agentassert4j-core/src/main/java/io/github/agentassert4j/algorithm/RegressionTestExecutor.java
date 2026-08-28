@@ -124,6 +124,11 @@ public class RegressionTestExecutor {
             result.setSkillId(baseline.getSkillId());
             result.setComparison(comparison);
             result.setCandidateFingerprint(currentFp);
+            // served 模型与 token 消耗随结果上抛：前者供精确模型身份比对，
+            // 后者供统计执行的 token 预算扣减
+            result.setServedModel(response.getServedModel());
+            result.setInputTokens(response.getInputTokens());
+            result.setOutputTokens(response.getOutputTokens());
             return result;
         } catch (RuntimeException e) {
             LOG.log(Level.SEVERE, "Post-processing failed for " + baseline.getRecordId(), e);

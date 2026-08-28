@@ -46,6 +46,10 @@ public class OpenAiCompatibleClient implements LlmClient {
      * 响应体读取上限（字节）——防异常端点拖垮客户端内存
      */
     static final int MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
+    /**
+     * 内置方言裁剪规则（数据文件驱动）：命中模型省略「发送即报错」的标准参数
+     */
+    private static final ProviderDialects DIALECTS = ProviderDialects.load();
     private final String endpoint;
     private final String apiKey;
     private final String defaultModel;
@@ -288,8 +292,9 @@ public class OpenAiCompatibleClient implements LlmClient {
         sb.append("{\"model\":\"").append(escapeJson(model)).append("\"");
 
         // temperature——null 表示不携带该成员（推理模型方言：发送 0.0 会被 400 拒绝）；
-        // 非 finite 值同样省略（JSON 无此字面量，发出即非法请求）
-        if (request.getTemperature() != null && Double.isFinite(request.getTemperature())) {
+        // 非 finite 值同样省略（JSON 无此字面量，发出即非法请求）；
+        // 方言注册表命中的模型（o 系/gpt-5 系只接受默认温度）整条裁掉
+        if (request.getTemperature() != null && Double.isFinite(request.getTemperature()) && !DIALECTS.droppedParamsFor(model).contains("temperature")) {
             sb.append(",\"temperature\":").append(request.getTemperature());
         }
 

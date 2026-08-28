@@ -70,6 +70,31 @@ class OpenAiCompatibleClientTest {
     }
 
     @Test
+    @DisplayName("方言注册表：o 系模型 temperature 整条裁掉")
+    void buildRequestBody_reasoningModel_dropsTemperature() {
+        // o 系只接受默认温度，发送 0.0 会被 400 拒绝——注册表命中即省略
+        LlmRequest request = new LlmRequest();
+        request.setTemperature(0.0);
+        request.setUserInput("test");
+
+        String body = client.buildRequestBody(request, "o3-mini");
+
+        assertFalse(body.contains("temperature"), "命中裁剪规则的模型不得携带该参数: " + body);
+    }
+
+    @Test
+    @DisplayName("方言注册表：未命中模型 temperature 照常携带")
+    void buildRequestBody_nonReasoningModel_keepsTemperature() {
+        LlmRequest request = new LlmRequest();
+        request.setTemperature(0.0);
+        request.setUserInput("test");
+
+        assertFalse(client.buildRequestBody(request, "deepseek-chat").contains("reasoning"));
+        assertTrue(client.buildRequestBody(request, "deepseek-chat").contains("\"temperature\":0.0"));
+        assertTrue(client.buildRequestBody(request, "gpt-4o").contains("\"temperature\":0.0"));
+    }
+
+    @Test
     void buildRequestBody_nullTemperature_omitsMember() {
         LlmRequest request = new LlmRequest();
         request.setTemperature(null);

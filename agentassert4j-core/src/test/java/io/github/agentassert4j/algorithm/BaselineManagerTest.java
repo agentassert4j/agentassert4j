@@ -540,8 +540,31 @@ class BaselineManagerTest {
             assertEquals(expected.getToolCallSet(), reestablished.getFingerprint().getToolCallSet());
             assertEquals(expected.getOutputContentType(), reestablished.getFingerprint().getOutputContentType());
             assertEquals(expected.getOutputFieldPaths(), reestablished.getFingerprint().getOutputFieldPaths());
-            // 首个基线被覆盖前未归档（无候选路径），此处活跃 tag 必须不与任何归档行同指纹冲突
+            // 被替换基线先归档留痕（含治理事实），rollback 可恢复——重建不再不可逆
+            ArchivedBaseline outgoing = repo.findArchivedBaseline(groupKey, firstVersion);
+            assertNotNull(outgoing);
+            assertEquals("alice", outgoing.getApprovedBy());
+            // 活跃 tag 不与任何归档行同指纹冲突
             assertNull(repo.findArchivedBaseline(groupKey, reestablished.getVersionTag()));
+        }
+
+        @Test
+        @DisplayName("重建覆盖后 rollback 恢复旧基线及其治理事实")
+        void rollbackAfterReestablish_restoresOutgoingBaseline() {
+            InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
+            manager.autoEstablishBaseline(record, "alice");
+            String groupKey = DeterministicSkillGrouper.group(record).getGroupKey();
+            String firstVersion = repo.findSkillByGroupKey(groupKey).getVersionTag();
+            Long aliceAt = repo.findSkillByGroupKey(groupKey).getApprovedAt();
+
+            manager.reestablishBaseline(record, "bob");
+            manager.rollback(groupKey, firstVersion);
+
+            SkillProfile restored = repo.findSkillByGroupKey(groupKey);
+            assertEquals(firstVersion, restored.getVersionTag());
+            assertEquals("alice", restored.getApprovedBy());
+            assertEquals(aliceAt, restored.getApprovedAt());
+            assertEquals(JudgmentSemantics.VERSION, restored.getAlgoVersion());
         }
 
         @Test

@@ -73,6 +73,10 @@ public class StatisticalRegressionExecutor {
         double costPerCall = CostEstimator.estimateCostPerCall(llmClient.name());
         int maxSamplesByCost = (int) Math.floor(config.getMaxCostPerCase() / costPerCall);
         int effectiveSampleCount = Math.min(config.getSampleCount(), maxSamplesByCost);
+        // 调用数预算在发放前截断（确定性）；token 预算需按实际消耗在采样间扣减
+        if (config.getMaxTotalCalls() > 0) {
+            effectiveSampleCount = Math.min(effectiveSampleCount, config.getMaxTotalCalls());
+        }
 
         if (effectiveSampleCount <= 0) {
             // 成本限制太严格，无法执行任何采样
@@ -87,8 +91,16 @@ public class StatisticalRegressionExecutor {
             samples = executeConcurrent(baseline, newSystemPrompt, config, effectiveSampleCount);
         } else {
             samples = new ArrayList<>(effectiveSampleCount);
+            long consumedTokens = 0;
             for (int i = 0; i < effectiveSampleCount; i++) {
-                samples.add(executeOneSample(baseline, newSystemPrompt, i + 1, config));
+                if (tokenBudgetExhausted(config, consumedTokens)) {
+                    // 预算耗尽后不再发调用，占位样本保持分母口径完整
+                    samples.add(budgetSample(i + 1, config));
+                    continue;
+                }
+                SampleResult sample = executeOneSample(baseline, newSystemPrompt, i + 1, config);
+                consumedTokens += tokensOf(sample);
+                samples.add(sample);
             }
         }
 
@@ -97,9 +109,21 @@ public class StatisticalRegressionExecutor {
         // 聚合统计
         StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(baseline.getRecordId(), baseline.getSkillId(), samples, config.getPassThreshold(), config.getRegressionTolerance());
         result.setTotalLatencyMs(totalLatency);
-        result.setEstimatedCost(samples.size() * costPerCall);
+        // 费用按实际发起的调用数估算：预算占位样本未发调用，不计入
+        int issuedCalls = samples.size() - countBudgetSamples(samples);
+        result.setEstimatedCost(issuedCalls * costPerCall);
 
         return result;
+    }
+
+    private static int countBudgetSamples(List<SampleResult> samples) {
+        int count = 0;
+        for (SampleResult sample : samples) {
+            if (sample.getErrorMessage() != null && sample.getErrorMessage().startsWith("Token 预算已耗尽")) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /**
@@ -149,7 +173,11 @@ public class StatisticalRegressionExecutor {
                 return sr;
             }
 
-            return new SampleResult(sampleIndex, single.getComparison().getVerdict(), single.getComparison().getScore(), single.getComparison().getVerdict() != Verdict.PASS ? single.getComparison().getSummary() : null, latency);
+            SampleResult judged = new SampleResult(sampleIndex, single.getComparison().getVerdict(), single.getComparison().getScore(), single.getComparison().getVerdict() != Verdict.PASS ? single.getComparison().getSummary() : null, latency);
+            // token 消耗随样本上抛，供整轮 token 预算扣减
+            judged.setInputTokens(single.getInputTokens());
+            judged.setOutputTokens(single.getOutputTokens());
+            return judged;
 
         } catch (Exception e) {
             // 防御性：任何意外异常都不中断其余采样
@@ -172,8 +200,17 @@ public class StatisticalRegressionExecutor {
 
         int batchSize = config.getConcurrency();
         List<SampleResult> allSamples = new ArrayList<>(totalCount);
+        long consumedTokens = 0;
 
         for (int batchStart = 0; batchStart < totalCount; batchStart += batchSize) {
+            if (tokenBudgetExhausted(config, consumedTokens)) {
+                // 预算耗尽：剩余槽位不再发调用，占位样本补齐分母口径
+                //（并发模式按批粒度扣减，无法逐次精确截停）
+                for (int i = batchStart; i < totalCount; i++) {
+                    allSamples.add(budgetSample(i + 1, config));
+                }
+                break;
+            }
             int batchEnd = Math.min(batchStart + batchSize, totalCount);
             int batchCount = batchEnd - batchStart;
 
@@ -204,19 +241,40 @@ public class StatisticalRegressionExecutor {
             // 收集结果：null 槽位 = 线程超时或中断未产出，计为错误样本——
             // 聚合分母必须反映实际发出的每一次采样，静默缩小会稀释错误占比
             for (int i = 0; i < batchCount; i++) {
+                SampleResult collected;
                 if (batchResults[i] != null) {
-                    allSamples.add(batchResults[i]);
+                    collected = batchResults[i];
                 } else {
-                    SampleResult lost = new SampleResult();
-                    lost.setSampleIndex(batchStart + i + 1);
-                    lost.setScore(0.0);
-                    lost.setErrorMessage("采样线程未在超时预算内返回");
-                    allSamples.add(lost);
+                    collected = new SampleResult();
+                    collected.setSampleIndex(batchStart + i + 1);
+                    collected.setScore(0.0);
+                    collected.setErrorMessage("采样线程未在超时预算内返回");
                 }
+                consumedTokens += tokensOf(collected);
+                allSamples.add(collected);
             }
         }
 
         return allSamples;
+    }
+
+    private static boolean tokenBudgetExhausted(StatisticalTestConfig config, long consumedTokens) {
+        return config.getMaxTotalTokens() > 0 && consumedTokens >= config.getMaxTotalTokens();
+    }
+
+    private static long tokensOf(SampleResult sample) {
+        return (sample.getInputTokens() != null ? sample.getInputTokens() : 0) + (sample.getOutputTokens() != null ? sample.getOutputTokens() : 0);
+    }
+
+    /**
+     * 预算耗尽后的占位样本：verdict 为空（不计入判定分母），错误消息写明预算原因。
+     */
+    private static SampleResult budgetSample(int sampleIndex, StatisticalTestConfig config) {
+        SampleResult sr = new SampleResult();
+        sr.setSampleIndex(sampleIndex);
+        sr.setScore(0.0);
+        sr.setErrorMessage("Token 预算已耗尽（maxTotalTokens=" + config.getMaxTotalTokens() + "），未发起调用");
+        return sr;
     }
 
     /**

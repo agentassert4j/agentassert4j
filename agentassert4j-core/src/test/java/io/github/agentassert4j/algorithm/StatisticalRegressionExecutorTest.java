@@ -61,6 +61,34 @@ class StatisticalRegressionExecutorTest {
     }
 
     @Test
+    void execute_maxTotalCalls_capsIssuedSamples() {
+        // 调用数预算在发放前截断：effectiveSampleCount 直接被预算收口
+        StatisticalTestConfig config = new StatisticalTestConfig();
+        config.setSampleCount(10);
+        config.setMaxTotalCalls(3);
+
+        StatisticalRegressionResult result = executor.execute(makeBaseline(), "prompt", config);
+
+        assertEquals(3, stubClient.callCount.get(), "调用数预算必须截断实际调用");
+        assertEquals(3, result.getActualSampleCount(), "预算外采样不发放也不占位");
+        assertEquals(StatisticalVerdict.STABLE, result.getStatisticalVerdict());
+    }
+
+    @Test
+    void execute_maxTotalTokens_stopsIssuingWhenExhausted() {
+        // 每次采样消耗 50+20=70 token：第 2 次后累计 140 >= 100，预算耗尽
+        StatisticalTestConfig config = new StatisticalTestConfig();
+        config.setSampleCount(10);
+        config.setMaxTotalTokens(100);
+        config.setConcurrency(1);
+
+        StatisticalRegressionResult result = executor.execute(makeBaseline(), "prompt", config);
+
+        assertEquals(2, stubClient.callCount.get(), "token 预算耗尽后不得再发调用");
+        assertEquals(10, result.getActualSampleCount());
+    }
+
+    @Test
     void execute_serial_allPass_stable() {
         stubClient.alwaysReturnToolCall = true;
         StatisticalTestConfig config = new StatisticalTestConfig();

@@ -183,8 +183,9 @@ public class BaselineManager {
 
     /**
      * 以当前判定语义重建基线——判定语义版本升级后的恢复路径。
-     * 用当前算法对既有录制重新提指纹并覆盖活跃画像，版本标签按归档占用顺延，
-     * 不触碰归档历史（回滚到旧语义版本的归档行会被重放入口的版本校验拒绝，属预期）。
+     * 用当前算法对既有录制重新提指纹并覆盖活跃画像，版本标签按归档占用顺延；
+     * 被替换的旧基线先归档留痕（含其治理事实），rollback 可恢复——恢复出的
+     * 旧语义基线会被重放入口的版本校验拒绝判定，属预期，再次重建即可。
      *
      * @param record   该 skill 的任一已录制交互
      * @param approver 重建操作者身份
@@ -205,6 +206,11 @@ public class BaselineManager {
         if (!overwrite && existing != null && existing.getFingerprint() != null) {
             // 已有基线，不覆盖
             return;
+        }
+        if (overwrite && existing != null) {
+            // 被替换基线先行归档：重建不是不可逆操作，rollback 可恢复旧语义基线
+            //（归档快照的是旧基线自身的指纹与治理事实，必须先于覆盖写入）
+            archiveIfAbsent(grouping.getGroupKey(), existing);
         }
 
         // 提取指纹作为基线

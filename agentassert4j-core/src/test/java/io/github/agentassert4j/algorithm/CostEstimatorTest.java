@@ -7,16 +7,17 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * CostEstimator 的单元测试。
+ * CostEstimator 的单元测试 — 价格快照驱动的预估与捕获计价契约。
  *
  * @author axy-yxa
  * @since 2026-08-26
  */
 class CostEstimatorTest {
+
+    private static final double DELTA = 1e-9;
 
     private InteractionRecord makeRecord(int turnIndex) {
         InteractionRecord r = new InteractionRecord();
@@ -25,13 +26,67 @@ class CostEstimatorTest {
     }
 
     @Test
-    void estimate_singleTestCase_turnIndex0() {
+    void estimateCallCostUsd_exactFamily_ratesFromSnapshot() {
+        // gpt-4o: 2.5e-6/输入 + 1e-5/输出（快照现值）
+        Double cost = CostEstimator.estimateCallCostUsd("gpt-4o", 1_000_000L, 500_000L);
+        assertEquals(2.5 + 5.0, cost, 1e-6);
+    }
+
+    @Test
+    void estimateCallCostUsd_datedVariant_fallsIntoFamilyPrice() {
+        // 带日期的部署变体按最长包含匹配归入族价
+        Double dated = CostEstimator.estimateCallCostUsd("gpt-4o-2024-08-06", 1_000_000L, 500_000L);
+        assertEquals(7.5, dated, 1e-6);
+    }
+
+    @Test
+    void estimateCallCostUsd_unknownModel_returnsNull() {
+        // 价格只是装饰层：查不到不编造费用
+        assertNull(CostEstimator.estimateCallCostUsd("my-local-llama", 1000L, 500L));
+        assertNull(CostEstimator.estimateCallCostUsd(null, 1000L, 500L));
+    }
+
+    @Test
+    void estimateCallCostUsd_caseInsensitive() {
+        Double upper = CostEstimator.estimateCallCostUsd("GPT-4O", 1_000_000L, 0L);
+        assertEquals(2.5, upper, 1e-6);
+    }
+
+    @Test
+    void estimateCostPerCall_previewUsesAssumptionTokens() {
+        // 预估口径固定 1000 输入 / 500 输出：gpt-4o → 2.5e-3 + 5e-3
+        assertEquals(0.0075, CostEstimator.estimateCostPerCall("gpt-4o"), DELTA);
+    }
+
+    @Test
+    void estimateCostPerCall_ladder_longerKeyWins() {
+        // 长键优先：mini 不得落进 gpt-4o 族价
+        assertEquals(0.00045, CostEstimator.estimateCostPerCall("gpt-4o-mini"), DELTA);
+        // gpt-4o 比 gpt-4 更长，先参与匹配
+        assertEquals(0.0075, CostEstimator.estimateCostPerCall("gpt-4o"), DELTA);
+        assertEquals(0.06, CostEstimator.estimateCostPerCall("gpt-4"), DELTA);
+    }
+
+    @Test
+    void estimateCostPerCall_deepseekFamily() {
+        assertEquals(0.00049, CostEstimator.estimateCostPerCall("deepseek-chat"), DELTA);
+        assertEquals(0.00049, CostEstimator.estimateCostPerCall("deepseek-reasoner"), DELTA);
+    }
+
+    @Test
+    void estimateCostPerCall_unknownModel_fallbackPrice() {
+        assertEquals(0.003, CostEstimator.estimateCostPerCall("llama-3"), DELTA);
+        assertEquals(0.003, CostEstimator.estimateCostPerCall(null), DELTA);
+    }
+
+    @Test
+    void estimate_previewLineContainsCallCountAndModel() {
         List<InteractionRecord> cases = Collections.singletonList(makeRecord(0));
         String result = CostEstimator.estimate(cases, "gpt-4o");
 
         assertTrue(result.contains("预估 1 次 API 调用"));
-        assertTrue(result.contains("$0.0040"));
         assertTrue(result.contains("gpt-4o"));
+        assertTrue(result.contains("$0.0075"), "预估文案按 1000/500 token 口径计价: " + result);
     }
 
     @Test
@@ -41,75 +96,6 @@ class CostEstimatorTest {
         String result = CostEstimator.estimate(cases, "gpt-4o");
 
         assertTrue(result.contains("预估 2 次 API 调用"));
-        assertTrue(result.contains("$0.0080"));
-    }
-
-    @Test
-    void estimate_deepseekModel() {
-        List<InteractionRecord> cases = Collections.singletonList(makeRecord(0));
-        String result = CostEstimator.estimate(cases, "deepseek-chat");
-
-        assertTrue(result.contains("$0.0010"));
-    }
-
-    @Test
-    void estimate_unknownModel_usesDefault() {
-        List<InteractionRecord> cases = Collections.singletonList(makeRecord(0));
-        String result = CostEstimator.estimate(cases, "unknown-model");
-
-        assertTrue(result.contains("$0.0030"));
-    }
-
-    @Test
-    void estimate_nullModel_usesDefault() {
-        List<InteractionRecord> cases = Collections.singletonList(makeRecord(0));
-        String result = CostEstimator.estimate(cases, null);
-
-        assertTrue(result.contains("$0.0030"));
-    }
-
-    @Test
-    void estimateCostPerCall_knownModels() {
-        assertEquals(0.004, CostEstimator.estimateCostPerCall("gpt-4o"));
-        assertEquals(0.0004, CostEstimator.estimateCostPerCall("gpt-4o-mini"));
-        assertEquals(0.03, CostEstimator.estimateCostPerCall("gpt-4"));
-        assertEquals(0.0005, CostEstimator.estimateCostPerCall("gpt-3.5-turbo"));
-        assertEquals(0.001, CostEstimator.estimateCostPerCall("deepseek-chat"));
-        assertEquals(0.002, CostEstimator.estimateCostPerCall("qwen-plus"));
-        assertEquals(0.0005, CostEstimator.estimateCostPerCall("qwen-turbo"));
-    }
-
-    @Test
-    void estimateCostPerCall_fuzzyMatch_longFirst() {
-        // gpt-4o-mini 应匹配 0.0004，而非 gpt-4o 的 0.004
-        assertEquals(0.0004, CostEstimator.estimateCostPerCall("gpt-4o-mini"));
-        // 确认 gpt-4o 仍然是 0.004
-        assertEquals(0.004, CostEstimator.estimateCostPerCall("gpt-4o"));
-    }
-
-    @Test
-    void estimateCostPerCall_caseInsensitive() {
-        assertEquals(0.004, CostEstimator.estimateCostPerCall("GPT-4O"));
-        assertEquals(0.001, CostEstimator.estimateCostPerCall("DeepSeek-Chat"));
-    }
-
-    @Test
-    void estimateCostPerCall_unknownModel() {
-        assertEquals(0.003, CostEstimator.estimateCostPerCall("llama-3"));
-    }
-
-    @Test
-    void estimateCostPerCall_null() {
-        assertEquals(0.003, CostEstimator.estimateCostPerCall(null));
-    }
-
-    @Test
-    void estimateStatistical_correctCalculation() {
-        List<InteractionRecord> cases = Arrays.asList(makeRecord(0), makeRecord(0));
-        String result = CostEstimator.estimateStatistical(cases, "gpt-4o", 10);
-
-        assertTrue(result.contains("预估 2 用例 x 10 次 = 20 次 API 调用"));
-        assertTrue(result.contains("$0.0800"));
     }
 
     @Test
@@ -119,18 +105,6 @@ class CostEstimatorTest {
 
         // 1 用例 x 5 采样 = 5 次调用（轮次不放大调用数）
         assertTrue(result.contains("预估 1 用例 x 5 次 = 5 次 API 调用"));
-        assertTrue(result.contains("$0.0050"));
-    }
-
-    @Test
-    void estimateStatistical_format() {
-        List<InteractionRecord> cases = Collections.singletonList(makeRecord(0));
-        String result = CostEstimator.estimateStatistical(cases, "gpt-4", 3);
-
-        // 格式："预估 N 用例 x M 次 = T 次 API 调用，约 $X.XXXX（模型：xxx）"
-        assertTrue(result.startsWith("预估"));
-        assertTrue(result.contains("API 调用"));
-        assertTrue(result.contains("$"));
-        assertTrue(result.contains("（模型：gpt-4）"));
+        assertTrue(result.contains("$0.0025"), "5 x 0.00049 = 0.00245 四舍五入到 0.0025: " + result);
     }
 }

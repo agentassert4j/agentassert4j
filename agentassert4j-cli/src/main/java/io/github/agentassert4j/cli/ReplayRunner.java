@@ -121,7 +121,7 @@ public class ReplayRunner {
         int failed = 0;
         for (InteractionRecord testCase : cases) {
             RegressionTestResult result = executor.execute(testCase, newSystemPrompt, executionConfig);
-            out.println("  [" + displayId(testCase) + "] " + testCase.getRecordId() + "  " + describe(result));
+            out.println("  [" + displayId(testCase) + "] " + testCase.getRecordId() + "  " + describe(result, testCase));
 
             ComparisonResult comparison = result.getComparison();
             if (comparison != null && result.getStatus() == TestResultStatus.SUCCESS) {
@@ -285,12 +285,26 @@ public class ReplayRunner {
         return String.valueOf(record.getSkillId());
     }
 
-    private String describe(RegressionTestResult result) {
+    private String describe(RegressionTestResult result, InteractionRecord baseline) {
         ComparisonResult comparison = result.getComparison();
         if (comparison != null) {
-            return String.format("%s  score=%.2f  %s", comparison.getVerdict(), comparison.getScore(), comparison.getSummary());
+            String line = String.format("%s  score=%.2f  %s", comparison.getVerdict(), comparison.getScore(), comparison.getSummary());
+            return line + servedModelNote(result, baseline);
         }
         return result.getStatus() + "  " + (result.getErrorMessage() != null ? result.getErrorMessage() : "");
+    }
+
+    /**
+     * 精确模型身份比对：响应报告的 served 模型与录制时不一致（版本漂移或换部署）
+     * 意味着答卷人已不同——就地标注而非阻断，判定可解释性留给使用者裁量。
+     */
+    private static String servedModelNote(RegressionTestResult result, InteractionRecord baseline) {
+        String served = result.getServedModel();
+        String recorded = baseline.getServedModel();
+        if (served == null || recorded == null || served.equals(recorded)) {
+            return "";
+        }
+        return "  〔served 模型 " + served + " ≠ 录制 " + recorded + "〕";
     }
 
     /**

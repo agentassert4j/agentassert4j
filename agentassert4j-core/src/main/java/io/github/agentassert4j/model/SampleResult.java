@@ -43,11 +43,16 @@ public class SampleResult {
      */
     private String errorMessage;
 
+    /**
+     * 本次采样消耗的输入/输出 token（null = 未成功调用或响应未报告）
+     */
+    private Integer inputTokens;
+    private Integer outputTokens;
+
     public SampleResult() {
     }
 
-    public SampleResult(int sampleIndex, Verdict verdict, double score,
-                        String diffSummary, long latencyMs) {
+    public SampleResult(int sampleIndex, Verdict verdict, double score, String diffSummary, long latencyMs) {
         this.sampleIndex = sampleIndex;
         this.verdict = verdict;
         this.score = score;
@@ -101,5 +106,21 @@ public class SampleResult {
 
     public void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
+    }
+
+    public Integer getInputTokens() {
+        return inputTokens;
+    }
+
+    public void setInputTokens(Integer inputTokens) {
+        this.inputTokens = inputTokens;
+    }
+
+    public Integer getOutputTokens() {
+        return outputTokens;
+    }
+
+    public void setOutputTokens(Integer outputTokens) {
+        this.outputTokens = outputTokens;
     }
 }

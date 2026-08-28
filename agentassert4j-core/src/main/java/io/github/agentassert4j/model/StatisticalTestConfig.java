@@ -59,6 +59,17 @@ public class StatisticalTestConfig {
      */
     private double maxCostPerCase = 1.0;
 
+    /**
+     * 整轮统计测试的 LLM 调用次数上限；0 = 不限（默认）
+     */
+    private int maxTotalCalls = 0;
+
+    /**
+     * 整轮统计测试的 token 消耗上限（输入+输出合计）；0 = 不限（默认）。
+     * 串行模式逐次扣减，并发模式按批粒度扣减
+     */
+    private long maxTotalTokens = 0;
+
     public StatisticalTestConfig() {
     }
 
@@ -85,6 +96,9 @@ public class StatisticalTestConfig {
         regressionTolerance = Math.max(0.0, Math.min(0.99, regressionTolerance));
         concurrency = Math.max(1, Math.min(10, concurrency));
         maxCostPerCase = Math.max(0.01, maxCostPerCase);
+        // 预算上限：负数按 0（不限）处理，非钳到 1——单次调用本身不受预算约束
+        maxTotalCalls = Math.max(0, maxTotalCalls);
+        maxTotalTokens = Math.max(0, maxTotalTokens);
     }
 
     public long getTimeoutMs() {
@@ -157,5 +171,21 @@ public class StatisticalTestConfig {
 
     public void setMaxCostPerCase(double maxCostPerCase) {
         this.maxCostPerCase = maxCostPerCase;
+    }
+
+    public int getMaxTotalCalls() {
+        return maxTotalCalls;
+    }
+
+    public void setMaxTotalCalls(int maxTotalCalls) {
+        this.maxTotalCalls = maxTotalCalls;
+    }
+
+    public long getMaxTotalTokens() {
+        return maxTotalTokens;
+    }
+
+    public void setMaxTotalTokens(long maxTotalTokens) {
+        this.maxTotalTokens = maxTotalTokens;
     }
 }

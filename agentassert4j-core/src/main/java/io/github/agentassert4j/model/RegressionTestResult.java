@@ -16,6 +16,15 @@ public class RegressionTestResult {
     private DeterministicFingerprint candidateFingerprint;
     private TestResultStatus status;
     private String errorMessage;
+    /**
+     * 重放响应报告的实际服务模型（null = 响应未报告或未成功调用）
+     */
+    private String servedModel;
+    /**
+     * 本次调用消耗的输入/输出 token（null = 未成功调用或响应未报告）
+     */
+    private Integer inputTokens;
+    private Integer outputTokens;
 
     public RegressionTestResult() {
         this.status = TestResultStatus.SUCCESS;
@@ -90,5 +99,29 @@ public class RegressionTestResult {
 
     public void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
+    }
+
+    public String getServedModel() {
+        return servedModel;
+    }
+
+    public void setServedModel(String servedModel) {
+        this.servedModel = servedModel;
+    }
+
+    public Integer getInputTokens() {
+        return inputTokens;
+    }
+
+    public void setInputTokens(Integer inputTokens) {
+        this.inputTokens = inputTokens;
+    }
+
+    public Integer getOutputTokens() {
+        return outputTokens;
+    }
+
+    public void setOutputTokens(Integer outputTokens) {
+        this.outputTokens = outputTokens;
     }
 }

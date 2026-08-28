@@ -356,6 +356,61 @@ class ReplayFlowTest {
 
             assertTrue(output.toString().contains("警告：重放模型"), "config.model 缺省时必须以客户端默认模型参与比对（此前该场景是告警盲区）: " + output);
         }
+
+        @Test
+        @DisplayName("served 模型与录制模型不一致 → 结果行就地标注")
+        void servedModelDiffers_annotatedInResultLine() {
+            InteractionRecord r = makeRecord("rec-s1", "skill-1", 1000L, "same answer");
+            r.setServedModel("recorded-snapshot-model");
+            repository.saveInteraction(r);
+            stubClient.responseText = "same answer";
+            stubClient.servedModel = "different-served-model";
+
+            runner.run("new prompt", null, 3, null, false);
+
+            assertTrue(output.toString().contains("served 模型 different-served-model ≠ 录制 recorded-snapshot-model"), "served 模型漂移必须就地标注: " + output);
+        }
+
+        @Test
+        @DisplayName("served 模型一致 → 不产生标注")
+        void servedModelMatches_noAnnotation() {
+            InteractionRecord r = makeRecord("rec-s2", "skill-1", 1000L, "same answer");
+            r.setServedModel("stub-served");
+            repository.saveInteraction(r);
+            stubClient.responseText = "same answer";
+            stubClient.servedModel = "stub-served";
+
+            runner.run("new prompt", null, 3, null, false);
+
+            assertFalse(output.toString().contains("served 模型"), "一致时不得误报: " + output);
+        }
+
+        @Test
+        @DisplayName("baseline --force 覆盖后 rollback 恢复旧基线与审批人")
+        void forceRebuild_thenRollbackRestoresOutgoing() {
+            seedOneSkill();
+            stubClient.responseText = "same answer";
+            runner.run("new prompt", null, 3, null, false);
+            String groupKey = groupKeyOf("skill-1");
+            String originalApprover = repository.findSkillByGroupKey(groupKey).getApprovedBy();
+
+            BaselineCommand baseline = new BaselineCommand();
+            baseline.db = tempDir.resolve("flow.db").toString();
+            baseline.approver = "rebuilder";
+            baseline.force = true;
+            assertEquals(0, baseline.call());
+            assertNotEquals(originalApprover, repository.findSkillByGroupKey(groupKey).getApprovedBy());
+
+            RollbackCommand rollback = new RollbackCommand();
+            rollback.db = tempDir.resolve("flow.db").toString();
+            rollback.skill = groupKey;
+            rollback.version = "v1";
+            assertEquals(0, rollback.call(), "force 覆盖的旧基线必须可经 rollback 恢复");
+
+            SkillProfile restored = repository.findSkillByGroupKey(groupKey);
+            assertEquals("v1", restored.getVersionTag());
+            assertEquals(originalApprover, restored.getApprovedBy());
+        }
     }
 
     /**
@@ -365,6 +420,7 @@ class ReplayFlowTest {
         String responseText;
         boolean toolCallResponse;
         int callCount;
+        String servedModel;
 
         @Override
         public LlmResponse chat(LlmRequest request, long timeoutMs) throws LlmTimeoutException, LlmApiException {
@@ -372,6 +428,7 @@ class ReplayFlowTest {
             LlmResponse response = new LlmResponse();
             response.setInputTokens(10);
             response.setOutputTokens(5);
+            response.setServedModel(servedModel);
             if (toolCallResponse) {
                 ToolCallResult tc = new ToolCallResult();
                 tc.setToolCallId("call-1");

@@ -55,8 +55,8 @@ public class BaselineService {
             List<InteractionRecord> records = repository.findBySkillId(skillId);
             if (force) {
                 if (hadBaseline) {
-                    // 破坏性操作必须留痕：被覆盖的旧基线不进入归档，事后无法回滚
-                    out.println("  警告：skill " + skillId + " 的既有基线 " + existing.getVersionTag() + "（审批人 " + existing.getApprovedBy() + "）将被覆盖，旧基线不进入归档、无法回滚。");
+                    // 破坏性操作必须留痕：被覆盖的旧基线进入归档，rollback 可恢复
+                    out.println("  警告：skill " + skillId + " 的既有基线 " + existing.getVersionTag() + "（审批人 " + existing.getApprovedBy() + "）将被当前语义重建覆盖，旧基线已归档、可用 rollback 恢复。");
                 }
                 // 重建只需任一该 skill 的可分组录制（取存储规范序，与首次建立的取材一致）；
                 // 逐条调用会让版本标签随记录数连跳

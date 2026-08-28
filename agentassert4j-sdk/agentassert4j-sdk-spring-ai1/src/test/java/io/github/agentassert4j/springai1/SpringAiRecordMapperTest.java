@@ -65,6 +65,30 @@ class SpringAiRecordMapperTest {
     class RequestMapping {
 
         @Test
+        @DisplayName("捕获补齐 apiProtocol 与冻结费用（价格表内模型）")
+        void captureFillsApiProtocolAndCost() {
+            Prompt prompt = new Prompt(List.of(new SystemMessage("你是助手"), user("你好")));
+            ChatResponse response = chatResponse("好的", "stop", 1000, 500, "gpt-4o");
+
+            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, response, 10, null, null);
+
+            assertEquals("openai-chat", record.getApiProtocol(), "落库数据协议为 OpenAI chat 形状");
+            // gpt-4o 快照价：1000*2.5e-6 + 500*1e-5 = 0.0075
+            assertEquals(0.0075, record.getCostUsd(), 1e-9);
+        }
+
+        @Test
+        @DisplayName("价格表外模型不编造费用，保持 null")
+        void captureUnknownModel_leavesCostNull() {
+            Prompt prompt = new Prompt(List.of(new SystemMessage("你是助手"), user("你好")));
+            ChatResponse response = chatResponse("好的", "stop", 1000, 500, "my-local-model");
+
+            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, response, 10, null, null);
+
+            assertNull(record.getCostUsd());
+        }
+
+        @Test
         @DisplayName("系统消息映射为 templateHash 并携带原文，不进入轮次")
         void systemMessageBecomesTemplateHash() {
             Prompt prompt = new Prompt(List.of(new SystemMessage("你是售后客服助手"), user("订单 SO-1 在哪")));

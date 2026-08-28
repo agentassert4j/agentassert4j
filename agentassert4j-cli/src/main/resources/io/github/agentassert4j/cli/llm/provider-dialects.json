@@ -1,0 +1,13 @@
+{
+  "_meta": {
+    "purpose": "发送前参数裁剪规则：模型命中 matchModelPrefix 时，dropParams 中的标准参数不写入请求体",
+    "note": "只收录「发送即报错」的方言（忽略未知参数的供应商不收录）；用户 llm.extraBody 显式配置优先于本表；发布前随供应商文档复核更新",
+    "snapshot": "2026-08-28"
+  },
+  "rules": [
+    {
+      "matchModelPrefix": ["o1", "o3", "o4", "gpt-5"],
+      "dropParams": ["temperature"]
+    }
+  ]
+}

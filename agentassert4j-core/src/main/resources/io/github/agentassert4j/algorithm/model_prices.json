@@ -1,0 +1,75 @@
+{
+  "_meta": {
+    "source": "LiteLLM model_prices_and_context_window.json (MIT)",
+    "snapshot": "2026-08-28",
+    "note": "按主流模型族裁剪；键为族名，运行期按最长包含匹配把带日期变体归入族价；发布前重新生成"
+  },
+  "gpt-5": {
+    "input": 0.00000125,
+    "output": 0.00001
+  },
+  "gpt-5-mini": {
+    "input": 2.5e-7,
+    "output": 0.000002
+  },
+  "gpt-4.1": {
+    "input": 0.000002,
+    "output": 0.000008
+  },
+  "gpt-4o": {
+    "input": 0.0000025,
+    "output": 0.00001
+  },
+  "gpt-4o-mini": {
+    "input": 1.5e-7,
+    "output": 6e-7
+  },
+  "gpt-4": {
+    "input": 0.00003,
+    "output": 0.00006
+  },
+  "gpt-3.5-turbo": {
+    "input": 5e-7,
+    "output": 0.0000015
+  },
+  "o1": {
+    "input": 0.000015,
+    "output": 0.00006
+  },
+  "o3": {
+    "input": 0.000002,
+    "output": 0.000008
+  },
+  "o4-mini": {
+    "input": 0.0000011,
+    "output": 0.0000044
+  },
+  "deepseek-chat": {
+    "input": 2.8e-7,
+    "output": 4.2e-7
+  },
+  "deepseek-reasoner": {
+    "input": 2.8e-7,
+    "output": 4.2e-7
+  },
+  "gemini-2.5-flash": {
+    "input": 3e-7,
+    "output": 0.0000025
+  },
+  "gemini-2.5-pro": {
+    "input": 0.00000125,
+    "output": 0.00001
+  },
+  "qwen-max": {
+    "input": 0.0000016,
+    "output": 0.0000064
+  },
+  "qwen-plus": {
+    "input": 4e-7,
+    "output": 0.0000012
+  },
+  "qwen-turbo": {
+    "input": 5e-8,
+    "output": 2e-7
+  }
+}

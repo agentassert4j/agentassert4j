@@ -1,5 +1,6 @@
 package io.github.agentassert4j.springai2;
 
+import io.github.agentassert4j.algorithm.CostEstimator;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.model.TurnContext;
@@ -66,6 +67,10 @@ final class SpringAiRecordMapper {
     }
 
     private static void mapRequest(Prompt prompt, InteractionRecord record) {
+        // 记录本身即 OpenAI chat 形状（system/user/tool 帧与多模态 content 数组）：
+        // apiProtocol 描述的是落库数据协议而非上游供应商
+        record.setApiProtocol("openai-chat");
+
         List<Message> instructions = prompt.getInstructions() != null ? prompt.getInstructions() : new ArrayList<Message>();
 
         List<TurnContext> turns = new ArrayList<>();
@@ -280,6 +285,11 @@ final class SpringAiRecordMapper {
                 Integer reasoning = probeReasoningTokens(usage.getNativeUsage());
                 if (reasoning != null) {
                     record.setReasoningTokens(reasoning);
+                }
+                // 调用时刻冻结的费用：价格快照查得到才算，查不到保持 null（不编造）
+                Double costUsd = CostEstimator.estimateCallCostUsd(record.getServedModel() != null ? record.getServedModel() : record.getModel(), record.getInputTokens(), record.getOutputTokens());
+                if (costUsd != null) {
+                    record.setCostUsd(costUsd);
                 }
             }
         }
