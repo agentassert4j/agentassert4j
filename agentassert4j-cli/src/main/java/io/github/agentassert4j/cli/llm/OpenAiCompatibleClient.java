@@ -42,6 +42,10 @@ public class OpenAiCompatibleClient implements LlmClient {
      * 默认重试次数（传输层失败的最大重试），供组装根构造客户端时引用
      */
     public static final int DEFAULT_MAX_RETRIES = 2;
+    /**
+     * 响应体读取上限（字节）——防异常端点拖垮客户端内存
+     */
+    static final int MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
     private final String endpoint;
     private final String apiKey;
     private final String defaultModel;
@@ -219,6 +223,10 @@ public class OpenAiCompatibleClient implements LlmClient {
         byte[] chunk = new byte[4096];
         int read;
         while ((read = stream.read(chunk)) != -1) {
+            if (buffer.size() + read > MAX_RESPONSE_BYTES) {
+                // 异常端点可能返回任意大小的响应体，无上限会拖垮客户端内存
+                throw new IOException("LLM 响应体超过 " + MAX_RESPONSE_BYTES + " 字节上限，已中止读取");
+            }
             buffer.write(chunk, 0, read);
         }
         return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
@@ -279,8 +287,9 @@ public class OpenAiCompatibleClient implements LlmClient {
         StringBuilder sb = new StringBuilder(512);
         sb.append("{\"model\":\"").append(escapeJson(model)).append("\"");
 
-        // temperature——null 表示不携带该成员（推理模型方言：发送 0.0 会被 400 拒绝）
-        if (request.getTemperature() != null) {
+        // temperature——null 表示不携带该成员（推理模型方言：发送 0.0 会被 400 拒绝）；
+        // 非 finite 值同样省略（JSON 无此字面量，发出即非法请求）
+        if (request.getTemperature() != null && Double.isFinite(request.getTemperature())) {
             sb.append(",\"temperature\":").append(request.getTemperature());
         }
 
@@ -299,13 +308,24 @@ public class OpenAiCompatibleClient implements LlmClient {
             String lastEmittedToolCallId = null;
             for (TurnContext turn : request.getPreviousTurns()) {
                 String role = turn.getRole();
+                if ("system".equals(role)) {
+                    // 系统提示属模板域，由 systemPrompt 成员承载——历史轮中的 system 帧
+                    // 混进消息序列会被服务端当作异常位置拒绝
+                    continue;
+                }
                 if ("tool".equals(role)) {
                     String callId = turn.getToolCallId();
+                    if (callId == null || callId.trim().isEmpty()) {
+                        // 缺失/空 callId 的 tool 帧必被服务端 400 拒绝整个请求——
+                        // 跳过该轮保住其余用例，丢弃事实显式告警
+                        System.err.println("警告：历史轮 tool 消息缺失 toolCallId，重放请求已跳过该轮（content 长度 " + (turn.getContent() == null ? 0 : turn.getContent().length()) + "）。");
+                        continue;
+                    }
                     // OpenAI 方言的硬约束：tool 消息必须紧跟在携带同 id tool_calls 的
                     // assistant 消息之后，否则服务端以 400 拒绝整个请求。
                     // 录制模型的历史轮没有"assistant 发起调用"的独立载体（无处存放
                     // arguments），渲染层按已知 id/toolName 合成最小合法请求帧补齐协议
-                    if (callId == null || callId.isEmpty() || !callId.equals(lastEmittedToolCallId)) {
+                    if (!callId.equals(lastEmittedToolCallId)) {
                         if (wroteAny) messages.append(",");
                         appendSyntheticAssistantToolCall(messages, turn);
                         wroteAny = true;
@@ -318,7 +338,7 @@ public class OpenAiCompatibleClient implements LlmClient {
                 messages.append("{\"role\":\"").append(escapeJson(role)).append("\"");
                 // tool 角色消息必须携带 tool_call_id 才能关联到前序 assistant 的调用决策，
                 // 缺失时服务端以 400 拒绝整个请求
-                if ("tool".equals(role) && turn.getToolCallId() != null) {
+                if ("tool".equals(role)) {
                     messages.append(",\"tool_call_id\":\"").append(escapeJson(turn.getToolCallId())).append("\"");
                 }
                 messages.append(",\"content\":\"").append(escapeJson(turn.getContent())).append("\"}");
@@ -428,17 +448,32 @@ public class OpenAiCompatibleClient implements LlmClient {
     }
 
     /**
+     * 从键名结束位置向后定位值数组的起始 '['：跳过空白与冒号。
+     * 形态不符返回 -1（交由上层按"无工具调用"处理）。
+     */
+    private static int findArrayStartAfterKey(String body, int from) {
+        int i = from;
+        while (i < body.length() && Character.isWhitespace(body.charAt(i))) i++;
+        if (i >= body.length() || body.charAt(i) != ':') return -1;
+        i++;
+        while (i < body.length() && Character.isWhitespace(body.charAt(i))) i++;
+        if (i >= body.length() || body.charAt(i) != '[') return -1;
+        return i;
+    }
+
+    /**
      * 从 JSON 中提取 tool_calls 数组。
      * 格式：[{"id":"...","type":"function","function":{"name":"...","arguments":"{...}"}}]
      */
     private List<ToolCallResult> parseToolCalls(String body) {
         List<ToolCallResult> results = new ArrayList<>();
 
-        // 找到 "tool_calls":[  的位置
-        int tcStart = body.indexOf("\"tool_calls\":[");
-        if (tcStart < 0) return results;
+        // 找到 "tool_calls" 键后容忍键与数组间的空白（部分网关会格式化响应体）
+        int keyStart = body.indexOf("\"tool_calls\"");
+        if (keyStart < 0) return results;
+        int arrStart = findArrayStartAfterKey(body, keyStart + "\"tool_calls\"".length());
+        if (arrStart < 0) return results;
 
-        int arrStart = body.indexOf('[', tcStart);
         int arrEnd = findMatchingBracket(body, arrStart);
         if (arrEnd < 0) return results;
 

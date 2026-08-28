@@ -406,4 +406,43 @@ class RecursiveJsonParserTest {
         }
         assertEquals("leaf", parsed.get("a"));
     }
+
+    @Test
+    void extractFieldPaths_emptyContainers_produceExplicitEntries() {
+        Map<String, Object> doc = (Map<String, Object>) RecursiveJsonParser.parse("{\"a\":{}, \"b\":[]}");
+        assertEquals(new HashSet<>(Arrays.asList("a", "b[]")), RecursiveJsonParser.extractFieldPaths(doc), "空对象与空数组必须留下显式路径，不能退化成空集");
+    }
+
+    @Test
+    void extractFieldTypeMap_emptyContainers_distinguishedFromNonEmpty() {
+        Map<String, Object> doc = (Map<String, Object>) RecursiveJsonParser.parse("{\"a\":{}, \"b\":[], \"c\":[1,2], \"d\":{\"x\":1}}");
+        Map<String, String> types = RecursiveJsonParser.extractFieldTypeMap(doc);
+        assertEquals("empty-object", types.get("a"));
+        assertEquals("empty-array", types.get("b[]"));
+        assertEquals("array", types.get("c[]"));
+        assertEquals("number", types.get("d.x"));
+        assertFalse(types.containsKey("d"), "非空容器自身不产生类型条目");
+    }
+
+    @Test
+    void extractPaths_structureDiff_onEmptyContainerChange_isVisible() {
+        // 历史缺陷探针：{"a":{}} 与 {"b":[]} 曾双双产出空路径集——结构差异完全不可见
+        Map<String, Object> base = (Map<String, Object>) RecursiveJsonParser.parse("{\"a\":{}}");
+        Map<String, Object> current = (Map<String, Object>) RecursiveJsonParser.parse("{\"b\":[]}");
+        Set<String> basePaths = RecursiveJsonParser.extractFieldPaths(base);
+        Set<String> currentPaths = RecursiveJsonParser.extractFieldPaths(current);
+        assertNotEquals(basePaths, currentPaths, "空容器差异必须反映在路径集上");
+    }
+
+    @Test
+    void toJson_nonFiniteDouble_writesNullInsteadOfInvalidLiteral() {
+        Map<String, Object> doc = new LinkedHashMap<>();
+        doc.put("x", Double.NaN);
+        doc.put("y", Double.NEGATIVE_INFINITY);
+        String json = RecursiveJsonParser.serialize(doc);
+        assertFalse(json.contains("NaN"), "JSON 无 NaN 字面量: " + json);
+        assertFalse(json.contains("Infinity"), "JSON 无 Infinity 字面量: " + json);
+        Object roundTripped = RecursiveJsonParser.parse(json);
+        assertNotNull(roundTripped, "非有限值写 null 后必须是合法 JSON");
+    }
 }

@@ -22,9 +22,7 @@ class SkillRulesConfigTest {
     @DisplayName("addRule 可手动添加规则")
     void addRule() {
         SkillRulesConfig config = new SkillRulesConfig();
-        SkillRulesConfig.SkillRule rule = new SkillRulesConfig.SkillRule();
-        rule.setBehaviors(Collections.singleton("testBehavior"));
-        config.addRule("mySkill", rule);
+        config.addRule("mySkill", SkillRulesConfig.fromJson("{\"skills\":{\"tmp\":{\"behaviors\":[\"testBehavior\"]}}}").getRulesForSkill("tmp"));
 
         assertTrue(config.hasRules());
         assertEquals(1, config.getDeclaredSkillIds().size());
@@ -157,43 +155,31 @@ class SkillRulesConfigTest {
     }
 
     @Nested
-    @DisplayName("SkillRule Setter 空值安全")
-    class SkillRuleSetterSafety {
+    @DisplayName("SkillRule 不可变契约")
+    class SkillRuleImmutability {
+
+        // 旧断言钉住 setter 的空值安全——setters 已随不可变化改造移除
+        // （共享 EMPTY 单例的污染风险大于 setter 便利性），改钉不可变契约
 
         @Test
-        @DisplayName("setRequiredKeywords(null) → 空集合")
-        void requiredKeywords_nullSafe() {
-            SkillRulesConfig.SkillRule rule = new SkillRulesConfig.SkillRule();
-            rule.setRequiredKeywords(null);
-            assertNotNull(rule.getRequiredKeywords());
+        @DisplayName("解析产物集合不可修改")
+        void parsedCollections_unmodifiable() {
+            SkillRulesConfig config = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"],\"behaviors\":[\"mustUseChinese\"]}}}");
+            SkillRulesConfig.SkillRule rule = config.getRulesForSkill("skill-1");
+            assertThrows(UnsupportedOperationException.class, () -> rule.getRequiredKeywords().add("x"));
+            assertThrows(UnsupportedOperationException.class, () -> rule.getBehaviors().add("x"));
+        }
+
+        @Test
+        @DisplayName("共享 EMPTY 实例无声明且不可变")
+        void sharedEmpty_hasNoDeclarations() {
+            SkillRulesConfig config = SkillRulesConfig.fromJson("{\"skills\":{}}");
+            SkillRulesConfig.SkillRule rule = config.getRulesForSkill("any-skill");
             assertTrue(rule.getRequiredKeywords().isEmpty());
-        }
-
-        @Test
-        @DisplayName("setForbiddenKeywords(null) → 空集合")
-        void forbiddenKeywords_nullSafe() {
-            SkillRulesConfig.SkillRule rule = new SkillRulesConfig.SkillRule();
-            rule.setForbiddenKeywords(null);
-            assertNotNull(rule.getForbiddenKeywords());
             assertTrue(rule.getForbiddenKeywords().isEmpty());
-        }
-
-        @Test
-        @DisplayName("setRegexPatterns(null) → 空列表")
-        void regexPatterns_nullSafe() {
-            SkillRulesConfig.SkillRule rule = new SkillRulesConfig.SkillRule();
-            rule.setRegexPatterns(null);
-            assertNotNull(rule.getRegexPatterns());
             assertTrue(rule.getRegexPatterns().isEmpty());
-        }
-
-        @Test
-        @DisplayName("setBehaviors(null) → 空集合")
-        void behaviors_nullSafe() {
-            SkillRulesConfig.SkillRule rule = new SkillRulesConfig.SkillRule();
-            rule.setBehaviors(null);
-            assertNotNull(rule.getBehaviors());
             assertTrue(rule.getBehaviors().isEmpty());
+            assertThrows(UnsupportedOperationException.class, () -> rule.getRequiredKeywords().add("x"));
         }
     }
 }

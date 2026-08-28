@@ -22,6 +22,10 @@ public final class CostEstimator {
      * 未知模型的默认值
      */
     private static final double DEFAULT_COST_PER_CALL = 0.003;
+    /**
+     * 价格表键按长度降序——模糊匹配时 "gpt-4o-mini" 必须先于 "gpt-4o" 参与
+     */
+    private static final List<String> KEYS_BY_LENGTH_DESC;
 
     static {
         Map<String, Double> map = new LinkedHashMap<>();
@@ -29,10 +33,15 @@ public final class CostEstimator {
         map.put("gpt-4o-mini", 0.0004);
         map.put("gpt-4", 0.03);
         map.put("gpt-3.5-turbo", 0.0005);
+        map.put("gpt-3.5", 0.0005);
         map.put("deepseek-chat", 0.001);
+        map.put("deepseek", 0.001);
         map.put("qwen-plus", 0.002);
         map.put("qwen-turbo", 0.0005);
         MODEL_COST = Collections.unmodifiableMap(map);
+        List<String> keys = new ArrayList<>(map.keySet());
+        keys.sort((a, b) -> Integer.compare(b.length(), a.length()));
+        KEYS_BY_LENGTH_DESC = Collections.unmodifiableList(keys);
     }
 
     private CostEstimator() {
@@ -59,7 +68,8 @@ public final class CostEstimator {
      * 按客户端名称（model name）估算单次调用成本。
      * 用于统计模式的 maxCostPerCase 截断计算。
      *
-     * <p>模糊匹配策略：先匹配长名称（如 gpt-4o-mini），再匹配短名称（如 gpt-4o）。</p>
+     * <p>模糊匹配策略：价格表键按长度降序做包含匹配（"gpt-4o-mini" 优先于 "gpt-4o"），
+     * 单一价格源即 MODEL_COST，无第二套硬编码口径。</p>
      *
      * @param clientName 客户端名称（通常是 model 名称）
      * @return 单次调用成本（美元）
@@ -67,17 +77,11 @@ public final class CostEstimator {
     public static double estimateCostPerCall(String clientName) {
         if (clientName == null) return DEFAULT_COST_PER_CALL;
         String lower = clientName.toLowerCase(Locale.ROOT);
-
-        // 先匹配长名称
-        if (lower.contains("gpt-4o-mini")) return 0.0004;
-        if (lower.contains("gpt-4o")) return 0.004;
-        if (lower.contains("gpt-4")) return 0.03;
-        if (lower.contains("gpt-3.5")) return 0.0005;
-        if (lower.contains("deepseek")) return 0.001;
-        if (lower.contains("qwen-turbo")) return 0.0005;
-        if (lower.contains("qwen")) return 0.002;
-
-        // 精确匹配已知模型表
+        for (String key : KEYS_BY_LENGTH_DESC) {
+            if (lower.contains(key)) {
+                return MODEL_COST.get(key);
+            }
+        }
         return MODEL_COST.getOrDefault(lower, DEFAULT_COST_PER_CALL);
     }
 

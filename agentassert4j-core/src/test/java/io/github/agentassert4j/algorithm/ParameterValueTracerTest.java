@@ -434,7 +434,7 @@ class ParameterValueTracerTest {
         }
 
         @Override
-        public void archiveBaseline(String skillId, io.github.agentassert4j.model.DeterministicFingerprint fp, String tag) {
+        public void archiveBaseline(io.github.agentassert4j.model.ArchivedBaseline archived) {
         }
 
         @Override

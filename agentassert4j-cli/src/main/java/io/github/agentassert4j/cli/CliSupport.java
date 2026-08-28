@@ -98,4 +98,13 @@ final class CliSupport {
         tracer.rebuildGraph(repository);
         return tracer.getGraph();
     }
+
+    /**
+     * 当前操作者身份（审批留痕的缺省来源）：user.name，缺失时显式记为 unknown
+     * 而非留下无主审批记录。
+     */
+    static String currentActor() {
+        String user = System.getProperty("user.name");
+        return user != null && !user.trim().isEmpty() ? user.trim() : "unknown";
+    }
 }

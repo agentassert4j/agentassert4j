@@ -51,7 +51,8 @@ public final class ConfigLoader {
     }
 
     /**
-     * 加载主配置。按优先级搜索配置文件，解析失败时安全退化为默认值。
+     * 加载主配置。按优先级搜索配置文件，解析失败时安全退化为默认值；
+     * 系统属性显式指定的路径不可读时抛 {@link IllegalStateException}。
      *
      * @return 主配置（永不为 null）
      */
@@ -64,7 +65,8 @@ public final class ConfigLoader {
     }
 
     /**
-     * 加载规则配置。按优先级搜索配置文件，解析失败时安全退化为空配置。
+     * 加载规则配置。按优先级搜索配置文件，解析失败时安全退化为空配置；
+     * 系统属性显式指定的路径不可读时抛 {@link IllegalStateException}。
      *
      * @return 规则配置（永不为 null）
      */
@@ -135,7 +137,8 @@ public final class ConfigLoader {
 
     /**
      * 按优先级搜索并读取配置文件。
-     * 1. 系统属性指定的路径
+     * 1. 系统属性指定的路径——显式指定的路径读不到属于配置错误，
+     * 抛 {@link IllegalStateException} 而非静默换源（用户会以为配置已生效）
      * 2. 当前工作目录
      * 3. 用户主目录下的 .agentassert4j/
      * 4. Classpath
@@ -145,7 +148,10 @@ public final class ConfigLoader {
         String explicitPath = System.getProperty(pathProperty);
         if (explicitPath != null) {
             String content = loadFromFile(explicitPath);
-            if (content != null) return content;
+            if (content == null) {
+                throw new IllegalStateException("显式指定的配置文件不可读: " + explicitPath + "（系统属性 " + pathProperty + "）");
+            }
+            return content;
         }
 
         // 2. 当前工作目录

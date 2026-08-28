@@ -134,11 +134,13 @@ class ConfigLoaderTest {
     class LoadPriority {
 
         @Test
-        @DisplayName("无配置文件 → 返回默认配置")
-        void noConfigFile_defaults() {
+        @DisplayName("显式路径不可读 → 抛 IllegalStateException")
+        void explicitPathUnreadable_failsFast() {
+            // 旧断言钉住「显式路径失败静默换源」行为——该行为会让用户以为配置已生效，
+            // 随显式路径 fail-fast 契约改写为必须显式报错
             System.setProperty(ConfigLoader.CONFIG_PATH_PROPERTY, "/nonexistent/path.json");
-            AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
-            assertNotNull(config.getStorage().getUrl());
+            IllegalStateException ex = assertThrows(IllegalStateException.class, ConfigLoader::loadAgentAssert4jConfig);
+            assertTrue(ex.getMessage().contains("/nonexistent/path.json"), "错误信息须指向显式路径: " + ex.getMessage());
         }
 
         @Test
@@ -180,11 +182,11 @@ class ConfigLoaderTest {
     class LoadRules {
 
         @Test
-        @DisplayName("无规则文件 → 空配置")
-        void noRulesFile_empty() {
+        @DisplayName("规则配置显式路径不可读 → 抛 IllegalStateException（同一 fail-fast 契约）")
+        void explicitRulesPathUnreadable_failsFast() {
+            // 同主配置：显式指定的规则路径读不到必须显式报错，不静默退化为空配置
             System.setProperty(ConfigLoader.RULES_PATH_PROPERTY, "/nonexistent/rules.json");
-            SkillRulesConfig config = ConfigLoader.loadRulesConfig();
-            assertFalse(config.hasRules());
+            assertThrows(IllegalStateException.class, ConfigLoader::loadRulesConfig);
         }
 
         @Test

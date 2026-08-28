@@ -43,10 +43,13 @@ public class TestExecutionConfig {
     /**
      * 钳位校验 — 确保所有参数在合法范围内。
      * 越界参数自动修正到最近合法值，不抛异常（退化不中断）。
+     * 非 finite 的 temperature（NaN/Infinity）没有「最近合法值」，置为 null（请求省略该成员）。
      */
     public void validate() {
         timeoutMs = Math.max(1000, timeoutMs);
-        if (temperature != null) {
+        if (temperature != null && !Double.isFinite(temperature)) {
+            temperature = null;
+        } else if (temperature != null) {
             temperature = Math.max(0.0, Math.min(2.0, temperature));
         }
     }

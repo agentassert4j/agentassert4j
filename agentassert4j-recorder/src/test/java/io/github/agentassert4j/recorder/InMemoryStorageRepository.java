@@ -1,7 +1,6 @@
 package io.github.agentassert4j.recorder;
 
 import io.github.agentassert4j.model.ArchivedBaseline;
-import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageRepository;
@@ -118,7 +117,7 @@ class InMemoryStorageRepository implements StorageRepository {
     }
 
     @Override
-    public void archiveBaseline(String skillId, DeterministicFingerprint fingerprint, String versionTag) {
+    public void archiveBaseline(ArchivedBaseline archived) {
     }
 
     @Override

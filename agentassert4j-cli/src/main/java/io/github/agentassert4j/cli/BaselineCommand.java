@@ -18,13 +18,20 @@ public class BaselineCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
     String db;
 
+    @Option(names = {"--approver"}, description = "操作者身份，随基线审批留痕（缺省取当前系统用户）")
+    String approver;
+
+    @Option(names = {"--force"}, description = "以当前判定语义重建基线：已有基线也被当前算法新指纹覆盖（判定语义升级后的恢复路径）")
+    boolean force;
+
     @Override
     public Integer call() {
         StorageRepository repository = null;
         try {
             repository = CliSupport.openRepository(db);
-            int established = new BaselineService(repository).establishMissing(System.out);
-            System.out.println(established > 0 ? "完成：" + established + " 个 skill 新建基线。" : "完成：所有 skill 均已有基线。");
+            String actor = approver != null && !approver.trim().isEmpty() ? approver.trim() : CliSupport.currentActor();
+            int established = new BaselineService(repository).establishMissing(System.out, actor, force);
+            System.out.println(established > 0 ? "完成：" + established + " 个 skill " + (force ? "重建" : "新建") + "基线。" : "完成：所有 skill 均已有基线。");
             return 0;
         } catch (RuntimeException e) {
             System.err.println("baseline 失败：" + e.getMessage());

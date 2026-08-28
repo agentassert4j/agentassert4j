@@ -2,6 +2,7 @@ package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.config.SkillRulesConfig;
 import io.github.agentassert4j.model.*;
+import io.github.agentassert4j.result.StatisticalVerdict;
 import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -43,7 +45,7 @@ class StatisticalRegressionExecutorTest {
         StatisticalRegressionResult result = executor.execute(baseline, "new prompt", config);
 
         assertEquals(1, result.getActualSampleCount());
-        assertEquals(1, stubClient.callCount);
+        assertEquals(1, stubClient.callCount.get());
     }
 
     @Test
@@ -55,7 +57,7 @@ class StatisticalRegressionExecutorTest {
         StatisticalRegressionResult result = executor.execute(makeBaseline(), "prompt", config);
 
         assertEquals(5, result.getActualSampleCount());
-        assertEquals(5, stubClient.callCount);
+        assertEquals(5, stubClient.callCount.get());
     }
 
     @Test
@@ -78,7 +80,7 @@ class StatisticalRegressionExecutorTest {
         StatisticalRegressionResult result = executor.execute(makeBaseline(), "prompt", config);
 
         assertEquals(6, result.getActualSampleCount());
-        assertEquals(6, stubClient.callCount);
+        assertEquals(6, stubClient.callCount.get());
     }
 
     @Test
@@ -109,7 +111,7 @@ class StatisticalRegressionExecutorTest {
         StatisticalRegressionResult result = executor.execute(makeBaseline(), "prompt", config);
 
         assertEquals(5, result.getActualSampleCount());
-        assertEquals(5, stubClient.callCount);
+        assertEquals(5, stubClient.callCount.get());
         // 第 3 次采样应该有 errorMessage
         boolean hasErrorSample = result.getSamples().stream().anyMatch(s -> s.getErrorMessage() != null);
         assertTrue(hasErrorSample);
@@ -131,6 +133,22 @@ class StatisticalRegressionExecutorTest {
     }
 
     @Test
+    void execute_allSamplesFail_errorSamplesFillDenominator_insufficientVerdict() {
+        // 基础设施全挂时：错误样本必须填满聚合分母（而非静默缩小分母稀释错误占比），
+        // 零可用判定样本 → INSUFFICIENT_SAMPLES，绝不放行 STABLE
+        stubClient.failEveryCall = true;
+
+        StatisticalTestConfig config = new StatisticalTestConfig();
+        config.setSampleCount(4);
+
+        StatisticalRegressionResult result = executor.execute(makeBaseline(), "prompt", config);
+
+        assertEquals(4, result.getActualSampleCount());
+        assertEquals(4, result.getErrorSampleCount(), "错误样本必须计入分母");
+        assertEquals(StatisticalVerdict.INSUFFICIENT_SAMPLES, result.getStatisticalVerdict());
+    }
+
+    @Test
     void execute_totalLatencyAndCostCalculated() {
         StatisticalTestConfig config = new StatisticalTestConfig();
         config.setSampleCount(3);
@@ -149,7 +167,7 @@ class StatisticalRegressionExecutorTest {
 
         StatisticalRegressionResult result = executor.execute(makeBaseline(), "prompt", config);
 
-        assertEquals(0, stubClient.callCount);
+        assertEquals(0, stubClient.callCount.get());
     }
 
     @Nested
@@ -217,15 +235,18 @@ class StatisticalRegressionExecutorTest {
     }
 
     static class CountingLlmClient implements LlmClient {
-        int callCount = 0;
+        // 并发采样下多线程同时计数——必须原子，否则丢失更新会让调用数断言偶发失败
+        final AtomicInteger callCount = new AtomicInteger();
         boolean alwaysReturnToolCall = false;
         Set<Integer> failOnCallNumber = Collections.emptySet();
         String failType = "timeout";
+        boolean failEveryCall = false;
 
         @Override
         public LlmResponse chat(LlmRequest request, long timeoutMs) throws LlmTimeoutException, LlmApiException {
-            callCount++;
-            if (failOnCallNumber.contains(callCount)) {
+            int nth = callCount.incrementAndGet();
+            boolean fail = failEveryCall || failOnCallNumber.contains(nth);
+            if (fail) {
                 if ("timeout".equals(failType)) throw new LlmTimeoutException("timeout");
                 throw new LlmApiException("API error");
             }
@@ -237,7 +258,7 @@ class StatisticalRegressionExecutorTest {
 
             if (alwaysReturnToolCall) {
                 ToolCallResult tc = new ToolCallResult();
-                tc.setToolCallId("call-" + callCount);
+                tc.setToolCallId("call-" + nth);
                 tc.setToolName("queryOrder");
                 tc.setArguments(Collections.singletonMap("orderId", "ORD-001"));
                 response.setToolCalls(Collections.singletonList(tc));

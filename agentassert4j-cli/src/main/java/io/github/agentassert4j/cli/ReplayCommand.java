@@ -40,7 +40,7 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--old-prompt"}, description = "变更前 System Prompt 文件路径（提供后按依赖图裁剪影响集；缺省全量选例）")
     String oldPromptPath;
 
-    @Option(names = {"--skill"}, description = "仅重放该 skillId")
+    @Option(names = {"--skill"}, description = "仅重放该 skill：业务 skillId 或 groupKey 唯一前缀（完整列表见 status 命令）")
     String skill;
 
     @Option(names = {"--max-cases"}, defaultValue = "3", description = "默认选例模式下每 skill 的用例上限（默认 3）")

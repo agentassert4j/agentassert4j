@@ -156,8 +156,10 @@ public class RegressionTestExecutor {
         request.setMultimodalInput(baseline.isMultimodalInput());
 
         // 多轮对话：注入前序轮次（完整复制——tool 角色的 toolCallId/toolName
-        // 是重放请求与原对话对齐的关联键，丢弃会导致服务端拒绝整个请求）
-        if (baseline.getTurnIndex() > 0 && baseline.getPreviousTurns() != null) {
+        // 是重放请求与原对话对齐的关联键，丢弃会导致服务端拒绝整个请求）。
+        // 判据只看前序轮次是否非空：无 user 消息收尾的会话（典型：tool 结果轮）
+        // turnIndex 为 0，但历史轮次同样必须参与重放
+        if (baseline.getPreviousTurns() != null && !baseline.getPreviousTurns().isEmpty()) {
             for (TurnContext turn : baseline.getPreviousTurns()) {
                 request.addTurn(copyTurn(turn));
             }

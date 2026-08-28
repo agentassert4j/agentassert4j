@@ -221,7 +221,14 @@ class SqliteStorageRepositoryTest {
         tools.add("toolX");
         fp.setToolCallSet(tools);
 
-        repo.archiveBaseline("sk-001", fp, "v1.0");
+        ArchivedBaseline archived = new ArchivedBaseline();
+        archived.setSkillId("sk-001");
+        archived.setFingerprint(fp);
+        archived.setVersionTag("v1.0");
+        archived.setAlgoVersion("det-v1");
+        archived.setApprovedBy("tester");
+        archived.setApprovedAt(123L);
+        repo.archiveBaseline(archived);
 
         ArchivedBaseline loaded = repo.findArchivedBaseline("sk-001", "v1.0");
         assertNotNull(loaded);
@@ -229,6 +236,11 @@ class SqliteStorageRepositoryTest {
         assertEquals("v1.0", loaded.getVersionTag());
         assertNotNull(loaded.getFingerprint());
         assertTrue(loaded.getFingerprint().getToolCallSet().contains("toolX"));
+        // 治理三列与归档时间戳写读对称
+        assertEquals("det-v1", loaded.getAlgoVersion());
+        assertEquals("tester", loaded.getApprovedBy());
+        assertEquals(Long.valueOf(123L), loaded.getApprovedAt());
+        assertTrue(loaded.getArchivedAt() > 0);
     }
 
     @Test

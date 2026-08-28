@@ -70,7 +70,7 @@ class BaselineManagerTest {
             DeterministicFingerprint candidate = profile.getCandidateFingerprint();
             repo.saveSkillProfile(profile);
 
-            manager.approve("gk-1");
+            manager.approve("gk-1", "tester");
 
             SkillProfile updated = repo.findSkillByGroupKey("gk-1");
             assertEquals(BaselineStatus.BASELINE, updated.getBaselineStatus());
@@ -91,14 +91,14 @@ class BaselineManagerTest {
             SkillProfile profile = makeProfileWithBaseline("gk-1", "skill-1");
             repo.saveSkillProfile(profile);
 
-            IllegalStateException ex = assertThrows(IllegalStateException.class, () -> manager.approve("gk-1"));
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () -> manager.approve("gk-1", "tester"));
             assertTrue(ex.getMessage().contains("No candidate"));
         }
 
         @Test
         @DisplayName("Skill profile 不存在 → 抛出 IllegalStateException")
         void profileNotFound_throwsException() {
-            assertThrows(IllegalStateException.class, () -> manager.approve("nonexistent"));
+            assertThrows(IllegalStateException.class, () -> manager.approve("nonexistent", "tester"));
         }
 
         @Test
@@ -113,7 +113,7 @@ class BaselineManagerTest {
             profile.setVersionTag(null);
             repo.saveSkillProfile(profile);
 
-            manager.approve("gk-1");
+            manager.approve("gk-1", "tester");
 
             // 无旧基线 → 不归档
             assertTrue(repo.archivedBaselines.isEmpty());
@@ -126,14 +126,14 @@ class BaselineManagerTest {
             // v1 → v2
             SkillProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
             repo.saveSkillProfile(profile);
-            manager.approve("gk-1");
+            manager.approve("gk-1", "tester");
 
             // 设置新候选 → v2 → v3
             SkillProfile updated = repo.findSkillByGroupKey("gk-1");
             updated.setCandidateFingerprint(new DeterministicFingerprint());
             updated.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveSkillProfile(updated);
-            manager.approve("gk-1");
+            manager.approve("gk-1", "tester");
 
             assertEquals("v3", repo.findSkillByGroupKey("gk-1").getVersionTag());
             assertEquals(2, repo.archivedBaselines.size());
@@ -188,7 +188,7 @@ class BaselineManagerTest {
             SkillProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
             DeterministicFingerprint originalBaseline = profile.getFingerprint();
             repo.saveSkillProfile(profile);
-            manager.approve("gk-1");
+            manager.approve("gk-1", "tester");
 
             // 现在 profile 是 v2，归档里有 v1
             // 再设一个候选准备回滚
@@ -227,7 +227,7 @@ class BaselineManagerTest {
         void rollback_currentBaselineAlsoArchived() {
             SkillProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
             repo.saveSkillProfile(profile);
-            manager.approve("gk-1"); // v1 → v2, 归档 v1
+            manager.approve("gk-1", "tester"); // v1 → v2, 归档 v1
 
             // v2 设候选
             SkillProfile v2 = repo.findSkillByGroupKey("gk-1");
@@ -247,13 +247,13 @@ class BaselineManagerTest {
         void rollbackThenApprove_versionTagSkipsArchived() {
             SkillProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
             repo.saveSkillProfile(profile);
-            manager.approve("gk-1"); // v1 归档，活跃 v2
+            manager.approve("gk-1", "tester"); // v1 归档，活跃 v2
 
             SkillProfile v2 = repo.findSkillByGroupKey("gk-1");
             v2.setCandidateFingerprint(new DeterministicFingerprint());
             v2.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveSkillProfile(v2);
-            manager.approve("gk-1"); // v2 归档，活跃 v3
+            manager.approve("gk-1", "tester"); // v2 归档，活跃 v3
 
             manager.rollback("gk-1", "v1"); // 活跃恢复 v1，v3 归档
 
@@ -262,7 +262,7 @@ class BaselineManagerTest {
             rolled.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveSkillProfile(rolled);
 
-            manager.approve("gk-1");
+            manager.approve("gk-1", "tester");
 
             // v2/v3 已在归档中，新基线必须跳到 v4——否则 rollback("v2") 无法区分两个不同指纹
             assertEquals("v4", repo.findSkillByGroupKey("gk-1").getVersionTag());
@@ -283,7 +283,7 @@ class BaselineManagerTest {
             InteractionRecord record = makeToolRecord("skill-new", "toolA");
             repo.saveInteraction(record);
 
-            manager.autoEstablishBaseline(record);
+            manager.autoEstablishBaseline(record, "tester");
 
             // 应该创建了 SkillProfile
             List<SkillProfile> allSkills = repo.findAllSkills();
@@ -303,11 +303,11 @@ class BaselineManagerTest {
             repo.saveInteraction(record);
 
             // 首次建立
-            manager.autoEstablishBaseline(record);
+            manager.autoEstablishBaseline(record, "tester");
             DeterministicFingerprint original = repo.findAllSkills().get(0).getFingerprint();
 
             // 再次调用
-            manager.autoEstablishBaseline(record);
+            manager.autoEstablishBaseline(record, "tester");
 
             // 基线不变
             List<SkillProfile> allSkills = repo.findAllSkills();
@@ -318,7 +318,7 @@ class BaselineManagerTest {
         @Test
         @DisplayName("null record → 安全忽略")
         void nullRecord_safeIgnore() {
-            manager.autoEstablishBaseline(null);
+            manager.autoEstablishBaseline(null, null);
             assertTrue(repo.findAllSkills().isEmpty());
         }
 
@@ -327,11 +327,11 @@ class BaselineManagerTest {
         void emptySkillId_safeIgnore() {
             InteractionRecord r = new InteractionRecord();
             r.setSkillId(null);
-            manager.autoEstablishBaseline(r);
+            manager.autoEstablishBaseline(r, "tester");
             assertTrue(repo.findAllSkills().isEmpty());
 
             r.setSkillId("");
-            manager.autoEstablishBaseline(r);
+            manager.autoEstablishBaseline(r, "tester");
             assertTrue(repo.findAllSkills().isEmpty());
         }
     }
@@ -347,7 +347,7 @@ class BaselineManagerTest {
             repo.saveSkillProfile(profile);
 
             // v1 → v2
-            manager.approve("gk-1");
+            manager.approve("gk-1", "tester");
             assertEquals("v2", repo.findSkillByGroupKey("gk-1").getVersionTag());
 
             // v2 → v3
@@ -355,7 +355,7 @@ class BaselineManagerTest {
             p.setCandidateFingerprint(new DeterministicFingerprint());
             p.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveSkillProfile(p);
-            manager.approve("gk-1");
+            manager.approve("gk-1", "tester");
             assertEquals("v3", repo.findSkillByGroupKey("gk-1").getVersionTag());
         }
     }
@@ -368,7 +368,7 @@ class BaselineManagerTest {
         @DisplayName("候选落库，状态转为 CANDIDATE，旧基线不动")
         void persistsCandidate_statusTransitions() {
             InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
-            manager.autoEstablishBaseline(record);
+            manager.autoEstablishBaseline(record, "tester");
             String groupKey = DeterministicSkillGrouper.group(record).getGroupKey();
             DeterministicFingerprint oldBaseline = repo.findSkillByGroupKey(groupKey).getFingerprint();
 
@@ -385,11 +385,11 @@ class BaselineManagerTest {
         @DisplayName("落库后 approve 在新进程可达（管道闭环）")
         void persistedCandidate_approvable() {
             InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
-            manager.autoEstablishBaseline(record);
+            manager.autoEstablishBaseline(record, "tester");
             String groupKey = DeterministicSkillGrouper.group(record).getGroupKey();
 
             manager.recordCandidate(record, new DeterministicFingerprint());
-            manager.approve(groupKey);
+            manager.approve(groupKey, "tester");
 
             assertNull(repo.findSkillByGroupKey(groupKey).getCandidateFingerprint());
         }
@@ -406,13 +406,121 @@ class BaselineManagerTest {
         @DisplayName("null 记录或 null 指纹 → 安全忽略")
         void nullArguments_safeIgnore() {
             InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
-            manager.autoEstablishBaseline(record);
+            manager.autoEstablishBaseline(record, "tester");
             String groupKey = DeterministicSkillGrouper.group(record).getGroupKey();
 
             manager.recordCandidate(null, new DeterministicFingerprint());
             manager.recordCandidate(record, null);
 
             assertNull(repo.findSkillByGroupKey(groupKey).getCandidateFingerprint());
+        }
+    }
+
+    @Nested
+    @DisplayName("治理链 - 语义版本与审批留痕")
+    class Governance {
+
+        @Test
+        @DisplayName("approve 盖上审批人、时间与当前语义版本")
+        void approveStampsGovernanceFacts() {
+            SkillProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
+            repo.saveSkillProfile(profile);
+
+            manager.approve("gk-1", "alice");
+
+            SkillProfile updated = repo.findSkillByGroupKey("gk-1");
+            assertEquals("alice", updated.getApprovedBy());
+            assertNotNull(updated.getApprovedAt());
+            assertEquals(JudgmentSemantics.VERSION, updated.getAlgoVersion());
+        }
+
+        @Test
+        @DisplayName("归档行携带旧基线自身的审批事实，新基线携带新审批人")
+        void archiveCarriesOutgoingApproval() {
+            InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
+            manager.autoEstablishBaseline(record, "alice");
+            String groupKey = DeterministicSkillGrouper.group(record).getGroupKey();
+            String firstVersion = repo.findSkillByGroupKey(groupKey).getVersionTag();
+
+            SkillProfile p = repo.findSkillByGroupKey(groupKey);
+            p.setCandidateFingerprint(new DeterministicFingerprint());
+            p.setBaselineStatus(BaselineStatus.CANDIDATE);
+            repo.saveSkillProfile(p);
+            manager.approve(groupKey, "bob");
+
+            ArchivedBaseline archived = repo.findArchivedBaseline(groupKey, firstVersion);
+            assertNotNull(archived);
+            assertEquals("alice", archived.getApprovedBy());
+            assertEquals(JudgmentSemantics.VERSION, archived.getAlgoVersion());
+            assertEquals("bob", repo.findSkillByGroupKey(groupKey).getApprovedBy());
+        }
+
+        @Test
+        @DisplayName("rollback 恢复归档行的语义版本与审批事实")
+        void rollbackRestoresGovernanceFacts() {
+            InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
+            manager.autoEstablishBaseline(record, "alice");
+            String groupKey = DeterministicSkillGrouper.group(record).getGroupKey();
+            String firstVersion = repo.findSkillByGroupKey(groupKey).getVersionTag();
+            Long aliceAt = repo.findSkillByGroupKey(groupKey).getApprovedAt();
+
+            SkillProfile p = repo.findSkillByGroupKey(groupKey);
+            p.setCandidateFingerprint(new DeterministicFingerprint());
+            p.setBaselineStatus(BaselineStatus.CANDIDATE);
+            repo.saveSkillProfile(p);
+            manager.approve(groupKey, "bob");
+
+            manager.rollback(groupKey, firstVersion);
+
+            SkillProfile restored = repo.findSkillByGroupKey(groupKey);
+            assertEquals("alice", restored.getApprovedBy());
+            assertEquals(aliceAt, restored.getApprovedAt());
+            assertEquals(JudgmentSemantics.VERSION, restored.getAlgoVersion());
+        }
+
+        @Test
+        @DisplayName("recordCandidate 不改写审批与语义版本（基线未变）")
+        void recordCandidateKeepsStamp() {
+            InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
+            manager.autoEstablishBaseline(record, "alice");
+            String groupKey = DeterministicSkillGrouper.group(record).getGroupKey();
+            Long before = repo.findSkillByGroupKey(groupKey).getApprovedAt();
+
+            manager.recordCandidate(record, new DeterministicFingerprint());
+
+            SkillProfile updated = repo.findSkillByGroupKey(groupKey);
+            assertEquals("alice", updated.getApprovedBy());
+            assertEquals(before, updated.getApprovedAt());
+        }
+
+        @Test
+        @DisplayName("reestablishBaseline 以当前语义覆盖活跃基线，版本顺延不与归档冲突")
+        void reestablishOverwritesWithCurrentSemantics() {
+            InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
+            manager.autoEstablishBaseline(record, "alice");
+            String groupKey = DeterministicSkillGrouper.group(record).getGroupKey();
+            String firstVersion = repo.findSkillByGroupKey(groupKey).getVersionTag();
+
+            manager.reestablishBaseline(record, "bob");
+
+            SkillProfile reestablished = repo.findSkillByGroupKey(groupKey);
+            assertEquals("bob", reestablished.getApprovedBy());
+            assertEquals(JudgmentSemantics.VERSION, reestablished.getAlgoVersion());
+            assertNotEquals(firstVersion, reestablished.getVersionTag());
+            // 首个基线被覆盖前未归档（无候选路径），此处活跃 tag 必须不与任何归档行同指纹冲突
+            assertNull(repo.findArchivedBaseline(groupKey, reestablished.getVersionTag()));
+        }
+
+        @Test
+        @DisplayName("自动建立基线同样留痕操作者身份")
+        void autoEstablishStampsActor() {
+            InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
+
+            manager.autoEstablishBaseline(record, "ci-bot");
+
+            String groupKey = DeterministicSkillGrouper.group(record).getGroupKey();
+            assertEquals("ci-bot", repo.findSkillByGroupKey(groupKey).getApprovedBy());
+            assertEquals(JudgmentSemantics.VERSION, repo.findSkillByGroupKey(groupKey).getAlgoVersion());
         }
     }
 }

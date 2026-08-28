@@ -1,7 +1,6 @@
 package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.model.ArchivedBaseline;
-import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageRepository;
@@ -108,13 +107,9 @@ class SimpleTestRepo implements StorageRepository {
     }
 
     @Override
-    public void archiveBaseline(String skillId, DeterministicFingerprint fingerprint, String versionTag) {
-        ArchivedBaseline ab = new ArchivedBaseline();
-        ab.setSkillId(skillId);
-        ab.setFingerprint(fingerprint);
-        ab.setVersionTag(versionTag);
-        ab.setArchivedAt(System.currentTimeMillis());
-        archivedBaselines.add(ab);
+    public void archiveBaseline(ArchivedBaseline archived) {
+        archived.setArchivedAt(System.currentTimeMillis());
+        archivedBaselines.add(archived);
     }
 
     @Override

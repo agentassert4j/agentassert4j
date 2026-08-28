@@ -48,7 +48,7 @@ public class ReplayRunner {
      * 执行重放。
      *
      * @param newSystemPrompt  新 System Prompt 全文
-     * @param skillFilter      仅重放该 skillId（null = 全部已录制 skill）
+     * @param skillFilter      仅重放该业务 skillId 或 groupKey 唯一前缀（null = 全部已录制 skill）
      * @param maxCasesPerSkill 默认选例模式下每 skill 的用例上限
      * @param oldPromptHash    变更前 Prompt 的 hash（null = 默认全量选例模式）
      * @param dryRun           只打印选例与成本预估，不调 LLM
@@ -61,7 +61,11 @@ public class ReplayRunner {
 
         warnIfModelDiffers();
 
-        new BaselineService(repository).establishMissing(out);
+        new BaselineService(repository).establishMissing(out, CliSupport.currentActor(), false);
+
+        // --skill 支持业务 skillId 与 groupKey 前缀两种写法（status/approve 展示的都是
+        // groupKey，直接粘贴是高频操作）；歧义前缀在这里显式报错
+        String resolvedSkill = resolveSkillFilter(skillFilter);
 
         // 图是派生数据：每次重放现场重建并刷新快照（CLI 单进程单写者，
         // last-writer-wins 语义安全）；分析直接用内存图，快照供 status 巡检留档
@@ -76,13 +80,21 @@ public class ReplayRunner {
                 out.println(analysis.getMessage());
                 return 2;
             }
-            cases = filterBySkill(analysis.getTestCases(), skillFilter);
+            cases = filterBySkill(analysis.getTestCases(), resolvedSkill);
         } else {
-            cases = selectTopPerSkill(skillFilter, maxCasesPerSkill);
+            cases = selectTopPerSkill(resolvedSkill, maxCasesPerSkill);
         }
 
         if (cases.isEmpty()) {
             out.println(skillFilter != null ? "未找到 skill " + skillFilter + " 的可重放用例（先录制交互或核对 skillId）。" : "未找到可重放用例（先录制交互数据）。");
+            return 2;
+        }
+
+        // 判定语义守卫：基线由不同版本的判定引擎批准时拒绝判定——
+        // 带着不匹配的标尺出结论就是对历史基线的静默重解释
+        String semanticProblem = checkJudgmentSemantics(cases);
+        if (semanticProblem != null) {
+            out.println(semanticProblem);
             return 2;
         }
 
@@ -141,6 +153,84 @@ public class ReplayRunner {
             }
         }
         return pending;
+    }
+
+    /**
+     * 解析 --skill 过滤值：与某业务 skillId 精确相等时按原义使用；
+     * 否则尝试 groupKey 唯一前缀匹配并换算回业务标签（画像上的 skillId 是
+     * 分组器派生的内部标识，与记录上的业务标签是两套体系）。完全无命中时
+     * 原样返回，由后续「未找到用例」路径兜底。
+     */
+    private String resolveSkillFilter(String filter) {
+        if (filter == null || filter.isEmpty()) {
+            return null;
+        }
+        Set<String> businessIds = CliSupport.recordedSkillIds(repository);
+        if (businessIds.contains(filter)) {
+            return filter;
+        }
+        List<SkillProfile> prefixMatches = new ArrayList<>();
+        for (SkillProfile profile : repository.findAllSkills()) {
+            if (profile.getGroupKey() != null && profile.getGroupKey().startsWith(filter)) {
+                prefixMatches.add(profile);
+            }
+        }
+        if (prefixMatches.size() > 1) {
+            List<String> keys = new ArrayList<>();
+            for (SkillProfile profile : prefixMatches) {
+                keys.add(profile.getGroupKey());
+            }
+            throw new IllegalStateException("--skill " + filter + " 前缀匹配到多个 skill：" + String.join(", ", keys) + "，请提供更长前缀。");
+        }
+        if (prefixMatches.isEmpty()) {
+            return filter;
+        }
+        String targetGroupKey = prefixMatches.get(0).getGroupKey();
+        List<String> businessMatches = new ArrayList<>();
+        for (String skillId : businessIds) {
+            List<InteractionRecord> records = repository.findBySkillId(skillId);
+            if (!records.isEmpty() && targetGroupKey.equals(DeterministicSkillGrouper.group(records.get(0)).getGroupKey())) {
+                businessMatches.add(skillId);
+            }
+        }
+        if (businessMatches.size() == 1) {
+            out.println("提示：--skill " + filter + " 按 groupKey 前缀匹配到 " + targetGroupKey + "（业务标签 " + businessMatches.get(0) + "）");
+            return businessMatches.get(0);
+        }
+        if (businessMatches.size() > 1) {
+            throw new IllegalStateException("--skill " + filter + " 对应分组覆盖多个业务标签：" + String.join(", ", businessMatches) + "，请使用确切的业务标签。");
+        }
+        return filter;
+    }
+
+    /**
+     * 校验受影响基线的判定语义版本。返回 null 表示全部一致；
+     * 否则返回拒绝信息——基线由其他版本（含未标记的历史行）批准时，
+     * 判定结论不可信，重跑 baseline --force 以当前语义重建是唯一恢复路径。
+     */
+    private String checkJudgmentSemantics(List<InteractionRecord> cases) {
+        Set<String> checked = new TreeSet<>();
+        List<String> problems = new ArrayList<>();
+        for (InteractionRecord testCase : cases) {
+            String groupKey = testCase.getGroupKey();
+            if (groupKey == null || groupKey.isEmpty()) {
+                // 未富化的记录不带 groupKey——与 recordCandidate 一致，按分组器现算
+                try {
+                    groupKey = DeterministicSkillGrouper.group(testCase).getGroupKey();
+                } catch (RuntimeException e) {
+                    continue;
+                }
+            }
+            if (groupKey == null || groupKey.isEmpty() || !checked.add(groupKey)) {
+                continue;
+            }
+            SkillProfile profile = repository.findSkillByGroupKey(groupKey);
+            if (profile == null || JudgmentSemantics.VERSION.equals(profile.getAlgoVersion())) {
+                continue;
+            }
+            problems.add("判定语义版本不一致：" + groupKey + " 的基线由 " + (profile.getAlgoVersion() == null ? "未标记版本" : profile.getAlgoVersion()) + " 批准，当前引擎为 " + JudgmentSemantics.VERSION + "。拒绝判定以防止静默重解释历史基线，" + "请执行 `agentassert4j baseline --force` 以当前语义重建基线。");
+        }
+        return problems.isEmpty() ? null : String.join(System.lineSeparator(), problems);
     }
 
     private List<InteractionRecord> selectTopPerSkill(String skillFilter, int maxCasesPerSkill) {

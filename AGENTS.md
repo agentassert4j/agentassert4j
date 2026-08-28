@@ -115,7 +115,7 @@ io.github.agentassert4j/
 ├── model/      核心数据模型（InteractionRecord, ToolCall, SkillProfile 等）
 ├── spi/        全部 SPI 接口（StorageRepository, LlmClient, RecordingInterceptor 等）
 ├── algorithm/  纯算法（SkillGrouper, FingerprintExtractor, Comparator 等）
-├── result/     判定结果模型（ComparisonResult, Verdict, DiffClassification）
+├── result/     判定结果模型（ComparisonResult, Verdict, StatisticalVerdict）
 ├── util/       纯 Java 工具（HashUtil, RecursiveJsonParser, TextDiffUtils）
 └── config/     配置加载（agentassert4j.json / agentassert4j-rules.json 解析）
 ```
@@ -377,7 +377,7 @@ sdk-spring-ai1 与 spring-boot3-starter 随 Spring AI 保持 17，不受此条�
 
 - 禁止为通过测试而削弱断言或删除测试；测试本身错误才可改，且须在提交说明中给出理由。
 - 框架正式发布前不写任何向后兼容用例（旧格式行、旧默认值迁移）；发布后兼容策略另行评审。
-- core 主代码与测试代码约 1:1.2 的规模是质量资产，不是削减对象。
+- 核心模块主代码与测试代码约 1:0.9 的规模是质量资产，不是削减对象（比例随功能演进浮动，禁止为通过测试而削测试）。
 
 ### 12.3 依赖与体积
 

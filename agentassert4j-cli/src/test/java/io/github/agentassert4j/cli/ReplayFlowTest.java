@@ -206,6 +206,89 @@ class ReplayFlowTest {
             assertEquals(2, exit);
             assertTrue(output.toString().contains("未找到可重放用例"));
         }
+
+        @Test
+        @DisplayName("--skill 接受 groupKey 前缀（与 status/approve 的用户标识一致）")
+        void skillFilter_acceptsGroupKeyPrefix() {
+            seedOneSkill();
+            stubClient.responseText = "same answer";
+
+            String prefix = groupKeyOf("skill-1").substring(0, 10);
+            int exit = runner.run("new prompt", prefix, 3, null, false);
+
+            assertEquals(0, exit, "groupKey 前缀必须解析到对应 skill: " + output);
+            assertTrue(output.toString().contains("按 groupKey 前缀匹配到"));
+            assertEquals(2, stubClient.callCount);
+        }
+    }
+
+    @Nested
+    @DisplayName("判定语义守卫")
+    class JudgmentGuard {
+
+        @Test
+        @DisplayName("基线语义版本过旧 → 拒绝判定 + 退出码 2，不消耗 LLM 调用")
+        void staleAlgoVersion_refusesJudgment() {
+            seedOneSkill();
+            stubClient.responseText = "same answer";
+            runner.run("new prompt", null, 3, null, false);
+            int callsAfterFirstRun = stubClient.callCount;
+
+            SkillProfile profile = repository.findSkillByGroupKey(groupKeyOf("skill-1"));
+            profile.setAlgoVersion("det-v0");
+            repository.saveSkillProfile(profile);
+
+            output.reset();
+            int exit = runner.run("new prompt", null, 3, null, false);
+
+            assertEquals(2, exit, "跨语义版本的判定必须被拒绝");
+            assertTrue(output.toString().contains("判定语义版本不一致"));
+            assertEquals(callsAfterFirstRun, stubClient.callCount, "拒绝路径不得发起 LLM 调用");
+        }
+
+        @Test
+        @DisplayName("未标记版本的基线同样拒绝（null 不享受豁免）")
+        void unstampedAlgoVersion_refusesJudgment() {
+            seedOneSkill();
+            stubClient.responseText = "same answer";
+            runner.run("new prompt", null, 3, null, false);
+
+            SkillProfile profile = repository.findSkillByGroupKey(groupKeyOf("skill-1"));
+            profile.setAlgoVersion(null);
+            repository.saveSkillProfile(profile);
+
+            int exit = runner.run("new prompt", null, 3, null, false);
+
+            assertEquals(2, exit);
+        }
+
+        @Test
+        @DisplayName("baseline --force 以当前语义重建后重放恢复可用")
+        void forceRebuild_restoresReplayability() {
+            seedOneSkill();
+            stubClient.responseText = "same answer";
+            runner.run("new prompt", null, 3, null, false);
+            String groupKey = groupKeyOf("skill-1");
+
+            SkillProfile profile = repository.findSkillByGroupKey(groupKey);
+            profile.setAlgoVersion("det-v0");
+            repository.saveSkillProfile(profile);
+
+            BaselineCommand baseline = new BaselineCommand();
+            baseline.db = tempDir.resolve("flow.db").toString();
+            baseline.approver = "rebuilder";
+            baseline.force = true;
+            assertEquals(0, baseline.call());
+
+            SkillProfile rebuilt = repository.findSkillByGroupKey(groupKey);
+            assertEquals("rebuilder", rebuilt.getApprovedBy());
+            assertNotNull(rebuilt.getAlgoVersion());
+            assertEquals("v2", rebuilt.getVersionTag(), "重建版本顺延，不与既有 tag 冲突");
+
+            output.reset();
+            int exit = runner.run("new prompt", null, 3, null, false);
+            assertEquals(0, exit, "重建后重放恢复全绿: " + output);
+        }
     }
 
     /**

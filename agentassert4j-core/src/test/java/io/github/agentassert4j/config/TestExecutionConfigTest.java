@@ -24,18 +24,9 @@ class TestExecutionConfigTest {
 
     @Test
     void builder_chainReturnsSameInstance() {
-        TestExecutionConfig config = new TestExecutionConfig()
-                .timeoutMs(5000)
-                .temperature(0.5)
-                .dryRun(true)
-                .model("gpt-4");
+        TestExecutionConfig config = new TestExecutionConfig().timeoutMs(5000).temperature(0.5).dryRun(true).model("gpt-4");
 
-        assertAll(
-                () -> assertEquals(5000, config.getTimeoutMs()),
-                () -> assertEquals(0.5, config.getTemperature()),
-                () -> assertTrue(config.isDryRun()),
-                () -> assertEquals("gpt-4", config.getModel())
-        );
+        assertAll(() -> assertEquals(5000, config.getTimeoutMs()), () -> assertEquals(0.5, config.getTemperature()), () -> assertTrue(config.isDryRun()), () -> assertEquals("gpt-4", config.getModel()));
     }
 
     @Test
@@ -60,15 +51,22 @@ class TestExecutionConfigTest {
     }
 
     @Test
+    void validate_nonFiniteTemperature_becomesNull() {
+        // NaN/Infinity 没有「最近合法值」——JSON 也无对应字面量，置 null 让请求省略该成员
+        TestExecutionConfig nan = new TestExecutionConfig().temperature(Double.NaN);
+        nan.validate();
+        assertNull(nan.getTemperature());
+
+        TestExecutionConfig inf = new TestExecutionConfig().temperature(Double.POSITIVE_INFINITY);
+        inf.validate();
+        assertNull(inf.getTemperature());
+    }
+
+    @Test
     void validate_validValuesUnchanged() {
-        TestExecutionConfig config = new TestExecutionConfig()
-                .timeoutMs(15000)
-                .temperature(0.7);
+        TestExecutionConfig config = new TestExecutionConfig().timeoutMs(15000).temperature(0.7);
         config.validate();
-        assertAll(
-                () -> assertEquals(15000, config.getTimeoutMs()),
-                () -> assertEquals(0.7, config.getTemperature())
-        );
+        assertAll(() -> assertEquals(15000, config.getTimeoutMs()), () -> assertEquals(0.7, config.getTemperature()));
     }
 
     @Test
@@ -79,11 +77,6 @@ class TestExecutionConfigTest {
         config.setDryRun(true);
         config.setModel("deepseek-chat");
 
-        assertAll(
-                () -> assertEquals(10000, config.getTimeoutMs()),
-                () -> assertEquals(1.0, config.getTemperature()),
-                () -> assertTrue(config.isDryRun()),
-                () -> assertEquals("deepseek-chat", config.getModel())
-        );
+        assertAll(() -> assertEquals(10000, config.getTimeoutMs()), () -> assertEquals(1.0, config.getTemperature()), () -> assertTrue(config.isDryRun()), () -> assertEquals("deepseek-chat", config.getModel()));
     }
 }

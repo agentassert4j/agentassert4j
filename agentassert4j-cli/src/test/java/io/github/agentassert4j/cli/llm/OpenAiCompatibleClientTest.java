@@ -562,4 +562,66 @@ class OpenAiCompatibleClientTest {
             assertNotNull(parsed.get("messages"));
         }
     }
+
+    @Test
+    @DisplayName("tool_calls 键与数组间有空白（格式化响应体）仍可解析")
+    void parseResponse_toolCallsWithWhitespace_stillParsed() throws Exception {
+        String json = "{\"choices\":[{\"message\":{\"content\":null," + "\"tool_calls\" : [" + "{\"id\":\"c1\",\"type\":\"function\",\"function\":{\"name\":\"queryOrder\",\"arguments\":\"{}\"}}" + "]}}]}";
+
+        LlmResponse response = client.parseResponse(json);
+
+        assertEquals(1, response.getToolCalls().size(), "键/冒号/数组间的空白必须被容忍");
+        assertEquals("queryOrder", response.getToolCalls().get(0).getToolName());
+    }
+
+    @Test
+    @DisplayName("历史轮中的 system 帧不进重放消息序列（系统提示由 systemPrompt 承载）")
+    void buildRequestBody_systemTurnInHistory_skipped() {
+        LlmRequest request = new LlmRequest();
+        request.setSystemPrompt("Current system");
+        request.setUserInput("Question");
+        request.setPreviousTurns(Arrays.asList(new TurnContext("system", "Stale system echo"), new TurnContext("user", "Previous question")));
+
+        String body = client.buildRequestBody(request, "gpt-4o");
+
+        assertFalse(body.contains("Stale system echo"), "历史 system 轮必须被跳过");
+        assertEquals(1, countOccurrences(body, "\"role\":\"system\""), "仅保留当前 systemPrompt 一帧");
+    }
+
+    @Test
+    @DisplayName("缺失 callId 的 tool 轮整帧跳过——必 400 的请求不如不发")
+    void buildRequestBody_toolTurnWithoutCallId_skippedEntirely() {
+        LlmRequest request = new LlmRequest();
+        request.setUserInput("Current");
+        request.setPreviousTurns(Arrays.asList(new TurnContext("assistant", "Let me check"), new TurnContext("tool", "tool result without id"), new TurnContext("user", "Follow up")));
+
+        String body = client.buildRequestBody(request, "gpt-4o");
+
+        assertFalse(body.contains("tool result without id"), "缺 callId 的 tool 轮必须整体跳过");
+        assertFalse(body.contains("tool_calls"), "也不得留下合成 assistant 帧（合成帧依赖该 callId）");
+        // 整体仍是合法 JSON
+        assertNotNull(RecursiveJsonParser.parse(body));
+    }
+
+    @Test
+    @DisplayName("非 finite temperature 省略成员（JSON 无此字面量）")
+    void buildRequestBody_nonFiniteTemperature_omitted() {
+        LlmRequest request = new LlmRequest();
+        request.setUserInput("q");
+        request.setTemperature(Double.NaN);
+
+        String body = client.buildRequestBody(request, "gpt-4o");
+
+        assertFalse(body.contains("temperature"), "NaN temperature 必须省略而非产出非法 JSON: " + body);
+    }
+
+    private static int countOccurrences(String text, String needle) {
+        int count = 0;
+        int idx = 0;
+        while ((idx = text.indexOf(needle, idx)) >= 0) {
+            count++;
+            idx += needle.length();
+        }
+        return count;
+    }
 }

@@ -63,9 +63,10 @@ public class BaselineManager {
      * 重试时归档去重守卫保证不产生重复归档行， approve 可安全重放。</p>
      *
      * @param groupKey Skill 的分组键（DeterministicSkillGrouper 生成的 groupKey）
+     * @param approver 审批人身份，随活跃画像与归档行留痕（纯治理元数据，永不参与判定）
      * @throws IllegalStateException 无候选指纹时抛出
      */
-    public void approve(String groupKey) {
+    public void approve(String groupKey, String approver) {
         SkillProfile profile = repository.findSkillByGroupKey(groupKey);
         if (profile == null) {
             throw new IllegalStateException("Skill profile not found: " + groupKey);
@@ -76,7 +77,8 @@ public class BaselineManager {
             throw new IllegalStateException("No candidate to approve for skill: " + groupKey);
         }
 
-        // 旧基线归档（可回溯）；回滚恢复的旧基线已在归档中，跳过避免同 tag 重复行
+        // 旧基线归档（可回溯）；回滚恢复的旧基线已在归档中，跳过避免同 tag 重复行。
+        // 归档行携带的是旧基线自身获批时的审批人与语义版本，必须先于新审批信息写入前快照
         archiveIfAbsent(groupKey, profile);
 
         // 候选提升为基线
@@ -85,6 +87,7 @@ public class BaselineManager {
         profile.setBaselineStatus(BaselineStatus.BASELINE);
         // 更新版本标签：跳过归档中已占用的 tag，保证 tag↔指纹一一对应（回滚后不产生同 tag 双指纹）
         profile.setVersionTag(nextAvailableVersionTag(groupKey, profile.getVersionTag()));
+        stampApproval(profile, approver);
         repository.saveSkillProfile(profile);
     }
 
@@ -130,11 +133,15 @@ public class BaselineManager {
         // 当前基线也归档（若该 tag 未曾归档过）
         archiveIfAbsent(groupKey, profile);
 
-        // 恢复归档基线
+        // 恢复归档基线——审批人与语义版本随基线一起回退：
+        // 活跃行的治理事实必须始终描述当前基线自身的获批历史
         profile.setFingerprint(archived.getFingerprint());
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);
         profile.setVersionTag(versionTag);
+        profile.setAlgoVersion(archived.getAlgoVersion());
+        profile.setApprovedBy(archived.getApprovedBy());
+        profile.setApprovedAt(archived.getApprovedAt());
         repository.saveSkillProfile(profile);
     }
 
@@ -167,9 +174,27 @@ public class BaselineManager {
      * 首次录制自动建立基线。
      * 如果该 Skill 已有基线，不做任何操作（幂等）。
      *
-     * @param record 首次录制的交互记录
+     * @param record   首次录制的交互记录
+     * @param approver 使该基线成为基线的操作者身份（自动建立同样留痕，纯治理元数据）
      */
-    public void autoEstablishBaseline(InteractionRecord record) {
+    public void autoEstablishBaseline(InteractionRecord record, String approver) {
+        establish(record, approver, false);
+    }
+
+    /**
+     * 以当前判定语义重建基线——判定语义版本升级后的恢复路径。
+     * 用当前算法对既有录制重新提指纹并覆盖活跃画像，版本标签按归档占用顺延，
+     * 不触碰归档历史（回滚到旧语义版本的归档行会被重放入口的版本校验拒绝，属预期）。
+     *
+     * @param record   该 skill 的任一已录制交互
+     * @param approver 重建操作者身份
+     * @throws IllegalStateException 该 Skill 无画像且无录制数据可分组时抛出
+     */
+    public void reestablishBaseline(InteractionRecord record, String approver) {
+        establish(record, approver, true);
+    }
+
+    private void establish(InteractionRecord record, String approver, boolean overwrite) {
         if (record == null || record.getSkillId() == null || record.getSkillId().isEmpty()) {
             return;
         }
@@ -177,7 +202,7 @@ public class BaselineManager {
         SkillProfile grouping = DeterministicSkillGrouper.group(record);
         SkillProfile existing = repository.findSkillByGroupKey(grouping.getGroupKey());
 
-        if (existing != null && existing.getFingerprint() != null) {
+        if (!overwrite && existing != null && existing.getFingerprint() != null) {
             // 已有基线，不覆盖
             return;
         }
@@ -191,10 +216,20 @@ public class BaselineManager {
         profile.setFingerprint(fingerprint);
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);
-        profile.setVersionTag("v1");
+        profile.setVersionTag(overwrite ? nextAvailableVersionTag(grouping.getGroupKey(), profile.getVersionTag()) : "v1");
         profile.setTotalRecords(existing != null ? existing.getTotalRecords() : 1);
+        stampApproval(profile, approver);
 
         repository.saveSkillProfile(profile);
+    }
+
+    /**
+     * 盖上审批痕迹：语义版本 + 审批人 + 时间。建立/批准/重建三条成为基线的路径共用。
+     */
+    private void stampApproval(SkillProfile profile, String approver) {
+        profile.setAlgoVersion(JudgmentSemantics.VERSION);
+        profile.setApprovedBy(approver);
+        profile.setApprovedAt(System.currentTimeMillis());
     }
 
     /**
@@ -227,7 +262,16 @@ public class BaselineManager {
             return;
         }
         if (repository.findArchivedBaseline(groupKey, profile.getVersionTag()) == null) {
-            repository.archiveBaseline(groupKey, profile.getFingerprint(), profile.getVersionTag());
+            // 归档行是该基线的完整快照：指纹、版本标签之外，语义版本与审批事实一并留痕，
+            // 回滚时据此恢复活跃行的治理信息
+            ArchivedBaseline archived = new ArchivedBaseline();
+            archived.setSkillId(groupKey);
+            archived.setFingerprint(profile.getFingerprint());
+            archived.setVersionTag(profile.getVersionTag());
+            archived.setAlgoVersion(profile.getAlgoVersion());
+            archived.setApprovedBy(profile.getApprovedBy());
+            archived.setApprovedAt(profile.getApprovedAt());
+            repository.archiveBaseline(archived);
         }
     }
 

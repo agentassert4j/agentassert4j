@@ -201,10 +201,17 @@ public class StatisticalRegressionExecutor {
                 }
             }
 
-            // 收集结果（null 说明线程超时了）
+            // 收集结果：null 槽位 = 线程超时或中断未产出，计为错误样本——
+            // 聚合分母必须反映实际发出的每一次采样，静默缩小会稀释错误占比
             for (int i = 0; i < batchCount; i++) {
                 if (batchResults[i] != null) {
                     allSamples.add(batchResults[i]);
+                } else {
+                    SampleResult lost = new SampleResult();
+                    lost.setSampleIndex(batchStart + i + 1);
+                    lost.setScore(0.0);
+                    lost.setErrorMessage("采样线程未在超时预算内返回");
+                    allSamples.add(lost);
                 }
             }
         }

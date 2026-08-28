@@ -78,7 +78,8 @@ public final class RecursiveJsonParser {
 
     /**
      * 推断每个字段路径的值类型。
-     * 返回 Map: path → 类型名（"string","number","boolean","null","object","array"）。
+     * 返回 Map: path → 类型名（"string","number","boolean","null","object","array"，
+     * 空容器为 "empty-object"/"empty-array"）。
      */
     public static Map<String, String> extractFieldTypeMap(Object json) {
         Map<String, String> typeMap = new LinkedHashMap<>();
@@ -95,7 +96,13 @@ public final class RecursiveJsonParser {
                 String path = prefix.isEmpty() ? key : prefix + "." + key;
 
                 if (val instanceof Map || val instanceof List) {
-                    collectPaths(val, path, paths);
+                    if (isEmptyContainer(val)) {
+                        // 空容器贡献显式路径条目：否则 {"a":{}} 与 {"b":[]} 都是空集，
+                        // 结构维把「字段存在但为空」误判为「无结构」
+                        paths.add(containerPath(path, val));
+                    } else {
+                        collectPaths(val, path, paths);
+                    }
                 } else {
                     paths.add(path);
                 }
@@ -107,11 +114,15 @@ public final class RecursiveJsonParser {
             for (Object item : list) {
                 if (item instanceof Map || item instanceof List) {
                     hasComplex = true;
-                    collectPaths(item, arrayPath, paths);
+                    if (isEmptyContainer(item)) {
+                        paths.add(containerPath(arrayPath, item));
+                    } else {
+                        collectPaths(item, arrayPath, paths);
+                    }
                 }
             }
-            if (!hasComplex && !list.isEmpty()) {
-                // 基本类型数组，路径就是 arrayPath
+            if (!hasComplex) {
+                // 基本类型数组与空数组都以 arrayPath 为路径（类型维区分 empty-array/array）
                 paths.add(arrayPath);
             }
         }
@@ -126,19 +137,18 @@ public final class RecursiveJsonParser {
                 String path = prefix.isEmpty() ? key : prefix + "." + key;
 
                 if (val instanceof Map) {
-                    collectTypes(val, path, typeMap);
+                    if (((Map<?, ?>) val).isEmpty()) {
+                        typeMap.put(path, "empty-object");
+                    } else {
+                        collectTypes(val, path, typeMap);
+                    }
                 } else if (val instanceof List) {
                     @SuppressWarnings("unchecked") List<Object> list = (List<Object>) val;
                     String arrayPath = path + "[]";
-                    boolean hasComplex = false;
-                    for (Object item : list) {
-                        if (item instanceof Map || item instanceof List) {
-                            hasComplex = true;
-                            collectTypes(item, arrayPath, typeMap);
-                        }
-                    }
-                    if (!hasComplex) {
-                        typeMap.put(arrayPath, "array");
+                    if (list.isEmpty()) {
+                        typeMap.put(arrayPath, "empty-array");
+                    } else {
+                        collectTypesInto(list, arrayPath, typeMap);
                     }
                 } else {
                     typeMap.put(path, typeName(val));
@@ -147,17 +157,42 @@ public final class RecursiveJsonParser {
         } else if (node instanceof List) {
             @SuppressWarnings("unchecked") List<Object> list = (List<Object>) node;
             String arrayPath = prefix + "[]";
-            boolean hasComplex = false;
-            for (Object item : list) {
-                if (item instanceof Map || item instanceof List) {
-                    hasComplex = true;
-                    collectTypes(item, arrayPath, typeMap);
-                }
-            }
-            if (!hasComplex) {
-                typeMap.put(arrayPath, "array");
+            if (list.isEmpty()) {
+                typeMap.put(arrayPath, "empty-array");
+            } else {
+                collectTypesInto(list, arrayPath, typeMap);
             }
         }
+    }
+
+    /**
+     * 非空数组的类型收集：对象/嵌套数组元素递归展开，基本类型数组记为 "array"。
+     */
+    private static void collectTypesInto(List<Object> list, String arrayPath, Map<String, String> typeMap) {
+        boolean hasComplex = false;
+        for (Object item : list) {
+            if (item instanceof Map || item instanceof List) {
+                hasComplex = true;
+                collectTypes(item, arrayPath, typeMap);
+            }
+        }
+        if (!hasComplex) {
+            typeMap.put(arrayPath, "array");
+        }
+    }
+
+    private static boolean isEmptyContainer(Object value) {
+        if (value instanceof Map) {
+            return ((Map<?, ?>) value).isEmpty();
+        }
+        if (value instanceof List) {
+            return ((List<?>) value).isEmpty();
+        }
+        return false;
+    }
+
+    private static String containerPath(String path, Object container) {
+        return container instanceof List ? path + "[]" : path;
     }
 
     private static String typeName(Object val) {
@@ -179,13 +214,23 @@ public final class RecursiveJsonParser {
             writeArray(sb, (List<?>) obj);
         } else if (obj instanceof String) {
             writeString(sb, (String) obj);
-        } else if (obj instanceof Boolean || obj instanceof Long || obj instanceof Double) {
+        } else if (obj instanceof Boolean || obj instanceof Long) {
             sb.append(obj);
+        } else if (obj instanceof Double) {
+            // JSON 无 NaN/Infinity 字面量——非有限值写 null（与主流序列化器一致），避免产出非法 JSON
+            Double d = (Double) obj;
+            if (d.isNaN() || d.isInfinite()) {
+                sb.append("null");
+            } else {
+                sb.append(d);
+            }
         } else if (obj instanceof Number) {
             // 兜底：其他 Number 子类
             Number n = (Number) obj;
             double d = n.doubleValue();
-            if (d == Math.floor(d) && !Double.isInfinite(d)) {
+            if (Double.isNaN(d) || Double.isInfinite(d)) {
+                sb.append("null");
+            } else if (d == Math.floor(d)) {
                 sb.append(n.longValue());
             } else {
                 sb.append(d);

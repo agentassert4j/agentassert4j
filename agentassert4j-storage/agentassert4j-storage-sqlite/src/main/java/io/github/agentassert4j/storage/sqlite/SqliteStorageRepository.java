@@ -1,7 +1,6 @@
 package io.github.agentassert4j.storage.sqlite;
 
 import io.github.agentassert4j.model.ArchivedBaseline;
-import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageException;
@@ -125,19 +124,7 @@ public class SqliteStorageRepository implements StorageRepository {
     @Override
     public synchronized void saveInteraction(InteractionRecord r) {
         // INSERT OR IGNORE：interactions 是只追加历史，record_id 冲突（崩溃重放双写）静默跳过
-        String sql = "INSERT OR IGNORE INTO interactions" +
-                " (record_id, session_id, timestamp, seq," +
-                "  template_id, template_hash, variables_fingerprint," +
-                "  api_protocol, provider, model, served_model, endpoint," +
-                "  skill_id, group_key, user_input, turn_index," +
-                "  tools_definition, sampling_params, model_request_raw," +
-                "  finish_reason, model_response, model_response_raw," +
-                "  tool_calls, has_tool_calls," +
-                "  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens," +
-                "  reasoning_tokens, usage_raw, latency_ms, ttft_ms, cost_usd," +
-                "  multimodal_input, multimodal_content, previous_turns, fingerprint," +
-                "  metadata, recorder_version)" +
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        String sql = "INSERT OR IGNORE INTO interactions" + " (record_id, session_id, timestamp, seq," + "  template_id, template_hash, variables_fingerprint," + "  api_protocol, provider, model, served_model, endpoint," + "  skill_id, group_key, user_input, turn_index," + "  tools_definition, sampling_params, model_request_raw," + "  finish_reason, model_response, model_response_raw," + "  tool_calls, has_tool_calls," + "  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens," + "  reasoning_tokens, usage_raw, latency_ms, ttft_ms, cost_usd," + "  multimodal_input, multimodal_content, previous_turns, fingerprint," + "  metadata, recorder_version)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             int i = 1;
             ps.setString(i++, r.getRecordId());
@@ -153,6 +140,8 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setString(i++, r.getServedModel());
             ps.setString(i++, r.getEndpoint());
             ps.setString(i++, r.getSkillId() != null ? r.getSkillId() : "");
+            // groupKey 的 null→"" 是单向变形契约：落库后无 groupKey 与空 groupKey 不可区分，
+            // 换取 NOT NULL 列约束（与 skillId 同一套约定）
             ps.setString(i++, r.getGroupKey() != null ? r.getGroupKey() : "");
             ps.setString(i++, r.getUserInput());
             ps.setInt(i++, r.getTurnIndex());
@@ -227,14 +216,12 @@ public class SqliteStorageRepository implements StorageRepository {
 
     @Override
     public synchronized List<InteractionRecord> findBySkillId(String skillId) {
-        return queryInteractions("SELECT * FROM interactions WHERE skill_id = ?"
-                + " ORDER BY timestamp ASC, seq ASC, record_id ASC", skillId);
+        return queryInteractions("SELECT * FROM interactions WHERE skill_id = ?" + " ORDER BY timestamp ASC, seq ASC, record_id ASC", skillId);
     }
 
     @Override
     public synchronized List<InteractionRecord> findByTemplateHash(String hash) {
-        return queryInteractions("SELECT * FROM interactions WHERE template_hash = ?"
-                + " ORDER BY timestamp ASC, seq ASC, record_id ASC", hash);
+        return queryInteractions("SELECT * FROM interactions WHERE template_hash = ?" + " ORDER BY timestamp ASC, seq ASC, record_id ASC", hash);
     }
 
     @Override
@@ -255,16 +242,14 @@ public class SqliteStorageRepository implements StorageRepository {
 
     @Override
     public synchronized List<InteractionRecord> findBySessionId(String sessionId) {
-        return queryInteractions("SELECT * FROM interactions WHERE session_id = ?"
-                + " ORDER BY timestamp ASC, seq ASC, record_id ASC", sessionId);
+        return queryInteractions("SELECT * FROM interactions WHERE session_id = ?" + " ORDER BY timestamp ASC, seq ASC, record_id ASC", sessionId);
     }
 
     @Override
     public synchronized List<String> findAllSessionIds() {
         List<String> result = new ArrayList<>();
         String sql = "SELECT DISTINCT session_id FROM interactions";
-        try (Statement stmt = connection.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+        try (Statement stmt = connection.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) result.add(rs.getString("session_id"));
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "findAllSessionIds failed", e);
@@ -275,12 +260,7 @@ public class SqliteStorageRepository implements StorageRepository {
 
     @Override
     public synchronized void saveSkillProfile(SkillProfile p) {
-        String sql = "INSERT OR REPLACE INTO skill_profiles" +
-                " (skill_id, group_key, skill_name, skill_type, fingerprint," +
-                "  candidate_fingerprint, baseline_status, version_tag," +
-                "  algo_version, param_signature, sample_count, approved_by, approved_at," +
-                "  total_records, updated_at)" +
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        String sql = "INSERT OR REPLACE INTO skill_profiles" + " (skill_id, group_key, skill_name, skill_type, fingerprint," + "  candidate_fingerprint, baseline_status, version_tag," + "  algo_version, param_signature, sample_count, approved_by, approved_at," + "  total_records, updated_at)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             int i = 1;
             ps.setString(i++, p.getSkillId());
@@ -324,8 +304,7 @@ public class SqliteStorageRepository implements StorageRepository {
     public synchronized List<SkillProfile> findAllSkills() {
         List<SkillProfile> result = new ArrayList<>();
         String sql = "SELECT * FROM skill_profiles";
-        try (Statement stmt = connection.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+        try (Statement stmt = connection.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) result.add(JsonMapper.toSkillProfile(rs));
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "findAllSkills failed", e);
@@ -379,8 +358,7 @@ public class SqliteStorageRepository implements StorageRepository {
     @Override
     public synchronized String loadGraph() {
         String sql = "SELECT graph_json FROM graph_snapshot WHERE id = 'current'";
-        try (Statement stmt = connection.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+        try (Statement stmt = connection.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
             if (rs.next()) return rs.getString("graph_json");
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "loadGraph failed", e);
@@ -390,13 +368,16 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public synchronized void archiveBaseline(String skillId, DeterministicFingerprint fingerprint, String versionTag) {
-        String sql = "INSERT INTO archived_baselines (skill_id, fingerprint, version_tag, archived_at) VALUES (?,?,?,?)";
+    public synchronized void archiveBaseline(ArchivedBaseline archived) {
+        String sql = "INSERT INTO archived_baselines (skill_id, fingerprint, version_tag, algo_version, approved_by, approved_at, archived_at) VALUES (?,?,?,?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setString(1, skillId);
-            ps.setString(2, JsonMapper.fingerprintToJson(fingerprint));
-            ps.setString(3, versionTag);
-            ps.setLong(4, System.currentTimeMillis());
+            ps.setString(1, archived.getSkillId());
+            ps.setString(2, JsonMapper.fingerprintToJson(archived.getFingerprint()));
+            ps.setString(3, archived.getVersionTag());
+            ps.setString(4, archived.getAlgoVersion());
+            ps.setString(5, archived.getApprovedBy());
+            setNullableLong(ps, 6, archived.getApprovedAt());
+            ps.setLong(7, System.currentTimeMillis());
             ps.executeUpdate();
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "archiveBaseline failed", e);

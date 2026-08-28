@@ -102,52 +102,66 @@ public class SkillRulesConfig {
 
     /**
      * 单个 Skill 的规则声明 — 维度 3（内容规则）+ 维度 4（约束行为）。
+     *
+     * <p>不可变对象：集合字段构造后只读（空集合与解析产物均不可变），
+     * 共享的 {@link #EMPTY} 因此可以安全复用。</p>
      */
     public static class SkillRule {
 
         /**
-         * 空规则（无任何声明）
+         * 空规则（无任何声明），全库共享
          */
         static final SkillRule EMPTY = new SkillRule();
 
-        private Set<String> requiredKeywords = Collections.emptySet();
-        private Set<String> forbiddenKeywords = Collections.emptySet();
-        private List<RegexPattern> regexPatterns = Collections.emptyList();
-        private Set<String> behaviors = Collections.emptySet();
+        private final Set<String> requiredKeywords;
+        private final Set<String> forbiddenKeywords;
+        private final List<RegexPattern> regexPatterns;
+        private final Set<String> behaviors;
 
         public SkillRule() {
+            this(Collections.<String>emptySet(), Collections.<String>emptySet(), Collections.<RegexPattern>emptyList(), Collections.<String>emptySet());
+        }
+
+        private SkillRule(Set<String> requiredKeywords, Set<String> forbiddenKeywords, List<RegexPattern> regexPatterns, Set<String> behaviors) {
+            this.requiredKeywords = requiredKeywords;
+            this.forbiddenKeywords = forbiddenKeywords;
+            this.regexPatterns = regexPatterns;
+            this.behaviors = behaviors;
         }
 
         @SuppressWarnings("unchecked")
         static SkillRule fromJson(Map<String, Object> map) {
             if (map == null) return EMPTY;
-            SkillRule rule = new SkillRule();
 
             // requiredKeywords
+            Set<String> req = Collections.emptySet();
             Object reqObj = map.get("requiredKeywords");
             if (reqObj instanceof List) {
-                rule.requiredKeywords = toStringSet((List<?>) reqObj);
+                req = toStringSet((List<?>) reqObj);
             }
 
             // forbiddenKeywords
+            Set<String> forbid = Collections.emptySet();
             Object forbidObj = map.get("forbiddenKeywords");
             if (forbidObj instanceof List) {
-                rule.forbiddenKeywords = toStringSet((List<?>) forbidObj);
+                forbid = toStringSet((List<?>) forbidObj);
             }
 
             // regexPatterns
+            List<RegexPattern> patterns = Collections.emptyList();
             Object regexObj = map.get("regexPatterns");
             if (regexObj instanceof List) {
-                rule.regexPatterns = toRegexPatterns((List<?>) regexObj);
+                patterns = toRegexPatterns((List<?>) regexObj);
             }
 
             // behaviors
+            Set<String> behaviors = Collections.emptySet();
             Object behObj = map.get("behaviors");
             if (behObj instanceof List) {
-                rule.behaviors = toStringSet((List<?>) behObj);
+                behaviors = toStringSet((List<?>) behObj);
             }
 
-            return rule;
+            return new SkillRule(req, forbid, patterns, behaviors);
         }
 
         private static Set<String> toStringSet(List<?> list) {
@@ -178,32 +192,16 @@ public class SkillRulesConfig {
             return requiredKeywords;
         }
 
-        public void setRequiredKeywords(Set<String> requiredKeywords) {
-            this.requiredKeywords = requiredKeywords != null ? requiredKeywords : Collections.emptySet();
-        }
-
         public Set<String> getForbiddenKeywords() {
             return forbiddenKeywords;
-        }
-
-        public void setForbiddenKeywords(Set<String> forbiddenKeywords) {
-            this.forbiddenKeywords = forbiddenKeywords != null ? forbiddenKeywords : Collections.emptySet();
         }
 
         public List<RegexPattern> getRegexPatterns() {
             return regexPatterns;
         }
 
-        public void setRegexPatterns(List<RegexPattern> regexPatterns) {
-            this.regexPatterns = regexPatterns != null ? regexPatterns : Collections.emptyList();
-        }
-
         public Set<String> getBehaviors() {
             return behaviors;
-        }
-
-        public void setBehaviors(Set<String> behaviors) {
-            this.behaviors = behaviors != null ? behaviors : Collections.emptySet();
         }
     }
 }

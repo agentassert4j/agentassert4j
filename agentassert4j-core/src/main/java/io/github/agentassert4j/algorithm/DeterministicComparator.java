@@ -49,9 +49,15 @@ public class DeterministicComparator {
         String output = currentOutput != null ? currentOutput : "";
         ComparisonResult r = new ComparisonResult();
 
+        // 集合字段统一空集兜底：程序化构造的指纹允许缺省集合字段，比较路径不应 NPE
+        Set<String> bTools = orEmpty(baseline.getToolCallSet());
+        Set<String> cTools = orEmpty(current.getToolCallSet());
+        Map<String, String> bParams = orEmptyMap(baseline.getToolParamTypes());
+        Map<String, String> cParams = orEmptyMap(current.getToolParamTypes());
+
         // === 维度 1：工具调用（40%）===
-        boolean toolMatch = baseline.getToolCallSet().equals(current.getToolCallSet());
-        boolean paramMatch = baseline.getToolParamTypes().equals(current.getToolParamTypes());
+        boolean toolMatch = bTools.equals(cTools);
+        boolean paramMatch = bParams.equals(cParams);
         r.setToolCallMatch(toolMatch);
         r.setParamTypeMatch(paramMatch);
         double d1 = (toolMatch ? 0.7 : 0.0) + (paramMatch ? 0.3 : 0.0);
@@ -59,8 +65,8 @@ public class DeterministicComparator {
         // === 维度 2：输出结构（25%）===
         // 自动回归检测使用"未过滤"字段集：用户把 error 配置为可忽略时，
         // 过滤后的 added 集合不再含 error，会静默击穿下方不变量。故先存原始集合。
-        Set<String> bFieldsRaw = baseline.getOutputFieldPaths();
-        Set<String> cFieldsRaw = current.getOutputFieldPaths();
+        Set<String> bFieldsRaw = orEmpty(baseline.getOutputFieldPaths());
+        Set<String> cFieldsRaw = orEmpty(current.getOutputFieldPaths());
         Set<String> bFields = filterIgnorable(bFieldsRaw);
         Set<String> cFields = filterIgnorable(cFieldsRaw);
         Set<String> added = new HashSet<>(cFields);
@@ -70,7 +76,9 @@ public class DeterministicComparator {
         r.setAddedFields(added);
         r.setRemovedFields(removed);
 
-        boolean typeOk = baseline.getOutputFieldTypeMap().entrySet().stream().filter(e -> !isIgnorable(e.getKey())).allMatch(e -> e.getValue().equals(current.getOutputFieldTypeMap().get(e.getKey())));
+        Map<String, String> bTypes = orEmptyMap(baseline.getOutputFieldTypeMap());
+        Map<String, String> cTypes = orEmptyMap(current.getOutputFieldTypeMap());
+        boolean typeOk = bTypes.entrySet().stream().filter(e -> !isIgnorable(e.getKey())).allMatch(e -> e.getValue().equals(cTypes.get(e.getKey())));
         r.setFieldTypeMatch(typeOk);
 
         double d2 = computeDimension2(baseline, current, removed, typeOk);
@@ -181,6 +189,14 @@ public class DeterministicComparator {
     private Set<String> filterIgnorable(Set<String> fields) {
         if (fields == null) return Collections.emptySet();
         return fields.stream().filter(f -> !isIgnorable(f)).collect(Collectors.toSet());
+    }
+
+    private static Set<String> orEmpty(Set<String> set) {
+        return set != null ? set : Collections.<String>emptySet();
+    }
+
+    private static Map<String, String> orEmptyMap(Map<String, String> map) {
+        return map != null ? map : Collections.<String, String>emptyMap();
     }
 
     private boolean isIgnorable(String fieldPath) {

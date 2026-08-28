@@ -165,6 +165,10 @@ final class JsonMapper {
         ab.setSkillId(rs.getString("skill_id"));
         ab.setFingerprint(fingerprintFromDb(rs.getString("fingerprint")));
         ab.setVersionTag(rs.getString("version_tag"));
+        ab.setAlgoVersion(rs.getString("algo_version"));
+        ab.setApprovedBy(rs.getString("approved_by"));
+        long approvedAt = rs.getLong("approved_at");
+        ab.setApprovedAt(rs.wasNull() ? null : approvedAt);
         ab.setArchivedAt(rs.getLong("archived_at"));
         return ab;
     }

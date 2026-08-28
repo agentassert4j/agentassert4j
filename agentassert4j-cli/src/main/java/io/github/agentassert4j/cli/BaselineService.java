@@ -30,10 +30,13 @@ public class BaselineService {
     /**
      * 为所有已录制且尚无基线的 skill 建立基线。
      *
-     * @param out 报告输出流
-     * @return 本次新建基线的 skill 数
+     * @param out   报告输出流
+     * @param actor 操作者身份（审批留痕）
+     * @param force 以当前判定语义重建基线：已有基线也被当前算法新指纹覆盖
+     *              （判定语义版本升级后的恢复路径），版本标签按归档占用顺延
+     * @return 本次新建/重建基线的 skill 数
      */
-    public int establishMissing(PrintStream out) {
+    public int establishMissing(PrintStream out, String actor, boolean force) {
         BaselineManager manager = new BaselineManager(repository);
         int established = 0;
 
@@ -44,24 +47,30 @@ public class BaselineService {
             }
             SkillProfile existing = repository.findSkillByGroupKey(groupKey);
             boolean hadBaseline = existing != null && existing.getFingerprint() != null;
+            if (hadBaseline && !force) {
+                out.println("  " + skillId + " → " + groupKey + ": 基线已存在（" + existing.getVersionTag() + "）");
+                continue;
+            }
 
             List<InteractionRecord> records = repository.findBySkillId(skillId);
-            for (InteractionRecord record : records) {
-                manager.autoEstablishBaseline(record);
+            if (force) {
+                // 重建只需任一该 skill 的录制（取存储规范序首条，与首次建立的取材一致）；
+                // 逐条调用会让版本标签随记录数连跳
+                manager.reestablishBaseline(records.get(0), actor);
+            } else {
+                for (InteractionRecord record : records) {
+                    manager.autoEstablishBaseline(record, actor);
+                }
             }
 
-            if (hadBaseline) {
-                out.println("  " + skillId + " → " + groupKey + ": 基线已存在（" + existing.getVersionTag() + "）");
-            } else {
-                established++;
-                // 首条记录建立画像时 totalRecords=1，回填该 skill 的真实记录数
-                SkillProfile created = repository.findSkillByGroupKey(groupKey);
-                if (created != null) {
-                    created.setTotalRecords(records.size());
-                    repository.saveSkillProfile(created);
-                }
-                out.println("  " + skillId + " → " + groupKey + ": 新建基线");
+            established++;
+            // 首条记录建立画像时 totalRecords=1，回填该 skill 的真实记录数
+            SkillProfile created = repository.findSkillByGroupKey(groupKey);
+            if (created != null) {
+                created.setTotalRecords(records.size());
+                repository.saveSkillProfile(created);
             }
+            out.println("  " + skillId + " → " + groupKey + ": " + (hadBaseline ? "已按当前判定语义重建基线（" + created.getVersionTag() + "）" : "新建基线"));
         }
         return established;
     }
