@@ -39,6 +39,10 @@ final class CliSupport {
      */
     static SqliteStorageRepository openRepository(String dbOverride) {
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
+        // 隐式查找链（cwd → home → classpath）命中了哪个文件必须就地披露——
+        // 错误目录下运行时旧配置静默生效是最难查的排障黑洞
+        String configSource = ConfigLoader.describeMainConfigSource();
+        System.out.println(configSource != null ? "配置：" + configSource : "配置：未找到 agentassert4j.json，使用内置默认值。");
         String url = dbOverride != null ? dbOverride : config.getStorage().getUrl();
         SqliteStorageRepository repository = new SqliteStorageRepository(expandHome(url));
         repository.initialize();

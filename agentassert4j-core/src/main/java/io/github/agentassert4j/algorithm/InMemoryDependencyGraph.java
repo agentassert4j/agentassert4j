@@ -249,96 +249,6 @@ public class InMemoryDependencyGraph {
     }
 
     /**
-     * 移除节点及其关联的所有边。
-     * 正向和反向邻接表同步清理。
-     */
-    public void removeNode(String node) {
-        // 移除该节点的所有出边
-        Map<String, GraphEdge> removed = outEdges.remove(node);
-        if (removed != null) {
-            for (String tgt : removed.keySet()) {
-                Set<String> preds = inEdges.get(tgt);
-                if (preds != null) {
-                    preds.remove(node);
-                }
-            }
-        }
-        // 移除该节点的所有入边
-        Set<String> preds = inEdges.remove(node);
-        if (preds != null) {
-            for (String pred : preds) {
-                Map<String, GraphEdge> targets = outEdges.get(pred);
-                if (targets != null) {
-                    targets.remove(node);
-                }
-            }
-        }
-    }
-
-    /**
-     * 穿透压缩 — 被排除的节点不是简单删除，而是将前驱和后继直接连通。
-     * 使用传递闭包：先为每个被排除节点找非排除前驱和后继，一次建边。
-     * 然后统一移除被排除节点。
-     *
-     * @param excludedTools 需要排除的工具节点集合
-     */
-    public void compressExcludedNodes(Set<String> excludedTools) {
-        if (excludedTools == null || excludedTools.isEmpty()) return;
-
-        // 第 1 步：为每个被排除节点，找非排除前驱和后继，建立穿透边
-        // 记录待添加的穿透边（避免在遍历中修改图结构）
-        List<GraphEdge> transparentEdges = new ArrayList<>();
-        for (String excluded : excludedTools) {
-            Set<String> nonExcludedPreds = findNonExcludedReachable(excluded, Direction.UP, excludedTools);
-            Set<String> nonExcludedSuccs = findNonExcludedReachable(excluded, Direction.DOWN, excludedTools);
-
-            for (String pred : nonExcludedPreds) {
-                for (String succ : nonExcludedSuccs) {
-                    if (!pred.equals(succ)) {
-                        transparentEdges.add(new GraphEdge(pred, succ, Confidence.TRANSPARENT, Collections.singletonList(excluded)));
-                    }
-                }
-            }
-        }
-
-        // 第 2 步：添加所有穿透边
-        for (GraphEdge edge : transparentEdges) {
-            addEdge(edge.getSource(), edge.getTarget(), edge.getConfidence(), edge.getThroughNodes());
-        }
-
-        // 第 3 步：统一移除被排除节点
-        for (String excluded : excludedTools) {
-            removeNode(excluded);
-        }
-    }
-
-    /**
-     * 沿图向上/向下搜索，跳过被排除的中间节点，找到最近的非排除节点。
-     */
-    private Set<String> findNonExcludedReachable(String start, Direction dir, Set<String> excluded) {
-        Set<String> result = new LinkedHashSet<>();
-        Deque<String> queue = new ArrayDeque<>();
-        Set<String> visited = new HashSet<>();
-
-        // 初始邻居
-        Set<String> neighbors = (dir == Direction.UP) ? getPredecessors(start) : getSuccessors(start);
-
-        queue.addAll(neighbors);
-        while (!queue.isEmpty()) {
-            String node = queue.poll();
-            if (!visited.add(node)) continue;
-            if (excluded.contains(node)) {
-                // 继续穿透
-                Set<String> next = (dir == Direction.UP) ? getPredecessors(node) : getSuccessors(node);
-                queue.addAll(next);
-            } else {
-                result.add(node);
-            }
-        }
-        return result;
-    }
-
-    /**
      * 将图谱序列化为 JSON 字符串。
      * 使用 RecursiveJsonParser.serialize() 辅助。
      */
@@ -364,8 +274,4 @@ public class InMemoryDependencyGraph {
         return RecursiveJsonParser.serialize(root);
     }
 
-    /**
-     * 搜索方向
-     */
-    private enum Direction {UP, DOWN}
 }

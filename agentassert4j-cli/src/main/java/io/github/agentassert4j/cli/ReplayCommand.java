@@ -75,6 +75,10 @@ public class ReplayCommand implements Callable<Integer> {
             System.err.println("--selection 只接受 newest 或 oldest，当前值：" + selection);
             return 2;
         }
+        if (maxCases < 1) {
+            System.err.println("--max-cases 必须 ≥ 1，当前值：" + maxCases);
+            return 2;
+        }
 
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
         StorageRepository repository = null;

@@ -729,9 +729,6 @@ class SqliteStorageRepositoryTest {
         Map<String, String> paramTypes = new LinkedHashMap<>();
         paramTypes.put("k\"1", "String");
         fp.setToolParamTypes(paramTypes);
-        Map<String, Boolean> required = new LinkedHashMap<>();
-        required.put("k\"1", true);
-        fp.setToolParamRequired(required);
         fp.setOutputContentType("text/plain");
         fp.setOutputFieldPaths(new LinkedHashSet<>(Collections.singletonList("a.b\"c")));
         fp.setTextLengthMagnitude(3);
@@ -752,7 +749,6 @@ class SqliteStorageRepositoryTest {
         DeterministicFingerprint bf = back.getFingerprint();
         assertEquals(fp.getToolCallSet(), bf.getToolCallSet());
         assertEquals("String", bf.getToolParamTypes().get("k\"1"));
-        assertEquals(Boolean.TRUE, bf.getToolParamRequired().get("k\"1"));
         assertEquals("text/plain", bf.getOutputContentType());
         assertEquals(fp.getOutputFieldPaths(), bf.getOutputFieldPaths());
         assertEquals(3, bf.getTextLengthMagnitude());

@@ -157,6 +157,55 @@ class CommandSmokeTest {
         assertTrue(text.contains("queryOrder"), "业务标签列应展示用户代码里的标识: " + text);
     }
 
+    @Test
+    @DisplayName("approve 的 --skill 与 --all 互斥")
+    void adjudicate_skillAndAll_mutuallyExclusive() {
+        PrintStream originalErr = System.err;
+        ByteArrayOutputStream errOut = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(errOut, true));
+        int exit;
+        try {
+            exit = new CommandLine(new AgentAssert4jCli()).execute("approve", "--db", dbPath, "--skill", "chat:x", "--all");
+        } finally {
+            System.setErr(originalErr);
+        }
+
+        assertEquals(2, exit);
+        assertTrue(errOut.toString().contains("不能同时使用"), "互斥必须显式报错而非静默忽略其一: " + errOut);
+    }
+
+    @Test
+    @DisplayName("--max-cases < 1 拒绝执行而非误导性「未找到用例」")
+    void replay_maxCasesBelowOne_rejected() throws Exception {
+        Path promptFile = tempDir.resolve("prompt.txt");
+        java.nio.file.Files.write(promptFile, "新提示词".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        PrintStream originalErr = System.err;
+        ByteArrayOutputStream errOut = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(errOut, true));
+        int exit;
+        try {
+            exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--prompt", promptFile.toString(), "--max-cases", "0");
+        } finally {
+            System.setErr(originalErr);
+        }
+
+        assertEquals(2, exit);
+        assertTrue(errOut.toString().contains("--max-cases 必须 ≥ 1"), "参数下限必须显式报错: " + errOut);
+    }
+
+    @Test
+    @DisplayName("命令输出披露实际加载的配置来源")
+    void configSource_disclosedInCommandOutput() {
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath);
+
+        assertEquals(0, exit);
+        String text = out.toString();
+        assertTrue(text.contains("配置："), "隐式查找链的命中结果必须披露: " + text);
+        assertTrue(text.contains("agentassert4j.json"), "披露必须指明来源文件: " + text);
+    }
+
     /**
      * 临时接管 stdout，返回捕获缓冲（命令直接写 System.out）；tearDown 统一恢复。
      */

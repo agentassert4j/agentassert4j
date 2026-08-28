@@ -86,6 +86,17 @@ class StatisticalRegressionExecutorTest {
 
         assertEquals(2, stubClient.callCount.get(), "token 预算耗尽后不得再发调用");
         assertEquals(10, result.getActualSampleCount());
+        // 占位样本带显式标志（此前靠错误文案前缀识别，文案一改费用就算错）
+        int placeholders = 0;
+        for (SampleResult s : result.getSamples()) {
+            if (s.isBudgetPlaceholder()) {
+                placeholders++;
+            }
+        }
+        assertEquals(8, placeholders, "未发放的 8 个采样必须是显式占位样本");
+        // 费用只按实际发起的调用估算：2 次 × gpt-4o 预估口径 0.0075
+        assertEquals(0.015, result.getEstimatedCost(), 1e-9, "占位样本不计入 estimatedCost");
+        assertEquals(8, result.getErrorSampleCount(), "占位样本计入非判定样本（2 判定 + 8 占位 = 10）");
     }
 
     @Test

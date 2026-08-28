@@ -77,7 +77,6 @@ public final class FingerprintExtractor {
         if (record.getToolCalls() == null || record.getToolCalls().isEmpty()) {
             fp.setToolCallSet(Collections.emptySet());
             fp.setToolParamTypes(Collections.emptyMap());
-            fp.setToolParamRequired(Collections.emptyMap());
             return;
         }
 
@@ -95,15 +94,6 @@ public final class FingerprintExtractor {
             }
         }
         fp.setToolParamTypes(paramTypes);
-
-        // toolParamRequired：暂无数据来源，默认全部 false
-        // TODO: [参数必填集] toolParamRequired 暂无数据来源默认全 false，待接入层
-        //       提供工具 schema 的 required 信息后填充
-        Map<String, Boolean> paramRequired = new LinkedHashMap<>();
-        for (String key : paramTypes.keySet()) {
-            paramRequired.put(key, false);
-        }
-        fp.setToolParamRequired(paramRequired);
     }
 
     private static void extractDimension2(InteractionRecord record, DeterministicFingerprint fp) {

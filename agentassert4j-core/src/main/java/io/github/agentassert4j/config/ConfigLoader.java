@@ -57,11 +57,24 @@ public final class ConfigLoader {
      * @return 主配置（永不为 null）
      */
     public static AgentAssert4jConfig loadAgentAssert4jConfig() {
-        String json = findAndRead(MAIN_CONFIG_FILE, CONFIG_PATH_PROPERTY);
+        String json = findAndRead(MAIN_CONFIG_FILE, CONFIG_PATH_PROPERTY, new StringBuilder());
         if (json != null) {
             json = resolveEnvVars(json);
         }
         return AgentAssert4jConfig.fromJson(json);
+    }
+
+    /**
+     * 报告主配置的实际来源——隐式查找链（系统属性 → 工作目录 → 用户主目录 →
+     * classpath）静默命中了哪个文件必须可披露，否则错误目录下的旧配置
+     * 静默生效会成为排障黑洞。
+     *
+     * @return 来源描述（文件路径或 classpath 标识）；未找到任何配置时 null
+     */
+    public static String describeMainConfigSource() {
+        StringBuilder origin = new StringBuilder();
+        String content = findAndRead(MAIN_CONFIG_FILE, CONFIG_PATH_PROPERTY, origin);
+        return content != null ? origin.toString() : null;
     }
 
     /**
@@ -71,7 +84,7 @@ public final class ConfigLoader {
      * @return 规则配置（永不为 null）
      */
     public static SkillRulesConfig loadRulesConfig() {
-        String json = findAndRead(RULES_CONFIG_FILE, RULES_PATH_PROPERTY);
+        String json = findAndRead(RULES_CONFIG_FILE, RULES_PATH_PROPERTY, new StringBuilder());
         if (json != null) {
             json = resolveEnvVars(json);
         }
@@ -143,7 +156,7 @@ public final class ConfigLoader {
      * 3. 用户主目录下的 .agentassert4j/
      * 4. Classpath
      */
-    private static String findAndRead(String filename, String pathProperty) {
+    private static String findAndRead(String filename, String pathProperty, StringBuilder origin) {
         // 1. 系统属性指定的路径
         String explicitPath = System.getProperty(pathProperty);
         if (explicitPath != null) {
@@ -151,24 +164,37 @@ public final class ConfigLoader {
             if (content == null) {
                 throw new IllegalStateException("显式指定的配置文件不可读: " + explicitPath + "（系统属性 " + pathProperty + "）");
             }
+            origin.append(explicitPath);
             return content;
         }
 
         // 2. 当前工作目录
         String cwd = System.getProperty("user.dir");
         if (cwd != null) {
-            String content = loadFromFile(Paths.get(cwd, filename).toString());
-            if (content != null) return content;
+            String path = Paths.get(cwd, filename).toString();
+            String content = loadFromFile(path);
+            if (content != null) {
+                origin.append(path);
+                return content;
+            }
         }
 
         // 3. 用户主目录下的 .agentassert4j/
         String home = System.getProperty("user.home");
         if (home != null) {
-            String content = loadFromFile(Paths.get(home, ".agentassert4j", filename).toString());
-            if (content != null) return content;
+            String path = Paths.get(home, ".agentassert4j", filename).toString();
+            String content = loadFromFile(path);
+            if (content != null) {
+                origin.append(path);
+                return content;
+            }
         }
 
         // 4. Classpath
-        return loadFromClasspath(filename);
+        String content = loadFromClasspath(filename);
+        if (content != null) {
+            origin.append("classpath:").append(filename);
+        }
+        return content;
     }
 }

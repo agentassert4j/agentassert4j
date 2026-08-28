@@ -26,7 +26,6 @@ public class DeterministicFingerprint {
 
     private Set<String> toolCallSet;
     private Map<String, String> toolParamTypes;
-    private Map<String, Boolean> toolParamRequired;
 
     private String outputContentType;
     private Set<String> outputFieldPaths;
@@ -57,14 +56,6 @@ public class DeterministicFingerprint {
 
     public void setToolParamTypes(Map<String, String> toolParamTypes) {
         this.toolParamTypes = toolParamTypes;
-    }
-
-    public Map<String, Boolean> getToolParamRequired() {
-        return toolParamRequired;
-    }
-
-    public void setToolParamRequired(Map<String, Boolean> toolParamRequired) {
-        this.toolParamRequired = toolParamRequired;
     }
 
     public String getOutputContentType() {

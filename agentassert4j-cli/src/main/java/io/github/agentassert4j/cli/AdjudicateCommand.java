@@ -31,6 +31,10 @@ abstract class AdjudicateCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        if (skill != null && all) {
+            System.err.println("--skill 与 --all 不能同时使用。");
+            return 2;
+        }
         if (skill == null && !all) {
             System.err.println("需要 --skill <业务标签 / groupKey / 唯一前缀> 或 --all。");
             return 2;

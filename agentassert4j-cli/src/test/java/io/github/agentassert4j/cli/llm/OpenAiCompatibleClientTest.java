@@ -13,6 +13,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -80,6 +82,30 @@ class OpenAiCompatibleClientTest {
         String body = client.buildRequestBody(request, "o3-mini");
 
         assertFalse(body.contains("temperature"), "命中裁剪规则的模型不得携带该参数: " + body);
+    }
+
+    @Test
+    @DisplayName("方言裁掉显式 temperature 时告警一次并点名 extraBody 逃生舱")
+    void dialectDrop_explicitTemperature_warnsOnce() {
+        LlmRequest request = new LlmRequest();
+        request.setTemperature(0.7);
+        request.setUserInput("test");
+
+        PrintStream originalErr = System.err;
+        ByteArrayOutputStream errOut = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(errOut, true));
+        try {
+            client.buildRequestBody(request, "o3-mini");
+            client.buildRequestBody(request, "o3-mini");
+        } finally {
+            System.setErr(originalErr);
+        }
+
+        String logs = errOut.toString();
+        assertTrue(logs.contains("temperature"), "用户显式配置被注册表裁剪必须告警: " + logs);
+        assertTrue(logs.contains("extraBody"), "告警必须指明逃生舱: " + logs);
+        int occurrences = logs.split("temperature 已从请求中移除", -1).length - 1;
+        assertEquals(1, occurrences, "同客户端重复命中只告警一次（批量重放不刷屏）: " + logs);
     }
 
     @Test
@@ -296,6 +322,61 @@ class OpenAiCompatibleClientTest {
 
             assertThrows(LlmApiException.class, () -> c.chat(request, 5000));
             assertEquals(1, hits.get(), "零重试配置不得发起第二次尝试");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("429 触发重试：首次限流、第二次 200 → 成功返回且总尝试 2 次")
+    void chat_retriesOnRateLimit_thenSucceeds() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicInteger hits = new AtomicInteger();
+        String okBody = "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1}}";
+        server.createContext("/v1/chat/completions", exchange -> {
+            if (hits.incrementAndGet() == 1) {
+                exchange.sendResponseHeaders(429, -1);
+            } else {
+                byte[] body = okBody.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, body.length);
+                exchange.getResponseBody().write(body);
+            }
+            exchange.close();
+        });
+        server.start();
+        try {
+            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 1);
+            LlmRequest request = new LlmRequest();
+            request.setUserInput("hi");
+
+            LlmResponse response = c.chat(request, 5000);
+
+            assertEquals("ok", response.getContent());
+            assertEquals(2, hits.get(), "429 属声明的可重试集合");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    @DisplayName("400 客户端错误不在可重试集合：单次尝试直接上抛")
+    void chat_clientError_noRetry() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicInteger hits = new AtomicInteger();
+        server.createContext("/v1/chat/completions", exchange -> {
+            hits.incrementAndGet();
+            exchange.sendResponseHeaders(400, -1);
+            exchange.close();
+        });
+        server.start();
+        try {
+            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 2);
+            LlmRequest request = new LlmRequest();
+            request.setUserInput("hi");
+
+            assertThrows(LlmApiException.class, () -> c.chat(request, 5000));
+            assertEquals(1, hits.get(), "4xx 不得被重试放大费用与耗时");
         } finally {
             server.stop(0);
         }

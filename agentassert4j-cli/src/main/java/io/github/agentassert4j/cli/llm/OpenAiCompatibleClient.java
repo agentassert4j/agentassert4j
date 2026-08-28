@@ -7,6 +7,8 @@ import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.LlmTimeoutException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -38,6 +40,8 @@ import java.util.Map;
  */
 public class OpenAiCompatibleClient implements LlmClient {
 
+    private static final Logger LOG = LoggerFactory.getLogger(OpenAiCompatibleClient.class);
+
     /**
      * 默认重试次数（传输层失败的最大重试），供组装根构造客户端时引用
      */
@@ -63,6 +67,10 @@ public class OpenAiCompatibleClient implements LlmClient {
      * 非法时服务端以 400 拒绝——错误显式可见，不做静默修正。
      */
     private final String extraBodyFields;
+    /**
+     * 方言裁剪告警只发一次——批量重放对同一模型逐请求告警会淹没输出
+     */
+    private boolean dialectWarned;
 
     /**
      * 构造客户端（默认重试 2 次，无厂商方言扩展）。
@@ -181,18 +189,13 @@ public class OpenAiCompatibleClient implements LlmClient {
             } catch (SocketTimeoutException e) {
                 // 单次尝试的超时预算已耗尽：立即判超时，不重试
                 throw new LlmTimeoutException("LLM call timed out after " + timeoutMs + "ms", e);
+            } catch (ConnectException e) {
+                // 连接被拒是声明契约中唯一可重试的 IO 故障（对端暂时不可达）
+                lastException = new LlmApiException("Connection failed: " + e.getMessage(), e);
             } catch (IOException e) {
-                if (e instanceof ConnectException) {
-                    lastException = new LlmApiException("Connection failed: " + e.getMessage(), e);
-                    continue;
-                }
-                lastException = e;
-                continue;
-            } catch (LlmApiException e) {
-                throw e;
-            } catch (Exception e) {
-                lastException = e;
-                continue;
+                // 其余 IO 故障（读中断/流意外关闭）不在可重试集合内——
+                // 重试洗白只会放大耗时与费用，且让真实故障形态失真
+                throw new LlmApiException("I/O error during LLM call: " + e.getMessage(), e);
             } finally {
                 if (conn != null) conn.disconnect();
             }
@@ -293,9 +296,13 @@ public class OpenAiCompatibleClient implements LlmClient {
 
         // temperature——null 表示不携带该成员（推理模型方言：发送 0.0 会被 400 拒绝）；
         // 非 finite 值同样省略（JSON 无此字面量，发出即非法请求）；
-        // 方言注册表命中的模型（o 系/gpt-5 系只接受默认温度）整条裁掉
+        // 方言注册表命中的模型（o 系/gpt-5 系只接受默认温度）整条裁掉。
+        // 显式配置被注册表覆盖必须告警——静默丢配置是排障黑洞，逃生舱（extraBody）要点名
         if (request.getTemperature() != null && Double.isFinite(request.getTemperature()) && !DIALECTS.droppedParamsFor(model).contains("temperature")) {
             sb.append(",\"temperature\":").append(request.getTemperature());
+        } else if (request.getTemperature() != null && Double.isFinite(request.getTemperature()) && !dialectWarned && DIALECTS.droppedParamsFor(model).contains("temperature")) {
+            dialectWarned = true;
+            LOG.warn("模型 {} 属方言裁剪族：显式配置的 temperature 已从请求中移除（该模型族对标准温度参数返回 400）；如需覆盖请改用 llm.extraBody 注入。", model);
         }
 
         // messages

@@ -36,7 +36,9 @@ public class StatisticalRegressionResult {
     private int actualSampleCount;
 
     /**
-     * 基础设施错误样本数（超时/API 错误/执行错误/跳过，不参与判定比率）
+     * 非判定样本数（verdict 为 null）：基础设施错误（超时/API 错误/执行错误/跳过）
+     * 与预算占位样本都计入——占位未发起调用不是错误，但同属「未产出判定结论」的样本，
+     * 均不参与判定比率
      */
     private int errorSampleCount;
 

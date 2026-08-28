@@ -119,7 +119,7 @@ public class StatisticalRegressionExecutor {
     private static int countBudgetSamples(List<SampleResult> samples) {
         int count = 0;
         for (SampleResult sample : samples) {
-            if (sample.getErrorMessage() != null && sample.getErrorMessage().startsWith("Token 预算已耗尽")) {
+            if (sample.isBudgetPlaceholder()) {
                 count++;
             }
         }
@@ -274,6 +274,7 @@ public class StatisticalRegressionExecutor {
         sr.setSampleIndex(sampleIndex);
         sr.setScore(0.0);
         sr.setErrorMessage("Token 预算已耗尽（maxTotalTokens=" + config.getMaxTotalTokens() + "），未发起调用");
+        sr.setBudgetPlaceholder(true);
         return sr;
     }
 

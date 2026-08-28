@@ -464,7 +464,6 @@ public class DataSanitizer {
         io.github.agentassert4j.model.DeterministicFingerprint copy = new io.github.agentassert4j.model.DeterministicFingerprint();
         copy.setToolCallSet(fp.getToolCallSet() != null ? new LinkedHashSet<>(fp.getToolCallSet()) : null);
         copy.setToolParamTypes(fp.getToolParamTypes() != null ? new LinkedHashMap<>(fp.getToolParamTypes()) : null);
-        copy.setToolParamRequired(fp.getToolParamRequired() != null ? new LinkedHashMap<>(fp.getToolParamRequired()) : null);
         copy.setOutputContentType(fp.getOutputContentType());
         copy.setOutputFieldPaths(fp.getOutputFieldPaths() != null ? new LinkedHashSet<>(fp.getOutputFieldPaths()) : null);
         copy.setOutputFieldTypeMap(fp.getOutputFieldTypeMap() != null ? new LinkedHashMap<>(fp.getOutputFieldTypeMap()) : null);

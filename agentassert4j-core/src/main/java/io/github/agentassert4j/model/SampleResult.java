@@ -44,6 +44,12 @@ public class SampleResult {
     private String errorMessage;
 
     /**
+     * true = 预算耗尽后未发起调用的占位样本——verdict 为空、未花费任何调用，
+     * 不参与判定分母也不计入费用；与基础设施错误样本是两类非判定样本
+     */
+    private boolean budgetPlaceholder;
+
+    /**
      * 本次采样消耗的输入/输出 token（null = 未成功调用或响应未报告）
      */
     private Integer inputTokens;
@@ -106,6 +112,14 @@ public class SampleResult {
 
     public void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
+    }
+
+    public boolean isBudgetPlaceholder() {
+        return budgetPlaceholder;
+    }
+
+    public void setBudgetPlaceholder(boolean budgetPlaceholder) {
+        this.budgetPlaceholder = budgetPlaceholder;
     }
 
     public Integer getInputTokens() {

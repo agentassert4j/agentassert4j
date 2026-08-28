@@ -100,7 +100,6 @@ final class JsonMapper {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("toolCallSet", sortedList(fp.getToolCallSet()));
         m.put("toolParamTypes", sortedStringMap(fp.getToolParamTypes()));
-        m.put("toolParamRequired", sortedBoolMap(fp.getToolParamRequired()));
         m.put("outputContentType", fp.getOutputContentType());
         m.put("outputFieldPaths", sortedList(fp.getOutputFieldPaths()));
         m.put("outputFieldTypeMap", sortedStringMap(fp.getOutputFieldTypeMap()));
@@ -125,7 +124,6 @@ final class JsonMapper {
         DeterministicFingerprint fp = new DeterministicFingerprint();
         fp.setToolCallSet(stringSet(m.get("toolCallSet")));
         fp.setToolParamTypes(asStringMap(m.get("toolParamTypes")));
-        fp.setToolParamRequired(asBoolMap(m.get("toolParamRequired")));
         fp.setOutputContentType(asString(m.get("outputContentType")));
         fp.setOutputFieldPaths(stringSet(m.get("outputFieldPaths")));
         fp.setOutputFieldTypeMap(asStringMap(m.get("outputFieldTypeMap")));
@@ -256,17 +254,6 @@ final class JsonMapper {
         return out;
     }
 
-    private static Map<String, Boolean> asBoolMap(Object v) {
-        if (!(v instanceof Map)) {
-            return null;
-        }
-        Map<String, Boolean> out = new LinkedHashMap<>();
-        for (Map.Entry<?, ?> e : ((Map<?, ?>) v).entrySet()) {
-            out.put(String.valueOf(e.getKey()), asBool(e.getValue()));
-        }
-        return out;
-    }
-
     private static Set<String> stringSet(Object v) {
         Set<String> out = new LinkedHashSet<>();
         if (!(v instanceof List)) {
@@ -288,7 +275,4 @@ final class JsonMapper {
         return map == null ? new TreeMap<>() : new TreeMap<>(map);
     }
 
-    private static Map<String, Object> sortedBoolMap(Map<String, Boolean> map) {
-        return map == null ? new TreeMap<>() : new TreeMap<>(map);
-    }
 }

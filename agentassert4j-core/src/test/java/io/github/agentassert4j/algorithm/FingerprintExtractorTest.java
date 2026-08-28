@@ -76,17 +76,6 @@ class FingerprintExtractorTest {
     }
 
     @Test
-    void dim1_paramRequired_allFalseByDefault() {
-        InteractionRecord r = record(Arrays.asList(tc("tool", stringMap("x", "String", "y", "Integer"))), "{}");
-
-        DeterministicFingerprint fp = FingerprintExtractor.extract(r);
-
-        // 所有 required 均为 false（TODO: 待 SDK 接入后填充）
-        assertFalse(fp.getToolParamRequired().get("x"));
-        assertFalse(fp.getToolParamRequired().get("y"));
-    }
-
-    @Test
     void dim1_noToolCalls_emptySets() {
         InteractionRecord r = record(null, "hello");
 
@@ -95,7 +84,6 @@ class FingerprintExtractorTest {
         assertNotNull(fp.getToolCallSet());
         assertTrue(fp.getToolCallSet().isEmpty());
         assertTrue(fp.getToolParamTypes().isEmpty());
-        assertTrue(fp.getToolParamRequired().isEmpty());
     }
 
     @Test
@@ -114,7 +102,6 @@ class FingerprintExtractorTest {
         DeterministicFingerprint fp = FingerprintExtractor.extract(r);
 
         assertTrue(fp.getToolParamTypes().isEmpty());
-        assertTrue(fp.getToolParamRequired().isEmpty());
     }
 
     @Test
