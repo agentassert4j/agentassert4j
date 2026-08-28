@@ -137,7 +137,6 @@ class BatchWriteHandlerTest {
 
         handler.onEvent(event, 0, true);
 
-        assertEquals(0, handler.getBufferSize());
         assertTrue(repo.getStore().isEmpty());
     }
 

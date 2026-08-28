@@ -193,13 +193,4 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
     public long getWrittenCount() {
         return writtenCount.get();
     }
-
-    /**
-     * 返回当前缓冲区大小（主要用于监控和测试）。
-     */
-    public int getBufferSize() {
-        synchronized (buffer) {
-            return buffer.size();
-        }
-    }
 }

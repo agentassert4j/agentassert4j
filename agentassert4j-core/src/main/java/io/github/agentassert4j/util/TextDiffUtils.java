@@ -99,58 +99,6 @@ public final class TextDiffUtils {
         return sb.toString();
     }
 
-    /**
-     * 计算两个集合之间新增和删除的元素。
-     * 返回 Map 包含两个键：
-     * - "added":   在 newSet 中但不在 oldSet 中的元素
-     * - "removed": 在 oldSet 中但不在 newSet 中的元素
-     */
-    public static Map<String, Set<String>> computeAddedRemoved(Set<String> oldSet, Set<String> newSet) {
-        Set<String> oldSafe = oldSet != null ? oldSet : Collections.emptySet();
-        Set<String> newSafe = newSet != null ? newSet : Collections.emptySet();
-
-        Set<String> added = new LinkedHashSet<>(newSafe);
-        added.removeAll(oldSafe);
-
-        Set<String> removed = new LinkedHashSet<>(oldSafe);
-        removed.removeAll(newSafe);
-
-        Map<String, Set<String>> result = new LinkedHashMap<>();
-        result.put("added", added);
-        result.put("removed", removed);
-        return result;
-    }
-
-    /**
-     * 统计两个集合的交集大小。
-     */
-    public static int intersectionSize(Set<String> setA, Set<String> setB) {
-        if (setA == null || setB == null) return 0;
-        Set<String> smaller = setA.size() <= setB.size() ? setA : setB;
-        Set<String> larger = setA.size() <= setB.size() ? setB : setA;
-        int count = 0;
-        for (String s : smaller) {
-            if (larger.contains(s)) count++;
-        }
-        return count;
-    }
-
-    /**
-     * 计算两个集合的 Jaccard 相似度（交集/并集）。
-     * 返回 0.0 ~ 1.0 之间的值。
-     */
-    public static double jaccardSimilarity(Set<String> setA, Set<String> setB) {
-        if ((setA == null || setA.isEmpty()) && (setB == null || setB.isEmpty())) {
-            return 1.0;
-        }
-        if (setA == null || setA.isEmpty() || setB == null || setB.isEmpty()) {
-            return 0.0;
-        }
-        int intersection = intersectionSize(setA, setB);
-        int union = setA.size() + setB.size() - intersection;
-        return union == 0 ? 1.0 : (double) intersection / union;
-    }
-
     private static String truncate(String s, int maxLen) {
         if (s == null) return "";
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
