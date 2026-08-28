@@ -129,6 +129,9 @@ public class RegressionTestExecutor {
             result.setServedModel(response.getServedModel());
             result.setInputTokens(response.getInputTokens());
             result.setOutputTokens(response.getOutputTokens());
+            // 候选原文只在重放现场存活（recordCandidate 只持久化指纹），
+            // 报告侧的文本差异证据依赖此处透传
+            result.setReplayOutput(response.getContent());
             return result;
         } catch (RuntimeException e) {
             LOG.log(Level.SEVERE, "Post-processing failed for " + baseline.getRecordId(), e);

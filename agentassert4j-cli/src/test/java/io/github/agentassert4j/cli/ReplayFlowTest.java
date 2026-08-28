@@ -10,6 +10,7 @@ import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.LlmTimeoutException;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -19,6 +20,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -595,12 +597,166 @@ class ReplayFlowTest {
         }
     }
 
+    @Nested
+    @DisplayName("文本差异证据")
+    class TextDiffEvidence {
+
+        @Test
+        @DisplayName("非 PASS 且两侧原文齐备 → 附 2–3 行截断文本 diff")
+        void nonPass_textsDiffer_appendsDiffNote() {
+            // 指纹只看结构：文本不同不构成非 PASS，须叠加工具维差异
+            seedOneSkill();
+            stubClient.toolCallResponse = true;
+            stubClient.toolCallWithText = true;
+            stubClient.responseText = "completely different revised answer";
+
+            int exit = runner.run("new prompt", null, 3, null, false, false, true);
+
+            assertEquals(1, exit);
+            String report = output.toString();
+            assertTrue(report.contains("文本差异"), "内容差异用例必须给出文本差异证据: " + report);
+            assertTrue(report.contains("~ [行1]"), "单行文本变化必须以差异行形式呈现: " + report);
+        }
+
+        @Test
+        @DisplayName("PASS 用例不得出现文本差异注记")
+        void pass_noDiffNote() {
+            seedOneSkill();
+            stubClient.responseText = "same answer";
+
+            int exit = runner.run("new prompt", null, 3, null, false, false, true);
+
+            assertEquals(0, exit);
+            assertFalse(output.toString().contains("文本差异"), "PASS 无差异可展示: " + output);
+        }
+
+        @Test
+        @DisplayName("差异出在结构维度且候选无文本 → 静默省略注记")
+        void nonPass_noCandidateText_noteOmitted() {
+            seedOneSkill();
+            stubClient.toolCallResponse = true;
+
+            int exit = runner.run("new prompt", null, 3, null, false, false, true);
+
+            assertEquals(1, exit);
+            assertFalse(output.toString().contains("文本差异"), "候选原文缺席时不得展示空 diff: " + output);
+        }
+    }
+
+    @Nested
+    @DisplayName("JSON 证据报告")
+    class JsonReport {
+
+        private ByteArrayOutputStream jsonOut;
+        private ByteArrayOutputStream jsonErr;
+        private ReplayRunner jsonRunner;
+
+        @BeforeEach
+        void setUpJson() {
+            jsonOut = new ByteArrayOutputStream();
+            jsonErr = new ByteArrayOutputStream();
+            jsonRunner = new ReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new SkillRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(jsonOut, true), new PrintStream(jsonErr, true), true);
+        }
+
+        @SuppressWarnings("unchecked")
+        private Map<String, Object> parseReport() {
+            String report = jsonOut.toString().trim();
+            assertFalse(report.isEmpty(), "JSON 模式必须在 stdout 产出报告");
+            assertFalse(report.contains("\n"), "报告必须单行（消费方按行读取）: " + report);
+            Object parsed = RecursiveJsonParser.parse(report);
+            assertTrue(parsed instanceof Map, "报告必须是 JSON 对象: " + report);
+            return (Map<String, Object>) parsed;
+        }
+
+        @SuppressWarnings("unchecked")
+        private Map<String, Object> nested(Map<String, Object> report, String key) {
+            Object value = report.get(key);
+            assertTrue(value instanceof Map, key + " 必须是 JSON 对象: " + report);
+            return (Map<String, Object>) value;
+        }
+
+        @Test
+        @DisplayName("全 PASS：报告含汇总/逐用例/空待裁决，stderr 零输出")
+        void json_fullPass_stdoutOnly() {
+            seedOneSkill();
+            stubClient.responseText = "same answer";
+
+            int exit = jsonRunner.run("new prompt", null, 3, null, false, false, true);
+
+            assertEquals(0, exit);
+            Map<String, Object> report = parseReport();
+            assertEquals("agentassert4j.replay-report/1", report.get("schema"));
+            assertEquals("replay", report.get("mode"));
+            Map<String, Object> summary = nested(report, "summary");
+            assertEquals(2, ((Number) summary.get("total")).intValue());
+            assertEquals(2, ((Number) summary.get("pass")).intValue());
+            List<Object> cases = (List<Object>) report.get("cases");
+            assertEquals(2, cases.size(), "逐用例数组必须与判定数闭合");
+            List<Object> pending = (List<Object>) report.get("pendingGroupKeys");
+            assertTrue(pending.isEmpty(), "全 PASS 无待裁决");
+            assertEquals("", jsonErr.toString(), "JSON 模式诊断通道应保持安静");
+        }
+
+        @Test
+        @DisplayName("非 PASS：verdict/summary/token 落报告，待裁决 groupKeys 非空")
+        void json_nonPass_listsPendingGroupKeys() {
+            // 基线无工具、重放多出工具调用 → 新行为按 REGRESSION 计
+            seedOneSkill();
+            stubClient.toolCallResponse = true;
+
+            int exit = jsonRunner.run("new prompt", null, 3, null, false, false, true);
+
+            assertEquals(1, exit);
+            Map<String, Object> report = parseReport();
+            Map<String, Object> summary = nested(report, "summary");
+            assertEquals(2, ((Number) summary.get("regression")).intValue());
+            assertEquals(20L, ((Number) summary.get("inputTokens")).longValue(), "汇总 token 必须聚合逐用例实际值");
+            List<Object> cases = (List<Object>) report.get("cases");
+            Map<String, Object> firstCase = (Map<String, Object>) cases.get(0);
+            assertEquals("REGRESSION", firstCase.get("verdict"));
+            assertEquals(10, ((Number) firstCase.get("inputTokens")).intValue());
+            assertNotNull(firstCase.get("summary"), "非 PASS 用例必须带差异摘要");
+            List<Object> pending = (List<Object>) report.get("pendingGroupKeys");
+            assertEquals(1, pending.size(), "差异候选的 groupKey 必须进入待裁决名单");
+            assertTrue(pending.get(0).toString().startsWith("chat:"), "待裁决按 groupKey 报告: " + pending);
+        }
+
+        @Test
+        @DisplayName("冷启动：退出码 2，stdout 无 JSON，指导信息走 stderr")
+        void json_coldStart_noJsonOnStdout() {
+            int exit = jsonRunner.run("new prompt", null, 3, null, false, false, true);
+
+            assertEquals(2, exit);
+            assertEquals("", jsonOut.toString(), "流程性失败不得产出 JSON——消费方按退出码分流");
+            assertTrue(jsonErr.toString().contains("未找到可重放用例"));
+        }
+
+        @Test
+        @DisplayName("dry-run：报告只有选例清单，零 LLM 调用")
+        void json_dryRun_selectionOnly() {
+            seedOneSkill();
+
+            int exit = jsonRunner.run("new prompt", null, 3, null, true, false, true);
+
+            assertEquals(0, exit);
+            Map<String, Object> report = parseReport();
+            assertEquals("dry-run", report.get("mode"));
+            List<Object> cases = (List<Object>) report.get("cases");
+            assertEquals(2, cases.size());
+            Map<String, Object> firstCase = (Map<String, Object>) cases.get(0);
+            assertFalse(firstCase.containsKey("verdict"), "dry-run 无判定字段");
+            assertEquals(0, stubClient.callCount);
+        }
+    }
+
     /**
      * 可编程桩 LLM 客户端——responseText 与 toolCallResponse 二选一。
      */
     static class StubLlmClient implements LlmClient {
         String responseText;
         boolean toolCallResponse;
+        boolean toolCallWithText;
+        String toolCallName = "queryOrder";
         int callCount;
         String servedModel;
         boolean throwApiError;
@@ -620,8 +776,9 @@ class ReplayFlowTest {
                 tc.setToolCallId("call-1");
                 tc.setToolName("queryOrder");
                 tc.setArguments(Collections.singletonMap("orderId", "ORD-001"));
+                tc.setToolName(toolCallName);
                 response.setToolCalls(Collections.singletonList(tc));
-                response.setContent(null);
+                response.setContent(toolCallWithText ? responseText : null);
             } else {
                 response.setContent(responseText);
                 response.setToolCalls(Collections.emptyList());

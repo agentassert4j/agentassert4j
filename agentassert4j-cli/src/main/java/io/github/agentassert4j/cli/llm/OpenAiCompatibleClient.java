@@ -1,5 +1,6 @@
 package io.github.agentassert4j.cli.llm;
 
+import io.github.agentassert4j.cli.JsonSupport;
 import io.github.agentassert4j.model.LlmRequest;
 import io.github.agentassert4j.model.LlmResponse;
 import io.github.agentassert4j.model.ToolCallResult;
@@ -270,7 +271,7 @@ public class OpenAiCompatibleClient implements LlmClient {
     private static void appendSyntheticAssistantToolCall(StringBuilder sb, TurnContext toolTurn) {
         String callId = toolTurn.getToolCallId() != null ? toolTurn.getToolCallId() : "";
         String name = toolTurn.getToolName() != null ? toolTurn.getToolName() : "";
-        sb.append("{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"").append(escapeJson(callId)).append("\",\"type\":\"function\",\"function\":{\"name\":\"").append(escapeJson(name)).append("\",\"arguments\":\"{}\"}}]}");
+        sb.append("{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"").append(JsonSupport.escape(callId)).append("\",\"type\":\"function\",\"function\":{\"name\":\"").append(JsonSupport.escape(name)).append("\",\"arguments\":\"{}\"}}]}");
     }
 
     /**
@@ -292,7 +293,7 @@ public class OpenAiCompatibleClient implements LlmClient {
      */
     String buildRequestBody(LlmRequest request, String model) {
         StringBuilder sb = new StringBuilder(512);
-        sb.append("{\"model\":\"").append(escapeJson(model)).append("\"");
+        sb.append("{\"model\":\"").append(JsonSupport.escape(model)).append("\"");
 
         // temperature——null 表示不携带该成员（推理模型方言：发送 0.0 会被 400 拒绝）；
         // 非 finite 值同样省略（JSON 无此字面量，发出即非法请求）；
@@ -311,7 +312,7 @@ public class OpenAiCompatibleClient implements LlmClient {
 
         // system message
         if (request.getSystemPrompt() != null && !request.getSystemPrompt().isEmpty()) {
-            messages.append("{\"role\":\"system\",\"content\":\"").append(escapeJson(request.getSystemPrompt())).append("\"}");
+            messages.append("{\"role\":\"system\",\"content\":\"").append(JsonSupport.escape(request.getSystemPrompt())).append("\"}");
             wroteAny = true;
         }
 
@@ -347,13 +348,13 @@ public class OpenAiCompatibleClient implements LlmClient {
                     lastEmittedToolCallId = null;
                 }
                 if (wroteAny) messages.append(",");
-                messages.append("{\"role\":\"").append(escapeJson(role)).append("\"");
+                messages.append("{\"role\":\"").append(JsonSupport.escape(role)).append("\"");
                 // tool 角色消息必须携带 tool_call_id 才能关联到前序 assistant 的调用决策，
                 // 缺失时服务端以 400 拒绝整个请求
                 if ("tool".equals(role)) {
-                    messages.append(",\"tool_call_id\":\"").append(escapeJson(turn.getToolCallId())).append("\"");
+                    messages.append(",\"tool_call_id\":\"").append(JsonSupport.escape(turn.getToolCallId())).append("\"");
                 }
-                messages.append(",\"content\":\"").append(escapeJson(turn.getContent())).append("\"}");
+                messages.append(",\"content\":\"").append(JsonSupport.escape(turn.getContent())).append("\"}");
                 wroteAny = true;
             }
         }
@@ -365,7 +366,7 @@ public class OpenAiCompatibleClient implements LlmClient {
                 // 多模态：userInput 存储的是 JSON 数组，原样注入
                 messages.append("{\"role\":\"user\",\"content\":").append(request.getUserInput()).append("}");
             } else {
-                messages.append("{\"role\":\"user\",\"content\":\"").append(escapeJson(request.getUserInput())).append("\"}");
+                messages.append("{\"role\":\"user\",\"content\":\"").append(JsonSupport.escape(request.getUserInput())).append("\"}");
             }
         }
 
@@ -700,47 +701,6 @@ public class OpenAiCompatibleClient implements LlmClient {
         return -1;
     }
 
-    /**
-     * JSON 字符串转义。除常见短转义外，所有 &lt;0x20 控制字符按 JSON 规范
-     * 强制转义为 \\uXXXX——用户输入携带原始控制字符时请求体必须仍是合法 JSON。
-     */
-    private static String escapeJson(String s) {
-        if (s == null) return "";
-        StringBuilder sb = new StringBuilder(s.length() + 16);
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '\\':
-                    sb.append("\\\\");
-                    break;
-                case '"':
-                    sb.append("\\\"");
-                    break;
-                case '\n':
-                    sb.append("\\n");
-                    break;
-                case '\r':
-                    sb.append("\\r");
-                    break;
-                case '\t':
-                    sb.append("\\t");
-                    break;
-                case '\b':
-                    sb.append("\\b");
-                    break;
-                case '\f':
-                    sb.append("\\f");
-                    break;
-                default:
-                    if (c < 0x20) {
-                        sb.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        sb.append(c);
-                    }
-            }
-        }
-        return sb.toString();
-    }
 
     private String unescapeJson(String s) {
         if (s == null) return null;

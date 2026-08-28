@@ -11,6 +11,8 @@ import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 
@@ -109,7 +111,7 @@ class CommandSmokeTest {
         seedOneRecord();
         new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
         Path promptFile = tempDir.resolve("new-prompt.txt");
-        java.nio.file.Files.write(promptFile, "新提示词内容".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        Files.write(promptFile, "新提示词内容".getBytes(StandardCharsets.UTF_8));
 
         ByteArrayOutputStream out = redirectStdout();
         int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--prompt", promptFile.toString(), "--dry-run");
@@ -178,7 +180,7 @@ class CommandSmokeTest {
     @DisplayName("--max-cases < 1 拒绝执行而非误导性「未找到用例」")
     void replay_maxCasesBelowOne_rejected() throws Exception {
         Path promptFile = tempDir.resolve("prompt.txt");
-        java.nio.file.Files.write(promptFile, "新提示词".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        Files.write(promptFile, "新提示词".getBytes(StandardCharsets.UTF_8));
 
         PrintStream originalErr = System.err;
         ByteArrayOutputStream errOut = new ByteArrayOutputStream();
@@ -192,6 +194,60 @@ class CommandSmokeTest {
 
         assertEquals(2, exit);
         assertTrue(errOut.toString().contains("--max-cases 必须 ≥ 1"), "参数下限必须显式报错: " + errOut);
+    }
+
+    @Test
+    @DisplayName("replay --json 冷启动：stdout 零污染，指导信息走 stderr")
+    void replayJson_coldStart_stdoutCleanErrorsOnStderr() throws Exception {
+        Path promptFile = tempDir.resolve("prompt.txt");
+        Files.write(promptFile, "新提示词".getBytes(StandardCharsets.UTF_8));
+
+        PrintStream originalOut = System.out;
+        PrintStream originalErr = System.err;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream errOut = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(out, true));
+        System.setErr(new PrintStream(errOut, true));
+        int exit;
+        try {
+            exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--prompt", promptFile.toString(), "--json");
+        } finally {
+            System.setOut(originalOut);
+            System.setErr(originalErr);
+        }
+
+        assertEquals(2, exit);
+        assertEquals("", out.toString(), "--json 模式 stdout 只允许报告本体，冷启动失败不得产出 JSON: " + out);
+        assertTrue(errOut.toString().contains("未找到可重放用例"), "用法错误必须走 stderr 供 CI 采集: " + errOut);
+    }
+
+    @Test
+    @DisplayName("replay --json --dry-run 输出单行 dry-run 报告")
+    void replayJsonDryRun_singleLineReport() throws Exception {
+        seedOneRecord();
+        new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
+        Path promptFile = tempDir.resolve("new-prompt.txt");
+        Files.write(promptFile, "新提示词内容".getBytes(StandardCharsets.UTF_8));
+
+        PrintStream originalOut = System.out;
+        PrintStream originalErr = System.err;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(out, true));
+        System.setErr(new PrintStream(new ByteArrayOutputStream(), true));
+        int exit;
+        try {
+            exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--prompt", promptFile.toString(), "--dry-run", "--json");
+        } finally {
+            System.setOut(originalOut);
+            System.setErr(originalErr);
+        }
+
+        assertEquals(0, exit);
+        String report = out.toString().trim();
+        assertTrue(report.startsWith("{\"schema\":\"agentassert4j.replay-report/1\""), "stdout 必须以报告 JSON 开头: " + report);
+        assertFalse(report.contains("\n"), "报告必须单行（消费方按行读取）: " + report);
+        assertTrue(report.contains("\"mode\":\"dry-run\""), "dry-run 报告必须标明模式: " + report);
+        assertTrue(report.contains("rec-1"), "选例清单必须含 recordId: " + report);
     }
 
     @Test

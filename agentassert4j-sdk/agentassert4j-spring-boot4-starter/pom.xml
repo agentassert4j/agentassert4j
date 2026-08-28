@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>io.github.agentassert4j</groupId>
+        <artifactId>agentassert4j-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+    <artifactId>agentassert4j-spring-boot4-starter</artifactId>
+    <name>AgentAssert4j Spring Boot 4 Starter</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.agentassert4j</groupId>
+            <artifactId>agentassert4j-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.agentassert4j</groupId>
+            <artifactId>agentassert4j-recorder</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.agentassert4j</groupId>
+            <artifactId>agentassert4j-sdk-spring-ai2</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.agentassert4j</groupId>
+            <artifactId>agentassert4j-storage-sqlite</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <!-- Boot 版本由用户应用自带，starter 不锁定：optional 不向用户传递，编译基线钉 Boot 4.0 地板（spring-ai 2.x 要求的最低线） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+            <version>${spring-boot4.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <!-- spring-ai-model 经 sdk-spring-ai2 为 provided 不传递，本模块编译期自带一份，用户应用自带 spring-ai 2.x -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-model</artifactId>
+            <version>${spring-ai2.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- ApplicationContextRunner 的 AssertableApplicationContext 接口层级引用 assertj，starter-test 一并供给 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <version>${spring-boot4.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>17</release>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

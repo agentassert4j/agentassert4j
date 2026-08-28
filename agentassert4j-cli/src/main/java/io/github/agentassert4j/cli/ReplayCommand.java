@@ -55,6 +55,9 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--dry-run"}, description = "只打印选例与成本预估，不调用 LLM（只读：不建档、不写图快照）")
     boolean dryRun;
 
+    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 证据报告（供 CI/agent 消费）；进度静默，诊断与用法错误走 stderr")
+    boolean jsonOutput;
+
     @Override
     public Integer call() {
         String newPrompt = readTextFile(promptPath);
@@ -83,23 +86,23 @@ public class ReplayCommand implements Callable<Integer> {
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db);
+            repository = CliSupport.openRepository(db, jsonOutput ? System.err : System.out);
 
             ComparatorConfig comparatorConfig = ComparatorConfig.defaults();
             comparatorConfig.setIgnorableFields(new HashSet<>(config.getRegression().getIgnorableFields()));
             DeterministicComparator comparator = new DeterministicComparator(comparatorConfig);
 
             if (TextUtil.isBlank(config.getLlm().getApiKey())) {
-                System.out.println("警告：未配置 API Key（agentassert4j.json 的 llm.apiKey 或其 ${ENV} 引用），LLM 调用将失败。");
+                (jsonOutput ? System.err : System.out).println("警告：未配置 API Key（agentassert4j.json 的 llm.apiKey 或其 ${ENV} 引用），LLM 调用将失败。");
             }
             LlmClient client = new OpenAiCompatibleClient(config.getLlm().getEndpoint(), config.getLlm().getApiKey(), config.getLlm().getModel(), OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, config.getLlm().getExtraBody());
 
             TestExecutionConfig executionConfig = new TestExecutionConfig().timeoutMs(config.getLlm().getTimeoutMs()).temperature(config.getLlm().getTemperature());
             SkillRulesConfig rules = ConfigLoader.loadRulesConfig();
-            CliSupport.warnUnknownBehaviors(rules, System.out);
+            CliSupport.warnUnknownBehaviors(rules, jsonOutput ? System.err : System.out);
 
             boolean newestFirst = "newest".equals(selection);
-            return new ReplayRunner(repository, client, comparator, rules, executionConfig, System.out).run(newPrompt, skill, maxCases, oldPromptHash, dryRun, ciMode, newestFirst);
+            return new ReplayRunner(repository, client, comparator, rules, executionConfig, System.out, System.err, jsonOutput).run(newPrompt, skill, maxCases, oldPromptHash, dryRun, ciMode, newestFirst);
         } catch (RuntimeException e) {
             System.err.println("replay 失败：" + e.getMessage());
             return 2;

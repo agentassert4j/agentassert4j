@@ -26,6 +26,13 @@ public class RegressionTestResult {
     private Integer inputTokens;
     private Integer outputTokens;
 
+    /**
+     * 重放响应的原文文本（null = 未成功调用或响应无文本）。
+     * 候选落库只持久化指纹，原文仅经此字段在重放现场存活，
+     * 供报告侧展示基线与重放的文本差异。
+     */
+    private String replayOutput;
+
     public RegressionTestResult() {
         this.status = TestResultStatus.SUCCESS;
     }
@@ -123,5 +130,13 @@ public class RegressionTestResult {
 
     public void setOutputTokens(Integer outputTokens) {
         this.outputTokens = outputTokens;
+    }
+
+    public String getReplayOutput() {
+        return replayOutput;
+    }
+
+    public void setReplayOutput(String replayOutput) {
+        this.replayOutput = replayOutput;
     }
 }
