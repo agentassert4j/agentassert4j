@@ -13,12 +13,9 @@ import java.util.List;
 /**
  * 统计回归测试执行器 — 对同一基线执行 N 次 LLM 重放，聚合统计结果。
  *
- * <p>设计原则：</p>
- * <ul>
- *   <li>单次等价：sampleCount=1 时行为与 RegressionTestExecutor 完全等价</li>
- *   <li>成本安全：maxCostPerCase 硬限制，超出自动截断采样</li>
- *   <li>退化不中断：任何一次 LLM 调用失败不影响其余采样</li>
- * </ul>
+ * <p>sampleCount=1 时与 {@link RegressionTestExecutor} 完全等价；
+ * maxCostPerCase/maxTotalTokens/maxTotalCalls 三重预算硬限制，超出自动截断采样；
+ * 任何一次 LLM 调用失败不中断其余采样。</p>
  *
  * @author axy-yxa
  * @since 2026-08-26
@@ -30,16 +27,6 @@ public class StatisticalRegressionExecutor {
 
     /**
      * 构造器。
-     *
-     * @param llmClient  LLM 客户端
-     * @param comparator 确定性对比器
-     */
-    public StatisticalRegressionExecutor(LlmClient llmClient, DeterministicComparator comparator) {
-        this(llmClient, comparator, null);
-    }
-
-    /**
-     * 构造器（带声明式规则）。
      *
      * @param llmClient  LLM 客户端
      * @param comparator 确定性对比器
@@ -141,36 +128,16 @@ public class StatisticalRegressionExecutor {
             long latency = System.currentTimeMillis() - start;
 
             if (single.getStatus() == TestResultStatus.TIMEOUT) {
-                SampleResult sr = new SampleResult();
-                sr.setSampleIndex(sampleIndex);
-                sr.setScore(0.0);
-                sr.setErrorMessage("LLM timeout");
-                sr.setLatencyMs(latency);
-                return sr;
+                return errorSample(sampleIndex, latency, "LLM timeout");
             }
             if (single.getStatus() == TestResultStatus.API_ERROR) {
-                SampleResult sr = new SampleResult();
-                sr.setSampleIndex(sampleIndex);
-                sr.setScore(0.0);
-                sr.setErrorMessage("API error: " + single.getErrorMessage());
-                sr.setLatencyMs(latency);
-                return sr;
+                return errorSample(sampleIndex, latency, "API error: " + single.getErrorMessage());
             }
             if (single.getStatus() == TestResultStatus.ERROR) {
-                SampleResult sr = new SampleResult();
-                sr.setSampleIndex(sampleIndex);
-                sr.setScore(0.0);
-                sr.setErrorMessage("Processing error: " + single.getErrorMessage());
-                sr.setLatencyMs(latency);
-                return sr;
+                return errorSample(sampleIndex, latency, "Processing error: " + single.getErrorMessage());
             }
             if (single.getStatus() == TestResultStatus.SKIP) {
-                SampleResult sr = new SampleResult();
-                sr.setSampleIndex(sampleIndex);
-                sr.setScore(0.0);
-                sr.setErrorMessage("Dry run skip");
-                sr.setLatencyMs(latency);
-                return sr;
+                return errorSample(sampleIndex, latency, "Dry run skip");
             }
 
             SampleResult judged = new SampleResult(sampleIndex, single.getComparison().getVerdict(), single.getComparison().getScore(), single.getComparison().getVerdict() != Verdict.PASS ? single.getComparison().getSummary() : null, latency);
@@ -181,13 +148,7 @@ public class StatisticalRegressionExecutor {
 
         } catch (Exception e) {
             // 防御性：任何意外异常都不中断其余采样
-            long latency = System.currentTimeMillis() - start;
-            SampleResult sr = new SampleResult();
-            sr.setSampleIndex(sampleIndex);
-            sr.setScore(0.0);
-            sr.setErrorMessage("Unexpected: " + e.getMessage());
-            sr.setLatencyMs(latency);
-            return sr;
+            return errorSample(sampleIndex, System.currentTimeMillis() - start, "Unexpected: " + e.getMessage());
         }
     }
 
@@ -264,6 +225,19 @@ public class StatisticalRegressionExecutor {
 
     private static long tokensOf(SampleResult sample) {
         return (sample.getInputTokens() != null ? sample.getInputTokens() : 0) + (sample.getOutputTokens() != null ? sample.getOutputTokens() : 0);
+    }
+
+    /**
+     * 非判定样本（超时/API 错误/执行错误/跳过/意外异常）的统一形态：
+     * verdict 为空——聚合侧据此剔除出判定分母，错误原因随样本上抛。
+     */
+    private static SampleResult errorSample(int sampleIndex, long latencyMs, String message) {
+        SampleResult sr = new SampleResult();
+        sr.setSampleIndex(sampleIndex);
+        sr.setScore(0.0);
+        sr.setErrorMessage(message);
+        sr.setLatencyMs(latencyMs);
+        return sr;
     }
 
     /**

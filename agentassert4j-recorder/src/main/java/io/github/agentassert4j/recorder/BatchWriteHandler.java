@@ -158,7 +158,7 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
     }
 
     /**
-     * 落库前补全派生字段（skillId/分组键 + 指纹快照）。
+     * 落库前补全派生字段（skillId/分组键）。
      * 在消费线程执行——指纹提取含响应体 JSON 解析，不允许回到业务线程。
      * skill_id 与 group_key 列有 NOT NULL 约束，上游缺失时回充分组器派生 id，
      * 否则整批 INSERT 失败；已有值不覆盖（上游显式设置的优先）。

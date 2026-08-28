@@ -14,6 +14,7 @@ import io.github.agentassert4j.util.TextUtil;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
+import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -30,6 +31,11 @@ import java.util.concurrent.Callable;
  */
 @Command(name = "replay", description = "用新 System Prompt 重放录制用例并对比基线（非 PASS 退出码非 0，可作 CI gating）", mixinStandardHelpOptions = true)
 public class ReplayCommand implements Callable<Integer> {
+
+    // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
+    PrintStream out = System.out;
+    PrintStream err = System.err;
+
 
     @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
     String db;
@@ -62,24 +68,24 @@ public class ReplayCommand implements Callable<Integer> {
     public Integer call() {
         String newPrompt = readTextFile(promptPath);
         if (newPrompt == null) {
-            System.err.println("无法读取 Prompt 文件：" + promptPath);
+            err.println("无法读取 Prompt 文件：" + promptPath);
             return 2;
         }
         String oldPromptHash = null;
         if (oldPromptPath != null) {
             String oldPrompt = readTextFile(oldPromptPath);
             if (oldPrompt == null) {
-                System.err.println("无法读取旧 Prompt 文件：" + oldPromptPath);
+                err.println("无法读取旧 Prompt 文件：" + oldPromptPath);
                 return 2;
             }
             oldPromptHash = HashUtil.sha256(oldPrompt);
         }
         if (!"newest".equals(selection) && !"oldest".equals(selection)) {
-            System.err.println("--selection 只接受 newest 或 oldest，当前值：" + selection);
+            err.println("--selection 只接受 newest 或 oldest，当前值：" + selection);
             return 2;
         }
         if (maxCases < 1) {
-            System.err.println("--max-cases 必须 ≥ 1，当前值：" + maxCases);
+            err.println("--max-cases 必须 ≥ 1，当前值：" + maxCases);
             return 2;
         }
 
@@ -93,7 +99,7 @@ public class ReplayCommand implements Callable<Integer> {
             DeterministicComparator comparator = new DeterministicComparator(comparatorConfig);
 
             if (TextUtil.isBlank(config.getLlm().getApiKey())) {
-                (jsonOutput ? System.err : System.out).println("警告：未配置 API Key（agentassert4j.json 的 llm.apiKey 或其 ${ENV} 引用），LLM 调用将失败。");
+                (jsonOutput ? err : out).println("警告：未配置 API Key（agentassert4j.json 的 llm.apiKey 或其 ${ENV} 引用），LLM 调用将失败。");
             }
             LlmClient client = new OpenAiCompatibleClient(config.getLlm().getEndpoint(), config.getLlm().getApiKey(), config.getLlm().getModel(), OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, config.getLlm().getExtraBody());
 
@@ -102,9 +108,9 @@ public class ReplayCommand implements Callable<Integer> {
             CliSupport.warnUnknownBehaviors(rules, jsonOutput ? System.err : System.out);
 
             boolean newestFirst = "newest".equals(selection);
-            return new ReplayRunner(repository, client, comparator, rules, executionConfig, System.out, System.err, jsonOutput).run(newPrompt, skill, maxCases, oldPromptHash, dryRun, ciMode, newestFirst);
+            return new ReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(newPrompt, skill, maxCases, oldPromptHash, dryRun, ciMode, newestFirst);
         } catch (RuntimeException e) {
-            System.err.println("replay 失败：" + e.getMessage());
+            err.println("replay 失败：" + e.getMessage());
             return 2;
         } finally {
             if (repository != null) {

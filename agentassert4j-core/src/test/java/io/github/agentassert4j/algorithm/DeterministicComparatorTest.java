@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class DeterministicComparatorTest {
 
-    private final DeterministicComparator comparator = new DeterministicComparator();
+    private final DeterministicComparator comparator = new DeterministicComparator(ComparatorConfig.defaults());
 
     private DeterministicFingerprint fp() {
         return fp(null, null, "text/plain", null, null, 1, null, null, false);

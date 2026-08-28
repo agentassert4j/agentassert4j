@@ -9,6 +9,7 @@ import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.HashUtil;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 import io.github.agentassert4j.util.TextDiffUtils;
 
 import java.io.ByteArrayOutputStream;
@@ -47,10 +48,6 @@ public class ReplayRunner {
     private final PrintStream out;
     private final PrintStream err;
     private final boolean jsonMode;
-
-    public ReplayRunner(StorageRepository repository, LlmClient llmClient, DeterministicComparator comparator, SkillRulesConfig rules, TestExecutionConfig executionConfig, PrintStream out) {
-        this(repository, llmClient, comparator, rules, executionConfig, out, out, false);
-    }
 
     public ReplayRunner(StorageRepository repository, LlmClient llmClient, DeterministicComparator comparator, SkillRulesConfig rules, TestExecutionConfig executionConfig, PrintStream out, PrintStream err, boolean jsonMode) {
         this.repository = repository;
@@ -433,22 +430,22 @@ public class ReplayRunner {
      */
     private static String caseJson(InteractionRecord testCase, RegressionTestResult result) {
         StringBuilder sb = new StringBuilder("{");
-        sb.append("\"groupKey\":\"").append(JsonSupport.escape(displayId(testCase))).append('"');
-        sb.append(",\"recordId\":\"").append(JsonSupport.escape(testCase.getRecordId())).append('"');
+        sb.append("\"groupKey\":\"").append(RecursiveJsonParser.escape(displayId(testCase))).append('"');
+        sb.append(",\"recordId\":\"").append(RecursiveJsonParser.escape(testCase.getRecordId())).append('"');
         sb.append(",\"status\":\"").append(result.getStatus()).append('"');
         ComparisonResult comparison = result.getComparison();
         if (comparison != null) {
             sb.append(",\"verdict\":\"").append(comparison.getVerdict()).append('"');
             sb.append(",\"score\":").append(comparison.getScore());
             if (comparison.getSummary() != null) {
-                sb.append(",\"summary\":\"").append(JsonSupport.escape(comparison.getSummary())).append('"');
+                sb.append(",\"summary\":\"").append(RecursiveJsonParser.escape(comparison.getSummary())).append('"');
             }
         }
         if (result.getErrorMessage() != null) {
-            sb.append(",\"error\":\"").append(JsonSupport.escape(result.getErrorMessage())).append('"');
+            sb.append(",\"error\":\"").append(RecursiveJsonParser.escape(result.getErrorMessage())).append('"');
         }
         if (result.getServedModel() != null) {
-            sb.append(",\"servedModel\":\"").append(JsonSupport.escape(result.getServedModel())).append('"');
+            sb.append(",\"servedModel\":\"").append(RecursiveJsonParser.escape(result.getServedModel())).append('"');
         }
         if (result.getInputTokens() != null && result.getOutputTokens() != null) {
             sb.append(",\"inputTokens\":").append(result.getInputTokens());
@@ -471,7 +468,7 @@ public class ReplayRunner {
         sb.append(",\"cases\":[").append(String.join(",", caseJsons)).append("]");
         List<String> quotedKeys = new ArrayList<>();
         for (String key : pendingGroupKeys) {
-            quotedKeys.add("\"" + JsonSupport.escape(key) + "\"");
+            quotedKeys.add("\"" + RecursiveJsonParser.escape(key) + "\"");
         }
         sb.append(",\"pendingGroupKeys\":[").append(String.join(",", quotedKeys)).append("]}");
         return sb.toString();
@@ -483,7 +480,7 @@ public class ReplayRunner {
     private static String dryRunJson(List<InteractionRecord> cases) {
         List<String> items = new ArrayList<>();
         for (InteractionRecord c : cases) {
-            items.add("{\"groupKey\":\"" + JsonSupport.escape(displayId(c)) + "\",\"recordId\":\"" + JsonSupport.escape(c.getRecordId()) + "\"}");
+            items.add("{\"groupKey\":\"" + RecursiveJsonParser.escape(displayId(c)) + "\",\"recordId\":\"" + RecursiveJsonParser.escape(c.getRecordId()) + "\"}");
         }
         return "{\"schema\":\"agentassert4j.replay-report/1\",\"mode\":\"dry-run\",\"summary\":{\"total\":" + cases.size() + "},\"cases\":[" + String.join(",", items) + "]}";
     }

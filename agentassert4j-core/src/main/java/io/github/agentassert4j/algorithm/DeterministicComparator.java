@@ -29,10 +29,6 @@ public class DeterministicComparator {
     private static final Set<String> AUTO_REGRESSION_FIELDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList("error", "errormessage", "error_code", "errorcode", "err", "exception", "error_msg", "errormsg", "fail_reason", "failreason")));
     private final ComparatorConfig config;
 
-    public DeterministicComparator() {
-        this(ComparatorConfig.defaults());
-    }
-
     public DeterministicComparator(ComparatorConfig config) {
         this.config = config != null ? config : ComparatorConfig.defaults();
     }

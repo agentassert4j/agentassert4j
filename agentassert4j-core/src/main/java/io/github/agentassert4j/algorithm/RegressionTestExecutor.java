@@ -23,15 +23,6 @@ import java.util.stream.Collectors;
 /**
  * 回归测试执行器 — 用新 Prompt + 历史输入重放 LLM 调用，对比决策行为。
  *
- * <p>核心流程：</p>
- * <ol>
- *   <li>buildReplayRequest — 构建重放请求</li>
- *   <li>llmClient.chat — 调用 LLM</li>
- *   <li>buildCurrentRecord — 从响应构建当前交互记录</li>
- *   <li>FingerprintExtractor.extract — 提取指纹</li>
- *   <li>DeterministicComparator.compare — 与基线对比</li>
- * </ol>
- *
  * @author axy-yxa
  * @since 2026-08-26
  */
@@ -57,10 +48,6 @@ public class RegressionTestExecutor {
         this.comparator = comparator;
         this.baselineManager = baselineManager;
         this.rules = rules;
-    }
-
-    public RegressionTestExecutor(LlmClient llmClient, DeterministicComparator comparator, BaselineManager baselineManager) {
-        this(llmClient, comparator, baselineManager, null);
     }
 
     /**
@@ -140,16 +127,7 @@ public class RegressionTestExecutor {
     }
 
     /**
-     * 构建重放请求 — 用历史输入 + 新 Prompt。
-     *
-     * <p>关键设计：</p>
-     * <ul>
-     *   <li>替换 System Prompt（这是要测的变量）</li>
-     *   <li>复用历史 User Input（这是控制变量）</li>
-     *   <li>注入 previousTurns（多轮对话上下文）</li>
-     *   <li>复用工具定义（不带工具则模型无法发起调用，工具维必然差异）</li>
-     *   <li>多模态原样复用</li>
-     * </ul>
+     * 构建重放请求 — 新 Prompt 为被测变量，历史输入/多轮上下文/工具定义为控制变量。
      */
     LlmRequest buildReplayRequest(InteractionRecord baseline, String newSystemPrompt, TestExecutionConfig config) {
         LlmRequest request = new LlmRequest();

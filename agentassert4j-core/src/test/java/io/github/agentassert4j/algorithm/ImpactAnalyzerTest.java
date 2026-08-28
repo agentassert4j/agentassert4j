@@ -1,6 +1,7 @@
 package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.model.AnalysisResult;
+import io.github.agentassert4j.model.Confidence;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageException;
@@ -141,8 +142,8 @@ class ImpactAnalyzerTest {
             repo.skillProfiles.put("gk-c", makeSkillProfile("gk-c", "skill-c"));
 
             // 构建依赖图：skill-a → skill-c, skill-b → skill-c
-            graph.addEdge("skill-a", "skill-c");
-            graph.addEdge("skill-b", "skill-c");
+            graph.addEdge("skill-a", "skill-c", Confidence.HIGH, null);
+            graph.addEdge("skill-b", "skill-c", Confidence.HIGH, null);
 
             AnalysisResult result = analyzer.analyzeChange("hash-old", "hash-new");
 
@@ -177,8 +178,8 @@ class ImpactAnalyzerTest {
             repo.skillProfiles.put("gk-b", makeSkillProfile("gk-b", "skill-b"));
             repo.skillProfiles.put("gk-c", makeSkillProfile("gk-c", "skill-c"));
 
-            graph.addEdge("skill-a", "skill-b");
-            graph.addEdge("skill-b", "skill-c");
+            graph.addEdge("skill-a", "skill-b", Confidence.HIGH, null);
+            graph.addEdge("skill-b", "skill-c", Confidence.HIGH, null);
 
             AnalysisResult result = analyzer.analyzeChange("hash-old", "hash-new");
 
@@ -240,7 +241,7 @@ class ImpactAnalyzerTest {
                 repo.saveInteraction(makeRecord(skillId, "hash-g", "s" + i));
                 repo.saveInteraction(makeRecord(skillId, "hash-g", "s" + i + "-2"));
                 repo.skillProfiles.put("gk-d" + i, makeSkillProfile("gk-d" + i, skillId));
-                graph.addEdge(skillId, "downstream-skill");
+                graph.addEdge(skillId, "downstream-skill", Confidence.HIGH, null);
             }
             // 下游 Skill 有 5 条记录
             repo.saveInteraction(makeRecord("downstream-skill", "hash-other", "ds1"));
@@ -298,9 +299,9 @@ class ImpactAnalyzerTest {
             repo.skillProfiles.put("gk-b", makeSkillProfile("gk-b", "skill-b"));
             repo.skillProfiles.put("gk-c", makeSkillProfile("gk-c", "skill-c"));
 
-            graph.addEdge("skill-a", "skill-b");
-            graph.addEdge("skill-b", "skill-c");
-            graph.addEdge("skill-c", "skill-a");
+            graph.addEdge("skill-a", "skill-b", Confidence.HIGH, null);
+            graph.addEdge("skill-b", "skill-c", Confidence.HIGH, null);
+            graph.addEdge("skill-c", "skill-a", Confidence.HIGH, null);
 
             // 不应抛异常
             AnalysisResult result = analyzer.analyzeChange("hash-old", "hash-new");

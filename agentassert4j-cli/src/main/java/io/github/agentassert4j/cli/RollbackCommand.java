@@ -7,6 +7,7 @@ import io.github.agentassert4j.spi.StorageRepository;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -23,6 +24,11 @@ import java.util.concurrent.Callable;
 @Command(name = "rollback", description = "把活跃基线恢复到指定版本的归档基线", mixinStandardHelpOptions = true)
 public class RollbackCommand implements Callable<Integer> {
 
+    // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
+    PrintStream out = System.out;
+    PrintStream err = System.err;
+
+
     @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
     String db;
 
@@ -36,7 +42,7 @@ public class RollbackCommand implements Callable<Integer> {
     public Integer call() {
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db);
+            repository = CliSupport.openRepository(db, out);
             String groupKey = CliSupport.resolveGroupKeyTarget(repository, skill);
             SkillProfile target = repository.findSkillByGroupKey(groupKey);
             if (target == null) {
@@ -45,13 +51,13 @@ public class RollbackCommand implements Callable<Integer> {
             ensureVersionExists(repository, groupKey, version);
             new BaselineManager(repository).rollback(groupKey, version);
             SkillProfile reloaded = repository.findSkillByGroupKey(groupKey);
-            System.out.println("  " + groupKey + " → " + version + "（审批人 " + reloaded.getApprovedBy() + "）");
+            out.println("  " + groupKey + " → " + version + "（审批人 " + reloaded.getApprovedBy() + "）");
             return 0;
         } catch (IllegalStateException e) {
-            System.err.println(e.getMessage());
+            err.println(e.getMessage());
             return 2;
         } catch (RuntimeException e) {
-            System.err.println("回滚失败：" + e.getMessage());
+            err.println("回滚失败：" + e.getMessage());
             return 2;
         } finally {
             if (repository != null) {

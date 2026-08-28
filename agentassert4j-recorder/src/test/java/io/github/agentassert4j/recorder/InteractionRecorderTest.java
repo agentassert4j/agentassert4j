@@ -5,6 +5,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -42,12 +43,12 @@ class InteractionRecorderTest {
 
     @Test
     void constructor_nullRepository_throwsException() {
-        assertThrows(IllegalArgumentException.class, () -> new InteractionRecorder(null));
+        assertThrows(IllegalArgumentException.class, () -> new InteractionRecorder(null, null));
     }
 
     @Test
     void startStop_lifecycle() {
-        InteractionRecorder recorder = new InteractionRecorder(repo);
+        InteractionRecorder recorder = new InteractionRecorder(repo, RecorderConfig.defaults());
 
         assertFalse(recorder.isStarted());
 
@@ -60,7 +61,7 @@ class InteractionRecorderTest {
 
     @Test
     void start_idempotent() {
-        InteractionRecorder recorder = new InteractionRecorder(repo);
+        InteractionRecorder recorder = new InteractionRecorder(repo, RecorderConfig.defaults());
         recorder.start();
         recorder.start(); // 第二次调用不抛异常
         assertTrue(recorder.isStarted());
@@ -69,7 +70,7 @@ class InteractionRecorderTest {
 
     @Test
     void stop_idempotent() {
-        InteractionRecorder recorder = new InteractionRecorder(repo);
+        InteractionRecorder recorder = new InteractionRecorder(repo, RecorderConfig.defaults());
         recorder.start();
         recorder.stop();
         recorder.stop(); // 第二次调用不抛异常
@@ -115,7 +116,7 @@ class InteractionRecorderTest {
 
     @Test
     void intercept_beforeStart_ignored() {
-        InteractionRecorder recorder = new InteractionRecorder(repo);
+        InteractionRecorder recorder = new InteractionRecorder(repo, RecorderConfig.defaults());
         recorder.intercept(createRecord("r1"));
 
         assertEquals(0, recorder.getRecordedCount());
@@ -144,7 +145,7 @@ class InteractionRecorderTest {
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
 
-        recorder.record(createRecord("r1"));
+        recorder.intercept(createRecord("r1"));
 
         Thread.sleep(200);
         recorder.stop();
@@ -154,7 +155,7 @@ class InteractionRecorderTest {
 
     @Test
     void intercept_withSanitization_masksSensitiveData() throws Exception {
-        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).sensitiveFields(java.util.Arrays.asList("password")).sanitizeStrategy(SanitizeStrategy.MASK).build();
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).sensitiveFields(Arrays.asList("password")).sanitizeStrategy(SanitizeStrategy.MASK).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
@@ -192,7 +193,7 @@ class InteractionRecorderTest {
 
     @Test
     void statistics_initialValues() {
-        InteractionRecorder recorder = new InteractionRecorder(repo);
+        InteractionRecorder recorder = new InteractionRecorder(repo, RecorderConfig.defaults());
 
         assertEquals(0, recorder.getRecordedCount());
         assertEquals(0, recorder.getDroppedCount());

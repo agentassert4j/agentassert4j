@@ -79,11 +79,6 @@ public class LlmRequest {
         this.temperature = temperature;
     }
 
-    public void addTurn(String role, String content) {
-        if (previousTurns == null) previousTurns = new ArrayList<>();
-        previousTurns.add(new TurnContext(role, content));
-    }
-
     /**
      * 追加一个完整的前序轮次（保留 toolCallId/toolName——tool 角色消息的关联键）。
      */

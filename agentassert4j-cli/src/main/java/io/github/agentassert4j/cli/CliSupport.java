@@ -36,10 +36,6 @@ final class CliSupport {
      * @param dbOverride 显式数据库路径（--db），null 时取 agentassert4j.json 的 storage.url
      * @return 已初始化的存储仓库（调用方负责 close）
      */
-    static SqliteStorageRepository openRepository(String dbOverride) {
-        return openRepository(dbOverride, System.out);
-    }
-
     static SqliteStorageRepository openRepository(String dbOverride, PrintStream out) {
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
         // 隐式查找链（cwd → home → classpath）命中了哪个文件必须就地披露——

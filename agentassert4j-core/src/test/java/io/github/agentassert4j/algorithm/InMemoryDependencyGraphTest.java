@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -22,7 +23,7 @@ class InMemoryDependencyGraphTest {
     @Test
     void addEdge_singleEdge() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "B");
+        g.addEdge("A", "B", Confidence.HIGH, null);
 
         assertEquals(1, g.edgeCount());
         assertTrue(g.getSuccessors("A").contains("B"));
@@ -32,7 +33,7 @@ class InMemoryDependencyGraphTest {
     @Test
     void addEdge_defaultHighConfidence() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "B");
+        g.addEdge("A", "B", Confidence.HIGH, null);
 
         GraphEdge edge = g.getAllEdges().get(0);
         assertEquals(Confidence.HIGH, edge.getConfidence());
@@ -41,8 +42,8 @@ class InMemoryDependencyGraphTest {
     @Test
     void addEdge_duplicateUpgradesConfidence() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "B", Confidence.LOW);
-        g.addEdge("A", "B", Confidence.HIGH);
+        g.addEdge("A", "B", Confidence.LOW, null);
+        g.addEdge("A", "B", Confidence.HIGH, null);
 
         assertEquals(1, g.edgeCount());
         GraphEdge edge = g.getAllEdges().get(0);
@@ -75,7 +76,7 @@ class InMemoryDependencyGraphTest {
     @Test
     void traverseDownstream_singleHop() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "B");
+        g.addEdge("A", "B", Confidence.HIGH, null);
 
         Set<String> result = g.traverseDownstream("A");
         assertEquals(Collections.singleton("B"), result);
@@ -84,9 +85,9 @@ class InMemoryDependencyGraphTest {
     @Test
     void traverseDownstream_multiHop() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "B");
-        g.addEdge("B", "C");
-        g.addEdge("C", "D");
+        g.addEdge("A", "B", Confidence.HIGH, null);
+        g.addEdge("B", "C", Confidence.HIGH, null);
+        g.addEdge("C", "D", Confidence.HIGH, null);
 
         Set<String> result = g.traverseDownstream("A");
         assertEquals(new HashSet<>(Arrays.asList("B", "C", "D")), result);
@@ -95,7 +96,7 @@ class InMemoryDependencyGraphTest {
     @Test
     void traverseDownstream_noDownstream() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("X", "Y");
+        g.addEdge("X", "Y", Confidence.HIGH, null);
 
         Set<String> result = g.traverseDownstream("Y");
         assertTrue(result.isEmpty());
@@ -104,9 +105,9 @@ class InMemoryDependencyGraphTest {
     @Test
     void traverseDownstream_cycle_noInfiniteLoop() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "B");
-        g.addEdge("B", "C");
-        g.addEdge("C", "A"); // 环
+        g.addEdge("A", "B", Confidence.HIGH, null);
+        g.addEdge("B", "C", Confidence.HIGH, null);
+        g.addEdge("C", "A", Confidence.HIGH, null); // 环
 
         Set<String> result = g.traverseDownstream("A");
         assertEquals(new HashSet<>(Arrays.asList("B", "C")), result);
@@ -122,8 +123,8 @@ class InMemoryDependencyGraphTest {
     @Test
     void detectCycles_noCycle() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "B");
-        g.addEdge("B", "C");
+        g.addEdge("A", "B", Confidence.HIGH, null);
+        g.addEdge("B", "C", Confidence.HIGH, null);
 
         assertTrue(g.detectCycles().isEmpty());
     }
@@ -131,8 +132,8 @@ class InMemoryDependencyGraphTest {
     @Test
     void detectCycles_simpleCycle() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "B");
-        g.addEdge("B", "A");
+        g.addEdge("A", "B", Confidence.HIGH, null);
+        g.addEdge("B", "A", Confidence.HIGH, null);
 
         Set<String> cycles = g.detectCycles();
         assertFalse(cycles.isEmpty());
@@ -143,9 +144,9 @@ class InMemoryDependencyGraphTest {
     @Test
     void detectCycles_threeNodeCycle() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "B");
-        g.addEdge("B", "C");
-        g.addEdge("C", "A");
+        g.addEdge("A", "B", Confidence.HIGH, null);
+        g.addEdge("B", "C", Confidence.HIGH, null);
+        g.addEdge("C", "A", Confidence.HIGH, null);
 
         Set<String> cycles = g.detectCycles();
         assertEquals(3, cycles.size());
@@ -160,8 +161,8 @@ class InMemoryDependencyGraphTest {
     @Test
     void getPredecessors_multiple() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "C");
-        g.addEdge("B", "C");
+        g.addEdge("A", "C", Confidence.HIGH, null);
+        g.addEdge("B", "C", Confidence.HIGH, null);
 
         assertEquals(new HashSet<>(Arrays.asList("A", "B")), g.getPredecessors("C"));
     }
@@ -169,8 +170,8 @@ class InMemoryDependencyGraphTest {
     @Test
     void getSuccessors_multiple() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "B");
-        g.addEdge("A", "C");
+        g.addEdge("A", "B", Confidence.HIGH, null);
+        g.addEdge("A", "C", Confidence.HIGH, null);
 
         assertEquals(new HashSet<>(Arrays.asList("B", "C")), g.getSuccessors("A"));
     }
@@ -178,7 +179,7 @@ class InMemoryDependencyGraphTest {
     @Test
     void getPredecessors_noPredecessors() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "B");
+        g.addEdge("A", "B", Confidence.HIGH, null);
 
         assertTrue(g.getPredecessors("A").isEmpty());
     }
@@ -186,8 +187,8 @@ class InMemoryDependencyGraphTest {
     @Test
     void toJson_fromJson_roundTrip() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "B", Confidence.HIGH);
-        g.addEdge("B", "C", Confidence.LOW);
+        g.addEdge("A", "B", Confidence.HIGH, null);
+        g.addEdge("B", "C", Confidence.LOW, null);
         g.addEdge("X", "Y", Confidence.TRANSPARENT, Collections.singletonList("Z"));
 
         String json = g.toJson();
@@ -239,8 +240,8 @@ class InMemoryDependencyGraphTest {
     void nodeCount_includesSinkNodes() {
         // C 只有入边没有出边
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "B");
-        g.addEdge("B", "C");
+        g.addEdge("A", "B", Confidence.HIGH, null);
+        g.addEdge("B", "C", Confidence.HIGH, null);
 
         assertEquals(3, g.nodeCount());
         assertTrue(g.getAllNodes().contains("C"));
@@ -249,7 +250,7 @@ class InMemoryDependencyGraphTest {
     @Test
     void selfLoop_detected() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "A");
+        g.addEdge("A", "A", Confidence.HIGH, null);
 
         Set<String> cycles = g.detectCycles();
         assertTrue(cycles.contains("A"));
@@ -275,9 +276,9 @@ class InMemoryDependencyGraphTest {
     void detectCycles_tailOutsideCycle_notMarked() {
         // 真环仅 B↔C，A 是环外尾部祖先——不得被误标为环节点
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("A", "B");
-        g.addEdge("B", "C");
-        g.addEdge("C", "B");
+        g.addEdge("A", "B", Confidence.HIGH, null);
+        g.addEdge("B", "C", Confidence.HIGH, null);
+        g.addEdge("C", "B", Confidence.HIGH, null);
 
         Set<String> cycles = g.detectCycles();
 
@@ -294,8 +295,8 @@ class InMemoryDependencyGraphTest {
 
     private static String buildSampleGraphJson() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
-        g.addEdge("queryOrder", "formatOrder", Confidence.HIGH);
-        g.addEdge("queryOrder", "checkStock", Confidence.LOW);
+        g.addEdge("queryOrder", "formatOrder", Confidence.HIGH, null);
+        g.addEdge("queryOrder", "checkStock", Confidence.LOW, null);
         g.addEdge("checkStock", "formatOrder", Confidence.HIGH, Arrays.asList("transparentNode"));
         return g.toJson();
     }
@@ -303,12 +304,12 @@ class InMemoryDependencyGraphTest {
     @Test
     void roundtrip_jsonPreservesEdgesAndOrder() {
         InMemoryDependencyGraph original = new InMemoryDependencyGraph();
-        original.addEdge("a", "b", Confidence.HIGH);
+        original.addEdge("a", "b", Confidence.HIGH, null);
         original.addEdge("b", "c", Confidence.LOW, Arrays.asList("t"));
 
         InMemoryDependencyGraph restored = InMemoryDependencyGraph.fromJson(original.toJson());
 
         assertEquals(original.edgeCount(), restored.edgeCount());
-        assertEquals(original.getAllEdges().stream().map(GraphEdge::getSource).collect(java.util.stream.Collectors.toList()).toString(), restored.getAllEdges().stream().map(GraphEdge::getSource).collect(java.util.stream.Collectors.toList()).toString(), "边插入序在快照往返后保持一致");
+        assertEquals(original.getAllEdges().stream().map(GraphEdge::getSource).collect(Collectors.toList()).toString(), restored.getAllEdges().stream().map(GraphEdge::getSource).collect(Collectors.toList()).toString(), "边插入序在快照往返后保持一致");
     }
 }

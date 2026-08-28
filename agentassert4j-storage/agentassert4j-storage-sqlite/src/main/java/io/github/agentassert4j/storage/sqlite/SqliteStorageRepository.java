@@ -34,10 +34,6 @@ public class SqliteStorageRepository implements StorageRepository {
     private final String dbPath;
     private Connection connection;
 
-    public SqliteStorageRepository() {
-        this(".agentassert4j/data.db");
-    }
-
     public SqliteStorageRepository(String dbPath) {
         this.dbPath = dbPath;
     }

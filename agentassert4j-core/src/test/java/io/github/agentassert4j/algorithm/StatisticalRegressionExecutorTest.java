@@ -34,7 +34,7 @@ class StatisticalRegressionExecutorTest {
     @BeforeEach
     void setUp() {
         stubClient = new CountingLlmClient();
-        executor = new StatisticalRegressionExecutor(stubClient, new DeterministicComparator());
+        executor = new StatisticalRegressionExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null);
     }
 
     @Test
@@ -219,7 +219,7 @@ class StatisticalRegressionExecutorTest {
         @DisplayName("规则经构造器传入 → 每次采样都按 skillId 应用规则")
         void rulesApplied_toEverySample() {
             SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
-            StatisticalRegressionExecutor wired = new StatisticalRegressionExecutor(stubClient, new DeterministicComparator(), rules);
+            StatisticalRegressionExecutor wired = new StatisticalRegressionExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), rules);
             StatisticalTestConfig config = new StatisticalTestConfig();
             config.setSampleCount(3);
 
@@ -238,7 +238,7 @@ class StatisticalRegressionExecutorTest {
         @Test
         @DisplayName("对比阶段抛异常 → 每次采样转为错误样本，批量不中断")
         void processingError_isolatedPerSample() {
-            StatisticalRegressionExecutor wired = new StatisticalRegressionExecutor(stubClient, new RegressionTestExecutorTest.ThrowingComparator());
+            StatisticalRegressionExecutor wired = new StatisticalRegressionExecutor(stubClient, new RegressionTestExecutorTest.ThrowingComparator(), null);
             StatisticalTestConfig config = new StatisticalTestConfig();
             config.setSampleCount(3);
 

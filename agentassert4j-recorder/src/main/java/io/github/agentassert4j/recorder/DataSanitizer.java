@@ -71,7 +71,6 @@ public class DataSanitizer {
 
         // 无条件深拷贝：消费线程的 enrich/序列化与上游对原对象的任何后续读写
         // 之间不得共享可变状态——脱敏配置只决定内容是否改写，不决定是否拷贝
-        // 复制原始记录
         InteractionRecord copy = copyRecord(original);
 
         // 脱敏 userInput
@@ -429,10 +428,6 @@ public class DataSanitizer {
         return strategy.apply(value);
     }
 
-    /**
-     * 深拷贝 InteractionRecord。
-     * 必须覆盖全部字段：漏拷贝的字段会在脱敏路径上静默丢失（捕获数据不可重建）。
-     */
     /**
      * 深拷贝任意值树（Map/List 递归，其余原样——String/Number 不可变）。
      */

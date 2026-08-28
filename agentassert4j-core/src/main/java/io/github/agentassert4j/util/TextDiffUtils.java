@@ -3,7 +3,7 @@ package io.github.agentassert4j.util;
 import java.util.*;
 
 /**
- * 文本差异工具 — 用于 Prompt 文本对比和字段路径对比。
+ * 文本差异工具 — 渲染两段响应文本的人类可读差异摘要（重放证据注记用）。
  * 零外部依赖，纯 java.base 实现。
  *
  * @author axy-yxa

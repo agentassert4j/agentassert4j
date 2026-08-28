@@ -1,6 +1,7 @@
 package io.github.agentassert4j.springboot4;
 
 import io.github.agentassert4j.recorder.InteractionRecorder;
+import io.github.agentassert4j.recorder.RecorderConfig;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.springai2.RecordingChatModel;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
@@ -57,7 +58,7 @@ public class AgentAssert4jAutoConfiguration {
     @Bean(destroyMethod = "stop")
     @ConditionalOnMissingBean(InteractionRecorder.class)
     public InteractionRecorder agentAssert4jInteractionRecorder(StorageRepository repository) {
-        InteractionRecorder recorder = new InteractionRecorder(repository);
+        InteractionRecorder recorder = new InteractionRecorder(repository, RecorderConfig.defaults());
         recorder.start();
         return recorder;
     }

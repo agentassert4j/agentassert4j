@@ -95,7 +95,7 @@ class StatisticalRegressionResultTest {
         SampleResult timeout = new SampleResult(1, null, 0, "upstream timeout", 50);
         SampleResult pass = new SampleResult(2, Verdict.PASS, 1.0, null, 50);
 
-        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", java.util.Arrays.asList(timeout, pass), 0.9, 0.0);
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", Arrays.asList(timeout, pass), 0.9, 0.0);
 
         assertEquals(1, result.getErrorSampleCount(), "超时样本计入错误数");
         assertEquals(StatisticalVerdict.STABLE, result.getStatisticalVerdict(), "基础设施错误不进分母，单条 PASS 判稳定而非 FLAKY");

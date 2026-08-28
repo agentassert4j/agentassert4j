@@ -26,17 +26,6 @@ public class GraphEdge {
      */
     private List<String> throughNodes;
 
-    public GraphEdge() {
-        this.throughNodes = new ArrayList<>();
-    }
-
-    public GraphEdge(String source, String target, Confidence confidence) {
-        this.source = source;
-        this.target = target;
-        this.confidence = confidence;
-        this.throughNodes = new ArrayList<>();
-    }
-
     public GraphEdge(String source, String target, Confidence confidence, List<String> throughNodes) {
         this.source = source;
         this.target = target;

@@ -33,7 +33,7 @@ class RegressionTestExecutorTest {
     @BeforeEach
     void setUp() {
         stubClient = new StubLlmClient();
-        executor = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null);
+        executor = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
     }
 
     @Test
@@ -228,7 +228,7 @@ class RegressionTestExecutorTest {
     void execute_fingerprintDiff_persistsCandidateForAdjudication() {
         SimpleTestRepo repo = new SimpleTestRepo();
         BaselineManager baselineManager = new BaselineManager(repo);
-        RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), baselineManager);
+        RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), baselineManager, null);
 
         // 基线带工具调用，重放响应为纯文本 → 工具集维度必然差异（非 PASS）
         InteractionRecord baseline = makeBaselineWithToolCall("hash", "input");
@@ -249,7 +249,7 @@ class RegressionTestExecutorTest {
     void execute_fingerprintIdentical_noCandidatePersisted() {
         SimpleTestRepo repo = new SimpleTestRepo();
         BaselineManager baselineManager = new BaselineManager(repo);
-        RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), baselineManager);
+        RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), baselineManager, null);
 
         // 基线与重放响应完全同形 → 指纹相同（PASS），无可裁决对象
         InteractionRecord baseline = makeBaseline("hash", "input");
@@ -355,7 +355,7 @@ class RegressionTestExecutorTest {
         @DisplayName("requiredKeywords 缺失 → keywordMatch=false 且判定非 PASS")
         void requiredKeywordMissing_failsComparison() {
             SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
-            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
+            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null, rules);
             stubClient.response = makeTextResponse("回答里没有关键词");
 
             RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
@@ -368,7 +368,7 @@ class RegressionTestExecutorTest {
         @DisplayName("requiredKeywords 命中 → 判定不受影响")
         void requiredKeywordPresent_staysPass() {
             SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
-            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
+            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null, rules);
             // 基线与重放输出完全同形（含关键词）→ PASS
             InteractionRecord baseline = makeBaseline("hash", "input");
             baseline.setModelResponse("订单已创建");
@@ -384,7 +384,7 @@ class RegressionTestExecutorTest {
         @DisplayName("forbiddenKeywords 出现 → keywordMatch=false")
         void forbiddenKeywordPresent_failsComparison() {
             SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"forbiddenKeywords\":[\"密码\"]}}}");
-            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
+            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null, rules);
             stubClient.response = makeTextResponse("请提供密码");
 
             RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
@@ -396,7 +396,7 @@ class RegressionTestExecutorTest {
         @DisplayName("behaviors 约束不满足 → behaviorMatch=false")
         void declaredBehaviorViolated_failsComparison() {
             SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"behaviors\":[\"mustUseChinese\"]}}}");
-            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
+            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null, rules);
             stubClient.response = makeTextResponse("english only answer");
 
             RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
@@ -408,7 +408,7 @@ class RegressionTestExecutorTest {
         @DisplayName("规则声明给其他 skill → 本 skill 不受影响")
         void rulesForOtherSkill_notApplied() {
             SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"other-skill\":{\"requiredKeywords\":[\"订单\"]}}}");
-            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(), null, rules);
+            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null, rules);
             InteractionRecord baseline = makeBaseline("hash", "input");
             baseline.setModelResponse("same answer");
             stubClient.response = makeTextResponse("same answer");
@@ -427,7 +427,7 @@ class RegressionTestExecutorTest {
         @Test
         @DisplayName("对比阶段抛 RuntimeException → 转为 ERROR 结果，不向调用方逃逸")
         void comparatorThrows_returnsErrorResult() {
-            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new ThrowingComparator(), null);
+            RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new ThrowingComparator(), null, null);
             stubClient.response = makeTextResponse("hello");
 
             RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
@@ -452,6 +452,11 @@ class RegressionTestExecutorTest {
      * 对比阶段必然抛异常的桩——验证处理失败的隔离边界。
      */
     static class ThrowingComparator extends DeterministicComparator {
+
+        ThrowingComparator() {
+            super(ComparatorConfig.defaults());
+        }
+
         @Override
         public ComparisonResult compare(DeterministicFingerprint baseline, DeterministicFingerprint current, String currentOutput) {
             throw new IllegalStateException("boom from comparator");

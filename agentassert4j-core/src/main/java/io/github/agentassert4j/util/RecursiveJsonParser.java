@@ -64,6 +64,20 @@ public final class RecursiveJsonParser {
     }
 
     /**
+     * 按 JSON 规范转义字符串的内容（不含首尾引号），供手工拼装 JSON 的调用方使用。
+     * 除常见短转义外，所有 &lt;0x20 控制字符强制转义为 \\uXXXX——
+     * 输入携带原始控制字符时拼装产物必须仍是合法 JSON。null 视为空串。
+     */
+    public static String escape(String s) {
+        if (s == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(s.length() + 16);
+        appendStringBody(sb, s);
+        return sb.toString();
+    }
+
+    /**
      * 递归提取 JSON 对象中所有字段路径（点分表示法）。
      * <pre>
      * {"a":{"b":1}}             → ["a.b"]
@@ -264,6 +278,11 @@ public final class RecursiveJsonParser {
 
     private static void writeString(StringBuilder sb, String s) {
         sb.append('"');
+        appendStringBody(sb, s);
+        sb.append('"');
+    }
+
+    private static void appendStringBody(StringBuilder sb, String s) {
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             switch (c) {
@@ -296,7 +315,6 @@ public final class RecursiveJsonParser {
                     }
             }
         }
-        sb.append('"');
     }
 
     private static final class Parser {

@@ -7,6 +7,7 @@ import io.github.agentassert4j.spi.StorageRepository;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,6 +26,11 @@ import java.util.concurrent.Callable;
 @Command(name = "status", description = "查看已录制 Skill 与基线状态", mixinStandardHelpOptions = true)
 public class StatusCommand implements Callable<Integer> {
 
+    // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
+    PrintStream out = System.out;
+    PrintStream err = System.err;
+
+
     @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
     String db;
 
@@ -35,14 +41,14 @@ public class StatusCommand implements Callable<Integer> {
     public Integer call() {
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db);
+            repository = CliSupport.openRepository(db, out);
             List<SkillProfile> profiles = repository.findAllSkills();
             Map<String, String> labelsByGroupKey = businessLabelsByGroupKey(repository);
 
-            System.out.println("groupKey                                              状态       版本   候选  归档版本      业务标签");
+            out.println("groupKey                                              状态       版本   候选  归档版本      业务标签");
             for (SkillProfile profile : profiles) {
                 String archivedTags = archivedVersionTags(repository, profile.getGroupKey());
-                System.out.printf("  %-50s %-9s %-6s %-4s %-12s %s%n", profile.getGroupKey(), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "有" : "-", archivedTags.isEmpty() ? "-" : archivedTags, labelsByGroupKey.getOrDefault(profile.getGroupKey(), "-"));
+                out.printf("  %-50s %-9s %-6s %-4s %-12s %s%n", profile.getGroupKey(), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "有" : "-", archivedTags.isEmpty() ? "-" : archivedTags, labelsByGroupKey.getOrDefault(profile.getGroupKey(), "-"));
                 printTemplateText(repository, profile.getGroupKey());
                 if (diff) {
                     printCandidateDiff(profile);
@@ -51,13 +57,13 @@ public class StatusCommand implements Callable<Integer> {
 
             List<String> uncovered = uncoveredBusinessTags(repository, profiles);
             for (String tag : uncovered) {
-                System.out.println("  " + tag + ": 已录制但无基线（先执行 baseline）");
+                out.println("  " + tag + ": 已录制但无基线（先执行 baseline）");
             }
-            System.out.println("共 " + profiles.size() + " 个基线画像。");
+            out.println("共 " + profiles.size() + " 个基线画像。");
             printGraphSnapshot(repository);
             return 0;
         } catch (RuntimeException e) {
-            System.err.println("status 失败：" + e.getMessage());
+            err.println("status 失败：" + e.getMessage());
             return 2;
         } finally {
             if (repository != null) {
@@ -111,13 +117,13 @@ public class StatusCommand implements Callable<Integer> {
     /**
      * 候选差异渲染（与 approve/reject 输出同源）——巡检时预览裁决证据。
      */
-    private static void printCandidateDiff(SkillProfile profile) {
+    private void printCandidateDiff(SkillProfile profile) {
         if (profile.getCandidateFingerprint() == null) {
             return;
         }
-        System.out.println("      └ 候选差异（基线 → 候选）:");
+        out.println("      └ 候选差异（基线 → 候选）:");
         for (String line : FingerprintDiffRenderer.render(profile.getFingerprint(), profile.getCandidateFingerprint())) {
-            System.out.println("        " + line);
+            out.println("        " + line);
         }
     }
 
@@ -126,7 +132,7 @@ public class StatusCommand implements Callable<Integer> {
      * （以 templateHash 为键），这里回放给审阅者——审批面对的模板一目了然。
      * 文本缺席（老数据或 userInput 锚点的会话）静默跳过，不阻断巡检。
      */
-    private static void printTemplateText(StorageRepository repository, String groupKey) {
+    private void printTemplateText(StorageRepository repository, String groupKey) {
         if (groupKey == null || !groupKey.startsWith("chat:")) {
             return;
         }
@@ -139,9 +145,9 @@ public class StatusCommand implements Callable<Integer> {
         if (text == null || text.trim().isEmpty()) {
             return;
         }
-        System.out.println("      └ 模板原文：");
+        out.println("      └ 模板原文：");
         for (String line : text.replace("\r\n", "\n").split("\n", -1)) {
-            System.out.println("        " + line);
+            out.println("        " + line);
         }
     }
 
@@ -173,7 +179,7 @@ public class StatusCommand implements Callable<Integer> {
      * 依赖图快照巡检：快照是最近一次 replay 的分析视图留档（本命令只读不重建，
      * 看实时图用 graph show）。
      */
-    private static void printGraphSnapshot(StorageRepository repository) {
+    private void printGraphSnapshot(StorageRepository repository) {
         String json = null;
         try {
             json = repository.loadGraph();
@@ -181,10 +187,10 @@ public class StatusCommand implements Callable<Integer> {
             // 快照缺席不阻断状态巡检
         }
         if (json == null || json.trim().isEmpty()) {
-            System.out.println("依赖图：无快照（执行 replay 后生成；实时视图用 graph show）。");
+            out.println("依赖图：无快照（执行 replay 后生成；实时视图用 graph show）。");
             return;
         }
         InMemoryDependencyGraph graph = InMemoryDependencyGraph.fromJson(json);
-        System.out.println("依赖图快照：" + graph.nodeCount() + " 节点 / " + graph.edgeCount() + " 边（最近一次 replay 生成；实时视图用 graph show）");
+        out.println("依赖图快照：" + graph.nodeCount() + " 节点 / " + graph.edgeCount() + " 边（最近一次 replay 生成；实时视图用 graph show）");
     }
 }

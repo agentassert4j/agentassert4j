@@ -12,19 +12,9 @@ import java.util.stream.Collectors;
 /**
  * 增量测试筛选 — 数据驱动的变更影响分析。
  *
- * <p>核心洞察：测试范围由实际数据决定，不依赖变更类型猜测。
- * 框架已掌握回答"影响范围"所需的全部数据——每条 InteractionRecord 都存储了
- * templateHash，可直接查询哪些 Skill 使用了该 Prompt。</p>
- *
- * <h3>工作流程</h3>
- * <ol>
- *   <li>查询：哪些 Skill 使用了变更前的 Prompt hash？</li>
- *   <li>冷启动检测：数据库为空或无匹配时给出引导提示</li>
- *   <li>图遍历：从直接受影响的 Skill 出发，沿依赖图谱找到所有下游受影响 Skill</li>
- *   <li>自适应测试密度：全局 Prompt（10+ Skill 共享）采样，局部 Prompt 全量</li>
- * </ol>
- *
- * <p><b>设计决策</b>：零分类、零硬编码、零配置。数据说话。</p>
+ * <p>测试范围由实际数据决定：每条 InteractionRecord 都存储 templateHash，
+ * 变更影响面 = 使用旧 Prompt hash 的 Skill 及其在依赖图上的下游，
+ * 全局 Prompt（多数 Skill 共享）采样、局部 Prompt 全量。</p>
  *
  * @author axy-yxa
  * @since 2026-08-26
@@ -53,8 +43,8 @@ public class ImpactAnalyzer {
      * 分析 Prompt 变更的影响范围（数据驱动）。
      *
      * @param oldPromptHash 变更前的 System Prompt SHA-256 hash
-     * @param newPromptHash 变更后的 System Prompt SHA-256 hash
-     *                                                                                                                                                    TODO: [预留参数] 当前未使用，未来可能用于查询新增 Skill（新 hash 关联但旧 hash 不关联的 Skill）
+     * @param newPromptHash 变更后的 System Prompt SHA-256 hash（当前未消费，预留用于
+     *                      新增 Skill 检测：新 hash 关联但旧 hash 不关联的 Skill）
      * @return 分析结果（含冷启动提示 / 受影响 Skill + 测试用例）
      */
     public AnalysisResult analyzeChange(String oldPromptHash, String newPromptHash) {

@@ -1,6 +1,5 @@
 package io.github.agentassert4j.cli.llm;
 
-import io.github.agentassert4j.cli.JsonSupport;
 import io.github.agentassert4j.model.LlmRequest;
 import io.github.agentassert4j.model.LlmResponse;
 import io.github.agentassert4j.model.ToolCallResult;
@@ -8,6 +7,7 @@ import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.LlmTimeoutException;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,15 +26,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * OpenAI 兼容 LLM 客户端
+ * OpenAI 兼容 LLM 客户端。
  *
  * <p>基于 JDK 内置 HttpURLConnection（Java 8 可用），零 SDK 依赖。
- * 兼容 Azure OpenAI / 通义千问 / DeepSeek / Gemini 等 OpenAI API 格式。</p>
- *
- * <h3>核心流程</h3>
- * <pre>
- * buildRequestBody(LlmRequest) → HTTP POST → parseResponse(String) → LlmResponse
- * </pre>
+ * 兼容 Azure OpenAI / 通义千问 / DeepSeek / Gemini 等 OpenAI API 格式。
+ * 请求体手工拼装、响应体统一经 core 的 RecursiveJsonParser 解析——
+ * 转义与解析语法不在此处另立第二真源。</p>
  *
  * @author axy-yxa
  * @since 2026-08-27
@@ -72,29 +69,6 @@ public class OpenAiCompatibleClient implements LlmClient {
      * 方言裁剪告警只发一次——批量重放对同一模型逐请求告警会淹没输出
      */
     private boolean dialectWarned;
-
-    /**
-     * 构造客户端（默认重试 2 次，无厂商方言扩展）。
-     *
-     * @param endpoint     API 端点，如 "https://api.openai.com"
-     * @param apiKey       API Key
-     * @param defaultModel 默认模型，如 "gpt-4o"
-     */
-    public OpenAiCompatibleClient(String endpoint, String apiKey, String defaultModel) {
-        this(endpoint, apiKey, defaultModel, DEFAULT_MAX_RETRIES, null);
-    }
-
-    /**
-     * 构造客户端（无厂商方言扩展）。
-     *
-     * @param endpoint     API 端点，如 "https://api.openai.com"
-     * @param apiKey       API Key
-     * @param defaultModel 默认模型，如 "gpt-4o"
-     * @param maxRetries   传输层失败（429/5xx/连接被拒）的最大重试次数，负数按 0 处理
-     */
-    public OpenAiCompatibleClient(String endpoint, String apiKey, String defaultModel, int maxRetries) {
-        this(endpoint, apiKey, defaultModel, maxRetries, null);
-    }
 
     /**
      * 构造客户端。
@@ -271,7 +245,7 @@ public class OpenAiCompatibleClient implements LlmClient {
     private static void appendSyntheticAssistantToolCall(StringBuilder sb, TurnContext toolTurn) {
         String callId = toolTurn.getToolCallId() != null ? toolTurn.getToolCallId() : "";
         String name = toolTurn.getToolName() != null ? toolTurn.getToolName() : "";
-        sb.append("{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"").append(JsonSupport.escape(callId)).append("\",\"type\":\"function\",\"function\":{\"name\":\"").append(JsonSupport.escape(name)).append("\",\"arguments\":\"{}\"}}]}");
+        sb.append("{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"").append(RecursiveJsonParser.escape(callId)).append("\",\"type\":\"function\",\"function\":{\"name\":\"").append(RecursiveJsonParser.escape(name)).append("\",\"arguments\":\"{}\"}}]}");
     }
 
     /**
@@ -293,7 +267,7 @@ public class OpenAiCompatibleClient implements LlmClient {
      */
     String buildRequestBody(LlmRequest request, String model) {
         StringBuilder sb = new StringBuilder(512);
-        sb.append("{\"model\":\"").append(JsonSupport.escape(model)).append("\"");
+        sb.append("{\"model\":\"").append(RecursiveJsonParser.escape(model)).append("\"");
 
         // temperature——null 表示不携带该成员（推理模型方言：发送 0.0 会被 400 拒绝）；
         // 非 finite 值同样省略（JSON 无此字面量，发出即非法请求）；
@@ -312,7 +286,7 @@ public class OpenAiCompatibleClient implements LlmClient {
 
         // system message
         if (request.getSystemPrompt() != null && !request.getSystemPrompt().isEmpty()) {
-            messages.append("{\"role\":\"system\",\"content\":\"").append(JsonSupport.escape(request.getSystemPrompt())).append("\"}");
+            messages.append("{\"role\":\"system\",\"content\":\"").append(RecursiveJsonParser.escape(request.getSystemPrompt())).append("\"}");
             wroteAny = true;
         }
 
@@ -348,13 +322,13 @@ public class OpenAiCompatibleClient implements LlmClient {
                     lastEmittedToolCallId = null;
                 }
                 if (wroteAny) messages.append(",");
-                messages.append("{\"role\":\"").append(JsonSupport.escape(role)).append("\"");
+                messages.append("{\"role\":\"").append(RecursiveJsonParser.escape(role)).append("\"");
                 // tool 角色消息必须携带 tool_call_id 才能关联到前序 assistant 的调用决策，
                 // 缺失时服务端以 400 拒绝整个请求
                 if ("tool".equals(role)) {
-                    messages.append(",\"tool_call_id\":\"").append(JsonSupport.escape(turn.getToolCallId())).append("\"");
+                    messages.append(",\"tool_call_id\":\"").append(RecursiveJsonParser.escape(turn.getToolCallId())).append("\"");
                 }
-                messages.append(",\"content\":\"").append(JsonSupport.escape(turn.getContent())).append("\"}");
+                messages.append(",\"content\":\"").append(RecursiveJsonParser.escape(turn.getContent())).append("\"}");
                 wroteAny = true;
             }
         }
@@ -366,7 +340,7 @@ public class OpenAiCompatibleClient implements LlmClient {
                 // 多模态：userInput 存储的是 JSON 数组，原样注入
                 messages.append("{\"role\":\"user\",\"content\":").append(request.getUserInput()).append("}");
             } else {
-                messages.append("{\"role\":\"user\",\"content\":\"").append(JsonSupport.escape(request.getUserInput())).append("\"}");
+                messages.append("{\"role\":\"user\",\"content\":\"").append(RecursiveJsonParser.escape(request.getUserInput())).append("\"}");
             }
         }
 
@@ -398,369 +372,124 @@ public class OpenAiCompatibleClient implements LlmClient {
     /**
      * 解析 OpenAI Chat Completion 响应体。
      *
-     * <p>提取：</p>
-     * <ul>
-     *   <li>choices[0].message.content → 文本输出</li>
-     *   <li>choices[0].message.tool_calls → 工具调用决策</li>
-     *   <li>usage.prompt_tokens / completion_tokens → token 统计</li>
-     *   <li>model → served_model（版本化快照）；choices[0].finish_reason → 结束原因</li>
-     *   <li>usage 子树逐字保留为 usage_raw——后续新增遥测列的回填来源</li>
-     *   <li>prompt_tokens_details.cached_tokens / completion_tokens_details.reasoning_tokens
-     *       → 方言归一化（仅捕获层允许持有方言知识，schema 存概念列）</li>
-     * </ul>
+     * <p>提取 choices[0].message.content / tool_calls、usage 子树、顶层 model、
+     * choices[0].finish_reason。usage 子树原文保留为 usage_raw（后续新增遥测列的
+     * 回填来源），缓存读/思考 token 在此完成方言归一。响应体不是合法 JSON 对象时
+     * 抛 {@link LlmApiException}；合法但缺成员时对应字段保持 null，退化不中断。</p>
      */
     LlmResponse parseResponse(String body) throws LlmApiException {
         try {
+            Object parsed = RecursiveJsonParser.parse(body);
+            if (!(parsed instanceof Map)) {
+                throw new LlmApiException("Failed to parse response: 响应体不是合法 JSON 对象");
+            }
+            Map<?, ?> root = (Map<?, ?>) parsed;
+
             LlmResponse response = new LlmResponse();
 
-            // 提取 choices[0].message.content
-            String content = extractStringField(body, "content");
-            response.setContent(content);
+            Map<?, ?> choice = firstMapElement(root.get("choices"));
+            Map<?, ?> message = memberMap(choice, "message");
+            response.setContent(memberString(message, "content"));
+            response.setToolCalls(parseToolCalls(message));
 
-            // 提取 tool_calls
-            List<ToolCallResult> toolCalls = parseToolCalls(body);
-            response.setToolCalls(toolCalls);
-
-            // 提取 usage 子树：原文保留 + 概念归一
-            String usageSection = extractSection(body, "usage");
-            if (usageSection != null) {
-                response.setUsageRaw(usageSection);
-                String promptTokens = extractNumericField(usageSection, "prompt_tokens");
-                String completionTokens = extractNumericField(usageSection, "completion_tokens");
-                if (promptTokens != null) response.setInputTokens(Integer.parseInt(promptTokens));
-                if (completionTokens != null) response.setOutputTokens(Integer.parseInt(completionTokens));
-
+            Map<?, ?> usage = memberMap(root, "usage");
+            if (usage != null) {
+                response.setUsageRaw(RecursiveJsonParser.serialize(usage));
+                response.setInputTokens(memberInt(usage, "prompt_tokens"));
+                response.setOutputTokens(memberInt(usage, "completion_tokens"));
                 // input_tokens 语义钉死为"总处理输入 token"：
                 // OpenAI/DeepSeek 的 prompt_tokens 已是总量；Anthropic 合成规则由其专属客户端实现
-                String promptDetails = extractSection(usageSection, "prompt_tokens_details");
+                Map<?, ?> promptDetails = memberMap(usage, "prompt_tokens_details");
                 if (promptDetails != null) {
-                    String cached = extractNumericField(promptDetails, "cached_tokens");
-                    if (cached != null) response.setCacheReadTokens(Integer.parseInt(cached));
+                    response.setCacheReadTokens(memberInt(promptDetails, "cached_tokens"));
                 }
-                String completionDetails = extractSection(usageSection, "completion_tokens_details");
+                Map<?, ?> completionDetails = memberMap(usage, "completion_tokens_details");
                 if (completionDetails != null) {
-                    String reasoning = extractNumericField(completionDetails, "reasoning_tokens");
-                    if (reasoning != null) response.setReasoningTokens(Integer.parseInt(reasoning));
+                    response.setReasoningTokens(memberInt(completionDetails, "reasoning_tokens"));
                 }
             }
 
-            // 响应报告的实际服务模型（首个顶层 "model" 字段）
-            response.setServedModel(extractStringField(body, "model"));
-
-            // choices[0].finish_reason
-            String finishReason = extractStringField(body, "finish_reason");
-            response.setFinishReason(normalizeFinishReason(finishReason));
+            // 响应报告的实际服务模型（顶层 "model" 字段）
+            response.setServedModel(memberString(root, "model"));
+            response.setFinishReason(normalizeFinishReason(memberString(choice, "finish_reason")));
 
             response.setHasError(false);
             return response;
-
+        } catch (LlmApiException e) {
+            throw e;
         } catch (Exception e) {
-            if (e instanceof LlmApiException) throw (LlmApiException) e;
             throw new LlmApiException("Failed to parse response: " + e.getMessage(), e);
         }
     }
 
     /**
-     * 从键名结束位置向后定位值数组的起始 '['：跳过空白与冒号。
-     * 形态不符返回 -1（交由上层按"无工具调用"处理）。
+     * choices 数组的首元素；形态不符（缺列/空列/元素非对象）按无选择项处理。
      */
-    private static int findArrayStartAfterKey(String body, int from) {
-        int i = from;
-        while (i < body.length() && Character.isWhitespace(body.charAt(i))) i++;
-        if (i >= body.length() || body.charAt(i) != ':') return -1;
-        i++;
-        while (i < body.length() && Character.isWhitespace(body.charAt(i))) i++;
-        if (i >= body.length() || body.charAt(i) != '[') return -1;
-        return i;
+    private static Map<?, ?> firstMapElement(Object value) {
+        if (!(value instanceof List) || ((List<?>) value).isEmpty()) {
+            return null;
+        }
+        Object first = ((List<?>) value).get(0);
+        return first instanceof Map ? (Map<?, ?>) first : null;
+    }
+
+    private static Map<?, ?> memberMap(Map<?, ?> obj, String key) {
+        if (obj == null) {
+            return null;
+        }
+        Object value = obj.get(key);
+        return value instanceof Map ? (Map<?, ?>) value : null;
+    }
+
+    private static String memberString(Map<?, ?> obj, String key) {
+        if (obj == null) {
+            return null;
+        }
+        Object value = obj.get(key);
+        return value instanceof String ? (String) value : null;
+    }
+
+    private static Integer memberInt(Map<?, ?> obj, String key) {
+        if (obj == null) {
+            return null;
+        }
+        Object value = obj.get(key);
+        return value instanceof Number ? Integer.valueOf(((Number) value).intValue()) : null;
     }
 
     /**
-     * 从 JSON 中提取 tool_calls 数组。
-     * 格式：[{"id":"...","type":"function","function":{"name":"...","arguments":"{...}"}}]
+     * 从 message 提取 tool_calls 数组；arguments 是内嵌 JSON 字符串，二次解析为 Map。
+     * 缺 function 成员的结构残缺条目跳过——对重放而言无名的工具调用无意义。
      */
-    private List<ToolCallResult> parseToolCalls(String body) {
+    private static List<ToolCallResult> parseToolCalls(Map<?, ?> message) {
         List<ToolCallResult> results = new ArrayList<>();
-
-        // 找到 "tool_calls" 键后容忍键与数组间的空白（部分网关会格式化响应体）
-        int keyStart = body.indexOf("\"tool_calls\"");
-        if (keyStart < 0) return results;
-        int arrStart = findArrayStartAfterKey(body, keyStart + "\"tool_calls\"".length());
-        if (arrStart < 0) return results;
-
-        int arrEnd = findMatchingBracket(body, arrStart);
-        if (arrEnd < 0) return results;
-
-        String arrContent = body.substring(arrStart + 1, arrEnd);
-
-        // 逐个解析 {...}
-        int pos = 0;
-        while (pos < arrContent.length()) {
-            int objStart = arrContent.indexOf('{', pos);
-            if (objStart < 0) break;
-            int objEnd = findMatchingBracket(arrContent, objStart);
-            if (objEnd < 0) break;
-
-            String obj = arrContent.substring(objStart, objEnd + 1);
-
-            ToolCallResult tc = new ToolCallResult();
-            tc.setToolCallId(extractStringField(obj, "id"));
-
-            // 从 function.name 提取
-            String funcSection = extractSection(obj, "function");
-            if (funcSection != null) {
-                tc.setToolName(extractStringField(funcSection, "name"));
-                // arguments 是 JSON 字符串，需要解析为 Map
-                String argsStr = extractStringField(funcSection, "arguments");
-                if (argsStr != null) {
-                    tc.setArguments(parseArgsToMap(argsStr));
-                }
-            }
-
-            results.add(tc);
-            pos = objEnd + 1;
+        if (message == null || !(message.get("tool_calls") instanceof List)) {
+            return results;
         }
-
+        for (Object item : (List<?>) message.get("tool_calls")) {
+            if (!(item instanceof Map)) {
+                continue;
+            }
+            Map<?, ?> call = (Map<?, ?>) item;
+            Map<?, ?> function = memberMap(call, "function");
+            if (function == null) {
+                continue;
+            }
+            ToolCallResult tc = new ToolCallResult();
+            tc.setToolCallId(memberString(call, "id"));
+            tc.setToolName(memberString(function, "name"));
+            String arguments = memberString(function, "arguments");
+            if (arguments != null) {
+                Object parsedArgs = RecursiveJsonParser.parse(arguments);
+                tc.setArguments(parsedArgs instanceof Map ? castStringKeyMap(parsedArgs) : new LinkedHashMap<String, Object>());
+            }
+            results.add(tc);
+        }
         return results;
     }
 
-    /**
-     * 将 JSON arguments 字符串解析为 Map<String, Object>。
-     * 简单的 key:value 解析，支持 String/Number/Boolean 基本类型。
-     */
-    private Map<String, Object> parseArgsToMap(String argsJson) {
-        Map<String, Object> map = new LinkedHashMap<>();
-        if (argsJson == null || argsJson.isEmpty()) return map;
-
-        // 去掉外层 {}
-        String trimmed = argsJson.trim();
-        if (trimmed.startsWith("{")) trimmed = trimmed.substring(1);
-        if (trimmed.endsWith("}")) trimmed = trimmed.substring(0, trimmed.length() - 1);
-
-        int pos = 0;
-        while (pos < trimmed.length()) {
-            // 找 key
-            int keyStart = trimmed.indexOf('"', pos);
-            if (keyStart < 0) break;
-            int keyEnd = trimmed.indexOf('"', keyStart + 1);
-            if (keyEnd < 0) break;
-            String key = trimmed.substring(keyStart + 1, keyEnd);
-
-            // 找冒号
-            int colon = trimmed.indexOf(':', keyEnd);
-            if (colon < 0) break;
-
-            // 找 value
-            int valStart = colon + 1;
-            while (valStart < trimmed.length() && trimmed.charAt(valStart) == ' ') valStart++;
-
-            if (valStart >= trimmed.length()) break;
-
-            char c = trimmed.charAt(valStart);
-            if (c == '"') {
-                // String value
-                int valEnd = findEndOfString(trimmed, valStart + 1);
-                String val = unescapeJson(trimmed.substring(valStart + 1, valEnd));
-                map.put(key, val);
-                pos = valEnd + 2;
-            } else if (c == '{' || c == '[') {
-                // 嵌套对象/数组 — 找到匹配的结束括号
-                int end = findMatchingBracket(trimmed, valStart);
-                String nested = trimmed.substring(valStart, end + 1);
-                map.put(key, nested); // 保留为字符串
-                pos = end + 2;
-            } else {
-                // Number / Boolean / null
-                int valEnd = valStart;
-                while (valEnd < trimmed.length()) {
-                    char vc = trimmed.charAt(valEnd);
-                    if (vc == ',' || vc == '}' || vc == ']') break;
-                    valEnd++;
-                }
-                String val = trimmed.substring(valStart, valEnd).trim();
-                if ("true".equals(val)) {
-                    map.put(key, Boolean.TRUE);
-                } else if ("false".equals(val)) {
-                    map.put(key, Boolean.FALSE);
-                } else if ("null".equals(val)) {
-                    map.put(key, null);
-                } else {
-                    try {
-                        if (val.contains(".") || val.contains("e") || val.contains("E")) {
-                            map.put(key, Double.parseDouble(val));
-                        } else {
-                            map.put(key, Long.parseLong(val));
-                        }
-                    } catch (NumberFormatException e) {
-                        map.put(key, val);
-                    }
-                }
-                pos = valEnd + 1;
-            }
-        }
-
-        return map;
-    }
-
-    private String extractStringField(String json, String field) {
-        String key = "\"" + field + "\"";
-        int idx = json.indexOf(key);
-        if (idx < 0) return null;
-
-        int colon = json.indexOf(':', idx + key.length());
-        if (colon < 0) return null;
-
-        int valStart = colon + 1;
-        while (valStart < json.length() && json.charAt(valStart) == ' ') valStart++;
-        if (valStart >= json.length()) return null;
-
-        if (json.charAt(valStart) != '"') return null;
-        int valEnd = findEndOfString(json, valStart + 1);
-        if (valEnd < 0) return null;
-
-        return unescapeJson(json.substring(valStart + 1, valEnd));
-    }
-
-    private String extractNumericField(String json, String field) {
-        String key = "\"" + field + "\"";
-        int idx = json.indexOf(key);
-        if (idx < 0) return null;
-
-        int colon = json.indexOf(':', idx + key.length());
-        if (colon < 0) return null;
-
-        int valStart = colon + 1;
-        while (valStart < json.length() && (json.charAt(valStart) == ' ' || json.charAt(valStart) == '\n')) valStart++;
-        if (valStart >= json.length()) return null;
-
-        int valEnd = valStart;
-        while (valEnd < json.length() && (Character.isDigit(json.charAt(valEnd)) || json.charAt(valEnd) == '-')) {
-            valEnd++;
-        }
-
-        return json.substring(valStart, valEnd);
-    }
-
-    /**
-     * 提取 JSON 中的嵌套 section（如 "usage":{...} 或 "function":{...}）
-     */
-    private String extractSection(String json, String section) {
-        String key = "\"" + section + "\"";
-        int idx = json.indexOf(key);
-        if (idx < 0) return null;
-
-        int colon = json.indexOf(':', idx + key.length());
-        if (colon < 0) return null;
-
-        int valStart = colon + 1;
-        while (valStart < json.length() && json.charAt(valStart) == ' ') valStart++;
-        if (valStart >= json.length() || json.charAt(valStart) != '{') return null;
-
-        int valEnd = findMatchingBracket(json, valStart);
-        if (valEnd < 0) return null;
-
-        return json.substring(valStart, valEnd + 1);
-    }
-
-    private int findMatchingBracket(String json, int openPos) {
-        if (openPos >= json.length() || json.charAt(openPos) != '{' && json.charAt(openPos) != '[') return -1;
-
-        char open = json.charAt(openPos);
-        char close = (open == '{') ? '}' : ']';
-        int depth = 0;
-        boolean inString = false;
-
-        for (int i = openPos; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '\\' && inString) {
-                i++; // skip escaped char
-                continue;
-            }
-            if (c == '"') {
-                inString = !inString;
-                continue;
-            }
-            if (inString) continue;
-
-            if (c == open) depth++;
-            else if (c == close) {
-                depth--;
-                if (depth == 0) return i;
-            }
-        }
-        return -1;
-    }
-
-    private int findEndOfString(String json, int start) {
-        for (int i = start; i < json.length(); i++) {
-            if (json.charAt(i) == '\\') {
-                i++; // skip escaped char
-                continue;
-            }
-            if (json.charAt(i) == '"') return i;
-        }
-        return -1;
-    }
-
-
-    private String unescapeJson(String s) {
-        if (s == null) return null;
-        StringBuilder sb = new StringBuilder(s.length());
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c == '\\' && i + 1 < s.length()) {
-                char next = s.charAt(i + 1);
-                switch (next) {
-                    case 'n':
-                        sb.append('\n');
-                        i++;
-                        break;
-                    case 'r':
-                        sb.append('\r');
-                        i++;
-                        break;
-                    case 't':
-                        sb.append('\t');
-                        i++;
-                        break;
-                    case '"':
-                        sb.append('"');
-                        i++;
-                        break;
-                    case '\\':
-                        sb.append('\\');
-                        i++;
-                        break;
-                    case '/':
-                        sb.append('/');
-                        i++;
-                        break;
-                    case 'b':
-                        sb.append('\b');
-                        i++;
-                        break;
-                    case 'f':
-                        sb.append('\f');
-                        i++;
-                        break;
-                    case 'u':
-                        if (i + 5 < s.length()) {
-                            try {
-                                sb.append((char) Integer.parseInt(s.substring(i + 2, i + 6), 16));
-                                i += 5;
-                            } catch (NumberFormatException nfe) {
-                                sb.append(c);
-                            }
-                        } else {
-                            sb.append(c);
-                        }
-                        break;
-                    default:
-                        sb.append(c);
-                }
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> castStringKeyMap(Object parsed) {
+        return (Map<String, Object>) parsed;
     }
 }

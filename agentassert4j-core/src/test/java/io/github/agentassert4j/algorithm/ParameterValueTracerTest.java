@@ -1,8 +1,6 @@
 package io.github.agentassert4j.algorithm;
 
-import io.github.agentassert4j.model.Confidence;
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.ToolCall;
+import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.spi.StorageRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -402,16 +400,16 @@ class ParameterValueTracerTest {
         }
 
         @Override
-        public void saveSkillProfile(io.github.agentassert4j.model.SkillProfile p) {
+        public void saveSkillProfile(SkillProfile p) {
         }
 
         @Override
-        public io.github.agentassert4j.model.SkillProfile findSkillByGroupKey(String key) {
+        public SkillProfile findSkillByGroupKey(String key) {
             return null;
         }
 
         @Override
-        public List<io.github.agentassert4j.model.SkillProfile> findAllSkills() {
+        public List<SkillProfile> findAllSkills() {
             return Collections.emptyList();
         }
 
@@ -434,16 +432,16 @@ class ParameterValueTracerTest {
         }
 
         @Override
-        public void archiveBaseline(io.github.agentassert4j.model.ArchivedBaseline archived) {
+        public void archiveBaseline(ArchivedBaseline archived) {
         }
 
         @Override
-        public io.github.agentassert4j.model.ArchivedBaseline findArchivedBaseline(String skillId, String tag) {
+        public ArchivedBaseline findArchivedBaseline(String skillId, String tag) {
             return null;
         }
 
         @Override
-        public List<io.github.agentassert4j.model.ArchivedBaseline> findArchivedBaselines(String skillId) {
+        public List<ArchivedBaseline> findArchivedBaselines(String skillId) {
             return Collections.emptyList();
         }
     }

@@ -139,7 +139,7 @@ class SqliteStorageRepositoryTest {
         p.setTotalRecords(42);
 
         DeterministicFingerprint fp = new DeterministicFingerprint();
-        Set<String> tools = new java.util.HashSet<>();
+        Set<String> tools = new HashSet<>();
         tools.add("queryOrder");
         fp.setToolCallSet(tools);
         p.setFingerprint(fp);
@@ -219,7 +219,7 @@ class SqliteStorageRepositoryTest {
     @Test
     void archiveAndFindBaseline() {
         DeterministicFingerprint fp = new DeterministicFingerprint();
-        Set<String> tools = new java.util.HashSet<>();
+        Set<String> tools = new HashSet<>();
         tools.add("toolX");
         fp.setToolCallSet(tools);
 
@@ -564,7 +564,7 @@ class SqliteStorageRepositoryTest {
         p.setApprovedAt(1735689600000L);
         p.setTotalRecords(10);
         DeterministicFingerprint fp = new DeterministicFingerprint();
-        fp.setToolCallSet(new java.util.HashSet<>());
+        fp.setToolCallSet(new HashSet<>());
         p.setFingerprint(fp);
         repo.saveSkillProfile(p);
 
@@ -600,7 +600,7 @@ class SqliteStorageRepositoryTest {
         p.setBaselineStatus(BaselineStatus.BASELINE);
         p.setTotalRecords(5);
         DeterministicFingerprint fp = new DeterministicFingerprint();
-        fp.setToolCallSet(new java.util.HashSet<>());
+        fp.setToolCallSet(new HashSet<>());
         p.setFingerprint(fp);
         repo.saveSkillProfile(p);
     }

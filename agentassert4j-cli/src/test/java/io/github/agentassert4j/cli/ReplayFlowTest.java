@@ -47,7 +47,7 @@ class ReplayFlowTest {
         repository.initialize();
         stubClient = new StubLlmClient();
         output = new ByteArrayOutputStream();
-        runner = new ReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new SkillRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(output, true));
+        runner = new ReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new SkillRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), false);
     }
 
     @AfterEach
@@ -132,7 +132,9 @@ class ReplayFlowTest {
             approve.skill = "chat:hash-old";
             PrintStream originalOut = System.out;
             ByteArrayOutputStream approveOut = new ByteArrayOutputStream();
-            System.setOut(new PrintStream(approveOut, true));
+            PrintStream approveStream = new PrintStream(approveOut, true);
+            approve.out = approveStream;
+            System.setOut(approveStream);
             int approveExit;
             try {
                 approveExit = approve.call();
@@ -582,7 +584,9 @@ class ReplayFlowTest {
             rollback.version = "v9";
             PrintStream originalErr = System.err;
             ByteArrayOutputStream errOut = new ByteArrayOutputStream();
-            System.setErr(new PrintStream(errOut, true));
+            PrintStream errStream = new PrintStream(errOut, true);
+            rollback.err = errStream;
+            System.setErr(errStream);
             int exit;
             try {
                 exit = rollback.call();

@@ -272,7 +272,7 @@ class RecursiveJsonParserTest {
 
     @Test
     void serialize_map() {
-        Map<String, Object> map = new java.util.LinkedHashMap<>();
+        Map<String, Object> map = new LinkedHashMap<>();
         map.put("a", 1L);
         map.put("b", "x");
         assertEquals("{\"a\":1,\"b\":\"x\"}", RecursiveJsonParser.serialize(map));
@@ -444,5 +444,43 @@ class RecursiveJsonParserTest {
         assertFalse(json.contains("Infinity"), "JSON 无 Infinity 字面量: " + json);
         Object roundTripped = RecursiveJsonParser.parse(json);
         assertNotNull(roundTripped, "非有限值写 null 后必须是合法 JSON");
+    }
+
+    @Test
+    void escape_shortSequences() {
+        assertEquals("a\\\"b", RecursiveJsonParser.escape("a\"b"));
+        assertEquals("a\\\\b", RecursiveJsonParser.escape("a\\b"));
+        assertEquals("a\\nb", RecursiveJsonParser.escape("a\nb"));
+        assertEquals("a\\tb", RecursiveJsonParser.escape("a\tb"));
+        assertEquals("a\\rb", RecursiveJsonParser.escape("a\rb"));
+        assertEquals("\\b\\f", RecursiveJsonParser.escape("\b\f"));
+    }
+
+    @Test
+    void escape_controlCharsToUnicodeForm() {
+        assertEquals("\\u0001", RecursiveJsonParser.escape("\u0001"));
+        assertEquals("\\u001f", RecursiveJsonParser.escape("\u001f"));
+    }
+
+    @Test
+    void escape_nullAndPlainContent() {
+        assertEquals("", RecursiveJsonParser.escape(null));
+        assertEquals("订单 SO-1 已发货 \uD83D\uDE80", RecursiveJsonParser.escape("订单 SO-1 已发货 \uD83D\uDE80"));
+    }
+
+    @Test
+    void escape_outputIsEmbeddable() {
+        String hostile = "引号\" 反斜杠\\ 换行\n 制表\t 控制符\u0007 中文";
+        String escaped = RecursiveJsonParser.escape(hostile);
+        for (int i = 0; i < escaped.length(); i++) {
+            char c = escaped.charAt(i);
+            assertFalse(c == '"' && (i == 0 || escaped.charAt(i - 1) != '\\'), "裸引号不得出现: " + escaped);
+            assertTrue(c >= 0x20 || c == '\\', "裸控制字符不得出现: " + escaped);
+        }
+        // 转义后可直接嵌入 JSON 字符串并被重新解析回原文
+        String wrapped = "{\"v\":\"" + escaped + "\"}";
+        Object parsed = RecursiveJsonParser.parse(wrapped);
+        assertNotNull(parsed, "嵌入产物必须是合法 JSON: " + wrapped);
+        assertEquals(hostile, ((Map<String, Object>) parsed).get("v"), "转义往返必须还原原文");
     }
 }

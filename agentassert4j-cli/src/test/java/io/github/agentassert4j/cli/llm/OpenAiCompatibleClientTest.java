@@ -37,7 +37,7 @@ class OpenAiCompatibleClientTest {
 
     @BeforeEach
     void setUp() {
-        client = new OpenAiCompatibleClient("https://api.openai.com", "test-key", "gpt-4o");
+        client = new OpenAiCompatibleClient("https://api.openai.com", "test-key", "gpt-4o", OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, null);
     }
 
     @Test
@@ -141,7 +141,7 @@ class OpenAiCompatibleClientTest {
 
         com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress(0), 0);
         server.createContext("/", exchange -> {
-            byte[] resp = ("{\"content\":\"\u5317\u4eac\"}").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            byte[] resp = ("{\"choices\":[{\"message\":{\"content\":\"\u5317\u4eac\"}}]}").getBytes(java.nio.charset.StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, resp.length);
             exchange.getResponseBody().write(resp);
@@ -263,13 +263,16 @@ class OpenAiCompatibleClientTest {
     }
 
     @Test
-    void parseResponse_argumentsWithNestedObject_keptAsString() throws Exception {
+    void parseResponse_argumentsWithNestedObject_parsedToMap() throws Exception {
         String json = "{\"choices\":[{\"message\":{\"tool_calls\":[" + "{\"id\":\"c1\",\"type\":\"function\",\"function\":{" + "\"name\":\"search\",\"arguments\":\"{\\\"filter\\\":{\\\"status\\\":\\\"active\\\"}}\"}}" + "]}}]}";
 
         LlmResponse response = client.parseResponse(json);
         Map<String, Object> args = response.getToolCalls().get(0).getArguments();
-        // 嵌套对象保留为字符串
-        assertEquals("{\"status\":\"active\"}", args.get("filter"));
+        // 嵌套对象必须解析为 Map——捕获侧（SDK）把 arguments 解析成 Map 填充，
+        // ArgTypeUtil 对两侧统一派生 "object"；旧实现保留字符串会把参数类型维
+        // 推成 "string"，与基线失配造成伪回归
+        @SuppressWarnings("unchecked") Map<String, Object> filter = (Map<String, Object>) args.get("filter");
+        assertEquals("active", filter.get("status"));
     }
 
     @Test
@@ -291,7 +294,7 @@ class OpenAiCompatibleClientTest {
         });
         server.start();
         try {
-            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 1);
+            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 1, null);
             LlmRequest request = new LlmRequest();
             request.setUserInput("hi");
 
@@ -316,7 +319,7 @@ class OpenAiCompatibleClientTest {
         });
         server.start();
         try {
-            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 0);
+            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 0, null);
             LlmRequest request = new LlmRequest();
             request.setUserInput("hi");
 
@@ -346,7 +349,7 @@ class OpenAiCompatibleClientTest {
         });
         server.start();
         try {
-            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 1);
+            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 1, null);
             LlmRequest request = new LlmRequest();
             request.setUserInput("hi");
 
@@ -371,7 +374,7 @@ class OpenAiCompatibleClientTest {
         });
         server.start();
         try {
-            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 2);
+            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 2, null);
             LlmRequest request = new LlmRequest();
             request.setUserInput("hi");
 
@@ -398,7 +401,7 @@ class OpenAiCompatibleClientTest {
         });
         server.start();
         try {
-            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort() + "/", "key", "test", 0);
+            OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort() + "/", "key", "test", 0, null);
             LlmRequest request = new LlmRequest();
             request.setUserInput("hi");
 
@@ -413,7 +416,7 @@ class OpenAiCompatibleClientTest {
 
     @Test
     void isAvailable_unreachableEndpoint_returnsFalse() {
-        OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://localhost:1", "fake-key", "test");
+        OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://localhost:1", "fake-key", "test", OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, null);
         assertFalse(c.isAvailable());
     }
 
@@ -505,7 +508,7 @@ class OpenAiCompatibleClientTest {
             });
             server.start();
             try {
-                OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 2);
+                OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://127.0.0.1:" + server.getAddress().getPort(), "key", "test", 2, null);
                 LlmRequest request = new LlmRequest();
                 request.setUserInput("hi");
 
@@ -545,7 +548,7 @@ class OpenAiCompatibleClientTest {
         void buildRequestBody_userTurn_hasNoToolCallId() {
             LlmRequest request = new LlmRequest();
             request.setUserInput("next");
-            request.addTurn("user", "q1");
+            request.addTurn(new TurnContext("user", "q1"));
 
             String body = client.buildRequestBody(request, "gpt-4o");
 

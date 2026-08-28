@@ -63,16 +63,7 @@ public class InteractionRecorder implements RecordingInterceptor {
     private volatile boolean started = false;
 
     /**
-     * 使用默认配置创建录制器。
-     *
-     * @param repository 存储仓库（不能为 null）
-     */
-    public InteractionRecorder(InteractionWriteStore repository) {
-        this(repository, RecorderConfig.defaults());
-    }
-
-    /**
-     * 使用自定义配置创建录制器。
+     * 创建录制器。
      *
      * @param repository 存储仓库（不能为 null）
      * @param config     录制器配置（null 时使用默认配置）
@@ -160,13 +151,6 @@ public class InteractionRecorder implements RecordingInterceptor {
             droppedCount.incrementAndGet();
             log.warn("Failed to publish interaction record: {}", e.getMessage());
         }
-    }
-
-    /**
-     * 便利方法：与 intercept() 等价，更直观的 API 名称。
-     */
-    public void record(InteractionRecord record) {
-        intercept(record);
     }
 
     /**

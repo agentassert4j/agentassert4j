@@ -86,24 +86,7 @@ public class InMemoryDependencyGraph {
     }
 
     /**
-     * 添加一条边（默认 HIGH 置信度）。
-     * 同一条边多次添加时合并 confidence：HIGH > LOW > TRANSPARENT。
-     */
-    public void addEdge(String src, String tgt) {
-        addEdge(src, tgt, Confidence.HIGH);
-    }
-
-    /**
-     * 添加一条边（指定置信度）。
-     * 同一条边多次添加时保留最高置信度。
-     */
-    public void addEdge(String src, String tgt, Confidence confidence) {
-        addEdge(src, tgt, confidence, Collections.emptyList());
-    }
-
-    /**
-     * 添加一条边（完整参数）。
-     * 同一条边多次添加时保留最高置信度，throughNodes 合并。
+     * 添加一条边。同一条边多次添加时保留最高置信度，throughNodes 合并。
      */
     public void addEdge(String src, String tgt, Confidence confidence, List<String> throughNodes) {
         Map<String, GraphEdge> targets = outEdges.computeIfAbsent(src, k -> new LinkedHashMap<>());

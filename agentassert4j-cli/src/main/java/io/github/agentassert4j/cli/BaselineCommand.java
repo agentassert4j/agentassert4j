@@ -6,6 +6,7 @@ import io.github.agentassert4j.spi.StorageRepository;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
+import java.io.PrintStream;
 import java.util.concurrent.Callable;
 
 /**
@@ -16,6 +17,11 @@ import java.util.concurrent.Callable;
  */
 @Command(name = "baseline", description = "为已录制的交互建立基线（幂等，可重复执行）", mixinStandardHelpOptions = true)
 public class BaselineCommand implements Callable<Integer> {
+
+    // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
+    PrintStream out = System.out;
+    PrintStream err = System.err;
+
 
     @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
     String db;
@@ -33,19 +39,19 @@ public class BaselineCommand implements Callable<Integer> {
     public Integer call() {
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db);
+            repository = CliSupport.openRepository(db, out);
             String actor = approver != null && !approver.trim().isEmpty() ? approver.trim() : CliSupport.currentActor();
-            String resolvedSkill = CliSupport.resolveBusinessSkillFilter(repository, skill, System.out);
+            String resolvedSkill = CliSupport.resolveBusinessSkillFilter(repository, skill, out);
             SkillRulesConfig rules = ConfigLoader.loadRulesConfig();
-            CliSupport.warnUnknownBehaviors(rules, System.out);
+            CliSupport.warnUnknownBehaviors(rules, out);
             int established = new BaselineService(repository).establishMissing(System.out, actor, force, resolvedSkill, rules);
-            System.out.println(established > 0 ? "完成：" + established + " 个 skill " + (force ? "重建" : "新建") + "基线。" : "完成：所有 skill 均已有基线。");
+            out.println(established > 0 ? "完成：" + established + " 个 skill " + (force ? "重建" : "新建") + "基线。" : "完成：所有 skill 均已有基线。");
             return 0;
         } catch (IllegalStateException e) {
-            System.err.println(e.getMessage());
+            err.println(e.getMessage());
             return 2;
         } catch (RuntimeException e) {
-            System.err.println("baseline 失败：" + e.getMessage());
+            err.println("baseline 失败：" + e.getMessage());
             return 2;
         } finally {
             if (repository != null) {

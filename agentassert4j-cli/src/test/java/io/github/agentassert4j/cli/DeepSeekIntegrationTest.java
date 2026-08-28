@@ -1,5 +1,6 @@
 package io.github.agentassert4j.cli;
 
+import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.algorithm.*;
 import io.github.agentassert4j.cli.llm.OpenAiCompatibleClient;
 import io.github.agentassert4j.config.TestExecutionConfig;
@@ -58,7 +59,7 @@ class DeepSeekIntegrationTest {
     static void setUp() {
         String apiKey = System.getProperty("deepseek.api.key");
         assumeTrue(apiKey != null && !apiKey.trim().isEmpty(), "跳过：未提供 -Ddeepseek.api.key");
-        client = new OpenAiCompatibleClient(ENDPOINT, apiKey, "deepseek-chat");
+        client = new OpenAiCompatibleClient(ENDPOINT, apiKey, "deepseek-chat", OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, null);
     }
 
     private LlmResponse callLlm(String systemPrompt, String userInput) throws Exception {
@@ -398,7 +399,7 @@ class DeepSeekIntegrationTest {
             DeterministicFingerprint fp1 = FingerprintExtractor.extract(rec1);
             DeterministicFingerprint fp2 = FingerprintExtractor.extract(rec2);
 
-            DeterministicComparator comparator = new DeterministicComparator();
+            DeterministicComparator comparator = new DeterministicComparator(ComparatorConfig.defaults());
             ComparisonResult result = comparator.compare(fp1, fp2, resp2.getContent());
 
             assertNotNull(result.getVerdict());
@@ -426,7 +427,7 @@ class DeepSeekIntegrationTest {
             DeterministicFingerprint textFp = FingerprintExtractor.extract(textRec);
             DeterministicFingerprint toolFp = FingerprintExtractor.extract(toolRec);
 
-            DeterministicComparator comparator = new DeterministicComparator();
+            DeterministicComparator comparator = new DeterministicComparator(ComparatorConfig.defaults());
             ComparisonResult result = comparator.compare(textFp, toolFp, toolResp.getContent());
 
             // 工具集变化 → 不匹配
@@ -489,7 +490,7 @@ class DeepSeekIntegrationTest {
             InteractionRecord baseline = makeTextBaseline("exec-text-1", "5+3等于几？", "8");
             String newPrompt = "你是一个数学助手，简洁回答。";
 
-            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
+            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
             RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
 
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
@@ -513,7 +514,7 @@ class DeepSeekIntegrationTest {
             // tools 定义由基线记录原样携带（重放请求自动复用），执行配置无需传入
             TestExecutionConfig config = new TestExecutionConfig().temperature(0.0).timeoutMs(30000);
 
-            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
+            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
             RegressionTestResult result = executor.execute(baseline, newPrompt, config);
 
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
@@ -537,7 +538,7 @@ class DeepSeekIntegrationTest {
             baseline.setPreviousTurns(turns);
 
             String newPrompt = "你是对话助手，记住用户信息。";
-            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
+            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
             RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
 
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
@@ -548,7 +549,7 @@ class DeepSeekIntegrationTest {
         @DisplayName("6.4 dryRun 模式")
         void testDryRun() {
             InteractionRecord baseline = makeTextBaseline("dry-1", "test", "ok");
-            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
+            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
 
             RegressionTestResult result = executor.execute(baseline, "new prompt", new TestExecutionConfig().dryRun(true));
 
@@ -566,7 +567,7 @@ class DeepSeekIntegrationTest {
             InteractionRecord baseline = makeTextBaseline("stat-serial-1", "7+8等于几？只回答数字。", "15");
             String newPrompt = "你是数学助手，只回答数字。";
 
-            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator());
+            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null);
 
             StatisticalTestConfig config = new StatisticalTestConfig();
             config.setSampleCount(5);
@@ -611,7 +612,7 @@ class DeepSeekIntegrationTest {
             InteractionRecord baseline = makeTextBaseline("stat-conc-1", "9*9等于几？只回答数字。", "81");
             String newPrompt = "你是数学助手。";
 
-            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator());
+            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null);
 
             StatisticalTestConfig config = new StatisticalTestConfig();
             config.setSampleCount(5);
@@ -631,7 +632,7 @@ class DeepSeekIntegrationTest {
         void testSingleMode() throws Exception {
             InteractionRecord baseline = makeTextBaseline("stat-single-1", "10/2等于几？", "5");
 
-            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator());
+            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null);
 
             StatisticalRegressionResult result = executor.execute(baseline, "你是数学助手。", StatisticalTestConfig.defaults());
 
@@ -720,7 +721,7 @@ class DeepSeekIntegrationTest {
             String newPrompt = "你是一个友好的数学老师，用完整句子回答数学问题。";
 
             // 4. 回归重放
-            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
+            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
             RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
 
             // 5. 验证完整链路
@@ -767,7 +768,7 @@ class DeepSeekIntegrationTest {
 
                 // 3. 用新 prompt 重放（tools 定义随基线记录原样携带）
                 String newPrompt = "你是一个天气专家。用 get_weather 工具查天气。";
-                RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
+                RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
                 RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
 
                 System.out.println("[9.2] 重放结果: Verdict=" + result.getComparison().getVerdict() + ", Score=" + String.format("%.4f", result.getComparison().getScore()) + ", toolMatch=" + result.getComparison().isToolCallMatch());
@@ -794,8 +795,8 @@ class DeepSeekIntegrationTest {
             // 构建 turn 2 with previousTurns
             LlmRequest turn2 = new LlmRequest();
             turn2.setSystemPrompt(prompt);
-            turn2.addTurn("user", "我叫小红");
-            turn2.addTurn("assistant", resp1.getContent());
+            turn2.addTurn(new TurnContext("user", "我叫小红"));
+            turn2.addTurn(new TurnContext("assistant", resp1.getContent()));
             turn2.setUserInput("我叫什么名字？只回答名字。");
             turn2.setTemperature(0.0);
             LlmResponse resp2 = client.chat(turn2, 30000);
@@ -823,7 +824,7 @@ class DeepSeekIntegrationTest {
 
             // 用新 prompt 重放
             String newPrompt = "你是一个友好的助手，总是记住用户信息。";
-            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(), null);
+            RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
             RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
 
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
@@ -836,7 +837,7 @@ class DeepSeekIntegrationTest {
             InteractionRecord baseline = makeTextBaseline("lifecycle-stat-1", "2的10次方等于多少？只回答数字。", "1024");
             String newPrompt = "你是数学助手，精确计算，只回答数字。";
 
-            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator());
+            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null);
 
             StatisticalTestConfig config = new StatisticalTestConfig();
             config.setSampleCount(5);

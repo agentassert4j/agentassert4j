@@ -3,6 +3,7 @@ package io.github.agentassert4j.cli;
 import io.github.agentassert4j.algorithm.BehaviorChecker;
 import picocli.CommandLine.Command;
 
+import java.io.PrintStream;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.Callable;
@@ -20,25 +21,30 @@ import java.util.concurrent.Callable;
 @Command(name = "rules", description = "查看内置约束行为目录与规则文件写法", mixinStandardHelpOptions = true)
 public class RulesCommand implements Callable<Integer> {
 
+    // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
+    PrintStream out = System.out;
+    PrintStream err = System.err;
+
+
     @Override
     public Integer call() {
         Set<String> builtins = new TreeSet<>(BehaviorChecker.getBuiltinBehaviorNames());
-        System.out.println("内置约束行为（agentassert4j-rules.json 的 behaviors 字段可用的全部名称）:");
+        out.println("内置约束行为（agentassert4j-rules.json 的 behaviors 字段可用的全部名称）:");
         for (String name : builtins) {
-            System.out.println("  " + name + " — " + describe(name));
+            out.println("  " + name + " — " + describe(name));
         }
-        System.out.println();
-        System.out.println("规则文件示例（agentassert4j-rules.json，与 agentassert4j.json 同目录查找）:");
-        System.out.println("{");
-        System.out.println("  \"skills\": {");
-        System.out.println("    \"<业务 skillId>\": {");
-        System.out.println("      \"requiredKeywords\": [\"订单\"],");
-        System.out.println("      \"forbiddenKeywords\": [\"抱歉\"],");
-        System.out.println("      \"regexPatterns\": [\"\\\\d{6,}\"],");
-        System.out.println("      \"behaviors\": [\"mustUseChinese\", \"jsonOutput\"]");
-        System.out.println("    }");
-        System.out.println("  }");
-        System.out.println("}");
+        out.println();
+        out.println("规则文件示例（agentassert4j-rules.json，与 agentassert4j.json 同目录查找）:");
+        out.println("{");
+        out.println("  \"skills\": {");
+        out.println("    \"<业务 skillId>\": {");
+        out.println("      \"requiredKeywords\": [\"订单\"],");
+        out.println("      \"forbiddenKeywords\": [\"抱歉\"],");
+        out.println("      \"regexPatterns\": [\"\\\\d{6,}\"],");
+        out.println("      \"behaviors\": [\"mustUseChinese\", \"jsonOutput\"]");
+        out.println("    }");
+        out.println("  }");
+        out.println("}");
         return 0;
     }
 

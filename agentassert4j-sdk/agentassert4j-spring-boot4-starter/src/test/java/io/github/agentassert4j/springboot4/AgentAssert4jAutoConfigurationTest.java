@@ -2,6 +2,7 @@ package io.github.agentassert4j.springboot4;
 
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.recorder.InteractionRecorder;
+import io.github.agentassert4j.recorder.RecorderConfig;
 import io.github.agentassert4j.spi.RecordingInterceptor;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.springai2.RecordingChatModel;
@@ -141,7 +142,7 @@ class AgentAssert4jAutoConfigurationTest {
     void userProvidedBeansPreferred() {
         SqliteStorageRepository userStorage = new SqliteStorageRepository(tempDbPath());
         userStorage.initialize();
-        InteractionRecorder userRecorder = new InteractionRecorder(userStorage);
+        InteractionRecorder userRecorder = new InteractionRecorder(userStorage, RecorderConfig.defaults());
         userRecorder.start();
         // destroy 推断只认 close/shutdown，不认 stop()——录制器必须显式声明，
         // 否则关停后 flush 线程会在存储 close 后重开连接，锁住库文件
