@@ -9,6 +9,7 @@ import io.github.agentassert4j.spi.StorageRepository;
 
 import java.io.PrintStream;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 基线建立服务 — baseline 命令与 replay 前置步骤共用的落基线逻辑。
@@ -29,69 +30,88 @@ public class BaselineService {
     }
 
     /**
-     * 为已录制且尚无基线的 skill 建立基线。
+     * 为已录制且尚无基线的分组建立基线。
      *
      * @param out         报告输出流
      * @param actor       操作者身份（审批留痕）
      * @param force       以当前判定语义重建基线：已有基线也被当前算法新指纹覆盖
      *                    （判定语义版本升级后的恢复路径），版本标签按归档占用顺延
-     * @param skillFilter 仅处理该业务 skillId（null = 全部；调用方经 CliSupport
-     *                    预解析，groupKey 前缀已在解析层换算成业务标签）
+     * @param skillFilter 仅处理该业务 skillId 或分组键前缀（null = 全部；调用方经
+     *                    CliSupport 预解析，groupKey 前缀已在解析层换算成业务标签）
      * @param rules       规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
-     * @return 本次新建/重建基线的 skill 数
+     * @return 本次新建/重建基线的分组数
      */
     public int establishMissing(PrintStream out, String actor, boolean force, String skillFilter, SkillRulesConfig rules) {
         BaselineManager manager = new BaselineManager(repository);
         int established = 0;
 
-        for (String skillId : CliSupport.recordedSkillIds(repository)) {
-            if (skillFilter != null && !skillFilter.equals(skillId)) {
-                continue;
-            }
-            String groupKey = groupKeyOfFirstRecord(skillId);
-            if (groupKey == null) {
-                continue;
-            }
-            SkillProfile existing = repository.findSkillByGroupKey(groupKey);
-            boolean hadBaseline = existing != null && existing.getFingerprint() != null;
-            if (hadBaseline && !force) {
-                out.println("  " + skillId + " → " + groupKey + ": 基线已存在（" + existing.getVersionTag() + "）");
+        for (Map.Entry<String, List<InteractionRecord>> bucket : CliSupport.groupBuckets(repository).entrySet()) {
+            String groupKey = bucket.getKey();
+            List<InteractionRecord> records = bucket.getValue();
+            if (skillFilter != null && !bucketCoversFilter(records, groupKey, skillFilter)) {
                 continue;
             }
 
-            List<InteractionRecord> records = repository.findBySkillId(skillId);
+            SkillProfile existing = repository.findSkillByGroupKey(groupKey);
+            boolean hadBaseline = existing != null && existing.getFingerprint() != null;
+            if (hadBaseline && !force) {
+                out.println("  " + displayLabel(records) + groupKey + ": 基线已存在（" + existing.getVersionTag() + "）");
+                continue;
+            }
+
             if (force) {
                 if (hadBaseline) {
                     // 破坏性操作必须留痕：被覆盖的旧基线进入归档，rollback 可恢复
-                    out.println("  警告：skill " + skillId + " 的既有基线 " + existing.getVersionTag() + "（审批人 " + existing.getApprovedBy() + "）将被当前语义重建覆盖，旧基线已归档、可用 rollback 恢复。");
+                    out.println("  警告：分组 " + groupKey + " 的既有基线 " + existing.getVersionTag() + "（审批人 " + existing.getApprovedBy() + "）将被当前语义重建覆盖，旧基线已归档、可用 rollback 恢复。");
                 }
-                // 重建只需任一该 skill 的可分组录制（取存储规范序，与首次建立的取材一致）；
+                // 重建取桶内规范序首条可分组记录（分桶已剔除不可分组记录）；
                 // 逐条调用会让版本标签随记录数连跳
-                InteractionRecord material = firstGroupableRecord(records);
-                if (material != null) {
-                    manager.reestablishBaseline(material, actor, rules);
-                }
+                manager.reestablishBaseline(records.get(0), actor, rules);
             } else {
                 for (InteractionRecord record : records) {
                     try {
                         manager.autoEstablishBaseline(record, actor, rules);
                     } catch (RuntimeException e) {
-                        // 单条分组失败不拦截其余记录——与录制 enrich 的单条容错同哲学，
-                        // 无法归组的记录由重放守卫统一告警并剔除
+                        // 单条建档失败（存储抖动等）不中断整批——与录制 enrich 的
+                        // 单条容错同哲学；分桶已剔除不可分组记录，这里只剩存储面故障
                     }
                 }
             }
 
             established++;
-            // 首条记录建立画像时 totalRecords=1，回填该 skill 的真实记录数
+            // 首条记录建立画像时 totalRecords=1，回填该分组的真实记录数
             SkillProfile created = repository.findSkillByGroupKey(groupKey);
             if (created != null) {
                 created.setTotalRecords(records.size());
                 repository.saveSkillProfile(created);
             }
-            out.println("  " + skillId + " → " + groupKey + ": " + (hadBaseline ? "已按当前判定语义重建基线（" + created.getVersionTag() + "）" : "新建基线"));
+            out.println("  " + displayLabel(records) + groupKey + ": " + (hadBaseline ? "已按当前判定语义重建基线（" + created.getVersionTag() + "）" : "新建基线"));
         }
         return established;
+    }
+
+    /**
+     * 桶是否覆盖过滤值：桶内任一记录的业务标签精确等于过滤值，或分组键以其为前缀。
+     */
+    private static boolean bucketCoversFilter(List<InteractionRecord> records, String groupKey, String filter) {
+        for (InteractionRecord record : records) {
+            if (filter.equals(record.getSkillId())) {
+                return true;
+            }
+        }
+        return groupKey.startsWith(filter);
+    }
+
+    /**
+     * 桶内首个非空业务标签（声明组显示人读名，形状组显示为空）。
+     */
+    private static String displayLabel(List<InteractionRecord> records) {
+        for (InteractionRecord record : records) {
+            if (record.getSkillId() != null && !record.getSkillId().isEmpty()) {
+                return record.getSkillId() + " → ";
+            }
+        }
+        return "";
     }
 
     /**

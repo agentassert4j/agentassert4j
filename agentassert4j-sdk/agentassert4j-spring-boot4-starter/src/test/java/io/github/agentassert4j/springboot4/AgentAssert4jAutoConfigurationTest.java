@@ -72,6 +72,26 @@ class AgentAssert4jAutoConfigurationTest {
     }
 
     @Test
+    @DisplayName("应用级默认 skillId：未声明调用按默认身份录制")
+    void defaultSkillId_recordsUndeclaredCalls() {
+        String dbPath = tempDbPath();
+        runner.withBean("chatModel", StubChatModel.class).withPropertyValues("agentassert4j.database=" + dbPath, "agentassert4j.skill-id=order-flow").run(context -> {
+            ChatModel model = context.getBean("chatModel", ChatModel.class);
+            model.call(new Prompt(List.of(new UserMessage("订单 SO-1 在哪"))));
+
+            InteractionRecorder recorder = context.getBean(InteractionRecorder.class);
+            awaitWritten(recorder, 1);
+            recorder.flush();
+            assertEquals(1, recorder.getWrittenCount(), "默认声明使未声明调用过采集门");
+
+            StorageRepository repository = context.getBean(StorageRepository.class);
+            List<String> sessions = repository.findAllSessionIds();
+            InteractionRecord record = repository.findBySessionId(sessions.iterator().next()).get(0);
+            assertEquals("order-flow", record.getSkillId(), "默认 skillId 落到记录声明位");
+        });
+    }
+
+    @Test
     @DisplayName("容器内 ChatModel 被包装，录制器与存储就绪")
     void wrapsChatModelBean() {
         runner.withBean("chatModel", StubChatModel.class).withPropertyValues("agentassert4j.database=" + tempDbPath()).run(context -> {

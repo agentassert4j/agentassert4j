@@ -60,6 +60,14 @@ public class ImpactAnalyzer {
         // 1. 查询直接受影响的 Skill
         Set<String> directSkills = repository.findSkillIdsByTemplateHash(oldPromptHash);
 
+        // 未声明记录的 skill_id 列是空串（业务声明位），不能直接当查询键：
+        // 按模板 hash 反查记录、以派生画像 id 归并进影响集，形状组才可进图遍历与选例
+        Map<String, List<InteractionRecord>> undeclaredByNode = collectUndeclaredByNode(oldPromptHash);
+        if (!undeclaredByNode.isEmpty()) {
+            directSkills.remove("");
+            directSkills.addAll(undeclaredByNode.keySet());
+        }
+
         // 2. 冷启动检测
         if (directSkills.isEmpty()) {
             List<SkillProfile> allSkills = repository.findAllSkills();
@@ -77,9 +85,28 @@ public class ImpactAnalyzer {
         }
 
         // 4. 自适应测试密度
-        List<InteractionRecord> testCases = selectTestCases(directSkills, allAffectedSkills);
+        List<InteractionRecord> testCases = selectTestCases(directSkills, allAffectedSkills, undeclaredByNode);
 
         return new AnalysisResult(directSkills, allAffectedSkills, testCases);
+    }
+
+    /**
+     * 未声明记录按派生画像 id（sha256(分组键)，与依赖图节点同空间）分桶。
+     */
+    private Map<String, List<InteractionRecord>> collectUndeclaredByNode(String oldPromptHash) {
+        Map<String, List<InteractionRecord>> byNode = new LinkedHashMap<>();
+        for (InteractionRecord record : repository.findByTemplateHash(oldPromptHash)) {
+            if (record.getSkillId() != null && !record.getSkillId().isEmpty()) {
+                continue;
+            }
+            try {
+                String nodeId = DeterministicSkillGrouper.group(record).getSkillId();
+                byNode.computeIfAbsent(nodeId, k -> new ArrayList<>()).add(record);
+            } catch (RuntimeException e) {
+                // 个别损坏记录（如工具名缺失）跳过，不让单条数据问题中断影响分析
+            }
+        }
+        return byNode;
     }
 
     /**
@@ -87,13 +114,13 @@ public class ImpactAnalyzer {
      * 全局 Prompt（10+ Skill 共享）：每 Skill 采样 top 3 条。
      * 局部 Prompt（1-9 Skill）：全部测试。
      */
-    private List<InteractionRecord> selectTestCases(Set<String> directSkills, Set<String> allAffectedSkills) {
+    private List<InteractionRecord> selectTestCases(Set<String> directSkills, Set<String> allAffectedSkills, Map<String, List<InteractionRecord>> undeclaredByNode) {
         List<InteractionRecord> testCases = new ArrayList<>();
 
         if (directSkills.size() >= GLOBAL_PROMPT_THRESHOLD) {
             // 全局 Prompt：采样策略
             for (String skill : allAffectedSkills) {
-                List<InteractionRecord> records = repository.findBySkillId(skill);
+                List<InteractionRecord> records = recordsForSkill(skill, undeclaredByNode);
                 // 存储查询自带确定性排序，top3 采样直接取规范序前缀
                 // （timestamp + recordId 平局决胜）的前缀，两次分析选例才一致
                 List<InteractionRecord> ordered = records.stream().sorted(Comparator.comparingLong(InteractionRecord::getTimestamp).thenComparing(r -> r.getRecordId() != null ? r.getRecordId() : "")).collect(Collectors.toList());
@@ -103,10 +130,19 @@ public class ImpactAnalyzer {
         } else {
             // 局部 Prompt：全量测试
             for (String skill : allAffectedSkills) {
-                testCases.addAll(repository.findBySkillId(skill));
+                testCases.addAll(recordsForSkill(skill, undeclaredByNode));
             }
         }
 
         return testCases;
+    }
+
+    /**
+     * 影响集节点的记录读取：声明 Skill 走业务标签查询，
+     * 未声明派生节点从预分桶读取（它们的 skill_id 列是空串，反查不可达）。
+     */
+    private List<InteractionRecord> recordsForSkill(String skill, Map<String, List<InteractionRecord>> undeclaredByNode) {
+        List<InteractionRecord> undeclared = undeclaredByNode.get(skill);
+        return undeclared != null ? undeclared : repository.findBySkillId(skill);
     }
 }

@@ -166,9 +166,11 @@ public class BaselineManager {
     }
 
     private void establish(InteractionRecord record, String approver, boolean overwrite, SkillRulesConfig rules) {
-        if (record == null || record.getSkillId() == null || record.getSkillId().isEmpty()) {
+        if (record == null) {
             return;
         }
+        // 画像字段（skillId/groupKey/skillName）全部以分组器产出为基底——
+        // 记录上的 skillId 只是可选业务声明位，未声明记录（形状派生身份）同样建档
 
         SkillProfile grouping = DeterministicSkillGrouper.group(record);
         SkillProfile existing = repository.findSkillByGroupKey(grouping.getGroupKey());

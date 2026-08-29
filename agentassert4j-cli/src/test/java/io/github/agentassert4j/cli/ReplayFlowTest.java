@@ -334,7 +334,7 @@ class ReplayFlowTest {
         @Test
         @DisplayName("未声明且形状损坏的记录不进入判定集——无守卫判定结构性不可达")
         void ungroupableRecord_excludedFromSelection() {
-            // 锚点收敛后：声明记录恒可分组（身份不依赖工具形状）；未声明记录不进
+            // 声明记录恒可分组（身份不依赖工具形状）；未声明记录不进
             // skill 桶、选例不可达。「分组失败剔除出判定集」守卫退居防御纵深——
             // 直插脏数据（模拟绕过采集门的写入）不再能产生无守卫判定
             repository.saveInteraction(makeRecord("rec-good-1", "skill-1", 1000L, "same answer"));
@@ -357,6 +357,57 @@ class ReplayFlowTest {
             assertFalse(report.contains("rec-bad-1"), "未声明记录不得进入判定集与报告: " + report);
             assertEquals(0, exit, "可分组用例全 PASS");
             assertEquals(2, stubClient.callCount, "仅声明的可分组记录参与判定");
+        }
+
+        @Test
+        @DisplayName("形状派生组（未声明）一等公民：自动建档 + 重放判定可达")
+        void shapeGroup_replayableWithoutDeclaration() {
+            // 未声明但带工具调用的记录按形状派生组分桶——重放选例、自动建档、判定
+            // 对它照常可用（框架内部消化，不要求用户先声明）
+            InteractionRecord shape = makeRecord("rec-shape-1", null, 1000L, "same answer");
+            ToolCall call = new ToolCall();
+            call.setToolName("getOrder");
+            // 参数类型与重放侧派生（arguments 单值 → string）一致，指纹两侧可比
+            call.setArgTypes(Collections.singletonMap("orderId", "String"));
+            shape.setToolCalls(Collections.singletonList(call));
+            shape.setHasToolCalls(true);
+            repository.saveInteraction(shape);
+            // 重放侧返回同名工具调用 + 同文本，形状指纹两侧一致 → PASS
+            stubClient.responseText = "same answer";
+            stubClient.toolCallResponse = true;
+            stubClient.toolCallWithText = true;
+            stubClient.toolCallName = "getOrder";
+
+            int exit = runner.run("new prompt", null, 3, null, false, false, true);
+
+            assertEquals(0, exit, "形状组重放判定可达: " + output);
+            assertEquals(1, stubClient.callCount);
+            String shapeGroupKey = DeterministicSkillGrouper.group(shape).getGroupKey();
+            SkillProfile profile = repository.findSkillByGroupKey(shapeGroupKey);
+            assertNotNull(profile, "形状组基线已自动建立");
+            assertEquals(BaselineStatus.BASELINE, profile.getBaselineStatus());
+        }
+
+        @Test
+        @DisplayName("影响集路径（--old-prompt）对未声明形状组可达")
+        void shapeGroup_impactPathReachable() {
+            // 未声明记录按派生画像 id 归并进影响集——--old-prompt 选例不因声明缺失漏掉形状组
+            InteractionRecord shape = makeRecord("rec-shape-1", null, 1000L, "same answer");
+            ToolCall call = new ToolCall();
+            call.setToolName("getOrder");
+            call.setArgTypes(Collections.singletonMap("orderId", "String"));
+            shape.setToolCalls(Collections.singletonList(call));
+            shape.setHasToolCalls(true);
+            repository.saveInteraction(shape);
+            stubClient.responseText = "same answer";
+            stubClient.toolCallResponse = true;
+            stubClient.toolCallWithText = true;
+            stubClient.toolCallName = "getOrder";
+
+            int exit = runner.run("new prompt", null, 3, "hash-old", false, false, true);
+
+            assertEquals(0, exit, "影响集路径对形状组可达");
+            assertEquals(1, stubClient.callCount);
         }
 
         @Test

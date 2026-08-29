@@ -99,7 +99,7 @@ public final class RecordingChatModel implements ChatModel {
     }
 
     /**
-     * 梯 1 检测告警：请求携带工具定义且内部工具执行开启时，模型编排的 toolCalls
+     * 内部工具执行检测告警：请求携带工具定义且内部工具执行开启时，模型编排的 toolCalls
      * 在装饰器视角不可见（被 ChatModel 内部回路消费），响应无可见工具调用 →
      * 该记录的工具维度失明。一次性 WARN 止血；恢复工具维的正路是关闭内部执行
      * 自持工具循环（每轮各自成记录、重放对称）或等待编排观察装饰。

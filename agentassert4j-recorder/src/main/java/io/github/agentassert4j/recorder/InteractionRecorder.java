@@ -119,11 +119,16 @@ public class InteractionRecorder implements RecordingInterceptor {
         }
 
         // 采集门：未声明（skillId/templateId 均无）且无可见工具调用的纯对话默认过滤。
-        // 逃生开关 recordUndeclaredChat=true 时全量录制；被滤记录不进入管道，
+        // 配置了应用级默认 skillId 时，未声明记录先以默认身份过门（单技能应用零声明成本）；
+        // 逃生开关 recordUndeclaredChat=true 时全量录制。被滤记录不进入管道，
         // 不占用 RingBuffer 与 seq，独立计数保证「滤了多少」可见
         if (!config.isRecordUndeclaredChat() && !isDeclared(record) && !hasVisibleToolCalls(record)) {
-            filteredCount.incrementAndGet();
-            return;
+            if (isNonEmpty(config.getDefaultSkillId())) {
+                record.setSkillId(config.getDefaultSkillId());
+            } else {
+                filteredCount.incrementAndGet();
+                return;
+            }
         }
 
         // 与 stop() 互斥：无锁窗口内关停完成会把事件发布进已停摆的

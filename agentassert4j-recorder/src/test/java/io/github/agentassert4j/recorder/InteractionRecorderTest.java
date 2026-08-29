@@ -40,8 +40,8 @@ class InteractionRecorderTest {
         record.setRecordId(id);
         record.setTimestamp(System.currentTimeMillis());
         record.setTemplateHash("hash-" + id);
-        // 声明业务身份：采集门生效后未声明且无工具调用的纯对话被过滤，
-        // 通用助手的记录必须能过门（门行为本身由 CaptureGate 组专门测）
+        // 声明业务身份：未声明且无工具调用的纯对话会被采集门过滤，
+        // 通用助手的记录必须能过门（门行为由下方专门的门测试覆盖）
         record.setSkillId("skill-" + id);
         return record;
     }
@@ -224,6 +224,27 @@ class InteractionRecorderTest {
         recorder.stop();
 
         assertEquals(1, repo.getStore().size(), "可见工具调用满足采集门，无需声明");
+    }
+
+    @Test
+    void captureGate_defaultSkillId_undeclaredRecordedWithDefault() throws Exception {
+        // 应用级默认声明：未声明记录以默认 skillId 过门并落到声明位
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).defaultSkillId("order-flow").build();
+
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        InteractionRecord bare = new InteractionRecord();
+        bare.setRecordId("bare-3");
+        bare.setTimestamp(System.currentTimeMillis());
+        recorder.intercept(bare);
+
+        Thread.sleep(200);
+        recorder.stop();
+
+        assertEquals(1, repo.getStore().size());
+        assertEquals("order-flow", repo.getStore().get(0).getSkillId(), "默认 skillId 落到记录声明位");
+        assertEquals(0, recorder.getFilteredCount());
     }
 
     @Test

@@ -101,4 +101,11 @@ class RecorderConfigTest {
 
         assertEquals(1, config.getSensitiveFields().size());
     }
+
+    @Test
+    void defaultSkillId_emptyByDefault_builderSetsAndNullNormalizes() {
+        assertEquals("", RecorderConfig.defaults().getDefaultSkillId());
+        assertEquals("order-flow", RecorderConfig.builder().defaultSkillId("order-flow").build().getDefaultSkillId());
+        assertEquals("", RecorderConfig.builder().defaultSkillId(null).build().getDefaultSkillId());
+    }
 }

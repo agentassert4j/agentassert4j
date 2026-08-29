@@ -329,15 +329,17 @@ class BaselineManagerTest {
 
         @Test
         @DisplayName("skillId 为空 → 安全忽略")
-        void emptySkillId_safeIgnore() {
+        void emptySkillId_establishedViaDerivedAnchor() {
+            // 原断言钉住「无 skillId 一律忽略建档」——形状组一等公民后该行为废止：
+            // 未声明记录按派生身份（模板/形状锚点）正常建档，派生不依赖声明位
             InteractionRecord r = new InteractionRecord();
-            r.setSkillId(null);
             manager.autoEstablishBaseline(r, "tester", null);
-            assertTrue(repo.findAllSkills().isEmpty());
+            assertEquals(1, repo.findAllSkills().size());
+            assertEquals("chat:", repo.findAllSkills().get(0).getGroupKey());
 
             r.setSkillId("");
             manager.autoEstablishBaseline(r, "tester", null);
-            assertTrue(repo.findAllSkills().isEmpty());
+            assertEquals(1, repo.findAllSkills().size(), "空串声明视同未声明，幂等不重复建档");
         }
     }
 

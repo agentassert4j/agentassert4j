@@ -52,6 +52,12 @@ public final class RecorderConfig {
      * 或带可见 toolCalls 的调用不受本开关影响，一律录制）
      */
     private final boolean recordUndeclaredChat;
+    /**
+     * 应用级默认 skillId：记录未声明且无工具调用时，以此身份过采集门并作为
+     * 业务声明锚点（单技能应用零代码即得跨提示词编辑的稳定身份）。
+     * 空串 = 无默认（默认值）；显式 per-call 声明（RecordingContext）优先级更高
+     */
+    private final String defaultSkillId;
 
     private RecorderConfig(Builder builder) {
         // 钳位：batchSize/maxBufferSize <= 0（如意图立即刷盘的 0 配置）会让
@@ -69,6 +75,7 @@ public final class RecorderConfig {
         this.sanitizeUserInput = builder.sanitizeUserInput;
         this.sanitizeModelResponse = builder.sanitizeModelResponse;
         this.recordUndeclaredChat = builder.recordUndeclaredChat;
+        this.defaultSkillId = builder.defaultSkillId;
     }
 
     /**
@@ -132,6 +139,10 @@ public final class RecorderConfig {
         return recordUndeclaredChat;
     }
 
+    public String getDefaultSkillId() {
+        return defaultSkillId;
+    }
+
     public static final class Builder {
         private int batchSize = 100;
         private long flushIntervalMs = 5000;
@@ -142,6 +153,7 @@ public final class RecorderConfig {
         private boolean sanitizeUserInput = false;
         private boolean sanitizeModelResponse = false;
         private boolean recordUndeclaredChat = false;
+        private String defaultSkillId = "";
 
         private Builder() {
         }
@@ -188,6 +200,11 @@ public final class RecorderConfig {
 
         public Builder recordUndeclaredChat(boolean recordUndeclaredChat) {
             this.recordUndeclaredChat = recordUndeclaredChat;
+            return this;
+        }
+
+        public Builder defaultSkillId(String defaultSkillId) {
+            this.defaultSkillId = defaultSkillId != null ? defaultSkillId : "";
             return this;
         }
 

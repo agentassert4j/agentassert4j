@@ -123,7 +123,7 @@ class DeterministicSkillGrouperTest {
 
     @Test
     void pureChat_nullTemplateHash_defensiveEmptyAnchor() {
-        // 采集门生效后「未声明且无工具调用的纯对话」不会进入分组，本分支仅防御程序化构造：
+        // 未声明且无工具调用的纯对话由采集门过滤、不进入分组，本分支仅防御程序化构造：
         // 派生契约冻结为 "chat:" + templateHash，双缺失时锚空串——确定且不含字面 null
         // （user_input hash 与 no-anchor 两条兜底路径已随身份锚点收敛物理删除）
         InteractionRecord r = record(null, null, false);
@@ -137,7 +137,7 @@ class DeterministicSkillGrouperTest {
 
     @Test
     void pureChat_userInputNeverEntersDerivation() {
-        // 身份锚点收敛后 user input 不参与派生：同模板同声明状态 → 同组，与输入内容无关
+        // user input 不参与身份派生：同模板同声明状态 → 同组，与输入内容无关
         InteractionRecord r1 = record("hash1", null, false);
         r1.setUserInput("查询订单状态");
         InteractionRecord r2 = record("hash1", null, false);
@@ -197,6 +197,33 @@ class DeterministicSkillGrouperTest {
         InteractionRecord r = record("whatever", Collections.singletonList(tc("queryOrderDB", Collections.singletonMap("orderId", "String"))), true);
 
         assertEquals("queryOrderDB[orderid:string]", DeterministicSkillGrouper.group(r).getGroupKey());
+    }
+
+    @Test
+    void injectivity_declaredSkillIdContainingColon_neverMergesWithSibling() {
+        // 键文法单射：skillId 含冒号时与「前缀 skillId + 恰好同值模板」不得同键——
+        // 团队命名规范（如 "module:skill"）不受框架文法约束
+        InteractionRecord colonId = record(null, null, false);
+        colonId.setSkillId("billing:refund");
+        InteractionRecord prefixIdWithTemplate = record("refund", null, false);
+        prefixIdWithTemplate.setSkillId("billing");
+
+        SkillProfile p1 = DeterministicSkillGrouper.group(colonId);
+        SkillProfile p2 = DeterministicSkillGrouper.group(prefixIdWithTemplate);
+
+        assertNotEquals(p1.getGroupKey(), p2.getGroupKey(), "skillId 含冒号不得与兄弟声明同键");
+        assertEquals("skill:billing%3Arefund", p1.getGroupKey());
+    }
+
+    @Test
+    void injectivity_toolNameContainingSeparator_neverMergesWithSplitTools() {
+        // 键文法单射：单个名为 "a+b" 的工具与 "a"、"b" 两个工具不得同键——
+        // MCP 工具名由 server 侧控制，连接符字符必须不能伪造多工具形状
+        InteractionRecord joined = record(null, Collections.singletonList(tc("a+b", Collections.singletonMap("id", "String"))), true);
+        InteractionRecord split = record(null, Arrays.asList(tc("a", Collections.singletonMap("id", "String")), tc("b", Collections.singletonMap("id", "String"))), true);
+
+        assertNotEquals(DeterministicSkillGrouper.group(joined).getGroupKey(), DeterministicSkillGrouper.group(split).getGroupKey());
+        assertEquals("a%2Bb[id:string]", DeterministicSkillGrouper.group(joined).getGroupKey());
     }
 
     @Test

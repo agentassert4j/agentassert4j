@@ -14,10 +14,7 @@ import io.github.agentassert4j.util.TextDiffUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 
 /**
  * 重放执行流程 — 选例、成本预估、逐例重放、汇总报告与退出码。
@@ -134,8 +131,8 @@ public class ReplayRunner {
             printImpactSummary(analysis);
             cases = filterBySkill(analysis.getTestCases(), resolvedSkill);
         } else {
-            cases = selectTopPerSkill(resolvedSkill, maxCasesPerSkill, newestFirst);
-            info("选例：每 skill " + (newestFirst ? "最新" : "最旧") + " " + maxCasesPerSkill + " 条，共 " + cases.size() + " 条用例。");
+            cases = selectCases(resolvedSkill, maxCasesPerSkill, newestFirst);
+            info("选例：每分组 " + (newestFirst ? "最新" : "最旧") + " " + maxCasesPerSkill + " 条，共 " + cases.size() + " 条用例。");
         }
 
         if (cases.isEmpty()) {
@@ -336,20 +333,31 @@ public class ReplayRunner {
         }
     }
 
-    private List<InteractionRecord> selectTopPerSkill(String skillFilter, int maxCasesPerSkill, boolean newestFirst) {
+    /**
+     * 选例：全库记录按分组键分桶（形状派生组与声明组同权），桶内规范序取头/尾 N 条。
+     * 过滤语义：null 全选；否则桶内任一记录的业务标签等于过滤值，或分组键以过滤值为前缀。
+     */
+    private List<InteractionRecord> selectCases(String skillFilter, int maxCasesPerGroup, boolean newestFirst) {
         List<InteractionRecord> selected = new ArrayList<>();
-        for (String skillId : CliSupport.recordedSkillIds(repository)) {
-            if (skillFilter != null && !skillFilter.equals(skillId)) {
+        for (Map.Entry<String, List<InteractionRecord>> bucket : CliSupport.groupBuckets(repository).entrySet()) {
+            List<InteractionRecord> records = bucket.getValue();
+            if (skillFilter != null && !bucketMatches(records, bucket.getKey(), skillFilter)) {
                 continue;
             }
-            List<InteractionRecord> records = repository.findBySkillId(skillId);
-            // 存储返回规范序（时间升序）：最新选例取尾部 N 条，最旧选例取头部 N 条
-            int size = records.size();
-            int limit = Math.min(maxCasesPerSkill, size);
-            int from = newestFirst ? Math.max(0, size - limit) : 0;
+            int limit = Math.min(maxCasesPerGroup, records.size());
+            int from = newestFirst ? records.size() - limit : 0;
             selected.addAll(records.subList(from, from + limit));
         }
         return selected;
+    }
+
+    private static boolean bucketMatches(List<InteractionRecord> records, String groupKey, String filter) {
+        for (InteractionRecord record : records) {
+            if (filter.equals(record.getSkillId())) {
+                return true;
+            }
+        }
+        return groupKey.startsWith(filter);
     }
 
     private List<InteractionRecord> filterBySkill(List<InteractionRecord> cases, String skillFilter) {

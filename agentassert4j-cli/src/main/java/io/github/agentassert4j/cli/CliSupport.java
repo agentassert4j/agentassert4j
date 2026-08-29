@@ -203,14 +203,40 @@ final class CliSupport {
     }
 
     /**
-     * 单条记录的分组键；分组失败的记录返回 null（调用方决定跳过或报错）。
+     * 单条记录的分组键：优先用落库存储值（enrich 写入，录入即定格——存储键与
+     * 现算键不得分叉），缺失时按分组器现算；无法分组的记录返回 null。
      */
     private static String groupKeyOfRecord(InteractionRecord record) {
+        if (record.getGroupKey() != null && !record.getGroupKey().isEmpty()) {
+            return record.getGroupKey();
+        }
         try {
             return DeterministicSkillGrouper.group(record).getGroupKey();
         } catch (RuntimeException e) {
             return null;
         }
+    }
+
+    /**
+     * 全库记录按分组键分桶：桶按分组键字典序，桶内保持存储规范序（时间、seq、recordId）。
+     * 选例与建档共用本枚举——形状派生组与声明组同权，不因「未声明」失去框架服务资格。
+     */
+    static Map<String, List<InteractionRecord>> groupBuckets(StorageRepository repository) {
+        Map<String, List<InteractionRecord>> buckets = new TreeMap<>();
+        for (String sessionId : repository.findAllSessionIds()) {
+            for (InteractionRecord record : repository.findBySessionId(sessionId)) {
+                String groupKey = groupKeyOfRecord(record);
+                if (groupKey == null) {
+                    continue;
+                }
+                buckets.computeIfAbsent(groupKey, k -> new ArrayList<>()).add(record);
+            }
+        }
+        Comparator<InteractionRecord> canonical = Comparator.comparing(InteractionRecord::getTimestamp).thenComparing(InteractionRecord::getSeq).thenComparing(InteractionRecord::getRecordId);
+        for (List<InteractionRecord> records : buckets.values()) {
+            records.sort(canonical);
+        }
+        return buckets;
     }
 
     /**

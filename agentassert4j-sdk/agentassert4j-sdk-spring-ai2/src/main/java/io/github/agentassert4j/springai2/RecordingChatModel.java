@@ -98,7 +98,7 @@ public final class RecordingChatModel implements ChatModel {
     }
 
     /**
-     * 梯 1 检测告警：请求携带工具定义而响应无可见工具调用——模型编排的 toolCalls
+     * 内部工具执行检测告警：请求携带工具定义而响应无可见工具调用——模型编排的 toolCalls
      * 很可能被模型实现内部的 ToolCallingManager 回路消费，工具维度失明。
      * ChatClient Advisor 链驱动的逐轮循环不受影响（中间轮次自带 toolCalls，
      * 不会触发本告警）。一次性 WARN 止血；正路是声明 skillId 保证分组身份，
