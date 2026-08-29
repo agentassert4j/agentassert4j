@@ -14,11 +14,15 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.definition.ToolDefinition;
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -39,7 +43,7 @@ class RecordingChatModelTest {
         }
     }
 
-    private static final class StubChatModel implements ChatModel {
+    private static class StubChatModel implements ChatModel {
         ChatResponse next;
         Flux<ChatResponse> nextStream;
 
@@ -154,5 +158,77 @@ class RecordingChatModelTest {
         assertEquals(1, interceptor.records.size());
         assertEquals("session-async", interceptor.records.get(0).getSessionId(), "上下文必须在调用线程捕获——聚合回调发生在异步完成信号线程");
         assertEquals("stream-skill", interceptor.records.get(0).getSkillId());
+    }
+
+    /**
+     * 确定性工具回调：记录调用次数，固定返回 JSON 结果。
+     */
+    private static ToolCallback stubTool(String name, AtomicInteger callCount) {
+        return new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder().name(name).description("查询订单").inputSchema("{}").build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                callCount.incrementAndGet();
+                return "{\"status\":\"shipped\"}";
+            }
+        };
+    }
+
+    @Test
+    @DisplayName("编排观察：直调姿势下内部消费的 toolCalls 按序进同一条记录")
+    void internalToolLoop_observedIntoSingleRecord() {
+        AtomicInteger callCount = new AtomicInteger();
+        ToolCallback tool = stubTool("get_order", callCount);
+        // 模拟直调 ChatModel 且模型实现内部消费工具调用：连续两次调用工具后返回最终文本
+        StubChatModel stub = new StubChatModel() {
+            @Override
+            public ChatResponse call(Prompt prompt) {
+                ToolCallingChatOptions options = (ToolCallingChatOptions) prompt.getOptions();
+                options.getToolCallbacks().get(0).call("{\"orderId\":\"SO-1\"}");
+                options.getToolCallbacks().get(0).call("{\"orderId\":\"SO-2\"}");
+                return textResponse("已发货");
+            }
+        };
+        CapturingInterceptor interceptor = new CapturingInterceptor();
+        RecordingChatModel model = RecordingChatModel.wrap(stub, interceptor);
+        ToolCallingChatOptions options = ToolCallingChatOptions.builder().toolCallbacks(List.of(tool)).build();
+
+        model.call(new Prompt(List.of(new UserMessage("订单在哪")), options));
+
+        assertEquals(1, interceptor.records.size());
+        InteractionRecord record = interceptor.records.get(0);
+        assertTrue(record.isHasToolCalls(), "内部消费的工具调用恢复工具维度");
+        assertEquals(2, record.getToolCalls().size(), "多轮回合按序累积进同一条记录");
+        assertEquals("get_order", record.getToolCalls().get(0).getToolName());
+        assertEquals("SO-2", record.getToolCalls().get(1).getArguments().get("orderId"));
+        assertEquals("{\"status\":\"shipped\"}", record.getToolCalls().get(0).getResult(), "结果原文捕获");
+        assertEquals(2, callCount.get(), "业务工具真实执行次数不受装饰影响");
+    }
+
+    @Test
+    @DisplayName("换装发生在 mutate 副本上：业务 options 与原始回调零触碰")
+    void decorateUsesCopy_businessOptionsNeverMutated() {
+        AtomicInteger callCount = new AtomicInteger();
+        ToolCallback tool = stubTool("get_order", callCount);
+        ToolCallingChatOptions options = ToolCallingChatOptions.builder().toolCallbacks(List.of(tool)).build();
+        List<ToolCallback> seenInDelegate = new CopyOnWriteArrayList<>();
+        StubChatModel stub = new StubChatModel() {
+            @Override
+            public ChatResponse call(Prompt prompt) {
+                seenInDelegate.add(((ToolCallingChatOptions) prompt.getOptions()).getToolCallbacks().get(0));
+                return textResponse("ok");
+            }
+        };
+        CapturingInterceptor interceptor = new CapturingInterceptor();
+        RecordingChatModel model = RecordingChatModel.wrap(stub, interceptor);
+
+        model.call(new Prompt(List.of(new UserMessage("hi")), options));
+
+        assertSame(tool, options.getToolCallbacks().get(0), "业务 options 上的回调未被替换");
+        assertNotSame(tool, seenInDelegate.get(0), "delegate 看到的是观察装饰副本");
     }
 }

@@ -41,6 +41,33 @@ final class SpringAiRecordMapper {
     }
 
     /**
+     * 编排观察合并（梯 2）：内部工具执行模式下响应无可见 toolCalls（被回路消费），
+     * 观察缓冲承载完整编排 [A, B, …]——参数经 RecursiveJsonParser 解析后用
+     * ArgTypeUtil.derive 派生类型，与 native 路径同词表。响应自带 toolCalls 时
+     * （ChatClient 逐轮姿势）缓冲静默丢弃，避免同一决策双计。
+     */
+    static InteractionRecord toRecord(Prompt prompt, ChatResponse response, long latencyMs, Long ttftMs, RecordingContext context, List<ObservedToolInvocation> observed) {
+        InteractionRecord record = toRecord(prompt, response, latencyMs, ttftMs, context);
+        if (observed == null || observed.isEmpty() || record.isHasToolCalls()) {
+            return record;
+        }
+        List<ToolCall> calls = new ArrayList<>();
+        for (ObservedToolInvocation invocation : observed) {
+            ToolCall call = new ToolCall();
+            call.setToolName(invocation.toolName);
+            Map<String, Object> arguments = parseArguments(invocation.arguments);
+            call.setArguments(arguments);
+            call.setArgTypes(ArgTypeUtil.derive(arguments));
+            call.setResult(invocation.result);
+            call.setSuccess(invocation.success);
+            calls.add(call);
+        }
+        record.setToolCalls(calls);
+        record.setHasToolCalls(true);
+        return record;
+    }
+
+    /**
      * 组装一次调用的完整交互记录；response 为 null 时只落请求面字段。
      * context 由调用方在业务线程捕获传入——异步回调线程的 ThreadLocal 不可达。
      */

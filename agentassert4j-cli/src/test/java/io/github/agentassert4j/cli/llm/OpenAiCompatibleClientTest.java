@@ -682,6 +682,86 @@ class OpenAiCompatibleClientTest {
     }
 
     @Nested
+    @DisplayName("链式半重放合成帧（assistant 携带 toolCallId 的帧）")
+    class ChainSynthesizedFrames {
+
+        private List<Map<String, Object>> messagesOf(String body) {
+            @SuppressWarnings("unchecked") Map<String, Object> parsed = (Map<String, Object>) RecursiveJsonParser.parse(body);
+            assertNotNull(parsed, "请求体必须可解析");
+            @SuppressWarnings("unchecked") List<Map<String, Object>> messages = (List<Map<String, Object>>) parsed.get("messages");
+            return messages;
+        }
+
+        private TurnContext assistantCallFrame(String callId, String toolName, String argumentsJson) {
+            TurnContext turn = new TurnContext("assistant", "");
+            turn.setToolCallId(callId);
+            turn.setToolName(toolName);
+            turn.setToolArguments(argumentsJson);
+            return turn;
+        }
+
+        private TurnContext toolResultFrame(String callId, String result) {
+            TurnContext turn = new TurnContext("tool", result);
+            turn.setToolCallId(callId);
+            return turn;
+        }
+
+        @Test
+        @DisplayName("合成 assistant+tool 对只渲染一条 assistant 帧，且携带真实参数")
+        void synthesizedPair_singleAssistantFrameWithRealArguments() {
+            LlmRequest request = new LlmRequest();
+            request.setSystemPrompt("new prompt");
+            request.addTurn(assistantCallFrame("aa-chain-1-0", "get_order", "{\"orderId\":\"SO-1\"}"));
+            request.addTurn(toolResultFrame("aa-chain-1-0", "{\"status\":\"shipped\"}"));
+
+            String body = client.buildRequestBody(request, "gpt-4o");
+            List<Map<String, Object>> messages = messagesOf(body);
+
+            assertEquals(3, messages.size(), "system + 一条 assistant + 一条 tool，assistant 帧不得重复补发");
+            Map<String, Object> assistant = messages.get(1);
+            assertEquals("assistant", assistant.get("role"));
+            @SuppressWarnings("unchecked") List<Map<String, Object>> toolCalls = (List<Map<String, Object>>) assistant.get("tool_calls");
+            assertEquals(1, toolCalls.size(), "重复补帧会让同一调用出现两条 tool_calls");
+            @SuppressWarnings("unchecked") Map<String, Object> fn = (Map<String, Object>) toolCalls.get(0).get("function");
+            assertEquals("get_order", fn.get("name"), "合成帧必须携带真实工具名（重复帧是空名，服务端必拒）");
+            assertEquals("{\"orderId\":\"SO-1\"}", fn.get("arguments"), "「当时输入」重建要求参数真值");
+            Map<String, Object> tool = messages.get(2);
+            assertEquals("tool", tool.get("role"));
+            assertEquals("aa-chain-1-0", tool.get("tool_call_id"));
+        }
+
+        @Test
+        @DisplayName("连续两轮合成对各自恰好一条 assistant 帧（链式第 3 轮请求的真实形态）")
+        void consecutivePairs_eachAssistantOnce() {
+            LlmRequest request = new LlmRequest();
+            request.setSystemPrompt("new prompt");
+            request.addTurn(new TurnContext("user", "查订单 SO-1"));
+            request.addTurn(assistantCallFrame("aa-chain-1-0", "get_order", "{\"orderId\":\"SO-1\"}"));
+            request.addTurn(toolResultFrame("aa-chain-1-0", "{\"status\":\"shipped\"}"));
+            request.addTurn(assistantCallFrame("aa-chain-2-1", "get_logistics", "{\"orderId\":\"SO-1\"}"));
+            request.addTurn(toolResultFrame("aa-chain-2-1", "运输中"));
+
+            String body = client.buildRequestBody(request, "gpt-4o");
+            List<Map<String, Object>> messages = messagesOf(body);
+
+            assertEquals(6, messages.size(), "system + user + 两对（assistant+tool）");
+            int pairCount = 0;
+            for (int i = 0; i < messages.size(); i++) {
+                Map<String, Object> message = messages.get(i);
+                if ("tool".equals(message.get("role"))) {
+                    Map<String, Object> preceding = messages.get(i - 1);
+                    assertEquals("assistant", preceding.get("role"), "每个 tool 帧的紧邻前驱必须是配对 assistant");
+                    @SuppressWarnings("unchecked") List<Map<String, Object>> toolCalls = (List<Map<String, Object>>) preceding.get("tool_calls");
+                    assertEquals(1, toolCalls.size(), "每轮合成对只允许一条 tool_calls 记录");
+                    assertEquals(message.get("tool_call_id"), toolCalls.get(0).get("id"), "assistant 帧的调用 id 与 tool_call_id 对应");
+                    pairCount++;
+                }
+            }
+            assertEquals(2, pairCount, "两轮各一条 tool 帧 → 恰两条配对 assistant 帧");
+        }
+    }
+
+    @Nested
     class ExtraBodyFields {
 
         @Test

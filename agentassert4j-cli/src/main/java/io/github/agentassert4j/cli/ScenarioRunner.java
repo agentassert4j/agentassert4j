@@ -323,7 +323,7 @@ public class ScenarioRunner {
         run.setSampleCount(result.getActualSampleCount());
         run.setPassCount(result.getVerdictCounts().getOrDefault(Verdict.PASS, 0));
         run.setFailCount(result.getVerdictCounts().getOrDefault(Verdict.CHANGED, 0));
-        run.setInputTokens(result.getSamples().isEmpty() ? 0 : aggregateInputTokens(result));
+        run.setInputTokens(aggregateInputTokens(result));
         run.setOutputTokens(aggregateOutputTokens(result));
         run.setCacheReadTokens(aggregateNullableToken(result.getSamples(), SampleResult::getCacheReadTokens));
         run.setCacheWriteTokens(aggregateNullableToken(result.getSamples(), SampleResult::getCacheWriteTokens));
@@ -334,7 +334,7 @@ public class ScenarioRunner {
         if (result.isStalled()) {
             // 停滞事实进吸收层——scenario_runs 无独立列，metadata 是扩展属性的持久化池
             run.setMetadata("{\"stalled\":true}");
-            out.println("  警告：场景 " + planned.scenarioId + " 连续 " + result.getActualSampleCount() + " 轮同一失败差异，停滞早停（声明 " + planned.sampleCount + " 轮）。");
+            out.println("  警告：场景 " + planned.scenarioId + " 连续同失败差异触发停滞早停（声明 " + planned.sampleCount + " 轮，实发 " + result.getActualSampleCount() + " 轮）。");
         }
         repository.saveScenarioRun(run);
         return run;

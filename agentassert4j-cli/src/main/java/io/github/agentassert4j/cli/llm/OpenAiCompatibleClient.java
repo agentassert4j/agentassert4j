@@ -238,14 +238,15 @@ public class OpenAiCompatibleClient implements LlmClient {
     }
 
     /**
-     * 合成"assistant 发起工具调用"消息帧：历史录制没有该轮的独立载体，
-     * arguments 以空对象占位（协议校验只看结构与 id/name 的对应关系），
-     * 待 SDK 接入层为历史轮保存完整调用参数后可替换为真实值。
+     * 合成"assistant 发起工具调用"消息帧：arguments 优先取 TurnContext 携带的真值
+     * （链式半重放的合成帧——「当时输入」重建要求内容无损）；历史录制轮没有该载体时
+     * 以空对象占位（协议校验只看结构与 id/name 的对应关系）。
      */
-    private static void appendSyntheticAssistantToolCall(StringBuilder sb, TurnContext toolTurn) {
-        String callId = toolTurn.getToolCallId() != null ? toolTurn.getToolCallId() : "";
-        String name = toolTurn.getToolName() != null ? toolTurn.getToolName() : "";
-        sb.append("{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"").append(RecursiveJsonParser.escape(callId)).append("\",\"type\":\"function\",\"function\":{\"name\":\"").append(RecursiveJsonParser.escape(name)).append("\",\"arguments\":\"{}\"}}]}");
+    private static void appendAssistantToolCall(StringBuilder sb, TurnContext turn) {
+        String callId = turn.getToolCallId() != null ? turn.getToolCallId() : "";
+        String name = turn.getToolName() != null ? turn.getToolName() : "";
+        String arguments = turn.getToolArguments() != null && !turn.getToolArguments().isEmpty() ? turn.getToolArguments() : "{}";
+        sb.append("{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"").append(RecursiveJsonParser.escape(callId)).append("\",\"type\":\"function\",\"function\":{\"name\":\"").append(RecursiveJsonParser.escape(name)).append("\",\"arguments\":\"").append(RecursiveJsonParser.escape(arguments)).append("\"}}]}");
     }
 
     /**
@@ -314,7 +315,7 @@ public class OpenAiCompatibleClient implements LlmClient {
                     // arguments），渲染层按已知 id/toolName 合成最小合法请求帧补齐协议
                     if (!callId.equals(lastEmittedToolCallId)) {
                         if (wroteAny) messages.append(",");
-                        appendSyntheticAssistantToolCall(messages, turn);
+                        appendAssistantToolCall(messages, turn);
                         wroteAny = true;
                         lastEmittedToolCallId = callId;
                     }
@@ -322,6 +323,16 @@ public class OpenAiCompatibleClient implements LlmClient {
                     lastEmittedToolCallId = null;
                 }
                 if (wroteAny) messages.append(",");
+                // assistant 携带 toolCallId = 「模型发起工具调用」帧（链式半重放的合成帧），
+                // 渲染为 assistant + tool_calls 结构；普通 assistant/user 帧走纯文本。
+                // 登记已发射的 callId：紧随的 tool 帧据此跳过补帧，否则同一调用
+                // 会出现第二个（空名）assistant 帧，服务端按非法 tool_calls 拒绝整个请求
+                if ("assistant".equals(role) && turn.getToolCallId() != null && !turn.getToolCallId().trim().isEmpty()) {
+                    appendAssistantToolCall(messages, turn);
+                    wroteAny = true;
+                    lastEmittedToolCallId = turn.getToolCallId();
+                    continue;
+                }
                 messages.append("{\"role\":\"").append(RecursiveJsonParser.escape(role)).append("\"");
                 // tool 角色消息必须携带 tool_call_id 才能关联到前序 assistant 的调用决策，
                 // 缺失时服务端以 400 拒绝整个请求
@@ -395,8 +406,10 @@ public class OpenAiCompatibleClient implements LlmClient {
             Map<?, ?> usage = memberMap(root, "usage");
             if (usage != null) {
                 response.setUsageRaw(RecursiveJsonParser.serialize(usage));
-                response.setInputTokens(memberInt(usage, "prompt_tokens"));
-                response.setOutputTokens(memberInt(usage, "completion_tokens"));
+                // usage 块残缺（缺 prompt_tokens/completion_tokens）按 0 兜底：
+                // 字段是 primitive，拆箱 null 会把整个合法响应误判为解析失败
+                response.setInputTokens(orZero(memberInt(usage, "prompt_tokens")));
+                response.setOutputTokens(orZero(memberInt(usage, "completion_tokens")));
                 // input_tokens 语义钉死为"总处理输入 token"：
                 // OpenAI/DeepSeek 的 prompt_tokens 已是总量；Anthropic 合成规则由其专属客户端实现
                 Map<?, ?> promptDetails = memberMap(usage, "prompt_tokens_details");
@@ -458,6 +471,10 @@ public class OpenAiCompatibleClient implements LlmClient {
         }
         Object value = obj.get(key);
         return value instanceof Number ? Integer.valueOf(((Number) value).intValue()) : null;
+    }
+
+    private static int orZero(Integer value) {
+        return value != null ? value : 0;
     }
 
     /**

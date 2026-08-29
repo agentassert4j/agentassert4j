@@ -9,10 +9,8 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.MessageAggregator;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import reactor.core.publisher.Flux;
 
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -26,7 +24,8 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>粒度说明：2.x 的工具调用循环由 ChatClient 的 ToolCallingAdvisor 在
  * ChatModel 之上驱动，每个 LLM 轮次都是一次独立 call——装饰器天然逐轮可见，
- * 无需关闭任何执行选项。</p>
+ * 无需关闭任何执行选项；直调 ChatModel 且模型实现内部消费工具调用的姿势
+ * 由编排观察装饰恢复工具维度（名称/参数/结果按序捕获进同一条记录）。</p>
  *
  * <p>录制失败只记 WARN 不抛出——框架任何故障不影响业务调用。</p>
  *
@@ -39,10 +38,6 @@ public final class RecordingChatModel implements ChatModel {
 
     private final ChatModel delegate;
     private final RecordingInterceptor recorder;
-    /**
-     * 工具维失明告警的实例级防刷屏开关——只需提醒一次，后续调用不再重复
-     */
-    private final AtomicBoolean toolBlindnessWarned = new AtomicBoolean(false);
 
     private RecordingChatModel(ChatModel delegate, RecordingInterceptor recorder) {
         if (delegate == null) {
@@ -66,8 +61,11 @@ public final class RecordingChatModel implements ChatModel {
     public ChatResponse call(Prompt prompt) {
         long start = System.currentTimeMillis();
         RecordingContext context = RecordingContext.currentOrNull();
-        ChatResponse response = delegate.call(prompt);
-        recordQuietly(prompt, response, System.currentTimeMillis() - start, null, context);
+        // 梯 2 编排观察：换装观察回调（mutate 副本），模型实现内部消费的工具调用按序进缓冲
+        ToolInvocationObserver observer = new ToolInvocationObserver();
+        Prompt observed = observer.decorate(prompt);
+        ChatResponse response = delegate.call(observed);
+        recordQuietly(prompt, response, System.currentTimeMillis() - start, null, context, observer);
         return response;
     }
 
@@ -77,9 +75,11 @@ public final class RecordingChatModel implements ChatModel {
         // 会话标注必须在调用线程捕获：聚合回调发生在异步完成信号线程，
         // 那里取不到业务线程的 ThreadLocal
         RecordingContext context = RecordingContext.currentOrNull();
+        ToolInvocationObserver observer = new ToolInvocationObserver();
+        Prompt observed = observer.decorate(prompt);
         AtomicLong ttft = new AtomicLong(-1);
-        Flux<ChatResponse> source = delegate.stream(prompt).doOnNext(chunk -> ttft.compareAndSet(-1, System.currentTimeMillis() - start));
-        return new MessageAggregator().aggregate(source, aggregated -> recordQuietly(prompt, aggregated, System.currentTimeMillis() - start, ttft.get(), context));
+        Flux<ChatResponse> source = delegate.stream(observed).doOnNext(chunk -> ttft.compareAndSet(-1, System.currentTimeMillis() - start));
+        return new MessageAggregator().aggregate(source, aggregated -> recordQuietly(prompt, aggregated, System.currentTimeMillis() - start, ttft.get(), context, observer));
     }
 
     @Override
@@ -87,36 +87,12 @@ public final class RecordingChatModel implements ChatModel {
         return delegate.getOptions();
     }
 
-    private void recordQuietly(Prompt prompt, ChatResponse response, long latencyMs, Long ttftMs, RecordingContext context) {
+    private void recordQuietly(Prompt prompt, ChatResponse response, long latencyMs, Long ttftMs, RecordingContext context, ToolInvocationObserver observer) {
         try {
-            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, response, latencyMs, ttftMs, context);
-            warnIfToolDimensionBlind(prompt, record);
+            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, response, latencyMs, ttftMs, context, observer.snapshot());
             recorder.intercept(record);
         } catch (Exception e) {
             log.warn("旁路录制失败（不影响业务调用）: {}", e.getMessage());
         }
-    }
-
-    /**
-     * 内部工具执行检测告警：请求携带工具定义而响应无可见工具调用——模型编排的 toolCalls
-     * 很可能被模型实现内部的 ToolCallingManager 回路消费，工具维度失明。
-     * ChatClient Advisor 链驱动的逐轮循环不受影响（中间轮次自带 toolCalls，
-     * 不会触发本告警）。一次性 WARN 止血；正路是声明 skillId 保证分组身份，
-     * 或等待编排观察装饰恢复工具维度与重放对称性。
-     */
-    private void warnIfToolDimensionBlind(Prompt prompt, InteractionRecord record) {
-        if (toolBlindnessWarned.get() || record.isHasToolCalls()) {
-            return;
-        }
-        ChatOptions options = prompt.getOptions();
-        if (!(options instanceof ToolCallingChatOptions)) {
-            return;
-        }
-        ToolCallingChatOptions toolOptions = (ToolCallingChatOptions) options;
-        if (toolOptions.getToolCallbacks() == null || toolOptions.getToolCallbacks().isEmpty()) {
-            return;
-        }
-        toolBlindnessWarned.set(true);
-        log.warn("检测到请求携带工具定义而响应无可见 toolCalls：模型编排的调用很可能被内部工具回路消费，本记录的工具维度缺失（分组与指纹只能依赖文本/结构维）。可在 RecordingContext 声明 skillId 保证分组身份，或将工具循环改为业务自持/编排观察方式以恢复工具维度。");
     }
 }

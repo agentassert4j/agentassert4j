@@ -46,9 +46,9 @@ public class InteractionRecord {
     private String variablesFingerprint;
 
     /**
-     * 协议枚举（TEXT）：openai-chat / anthropic-messages / openai-responses / gemini-native
+     * 协议枚举（TEXT）：openai-chat / anthropic-messages / openai-responses / gemini-native。
+     * 由 SDK 捕获侧按适配线写入（Spring AI 记录即 OpenAI chat 形状）
      */
-    // TODO: 捕获侧未接线——该列暂恒为 null，待 SDK 捕获层按适配线补写协议标识，接线后移除本标注
     private String apiProtocol;
     /**
      * 供应商标识：openai / anthropic / deepseek / qwen / ollama / vllm / custom
@@ -124,9 +124,8 @@ public class InteractionRecord {
      */
     private Long ttftMs;
     /**
-     * 调用时刻冻结的费用（USD）；无价格表时为 null
+     * 调用时刻冻结的费用（USD）：捕获侧按价格快照现算，快照无价时为 null（不编造）
      */
-    // TODO: 捕获侧未接线——该列暂恒为 null，费用计算依赖随版本刷新的价格快照，待价格数据链接线后移除本标注
     private Double costUsd;
 
     private List<ToolCall> toolCalls;

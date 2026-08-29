@@ -17,13 +17,19 @@ public class TurnContext {
      */
     private String content;
     /**
-     * role=tool 时有值
+     * 工具调用的关联键：tool 结果帧必带；assistant 工具调用帧（链式半重放的合成帧）同样携带
      */
     private String toolCallId;
     /**
-     * role=tool 时有值
+     * 工具名：tool 结果帧与 assistant 工具调用帧（链式合成帧）均携带
      */
     private String toolName;
+    /**
+     * assistant 发起工具调用帧的实际参数 JSON（仅 assistant 角色且携带 toolCallId 的帧使用）。
+     * 历史录制轮没有该载体，为 null——渲染层以 "{}" 占位；链式半重放的合成帧携带真值
+     * （「当时输入」重建要求内容无损）
+     */
+    private String toolArguments;
 
     public TurnContext() {
     }
@@ -63,5 +69,13 @@ public class TurnContext {
 
     public void setToolName(String toolName) {
         this.toolName = toolName;
+    }
+
+    public String getToolArguments() {
+        return toolArguments;
+    }
+
+    public void setToolArguments(String toolArguments) {
+        this.toolArguments = toolArguments;
     }
 }

@@ -216,10 +216,12 @@ public class StatisticalRegressionExecutor {
                 threads[i].start();
             }
 
-            // 等待当前批次完成
+            // 等待当前批次完成。join 预算按传输层重试现实的折算上界（默认重试
+            // 2 次 ≈ 3 次尝试 + 指数退避 + 余量）：按单次超时收紧会把仍在重试中
+            // 的慢调用误记账为错误样本，且那笔真实花费不进任何账
             for (Thread t : threads) {
                 try {
-                    t.join(config.getTimeoutMs() + 5000);
+                    t.join(config.getTimeoutMs() * 3L + 15000L);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;

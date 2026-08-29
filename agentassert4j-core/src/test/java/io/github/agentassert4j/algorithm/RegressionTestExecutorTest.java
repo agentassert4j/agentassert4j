@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -521,6 +522,178 @@ class RegressionTestExecutorTest {
         response.setInputTokens(10);
         response.setOutputTokens(5);
         return response;
+    }
+
+    @Nested
+    @DisplayName("链式半重放（梯 2 编排记录的专用重放契约）")
+    class ChainedReplay {
+
+        private LlmResponse toolDecision(String name, String orderId) {
+            LlmResponse response = new LlmResponse();
+            ToolCallResult call = new ToolCallResult();
+            call.setToolName(name);
+            call.setArguments(Collections.singletonMap("orderId", orderId));
+            response.setToolCalls(Collections.singletonList(call));
+            response.setInputTokens(10);
+            response.setOutputTokens(5);
+            return response;
+        }
+
+        private LlmResponse textDecision(String content) {
+            LlmResponse response = new LlmResponse();
+            response.setContent(content);
+            response.setInputTokens(10);
+            response.setOutputTokens(5);
+            return response;
+        }
+
+        /**
+         * 两步编排的基线：get_order → get_logistics，每轮结果齐备（梯 2 观察形态）。
+         */
+        private InteractionRecord chainBaseline() {
+            InteractionRecord r = new InteractionRecord();
+            r.setRecordId("rec-chain");
+            r.setSkillId("skill-1");
+            r.setSessionId("session-1");
+            r.setTemplateHash("hash-old");
+            r.setUserInput("查订单 SO-1");
+            r.setTurnIndex(0);
+            r.setModelResponse("您的订单已发货，请留意查收。");
+            r.setHasToolCalls(true);
+            r.setToolsDefinition("[{\"type\":\"function\",\"function\":{\"name\":\"get_order\"}}]");
+            ToolCall a = new ToolCall();
+            a.setToolName("get_order");
+            a.setArguments(Collections.singletonMap("orderId", "SO-1"));
+            a.setArgTypes(Collections.singletonMap("orderId", "string"));
+            a.setResult("{\"status\":\"shipped\"}");
+            a.setSuccess(true);
+            ToolCall b = new ToolCall();
+            b.setToolName("get_logistics");
+            b.setArguments(Collections.singletonMap("orderId", "SO-1"));
+            b.setArgTypes(Collections.singletonMap("orderId", "string"));
+            b.setResult("运输中");
+            b.setSuccess(true);
+            r.setToolCalls(Arrays.asList(a, b));
+            return r;
+        }
+
+        private RegressionTestExecutor chainedExecutor(LlmClient client) {
+            return new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
+        }
+
+        @Test
+        @DisplayName("全匹配端到端：逐轮决策一致 → 末轮四维比对 PASS，调用次数 = 编排轮数 + 1")
+        void fullMatch_endToEnd_pass() {
+            ScriptedClient client = new ScriptedClient();
+            client.script.add(toolDecision("get_order", "SO-1"));
+            client.script.add(toolDecision("get_logistics", "SO-1"));
+            client.script.add(textDecision("您的订单已发货，请留意查收。"));
+
+            RegressionTestResult result = chainedExecutor(client).execute(chainBaseline(), "new prompt", null, TestExecutionConfig.defaults());
+
+            assertEquals(3, client.requests.size(), "两轮决策 + 末轮收口 = 3 次调用（调用次数闭合）");
+            assertEquals(TestResultStatus.SUCCESS, result.getStatus());
+            assertEquals(Verdict.PASS, result.getComparison().getVerdict());
+            assertEquals(30, result.getInputTokens().intValue(), "token 遥测跨轮聚合");
+        }
+
+        @Test
+        @DisplayName("分歧即停：第 2 轮决策偏离基线 → 恰好 2 次调用，定位到轮")
+        void divergenceAtSecondRound_stopsImmediately() {
+            ScriptedClient client = new ScriptedClient();
+            client.script.add(toolDecision("get_order", "SO-1"));
+            client.script.add(toolDecision("cancel_order", "SO-1"));
+            client.script.add(textDecision("不该被用到"));
+
+            RegressionTestResult result = chainedExecutor(client).execute(chainBaseline(), "new prompt", null, TestExecutionConfig.defaults());
+
+            assertEquals(2, client.requests.size(), "分歧后不再发起调用");
+            assertEquals(Verdict.CHANGED, result.getComparison().getVerdict());
+            String summary = result.getComparison().getSummary();
+            assertTrue(summary.contains("第 2 轮"), "定位到分歧轮次: " + summary);
+            assertTrue(summary.contains("get_logistics") && summary.contains("cancel_order"), "摘要点名该轮基线决策与实际决策: " + summary);
+        }
+
+        @Test
+        @DisplayName("逐轮上下文保真：第 2 轮请求携带基线旧结果的合成帧，且不重复提问")
+        void contextFidelity_synthesizedFramesCarryBaselineResults() {
+            ScriptedClient client = new ScriptedClient();
+            client.script.add(toolDecision("get_order", "SO-1"));
+            client.script.add(toolDecision("get_logistics", "SO-1"));
+            client.script.add(textDecision("您的订单已发货，请留意查收。"));
+
+            chainedExecutor(client).execute(chainBaseline(), "new prompt", null, TestExecutionConfig.defaults());
+
+            LlmRequest first = client.requests.get(0);
+            assertEquals("查订单 SO-1", first.getUserInput(), "第 1 轮携带用户输入");
+            LlmRequest second = client.requests.get(1);
+            assertNull(second.getUserInput(), "第 2 轮从工具结果续起，不重复提问");
+            List<TurnContext> turns = second.getPreviousTurns();
+            assertEquals(2, turns.size(), "第 2 轮上下文 = 合成的 assistant+tool 帧");
+            TurnContext assistant = turns.get(0);
+            TurnContext tool = turns.get(1);
+            assertEquals("assistant", assistant.getRole());
+            assertEquals("get_order", assistant.getToolName());
+            assertEquals("tool", tool.getRole());
+            assertEquals(assistant.getToolCallId(), tool.getToolCallId(), "assistant 与 tool 帧以合成 id 关联");
+            assertEquals("{\"status\":\"shipped\"}", tool.getContent(), "结果帧携带基线录制内容（内容无损）");
+            assertNotNull(assistant.getToolArguments(), "assistant 帧携带真实参数 JSON");
+        }
+
+        @Test
+        @DisplayName("末轮多出工具调用 = 编排变化 → 分歧即停")
+        void extraToolCallAtFinalRound_divergence() {
+            ScriptedClient client = new ScriptedClient();
+            client.script.add(toolDecision("get_order", "SO-1"));
+            client.script.add(toolDecision("get_logistics", "SO-1"));
+            client.script.add(toolDecision("refund", "SO-1"));
+
+            RegressionTestResult result = chainedExecutor(client).execute(chainBaseline(), "new prompt", null, TestExecutionConfig.defaults());
+
+            assertEquals(3, client.requests.size());
+            assertEquals(Verdict.CHANGED, result.getComparison().getVerdict());
+            assertTrue(result.getComparison().getSummary().contains("第 3 轮"), "末轮多出的编排定位到收口轮: " + result.getComparison().getSummary());
+        }
+
+        @Test
+        @DisplayName("结果道具缺失（录制时工具失败）→ 退回单发重放")
+        void missingResult_fallsBackToSingleShot() {
+            InteractionRecord baseline = chainBaseline();
+            baseline.getToolCalls().get(0).setResult(null);
+            ScriptedClient client = new ScriptedClient();
+            client.script.add(textDecision("您的订单已发货，请留意查收。"));
+
+            RegressionTestResult result = chainedExecutor(client).execute(baseline, "new prompt", null, TestExecutionConfig.defaults());
+
+            assertEquals(1, client.requests.size(), "单发重放只发一次");
+            assertFalse(RegressionTestExecutor.isChainReplayable(baseline), "结果道具缺失不再是链式资格");
+            assertEquals(TestResultStatus.SUCCESS, result.getStatus());
+        }
+    }
+
+    /**
+     * 可编程脚本桩：第 k 次调用返回 script[k]（越界时重复最后一个），并留存每次请求。
+     */
+    static class ScriptedClient implements LlmClient {
+        final List<LlmResponse> script = new ArrayList<>();
+        final List<LlmRequest> requests = new ArrayList<>();
+
+        @Override
+        public LlmResponse chat(LlmRequest request, long timeoutMs) throws LlmTimeoutException, LlmApiException {
+            requests.add(request);
+            int i = Math.min(requests.size() - 1, script.size() - 1);
+            return script.get(i);
+        }
+
+        @Override
+        public String name() {
+            return "stub";
+        }
+
+        @Override
+        public boolean isAvailable() {
+            return true;
+        }
     }
 
     static class StubLlmClient implements LlmClient {

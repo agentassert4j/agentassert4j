@@ -12,10 +12,7 @@ import io.github.agentassert4j.util.ArgTypeUtil;
 import io.github.agentassert4j.util.HashUtil;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -69,6 +66,13 @@ public class RegressionTestExecutor {
             result.setSkillId(baseline.getSkillId());
             result.setStatus(TestResultStatus.SKIP);
             return result;
+        }
+
+        // 梯 2 记录（编排观察产出：完整工具编排 + 每轮录制结果）走链式半重放——
+        // 单发重放拼不出「第 2 轮输入含第 1 轮工具结果」的当时上下文，且会把整段
+        // 编排一次性重新决策，工具维必然假阳性
+        if (isChainReplayable(baseline)) {
+            return executeChained(baseline, newSystemPrompt, userInput, config);
         }
 
         // 1. 构建重放请求
@@ -249,6 +253,7 @@ public class RegressionTestExecutor {
         TurnContext copy = new TurnContext(turn.getRole(), turn.getContent());
         copy.setToolCallId(turn.getToolCallId());
         copy.setToolName(turn.getToolName());
+        copy.setToolArguments(turn.getToolArguments());
         return copy;
     }
 
@@ -262,6 +267,264 @@ public class RegressionTestExecutor {
         call.setArgTypes(ArgTypeUtil.derive(tc.getArguments()));
         call.setSuccess(true); // 重放不执行工具，默认成功
         return call;
+    }
+
+
+    /**
+     * 链式半重放资格：基线带完整工具编排且每个调用都有录制结果（结果道具齐备）。
+     * 任一结果缺失（录制时工具执行失败等）则无法合成「当时输入」，退回单发重放。
+     */
+    static boolean isChainReplayable(InteractionRecord baseline) {
+        if (!baseline.isHasToolCalls() || baseline.getToolCalls() == null || baseline.getToolCalls().isEmpty()) {
+            return false;
+        }
+        for (ToolCall call : baseline.getToolCalls()) {
+            if (call.getResult() == null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 链式半重放（梯 2 编排观察记录的专用重放契约）：拿基线录制的旧结果当道具，
+     * 逐轮重建「当时输入」逐轮比对模型决策。每轮把响应的 tool_calls 与基线编排的
+     * 下一个片段逐项比对（工具名 + 参数解析后严格相等）；全部轮次匹配则末轮四维
+     * 比对收口；某轮分歧则精确到轮的定位后立即停止（分歧即停：旧结果配新决策是
+     * 虚构演进，链条停在真相失效处）。合成帧的 tool_call_id 用合成关联值，结果帧
+     * 携带基线录制内容（内容无损）。分歧轮次不做候选落库——编排未走完，指纹不完整。
+     */
+    private RegressionTestResult executeChained(InteractionRecord baseline, String newSystemPrompt, String userInput, TestExecutionConfig config) {
+        try {
+            String effectiveInput = userInput != null ? userInput : baseline.getUserInput();
+            List<ToolCall> orchestration = baseline.getToolCalls();
+            List<TurnContext> synthesized = new ArrayList<>();
+            int cursor = 0;
+            int round = 0;
+            long totalInput = 0;
+            long totalOutput = 0;
+            Integer cacheRead = null;
+            Integer cacheWrite = null;
+            Integer reasoning = null;
+            String servedModel = null;
+            LlmResponse response = null;
+
+            // 决策轮：每轮响应的 tool_calls 必须与基线编排的下一片段逐项一致
+            while (cursor < orchestration.size()) {
+                round++;
+                response = chainChat(baseline, newSystemPrompt, round == 1 ? effectiveInput : null, synthesized, config);
+                totalInput += response.getInputTokens();
+                totalOutput += response.getOutputTokens();
+                if (response.getServedModel() != null) {
+                    servedModel = response.getServedModel();
+                }
+                cacheRead = sumNullable(cacheRead, response.getCacheReadTokens());
+                cacheWrite = sumNullable(cacheWrite, response.getCacheWriteTokens());
+                reasoning = sumNullable(reasoning, response.getReasoningTokens());
+                List<ToolCallResult> decisions = response.getToolCalls() == null ? Collections.<ToolCallResult>emptyList() : response.getToolCalls();
+                if (decisions.isEmpty() || cursor + decisions.size() > orchestration.size() || !matchesSlice(orchestration, cursor, decisions)) {
+                    return chainDivergence(baseline, round, cursor, decisions);
+                }
+                // 决策与基线一致：合成 assistant+tool 帧——结果用基线录制值（控制变量）
+                for (ToolCallResult decision : decisions) {
+                    String syntheticId = "aa-chain-" + round + "-" + cursor;
+                    cursor++;
+                    ToolCall recorded = orchestration.get(cursor - 1);
+                    synthesized.add(assistantToolCallFrame(syntheticId, decision));
+                    synthesized.add(toolResultFrame(syntheticId, recorded.getResult()));
+                }
+            }
+
+            // 末轮收口：编排全部复现后模型给出最终答复——四维比对对象
+            round++;
+            response = chainChat(baseline, newSystemPrompt, null, synthesized, config);
+            totalInput += response.getInputTokens();
+            totalOutput += response.getOutputTokens();
+            if (response.getServedModel() != null) {
+                servedModel = response.getServedModel();
+            }
+            cacheRead = sumNullable(cacheRead, response.getCacheReadTokens());
+            cacheWrite = sumNullable(cacheWrite, response.getCacheWriteTokens());
+            reasoning = sumNullable(reasoning, response.getReasoningTokens());
+            if (response.getToolCalls() != null && !response.getToolCalls().isEmpty()) {
+                // 编排比基线多出工具调用——行为变化，分歧即停
+                return chainDivergence(baseline, round, cursor, response.getToolCalls());
+            }
+
+            InteractionRecord current = new InteractionRecord();
+            current.setRecordId(UUID.randomUUID().toString());
+            current.setTimestamp(System.currentTimeMillis());
+            current.setSkillId(baseline.getSkillId());
+            current.setTemplateHash(HashUtil.sha256(newSystemPrompt));
+            current.setUserInput(effectiveInput != null ? effectiveInput : baseline.getUserInput());
+            current.setTurnIndex(baseline.getTurnIndex());
+            current.setSessionId(baseline.getSessionId());
+            // 决策逐轮匹配成立：当前编排与基线一致（名称/参数/成功标记同值比对）
+            List<ToolCall> matched = new ArrayList<>();
+            for (ToolCall call : orchestration) {
+                ToolCall copy = new ToolCall();
+                copy.setToolName(call.getToolName());
+                copy.setArguments(call.getArguments());
+                copy.setArgTypes(call.getArgTypes());
+                copy.setSuccess(call.isSuccess());
+                matched.add(copy);
+            }
+            current.setToolCalls(matched);
+            current.setHasToolCalls(true);
+            current.setModelResponse(response.getContent());
+            current.setInputTokens(response.getInputTokens());
+            current.setOutputTokens(response.getOutputTokens());
+
+            DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline, rules, baseline.getSkillId());
+            DeterministicFingerprint currentFp = FingerprintExtractor.extract(current, rules, current.getSkillId());
+            ComparisonResult comparison = comparator.compare(baselineFp, currentFp, response.getContent());
+
+            RegressionTestResult result = new RegressionTestResult();
+            result.setBaselineRecordId(baseline.getRecordId());
+            result.setSkillId(baseline.getSkillId());
+            result.setComparison(comparison);
+            result.setCandidateFingerprint(currentFp);
+            if (baselineManager != null && comparison.getVerdict() != Verdict.PASS) {
+                try {
+                    baselineManager.recordCandidate(baseline, currentFp);
+                } catch (RuntimeException e) {
+                    LOG.log(Level.SEVERE, "Failed to persist candidate fingerprint for " + baseline.getRecordId(), e);
+                }
+            }
+            result.setServedModel(servedModel);
+            result.setInputTokens((int) totalInput);
+            result.setOutputTokens((int) totalOutput);
+            result.setCacheReadTokens(cacheRead);
+            result.setCacheWriteTokens(cacheWrite);
+            result.setReasoningTokens(reasoning);
+            result.setReplayOutput(response.getContent());
+            return result;
+        } catch (LlmTimeoutException e) {
+            return RegressionTestResult.timeout(baseline.getRecordId());
+        } catch (LlmApiException e) {
+            return RegressionTestResult.apiError(baseline.getRecordId(), e.getMessage());
+        } catch (RuntimeException e) {
+            // 防御性：链路中的意外异常（LLM 客户端或末轮指纹/对比的后处理）不向批量调用方逃逸
+            return RegressionTestResult.error(baseline.getRecordId(), "链式重放未捕获异常：" + e.getClass().getSimpleName() + "：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 链式单轮请求：与单发重放共用同一条装配语义（系统提示/历史轮/工具定义为
+     * 控制变量），差异在两点——用户输入只在第 1 轮携带（后续轮从工具结果续起，
+     * 重建「当时输入」不重复提问），以及合成帧追加在历史轮之后。
+     */
+    private LlmResponse chainChat(InteractionRecord baseline, String newSystemPrompt, String userInput, List<TurnContext> synthesized, TestExecutionConfig config) throws LlmTimeoutException, LlmApiException {
+        LlmRequest request = new LlmRequest();
+        request.setSystemPrompt(newSystemPrompt);
+        request.setUserInput(userInput);
+        request.setMultimodalInput(baseline.isMultimodalInput());
+        if (baseline.getPreviousTurns() != null) {
+            for (TurnContext turn : baseline.getPreviousTurns()) {
+                // system 帧不注入：系统提示属模板域由 systemPrompt 承载
+                if ("system".equalsIgnoreCase(turn.getRole())) {
+                    continue;
+                }
+                request.addTurn(copyTurn(turn));
+            }
+        }
+        for (TurnContext turn : synthesized) {
+            request.addTurn(turn);
+        }
+        request.setTemperature(config.getTemperature());
+        if (config.getModel() != null) {
+            request.setModel(config.getModel());
+        }
+        List<String> toolDefinitions = splitToolDefinitions(baseline.getToolsDefinition());
+        if (!toolDefinitions.isEmpty()) {
+            request.setToolDefinitions(toolDefinitions);
+        }
+        return llmClient.chat(request, config.getTimeoutMs());
+    }
+
+    /**
+     * 决策片段比对：工具名严格相等 + 参数解析后 Map 严格相等（null 视同空对象）。
+     * tool_call id 是关联键不是行为，不参与比对。
+     */
+    private static boolean matchesSlice(List<ToolCall> orchestration, int cursor, List<ToolCallResult> decisions) {
+        for (int i = 0; i < decisions.size(); i++) {
+            ToolCall expected = orchestration.get(cursor + i);
+            ToolCallResult actual = decisions.get(i);
+            if (!Objects.equals(expected.getToolName(), actual.getToolName())) {
+                return false;
+            }
+            Map<String, Object> expectedArgs = expected.getArguments() == null ? Collections.<String, Object>emptyMap() : expected.getArguments();
+            Map<String, Object> actualArgs = actual.getArguments() == null ? Collections.<String, Object>emptyMap() : actual.getArguments();
+            if (!expectedArgs.equals(actualArgs)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 分歧结果：verdict=CHANGED + 精确到轮的定位摘要。工具/参数两维标记失配，
+     * 其余维度未参与评估置为匹配（分歧发生在编排决策，不产生文本/结构证据）。
+     */
+    private RegressionTestResult chainDivergence(InteractionRecord baseline, int round, int cursor, List<ToolCallResult> decisions) {
+        String expected;
+        if (cursor < baseline.getToolCalls().size()) {
+            ToolCall next = baseline.getToolCalls().get(cursor);
+            expected = next.getToolName() + "(" + next.getArguments() + ")";
+        } else {
+            expected = "编排已结束（无更多工具调用）";
+        }
+        StringBuilder actual = new StringBuilder();
+        for (ToolCallResult decision : decisions) {
+            if (actual.length() > 0) {
+                actual.append("; ");
+            }
+            actual.append(decision.getToolName()).append("(").append(decision.getArguments()).append(")");
+        }
+        if (actual.length() == 0) {
+            actual.append("未发起工具调用");
+        }
+        ComparisonResult comparison = new ComparisonResult();
+        comparison.setVerdict(Verdict.CHANGED);
+        comparison.setScore(0.0);
+        comparison.setToolCallMatch(false);
+        comparison.setParamTypeMatch(false);
+        comparison.setStructureMatch(true);
+        comparison.setKeywordMatch(true);
+        comparison.setRegexMatch(true);
+        comparison.setBehaviorMatch(true);
+        comparison.setAddedFields(Collections.<String>emptySet());
+        comparison.setRemovedFields(Collections.<String>emptySet());
+        comparison.setSummary("第 " + round + " 轮工具决策分歧（链式半重放于分歧处停止）：基线为 " + expected + "，实际为 " + actual);
+        RegressionTestResult result = new RegressionTestResult();
+        result.setBaselineRecordId(baseline.getRecordId());
+        result.setSkillId(baseline.getSkillId());
+        result.setComparison(comparison);
+        return result;
+    }
+
+    private static TurnContext assistantToolCallFrame(String syntheticId, ToolCallResult decision) {
+        TurnContext turn = new TurnContext("assistant", "");
+        turn.setToolCallId(syntheticId);
+        turn.setToolName(decision.getToolName());
+        turn.setToolArguments(decision.getArguments() != null && !decision.getArguments().isEmpty() ? RecursiveJsonParser.serialize(decision.getArguments()) : "{}");
+        return turn;
+    }
+
+    private static TurnContext toolResultFrame(String syntheticId, String result) {
+        TurnContext turn = new TurnContext("tool", result);
+        turn.setToolCallId(syntheticId);
+        return turn;
+    }
+
+    private static Integer sumNullable(Integer first, Integer second) {
+        if (first == null) {
+            return second;
+        }
+        if (second == null) {
+            return first;
+        }
+        return first + second;
     }
 
 }
