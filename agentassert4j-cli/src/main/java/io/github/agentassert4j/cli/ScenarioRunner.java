@@ -13,6 +13,7 @@ import io.github.agentassert4j.spi.StorageRepository;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.util.*;
+import java.util.function.Function;
 
 /**
  * 场景执行编排 — 把一条场景声明落成「基线 → N 轮真实调用 → 断言 → 聚合判定 → 落库」。
@@ -66,18 +67,14 @@ public class ScenarioRunner {
         }
 
         List<Skip> skipped = new ArrayList<>();
-        List<PlannedScenario> planned = config.getScenarios().isEmpty()
-                ? deriveFromGroups(skipped)
-                : planFromConfig(config, skipped);
+        List<PlannedScenario> planned = config.getScenarios().isEmpty() ? deriveFromGroups(skipped) : planFromConfig(config, skipped);
 
         for (Skip skip : skipped) {
             out.println("警告：场景 " + skip.scenarioId + " 已跳过——" + skip.reason);
         }
 
         if (planned.isEmpty()) {
-            out.println(skipped.isEmpty()
-                    ? "没有可执行的场景：未找到已建档的分组，且场景配置为空。先录制交互数据。"
-                    : "没有可执行的场景：全部 " + skipped.size() + " 个场景已被跳过（原因见上）。");
+            out.println(skipped.isEmpty() ? "没有可执行的场景：未找到已建档的分组，且场景配置为空。先录制交互数据。" : "没有可执行的场景：全部 " + skipped.size() + " 个场景已被跳过（原因见上）。");
             return new Outcome(new ArrayList<ScenarioRun>(), planned, skipped);
         }
 
@@ -198,7 +195,8 @@ public class ScenarioRunner {
                 skipped.add(new Skip(scenario.getScenarioId(), "绑定（skillId=" + scenario.getSkillId() + "）没有匹配的已录制分组"));
                 continue;
             }
-            String systemPrompt = repository.findTemplateText(latestRecord(bucket).getTemplateHash());
+            InteractionRecord baselineRecord = latestRecord(bucket);
+            String systemPrompt = repository.findTemplateText(baselineRecord.getTemplateHash());
             if (systemPrompt == null || systemPrompt.isEmpty()) {
                 skipped.add(new Skip(scenario.getScenarioId(), "绑定分组缺少模板原文存档，无法重构调用"));
                 continue;
@@ -208,12 +206,18 @@ public class ScenarioRunner {
                 skipped.add(new Skip(scenario.getScenarioId(), "断言声明了未知行为 " + String.join(", ", unknown) + "（带缺口跑会出假绿，场景整体跳过）"));
                 continue;
             }
+            // 场景是新输入的首次调用：声明了输入但绑定分组收尾为工具结果轮
+            // （记录无用户输入位）时输入无法注入，无法兑现声明的场景不执行
+            if (!scenario.getUserInput().isEmpty() && baselineRecord.getUserInput() == null) {
+                skipped.add(new Skip(scenario.getScenarioId(), "绑定分组收尾为工具结果轮（无用户输入位），场景输入无法注入"));
+                continue;
+            }
             PlannedScenario plannedScenario = new PlannedScenario();
             plannedScenario.scenarioId = scenario.getScenarioId();
             plannedScenario.description = scenario.getName();
-            plannedScenario.userInput = substituteVariables(scenario.getUserInput(), scenario.getVariables());
+            plannedScenario.userInput = scenario.getUserInput().isEmpty() ? null : substituteVariables(scenario.getUserInput(), scenario.getVariables());
             plannedScenario.systemPrompt = systemPrompt;
-            plannedScenario.baseline = latestRecord(bucket);
+            plannedScenario.baseline = baselineRecord;
             plannedScenario.source = scenario;
             plannedScenario.sampleCount = scenario.getSampleCount();
             planned.add(plannedScenario);
@@ -270,6 +274,9 @@ public class ScenarioRunner {
      * 结构化变量替换：userInput 中的 {{键}} 占位符以变量值填充，未声明变量保持原样。
      */
     private static String substituteVariables(String userInput, Map<String, String> variables) {
+        if (userInput == null) {
+            return null;
+        }
         String result = userInput;
         for (Map.Entry<String, String> entry : variables.entrySet()) {
             result = result.replace("{{" + entry.getKey() + "}}", entry.getValue());
@@ -286,13 +293,11 @@ public class ScenarioRunner {
      */
     private ScenarioRun executeScenario(PlannedScenario planned, SkillRulesConfig baseRules) {
         String identityKey = planned.baseline.getSkillId() != null ? planned.baseline.getSkillId() : "";
-        SkillRulesConfig rules = planned.source != null
-                ? baseRules.merging(identityKey, planned.source.getAssertions())
-                : baseRules;
+        SkillRulesConfig rules = planned.source != null ? baseRules.merging(identityKey, planned.source.getAssertions()) : baseRules;
         StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(llmClient, comparator, rules);
 
         long startedAt = System.currentTimeMillis();
-        StatisticalRegressionResult result = executor.execute(planned.baseline, planned.systemPrompt, planned.testConfig());
+        StatisticalRegressionResult result = executor.execute(planned.baseline, planned.systemPrompt, planned.userInput, planned.testConfig());
 
         ScenarioRun run = new ScenarioRun();
         run.setRunId(UUID.randomUUID().toString());
@@ -304,6 +309,9 @@ public class ScenarioRunner {
         run.setFailCount(result.getVerdictCounts().getOrDefault(Verdict.CHANGED, 0));
         run.setInputTokens(result.getSamples().isEmpty() ? 0 : aggregateInputTokens(result));
         run.setOutputTokens(aggregateOutputTokens(result));
+        run.setCacheReadTokens(aggregateNullableToken(result.getSamples(), SampleResult::getCacheReadTokens));
+        run.setCacheWriteTokens(aggregateNullableToken(result.getSamples(), SampleResult::getCacheWriteTokens));
+        run.setReasoningTokens(aggregateNullableToken(result.getSamples(), SampleResult::getReasoningTokens));
         run.setLatencyMs(result.getTotalLatencyMs());
         run.setCostUsd(result.getEstimatedCost() > 0 ? result.getEstimatedCost() : null);
         repository.saveScenarioRun(run);
@@ -334,6 +342,20 @@ public class ScenarioRunner {
         int total = 0;
         for (SampleResult sample : result.getSamples()) {
             total += sample.getOutputTokens() != null ? sample.getOutputTokens() : 0;
+        }
+        return total;
+    }
+
+    /**
+     * 可空遥测聚合：全部样本缺失返回 null（未知 ≠ 0），任一样本有值则取非空和。
+     */
+    private static Integer aggregateNullableToken(List<SampleResult> samples, Function<SampleResult, Integer> extractor) {
+        Integer total = null;
+        for (SampleResult sample : samples) {
+            Integer value = extractor.apply(sample);
+            if (value != null) {
+                total = (total != null ? total : 0) + value;
+            }
         }
         return total;
     }

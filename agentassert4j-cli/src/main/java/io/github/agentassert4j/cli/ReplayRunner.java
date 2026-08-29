@@ -191,7 +191,8 @@ public class ReplayRunner {
         boolean hasTokens = false;
         List<String> caseJsons = jsonMode ? new ArrayList<>() : null;
         for (InteractionRecord testCase : cases) {
-            RegressionTestResult result = executor.execute(testCase, newSystemPrompt, executionConfig);
+            // 重放语义 = 历史输入原样（userInput 传 null，不覆盖基线记录）
+            RegressionTestResult result = executor.execute(testCase, newSystemPrompt, null, executionConfig);
             info("  [" + displayId(testCase) + "] " + testCase.getRecordId() + "  " + describe(result, testCase));
             if (jsonMode) {
                 caseJsons.add(caseJson(testCase, result));

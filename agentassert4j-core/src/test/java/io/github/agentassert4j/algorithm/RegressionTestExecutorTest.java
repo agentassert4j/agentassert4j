@@ -41,10 +41,21 @@ class RegressionTestExecutorTest {
         InteractionRecord baseline = makeBaseline("old prompt hash", "user input");
         TestExecutionConfig config = TestExecutionConfig.defaults();
 
-        LlmRequest request = executor.buildReplayRequest(baseline, "new prompt", config);
+        LlmRequest request = executor.buildReplayRequest(baseline, "new prompt", null, config);
 
         assertEquals("new prompt", request.getSystemPrompt());
         assertEquals("user input", request.getUserInput());
+    }
+
+    @Test
+    void buildReplayRequest_inputOverride_reachesRequest() {
+        // 场景层语义：新输入覆盖末位 user 帧（多轮上下文与工具定义仍原样保留）
+        InteractionRecord baseline = makeBaseline("old prompt hash", "user input");
+        TestExecutionConfig config = TestExecutionConfig.defaults();
+
+        LlmRequest request = executor.buildReplayRequest(baseline, "new prompt", "brand new input", config);
+
+        assertEquals("brand new input", request.getUserInput());
     }
 
     @Test
@@ -54,7 +65,7 @@ class RegressionTestExecutorTest {
         baseline.setPreviousTurns(Arrays.asList(new TurnContext("user", "q1"), new TurnContext("assistant", "a1"), new TurnContext("tool", "result1")));
 
         TestExecutionConfig config = TestExecutionConfig.defaults();
-        LlmRequest request = executor.buildReplayRequest(baseline, "prompt", config);
+        LlmRequest request = executor.buildReplayRequest(baseline, "prompt", null, config);
 
         assertNotNull(request.getPreviousTurns());
         assertEquals(3, request.getPreviousTurns().size());
@@ -68,7 +79,7 @@ class RegressionTestExecutorTest {
         InteractionRecord baseline = makeBaseline("hash", "input");
         baseline.setPreviousTurns(Arrays.asList(new TurnContext("user", "q1"), new TurnContext("system", "old system prompt"), new TurnContext("assistant", "a1")));
 
-        LlmRequest request = executor.buildReplayRequest(baseline, "prompt", TestExecutionConfig.defaults());
+        LlmRequest request = executor.buildReplayRequest(baseline, "prompt", null, TestExecutionConfig.defaults());
 
         assertNotNull(request.getPreviousTurns());
         assertEquals(2, request.getPreviousTurns().size());
@@ -81,7 +92,7 @@ class RegressionTestExecutorTest {
         InteractionRecord baseline = makeBaseline("hash", "input");
         TestExecutionConfig config = new TestExecutionConfig().model("deepseek-chat");
 
-        LlmRequest request = executor.buildReplayRequest(baseline, "prompt", config);
+        LlmRequest request = executor.buildReplayRequest(baseline, "prompt", null, config);
 
         assertEquals("deepseek-chat", request.getModel());
     }
@@ -92,7 +103,7 @@ class RegressionTestExecutorTest {
         baseline.setTurnIndex(0);
 
         TestExecutionConfig config = TestExecutionConfig.defaults();
-        LlmRequest request = executor.buildReplayRequest(baseline, "prompt", config);
+        LlmRequest request = executor.buildReplayRequest(baseline, "prompt", null, config);
 
         // previousTurns 应为 null 或空
         assertTrue(request.getPreviousTurns() == null || request.getPreviousTurns().isEmpty());
@@ -113,7 +124,7 @@ class RegressionTestExecutorTest {
         tc.setArguments(Collections.singletonMap("orderId", "ORD-001"));
         response.setToolCalls(Collections.singletonList(tc));
 
-        InteractionRecord current = executor.buildCurrentRecord(baseline, response, "new prompt");
+        InteractionRecord current = executor.buildCurrentRecord(baseline, response, "new prompt", null);
 
         assertNotNull(current.getRecordId());
         assertNotNull(current.getTemplateHash());
@@ -138,7 +149,7 @@ class RegressionTestExecutorTest {
         response.setContent("just text");
         response.setToolCalls(Collections.emptyList());
 
-        InteractionRecord current = executor.buildCurrentRecord(baseline, response, "prompt");
+        InteractionRecord current = executor.buildCurrentRecord(baseline, response, "prompt", null);
 
         assertFalse(current.isHasToolCalls());
         assertTrue(current.getToolCalls().isEmpty());
@@ -153,7 +164,7 @@ class RegressionTestExecutorTest {
         stubClient.response = makeToolCallResponse("queryOrder", "ORD-001");
 
         TestExecutionConfig config = TestExecutionConfig.defaults();
-        RegressionTestResult result = executor.execute(baseline, "new prompt", config);
+        RegressionTestResult result = executor.execute(baseline, "new prompt", null, config);
 
         assertEquals("rec-1", result.getBaselineRecordId());
         assertEquals("skill-1", result.getSkillId());
@@ -168,7 +179,7 @@ class RegressionTestExecutorTest {
         stubClient.throwTimeout = true;
 
         TestExecutionConfig config = TestExecutionConfig.defaults();
-        RegressionTestResult result = executor.execute(baseline, "new prompt", config);
+        RegressionTestResult result = executor.execute(baseline, "new prompt", null, config);
 
         assertEquals(TestResultStatus.TIMEOUT, result.getStatus());
         assertEquals("rec-1", result.getBaselineRecordId());
@@ -180,7 +191,7 @@ class RegressionTestExecutorTest {
         stubClient.throwApiError = true;
 
         TestExecutionConfig config = TestExecutionConfig.defaults();
-        RegressionTestResult result = executor.execute(baseline, "new prompt", config);
+        RegressionTestResult result = executor.execute(baseline, "new prompt", null, config);
 
         assertEquals(TestResultStatus.API_ERROR, result.getStatus());
         assertEquals("rec-1", result.getBaselineRecordId());
@@ -194,7 +205,7 @@ class RegressionTestExecutorTest {
         stubClient.throwRuntime = true;
 
         TestExecutionConfig config = TestExecutionConfig.defaults();
-        RegressionTestResult result = executor.execute(baseline, "new prompt", config);
+        RegressionTestResult result = executor.execute(baseline, "new prompt", null, config);
 
         assertEquals(TestResultStatus.ERROR, result.getStatus());
         assertEquals("rec-1", result.getBaselineRecordId());
@@ -206,7 +217,7 @@ class RegressionTestExecutorTest {
         InteractionRecord baseline = makeBaseline("hash", "input");
 
         TestExecutionConfig config = new TestExecutionConfig().dryRun(true);
-        RegressionTestResult result = executor.execute(baseline, "new prompt", config);
+        RegressionTestResult result = executor.execute(baseline, "new prompt", null, config);
 
         assertEquals(TestResultStatus.SKIP, result.getStatus());
         // 确认没调 LLM
@@ -219,7 +230,7 @@ class RegressionTestExecutorTest {
         stubClient.response = makeTextResponse("hello");
 
         TestExecutionConfig config = new TestExecutionConfig().timeoutMs(5000);
-        executor.execute(baseline, "prompt", config);
+        executor.execute(baseline, "prompt", null, config);
 
         assertEquals(5000, stubClient.lastTimeoutMs);
     }
@@ -236,7 +247,7 @@ class RegressionTestExecutorTest {
         String groupKey = DeterministicSkillGrouper.group(baseline).getGroupKey();
         stubClient.response = makeTextResponse("plain answer");
 
-        wired.execute(baseline, "new prompt", TestExecutionConfig.defaults());
+        wired.execute(baseline, "new prompt", null, TestExecutionConfig.defaults());
 
         // 候选必须经持久层落库，否则 approve 在另一进程不可达
         SkillProfile profile = repo.findSkillByGroupKey(groupKey);
@@ -258,7 +269,7 @@ class RegressionTestExecutorTest {
         String groupKey = DeterministicSkillGrouper.group(baseline).getGroupKey();
         stubClient.response = makeTextResponse("same answer");
 
-        RegressionTestResult result = wired.execute(baseline, "new prompt", TestExecutionConfig.defaults());
+        RegressionTestResult result = wired.execute(baseline, "new prompt", null, TestExecutionConfig.defaults());
 
         assertEquals(Verdict.PASS, result.getComparison().getVerdict());
         assertNull(repo.findSkillByGroupKey(groupKey).getCandidateFingerprint());
@@ -271,7 +282,7 @@ class RegressionTestExecutorTest {
         InteractionRecord baseline = makeBaselineWithToolCall("hash", "input");
         stubClient.response = makeTextResponse("plain answer");
 
-        RegressionTestResult result = executor.execute(baseline, "new prompt", TestExecutionConfig.defaults());
+        RegressionTestResult result = executor.execute(baseline, "new prompt", null, TestExecutionConfig.defaults());
 
         assertNotNull(result.getComparison());
     }
@@ -286,7 +297,7 @@ class RegressionTestExecutorTest {
             InteractionRecord baseline = makeBaseline("hash", "input");
             baseline.setToolsDefinition("[{\"type\":\"function\",\"function\":{\"name\":\"queryOrder\",\"parameters\":{}}}]");
 
-            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", TestExecutionConfig.defaults());
+            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", null, TestExecutionConfig.defaults());
 
             assertNotNull(request.getToolDefinitions(), "重放请求必须携带录制的工具定义");
             assertEquals(1, request.getToolDefinitions().size());
@@ -299,7 +310,7 @@ class RegressionTestExecutorTest {
             InteractionRecord baseline = makeBaseline("hash", "input");
             baseline.setToolsDefinition("{\"type\":\"function\",\"function\":{\"name\":\"search\"}}");
 
-            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", TestExecutionConfig.defaults());
+            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", null, TestExecutionConfig.defaults());
 
             assertEquals(1, request.getToolDefinitions().size());
             assertTrue(request.getToolDefinitions().get(0).contains("search"));
@@ -311,7 +322,7 @@ class RegressionTestExecutorTest {
             InteractionRecord baseline = makeBaseline("hash", "input");
             baseline.setToolsDefinition("not-json");
 
-            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", TestExecutionConfig.defaults());
+            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", null, TestExecutionConfig.defaults());
 
             assertTrue(request.getToolDefinitions() == null || request.getToolDefinitions().isEmpty(), "损坏的工具定义不得进入重放请求");
         }
@@ -326,7 +337,7 @@ class RegressionTestExecutorTest {
             toolTurn.setToolName("queryOrder");
             baseline.setPreviousTurns(Collections.singletonList(toolTurn));
 
-            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", TestExecutionConfig.defaults());
+            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", null, TestExecutionConfig.defaults());
 
             TurnContext copied = request.getPreviousTurns().get(0);
             assertEquals("call_abc", copied.getToolCallId(), "toolCallId 是 tool 消息与调用决策的关联键，重放不得丢弃");
@@ -340,7 +351,7 @@ class RegressionTestExecutorTest {
             baseline.setTurnIndex(1);
             baseline.setPreviousTurns(Collections.singletonList(new TurnContext("user", "q1")));
 
-            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", TestExecutionConfig.defaults());
+            LlmRequest request = executor.buildReplayRequest(baseline, "prompt", null, TestExecutionConfig.defaults());
 
             request.getPreviousTurns().get(0).setContent("mutated");
             assertEquals("q1", baseline.getPreviousTurns().get(0).getContent());
@@ -358,7 +369,7 @@ class RegressionTestExecutorTest {
             RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null, rules);
             stubClient.response = makeTextResponse("回答里没有关键词");
 
-            RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
+            RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", null, TestExecutionConfig.defaults());
 
             assertFalse(result.getComparison().isKeywordMatch());
             assertNotEquals(Verdict.PASS, result.getComparison().getVerdict());
@@ -374,7 +385,7 @@ class RegressionTestExecutorTest {
             baseline.setModelResponse("订单已创建");
             stubClient.response = makeTextResponse("订单已创建");
 
-            RegressionTestResult result = wired.execute(baseline, "prompt", TestExecutionConfig.defaults());
+            RegressionTestResult result = wired.execute(baseline, "prompt", null, TestExecutionConfig.defaults());
 
             assertTrue(result.getComparison().isKeywordMatch());
             assertEquals(Verdict.PASS, result.getComparison().getVerdict());
@@ -387,7 +398,7 @@ class RegressionTestExecutorTest {
             RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null, rules);
             stubClient.response = makeTextResponse("请提供密码");
 
-            RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
+            RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", null, TestExecutionConfig.defaults());
 
             assertFalse(result.getComparison().isKeywordMatch());
         }
@@ -399,7 +410,7 @@ class RegressionTestExecutorTest {
             RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null, rules);
             stubClient.response = makeTextResponse("english only answer");
 
-            RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
+            RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", null, TestExecutionConfig.defaults());
 
             assertFalse(result.getComparison().isBehaviorMatch());
         }
@@ -413,7 +424,7 @@ class RegressionTestExecutorTest {
             baseline.setModelResponse("same answer");
             stubClient.response = makeTextResponse("same answer");
 
-            RegressionTestResult result = wired.execute(baseline, "prompt", TestExecutionConfig.defaults());
+            RegressionTestResult result = wired.execute(baseline, "prompt", null, TestExecutionConfig.defaults());
 
             assertTrue(result.getComparison().isKeywordMatch());
             assertEquals(Verdict.PASS, result.getComparison().getVerdict());
@@ -430,7 +441,7 @@ class RegressionTestExecutorTest {
             RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new ThrowingComparator(), null, null);
             stubClient.response = makeTextResponse("hello");
 
-            RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
+            RegressionTestResult result = wired.execute(makeBaseline("hash", "input"), "prompt", null, TestExecutionConfig.defaults());
 
             assertEquals(TestResultStatus.ERROR, result.getStatus());
             assertEquals("rec-1", result.getBaselineRecordId());
@@ -442,7 +453,7 @@ class RegressionTestExecutorTest {
         void timeoutStillMappedBeforePostProcessing() {
             stubClient.throwTimeout = true;
 
-            RegressionTestResult result = executor.execute(makeBaseline("hash", "input"), "prompt", TestExecutionConfig.defaults());
+            RegressionTestResult result = executor.execute(makeBaseline("hash", "input"), "prompt", null, TestExecutionConfig.defaults());
 
             assertEquals(TestResultStatus.TIMEOUT, result.getStatus());
         }

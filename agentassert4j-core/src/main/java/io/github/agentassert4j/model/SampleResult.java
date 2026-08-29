@@ -55,6 +55,13 @@ public class SampleResult {
     private Integer inputTokens;
     private Integer outputTokens;
 
+    /**
+     * 缓存命中与思考 token（null = 供应商未返回；未知不得记 0）
+     */
+    private Integer cacheReadTokens;
+    private Integer cacheWriteTokens;
+    private Integer reasoningTokens;
+
     public SampleResult() {
     }
 
@@ -136,5 +143,29 @@ public class SampleResult {
 
     public void setOutputTokens(Integer outputTokens) {
         this.outputTokens = outputTokens;
+    }
+
+    public Integer getCacheReadTokens() {
+        return cacheReadTokens;
+    }
+
+    public void setCacheReadTokens(Integer cacheReadTokens) {
+        this.cacheReadTokens = cacheReadTokens;
+    }
+
+    public Integer getCacheWriteTokens() {
+        return cacheWriteTokens;
+    }
+
+    public void setCacheWriteTokens(Integer cacheWriteTokens) {
+        this.cacheWriteTokens = cacheWriteTokens;
+    }
+
+    public Integer getReasoningTokens() {
+        return reasoningTokens;
+    }
+
+    public void setReasoningTokens(Integer reasoningTokens) {
+        this.reasoningTokens = reasoningTokens;
     }
 }

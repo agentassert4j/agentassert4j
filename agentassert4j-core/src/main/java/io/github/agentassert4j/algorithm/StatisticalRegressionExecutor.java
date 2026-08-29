@@ -42,16 +42,18 @@ public class StatisticalRegressionExecutor {
      *
      * @param baseline        历史交互基线
      * @param newSystemPrompt 新 System Prompt
+     * @param userInput       每次采样的用户输入；null = 原样复用基线记录的历史输入（重放语义），
+     *                        场景层传入新输入实现「新输入的首次调用」
      * @param config          统计测试配置
      * @return 聚合统计结果
      */
-    public StatisticalRegressionResult execute(InteractionRecord baseline, String newSystemPrompt, StatisticalTestConfig config) {
+    public StatisticalRegressionResult execute(InteractionRecord baseline, String newSystemPrompt, String userInput, StatisticalTestConfig config) {
 
         config.validate();
 
         // 单次模式：直接委托给 RegressionTestExecutor
         if (!config.isStatisticalMode()) {
-            return executeSingleAsStatistical(baseline, newSystemPrompt, config);
+            return executeSingleAsStatistical(baseline, newSystemPrompt, userInput, config);
         }
 
         // ====== 统计模式 ======
@@ -75,7 +77,7 @@ public class StatisticalRegressionExecutor {
         long totalStart = System.currentTimeMillis();
 
         if (config.getConcurrency() > 1) {
-            samples = executeConcurrent(baseline, newSystemPrompt, config, effectiveSampleCount);
+            samples = executeConcurrent(baseline, newSystemPrompt, userInput, config, effectiveSampleCount);
         } else {
             samples = new ArrayList<>(effectiveSampleCount);
             long consumedTokens = 0;
@@ -85,7 +87,7 @@ public class StatisticalRegressionExecutor {
                     samples.add(budgetSample(i + 1, config));
                     continue;
                 }
-                SampleResult sample = executeOneSample(baseline, newSystemPrompt, i + 1, config);
+                SampleResult sample = executeOneSample(baseline, newSystemPrompt, userInput, i + 1, config);
                 consumedTokens += tokensOf(sample);
                 samples.add(sample);
             }
@@ -118,12 +120,12 @@ public class StatisticalRegressionExecutor {
      *
      * <p>退化不中断：任何异常都转换为 SampleResult，不向外抛出。</p>
      */
-    SampleResult executeOneSample(InteractionRecord baseline, String newSystemPrompt, int sampleIndex, StatisticalTestConfig config) {
+    SampleResult executeOneSample(InteractionRecord baseline, String newSystemPrompt, String userInput, int sampleIndex, StatisticalTestConfig config) {
 
         long start = System.currentTimeMillis();
 
         try {
-            RegressionTestResult single = singleExecutor.execute(baseline, newSystemPrompt, toTestExecutionConfig(config));
+            RegressionTestResult single = singleExecutor.execute(baseline, newSystemPrompt, userInput, toTestExecutionConfig(config));
 
             long latency = System.currentTimeMillis() - start;
 
@@ -141,9 +143,13 @@ public class StatisticalRegressionExecutor {
             }
 
             SampleResult judged = new SampleResult(sampleIndex, single.getComparison().getVerdict(), single.getComparison().getScore(), single.getComparison().getVerdict() != Verdict.PASS ? single.getComparison().getSummary() : null, latency);
-            // token 消耗随样本上抛，供整轮 token 预算扣减
+            // token 消耗随样本上抛，供整轮 token 预算扣减与场景层遥测聚合；
+            // 缓存/思考 token 可空（供应商未返回保持 null）
             judged.setInputTokens(single.getInputTokens());
             judged.setOutputTokens(single.getOutputTokens());
+            judged.setCacheReadTokens(single.getCacheReadTokens());
+            judged.setCacheWriteTokens(single.getCacheWriteTokens());
+            judged.setReasoningTokens(single.getReasoningTokens());
             return judged;
 
         } catch (Exception e) {
@@ -157,7 +163,7 @@ public class StatisticalRegressionExecutor {
      *
      * <p>使用裸 Thread + join，零额外依赖。</p>
      */
-    private List<SampleResult> executeConcurrent(InteractionRecord baseline, String newSystemPrompt, StatisticalTestConfig config, int totalCount) {
+    private List<SampleResult> executeConcurrent(InteractionRecord baseline, String newSystemPrompt, String userInput, StatisticalTestConfig config, int totalCount) {
 
         int batchSize = config.getConcurrency();
         List<SampleResult> allSamples = new ArrayList<>(totalCount);
@@ -182,7 +188,7 @@ public class StatisticalRegressionExecutor {
                 final int sampleIndex = batchStart + i + 1;
                 final int resultIndex = i;
                 threads[i] = new Thread(() -> {
-                    batchResults[resultIndex] = executeOneSample(baseline, newSystemPrompt, sampleIndex, config);
+                    batchResults[resultIndex] = executeOneSample(baseline, newSystemPrompt, userInput, sampleIndex, config);
                 });
                 threads[i].setName("agentassert4j-statistical-" + sampleIndex);
                 threads[i].setDaemon(true);
@@ -224,6 +230,7 @@ public class StatisticalRegressionExecutor {
     }
 
     private static long tokensOf(SampleResult sample) {
+        // 只计输入+输出：缓存读 token 是输入 token 的已命中子集，纳入会重复扣减预算
         return (sample.getInputTokens() != null ? sample.getInputTokens() : 0) + (sample.getOutputTokens() != null ? sample.getOutputTokens() : 0);
     }
 
@@ -255,9 +262,9 @@ public class StatisticalRegressionExecutor {
     /**
      * 单次模式包装 — 与 RegressionTestExecutor 单次执行等价。
      */
-    private StatisticalRegressionResult executeSingleAsStatistical(InteractionRecord baseline, String newSystemPrompt, StatisticalTestConfig config) {
+    private StatisticalRegressionResult executeSingleAsStatistical(InteractionRecord baseline, String newSystemPrompt, String userInput, StatisticalTestConfig config) {
 
-        SampleResult sample = executeOneSample(baseline, newSystemPrompt, 1, config);
+        SampleResult sample = executeOneSample(baseline, newSystemPrompt, userInput, 1, config);
 
         StatisticalRegressionResult result = StatisticalRegressionResult.aggregate(baseline.getRecordId(), baseline.getSkillId(), Collections.singletonList(sample), 1.0, 0.0);
 

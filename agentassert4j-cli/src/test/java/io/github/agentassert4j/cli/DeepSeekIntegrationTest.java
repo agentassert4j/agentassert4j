@@ -1,6 +1,5 @@
 package io.github.agentassert4j.cli;
 
-import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.algorithm.*;
 import io.github.agentassert4j.cli.llm.OpenAiCompatibleClient;
 import io.github.agentassert4j.config.TestExecutionConfig;
@@ -491,7 +490,7 @@ class DeepSeekIntegrationTest {
             String newPrompt = "你是一个数学助手，简洁回答。";
 
             RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
-            RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
+            RegressionTestResult result = executor.execute(baseline, newPrompt, null, TestExecutionConfig.defaults());
 
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
             assertNotNull(result.getComparison());
@@ -515,7 +514,7 @@ class DeepSeekIntegrationTest {
             TestExecutionConfig config = new TestExecutionConfig().temperature(0.0).timeoutMs(30000);
 
             RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
-            RegressionTestResult result = executor.execute(baseline, newPrompt, config);
+            RegressionTestResult result = executor.execute(baseline, newPrompt, null, config);
 
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
 
@@ -539,7 +538,7 @@ class DeepSeekIntegrationTest {
 
             String newPrompt = "你是对话助手，记住用户信息。";
             RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
-            RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
+            RegressionTestResult result = executor.execute(baseline, newPrompt, null, TestExecutionConfig.defaults());
 
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
             System.out.println("[6.3] Verdict=" + result.getComparison().getVerdict() + ", Score=" + String.format("%.4f", result.getComparison().getScore()));
@@ -551,7 +550,7 @@ class DeepSeekIntegrationTest {
             InteractionRecord baseline = makeTextBaseline("dry-1", "test", "ok");
             RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
 
-            RegressionTestResult result = executor.execute(baseline, "new prompt", new TestExecutionConfig().dryRun(true));
+            RegressionTestResult result = executor.execute(baseline, "new prompt", null, new TestExecutionConfig().dryRun(true));
 
             assertEquals(TestResultStatus.SKIP, result.getStatus());
         }
@@ -576,7 +575,7 @@ class DeepSeekIntegrationTest {
             config.setPassThreshold(0.9);
             config.setRegressionTolerance(0.0);
 
-            StatisticalRegressionResult result = executor.execute(baseline, newPrompt, config);
+            StatisticalRegressionResult result = executor.execute(baseline, newPrompt, null, config);
 
             assertEquals(5, result.getActualSampleCount());
             assertEquals(5, result.getSamples().size());
@@ -619,7 +618,7 @@ class DeepSeekIntegrationTest {
             config.setConcurrency(5);
             config.setTemperature(0.0);
 
-            StatisticalRegressionResult result = executor.execute(baseline, newPrompt, config);
+            StatisticalRegressionResult result = executor.execute(baseline, newPrompt, null, config);
 
             assertEquals(5, result.getActualSampleCount());
             assertNotNull(result.getStatisticalVerdict());
@@ -634,7 +633,7 @@ class DeepSeekIntegrationTest {
 
             StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null);
 
-            StatisticalRegressionResult result = executor.execute(baseline, "你是数学助手。", StatisticalTestConfig.defaults());
+            StatisticalRegressionResult result = executor.execute(baseline, "你是数学助手。", null, StatisticalTestConfig.defaults());
 
             assertEquals(1, result.getActualSampleCount());
             assertNotNull(result.getStatisticalVerdict());
@@ -722,7 +721,7 @@ class DeepSeekIntegrationTest {
 
             // 4. 回归重放
             RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
-            RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
+            RegressionTestResult result = executor.execute(baseline, newPrompt, null, TestExecutionConfig.defaults());
 
             // 5. 验证完整链路
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
@@ -769,7 +768,7 @@ class DeepSeekIntegrationTest {
                 // 3. 用新 prompt 重放（tools 定义随基线记录原样携带）
                 String newPrompt = "你是一个天气专家。用 get_weather 工具查天气。";
                 RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
-                RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
+                RegressionTestResult result = executor.execute(baseline, newPrompt, null, TestExecutionConfig.defaults());
 
                 System.out.println("[9.2] 重放结果: Verdict=" + result.getComparison().getVerdict() + ", Score=" + String.format("%.4f", result.getComparison().getScore()) + ", toolMatch=" + result.getComparison().isToolCallMatch());
             } else {
@@ -825,7 +824,7 @@ class DeepSeekIntegrationTest {
             // 用新 prompt 重放
             String newPrompt = "你是一个友好的助手，总是记住用户信息。";
             RegressionTestExecutor executor = new RegressionTestExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null, null);
-            RegressionTestResult result = executor.execute(baseline, newPrompt, TestExecutionConfig.defaults());
+            RegressionTestResult result = executor.execute(baseline, newPrompt, null, TestExecutionConfig.defaults());
 
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
             System.out.println("[9.3] 重放: Verdict=" + result.getComparison().getVerdict() + ", Score=" + String.format("%.4f", result.getComparison().getScore()));
@@ -845,7 +844,7 @@ class DeepSeekIntegrationTest {
             config.setTemperature(0.0);
             config.setPassThreshold(0.9);
 
-            StatisticalRegressionResult result = executor.execute(baseline, newPrompt, config);
+            StatisticalRegressionResult result = executor.execute(baseline, newPrompt, null, config);
 
             // 完整断言
             assertEquals(5, result.getActualSampleCount());

@@ -87,6 +87,24 @@ class ScenarioRunnerTest {
         repository.saveTemplateText("hash-old", "系统提示词");
     }
 
+    private void seedToolClosingRecord() {
+        // 工具结果收尾轮：无用户输入位（userInput null），行为分组仍由模板锚点派生
+        InteractionRecord record = new InteractionRecord();
+        record.setRecordId("rec-t1");
+        record.setSessionId("session-t1");
+        record.setTimestamp(3000L);
+        record.setSeq(1L);
+        record.setTemplateHash("hash-old");
+        record.setUserInput(null);
+        record.setTurnIndex(0);
+        record.setModelResponse("same answer");
+        record.setToolCalls(new ArrayList<>());
+        record.setHasToolCalls(false);
+        record.setTemplateText("系统提示词");
+        repository.saveInteraction(record);
+        repository.saveTemplateText("hash-old", "系统提示词");
+    }
+
     @Test
     void run_autoDerivesNoiseBaselineScenarios_perEstablishedGroup() {
         seedDeclaredRecord();
@@ -106,8 +124,7 @@ class ScenarioRunnerTest {
     @Test
     void run_declaredAssertionFailure_mapsToDrifted() {
         seedDeclaredRecord();
-        String configJson = "{\"scenarios\":[{\"scenarioId\":\"kw\",\"skillId\":\"skill-1\"," +
-                "\"userInput\":\"查订单 ORD-001\",\"assertions\":{\"requiredKeywords\":[\"不存在的词\"]}}]}";
+        String configJson = "{\"scenarios\":[{\"scenarioId\":\"kw\",\"skillId\":\"skill-1\"," + "\"userInput\":\"查订单 ORD-001\",\"assertions\":{\"requiredKeywords\":[\"不存在的词\"]}}]}";
 
         ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.fromJson(configJson), false);
 
@@ -121,14 +138,63 @@ class ScenarioRunnerTest {
         // 未声明分组（无业务标签）按模板 hash 绑定：断言必须经空键规则注入生效，
         // 静默丢弃断言会产出假绿（回归钉子）
         seedUndeclaredRecord();
-        String configJson = "{\"scenarios\":[{\"scenarioId\":\"tpl-bound\",\"templateHash\":\"hash-old\"," +
-                "\"userInput\":\"查订单 ORD-001\",\"assertions\":{\"requiredKeywords\":[\"不存在的词\"]}}]}";
+        String configJson = "{\"scenarios\":[{\"scenarioId\":\"tpl-bound\",\"templateHash\":\"hash-old\"," + "\"userInput\":\"查订单 ORD-001\",\"assertions\":{\"requiredKeywords\":[\"不存在的词\"]}}]}";
 
         ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.fromJson(configJson), false);
 
         assertEquals(1, outcome.getRuns().size(), "templateHash 绑定未声明分组应可解析");
         assertEquals("DRIFTED", outcome.getRuns().get(0).getVerdict(), "断言对未声明分组同样生效：缺词 → 逐轮 CHANGED");
         assertTrue(outcome.getRuns().get(0).getFailCount() > 0);
+    }
+
+    @Test
+    void run_scenarioInputWithVariables_reachesLlmRequest() {
+        // 场景核心语义：新输入（变量替换后）是发起给模型的真实输入，而非重放历史输入
+        seedDeclaredRecord();
+        String configJson = "{\"scenarios\":[{\"scenarioId\":\"new-input\",\"skillId\":\"skill-1\"," + "\"userInput\":\"查订单 {{order_id}} 的物流\",\"variables\":{\"order_id\":\"ORD-777\"}}]}";
+
+        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.fromJson(configJson), false);
+
+        assertEquals(1, outcome.getRuns().size());
+        assertEquals("查订单 ORD-777 的物流", client.lastRequest.getUserInput());
+    }
+
+    @Test
+    void run_autoDerive_replaysBaselineInput() {
+        seedDeclaredRecord();
+
+        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.empty(), false);
+
+        assertEquals(1, outcome.getRuns().size());
+        assertEquals("查订单 ORD-001", client.lastRequest.getUserInput(), "自动派生重放基线历史输入");
+    }
+
+    @Test
+    void run_cacheTelemetry_aggregatedAndPersisted() {
+        seedDeclaredRecord();
+
+        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.empty(), false);
+
+        ScenarioRun run = outcome.getRuns().get(0);
+        assertEquals(Integer.valueOf(150), run.getCacheReadTokens(), "5 轮 × 30 缓存读 token 聚合");
+        assertEquals(Integer.valueOf(50), run.getCacheWriteTokens());
+        assertEquals(Integer.valueOf(25), run.getReasoningTokens());
+        List<ScenarioRun> persisted = repository.findScenarioRuns(run.getScenarioId());
+        assertEquals(Integer.valueOf(150), persisted.get(0).getCacheReadTokens(), "可空遥测列写读往返");
+    }
+
+    @Test
+    void run_toolClosingTurnBucket_scenarioInputDeclared_skipped() {
+        // 工具结果收尾轮没有用户输入位：声明了输入的场景无法注入，跳过而非静默忽略
+        seedToolClosingRecord();
+        String configJson = "{\"scenarios\":[{\"scenarioId\":\"tpl-input\",\"templateHash\":\"hash-old\"," + "\"userInput\":\"新输入来了\"}]}";
+
+        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.fromJson(configJson), false);
+
+        assertTrue(outcome.getRuns().isEmpty());
+        assertEquals(1, outcome.getSkipped().size());
+        assertTrue(outcome.getSkipped().get(0).reason.contains("工具结果轮"));
+        assertEquals(0, client.callCount);
     }
 
     @Test
@@ -148,8 +214,7 @@ class ScenarioRunnerTest {
     @Test
     void run_unknownBehaviorInAssertions_scenarioSkipped() {
         seedDeclaredRecord();
-        String configJson = "{\"scenarios\":[{\"scenarioId\":\"typo\",\"skillId\":\"skill-1\"," +
-                "\"userInput\":\"查订单 ORD-001\",\"assertions\":{\"behaviors\":[\"noErr0\"]}}]}";
+        String configJson = "{\"scenarios\":[{\"scenarioId\":\"typo\",\"skillId\":\"skill-1\"," + "\"userInput\":\"查订单 ORD-001\",\"assertions\":{\"behaviors\":[\"noErr0\"]}}]}";
 
         ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.fromJson(configJson), false);
 
@@ -176,6 +241,10 @@ class ScenarioRunnerTest {
     static class CannedClient implements LlmClient {
         private final String content;
         int callCount;
+        LlmRequest lastRequest;
+        Integer cacheReadTokens = 30;
+        Integer cacheWriteTokens = 10;
+        Integer reasoningTokens = 5;
 
         CannedClient(String content) {
             this.content = content;
@@ -184,10 +253,14 @@ class ScenarioRunnerTest {
         @Override
         public LlmResponse chat(LlmRequest request, long timeoutMs) throws LlmTimeoutException, LlmApiException {
             callCount++;
+            lastRequest = request;
             LlmResponse response = new LlmResponse();
             response.setContent(content);
             response.setInputTokens(10);
             response.setOutputTokens(5);
+            response.setCacheReadTokens(cacheReadTokens);
+            response.setCacheWriteTokens(cacheWriteTokens);
+            response.setReasoningTokens(reasoningTokens);
             return response;
         }
 

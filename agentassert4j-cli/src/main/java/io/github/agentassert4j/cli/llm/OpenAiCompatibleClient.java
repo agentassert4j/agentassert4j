@@ -407,6 +407,9 @@ public class OpenAiCompatibleClient implements LlmClient {
                 if (completionDetails != null) {
                     response.setReasoningTokens(memberInt(completionDetails, "reasoning_tokens"));
                 }
+                // TODO: [cache write 未解析] Anthropic 风格的 cache_creation_input_tokens
+                // 暂不解析，cacheWriteTokens 保持 null（未知 ≠ 0）；出现真实报告该字段的
+                // 兼容端点时随方言适配补齐
             }
 
             // 响应报告的实际服务模型（顶层 "model" 字段）

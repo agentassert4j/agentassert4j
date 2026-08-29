@@ -55,10 +55,12 @@ public class RegressionTestExecutor {
      *
      * @param baseline        历史交互（基线）
      * @param newSystemPrompt 新 System Prompt
+     * @param userInput       本次调用的用户输入；null = 原样复用基线记录的历史输入
+     *                        （重放语义）。场景层传入新输入，实现「新输入的首次调用」
      * @param config          执行配置
      * @return 回归测试结果
      */
-    public RegressionTestResult execute(InteractionRecord baseline, String newSystemPrompt, TestExecutionConfig config) {
+    public RegressionTestResult execute(InteractionRecord baseline, String newSystemPrompt, String userInput, TestExecutionConfig config) {
 
         // dryRun 模式：不调 LLM
         if (config.isDryRun()) {
@@ -70,7 +72,7 @@ public class RegressionTestExecutor {
         }
 
         // 1. 构建重放请求
-        LlmRequest replayRequest = buildReplayRequest(baseline, newSystemPrompt, config);
+        LlmRequest replayRequest = buildReplayRequest(baseline, newSystemPrompt, userInput, config);
 
         // 2. 调用 LLM
         LlmResponse response;
@@ -89,7 +91,7 @@ public class RegressionTestExecutor {
         // 3-5. LLM 调用成功后的处理（构建当前记录/提取指纹/对比与候选落库/结果封装）。
         //    任何处理失败转为 ERROR 结果，不向批量调用方逃逸——批量回归不允许单条记录中断整体
         try {
-            InteractionRecord current = buildCurrentRecord(baseline, response, newSystemPrompt);
+            InteractionRecord current = buildCurrentRecord(baseline, response, newSystemPrompt, userInput);
 
             DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline, rules, baseline.getSkillId());
             DeterministicFingerprint currentFp = FingerprintExtractor.extract(current, rules, current.getSkillId());
@@ -112,10 +114,14 @@ public class RegressionTestExecutor {
             result.setComparison(comparison);
             result.setCandidateFingerprint(currentFp);
             // served 模型与 token 消耗随结果上抛：前者供精确模型身份比对，
-            // 后者供统计执行的 token 预算扣减
+            // 后者供统计执行的 token 预算扣减与场景层遥测聚合；缓存/思考
+            // token 可空（供应商未返回时保持 null，未知不得记 0）
             result.setServedModel(response.getServedModel());
             result.setInputTokens(response.getInputTokens());
             result.setOutputTokens(response.getOutputTokens());
+            result.setCacheReadTokens(response.getCacheReadTokens());
+            result.setCacheWriteTokens(response.getCacheWriteTokens());
+            result.setReasoningTokens(response.getReasoningTokens());
             // 候选原文只在重放现场存活（recordCandidate 只持久化指纹），
             // 报告侧的文本差异证据依赖此处透传
             result.setReplayOutput(response.getContent());
@@ -127,16 +133,17 @@ public class RegressionTestExecutor {
     }
 
     /**
-     * 构建重放请求 — 新 Prompt 为被测变量，历史输入/多轮上下文/工具定义为控制变量。
+     * 构建重放请求 — 新 Prompt 与场景输入为被测变量，多轮上下文/工具定义为控制变量。
      */
-    LlmRequest buildReplayRequest(InteractionRecord baseline, String newSystemPrompt, TestExecutionConfig config) {
+    LlmRequest buildReplayRequest(InteractionRecord baseline, String newSystemPrompt, String userInput, TestExecutionConfig config) {
         LlmRequest request = new LlmRequest();
 
         // 替换 System Prompt
         request.setSystemPrompt(newSystemPrompt);
 
-        // 复用历史用户输入
-        request.setUserInput(baseline.getUserInput());
+        // 用户输入：null = 重放语义，原样复用历史输入；场景层传入新输入覆盖
+        // 末位 user 帧（「新输入的首次调用」语义落在这里，上下文与工具原样保留）
+        request.setUserInput(userInput != null ? userInput : baseline.getUserInput());
 
         // 多模态原样复用
         request.setMultimodalInput(baseline.isMultimodalInput());
@@ -197,13 +204,13 @@ public class RegressionTestExecutor {
     /**
      * 从 LLM 响应构建当前交互记录（不持久化，仅用于指纹提取和对比）。
      */
-    InteractionRecord buildCurrentRecord(InteractionRecord baseline, LlmResponse response, String newPrompt) {
+    InteractionRecord buildCurrentRecord(InteractionRecord baseline, LlmResponse response, String newPrompt, String userInput) {
         InteractionRecord current = new InteractionRecord();
         current.setRecordId(UUID.randomUUID().toString());
         current.setTimestamp(System.currentTimeMillis());
         current.setSkillId(baseline.getSkillId());
         current.setTemplateHash(HashUtil.sha256(newPrompt));
-        current.setUserInput(baseline.getUserInput());
+        current.setUserInput(userInput != null ? userInput : baseline.getUserInput());
         current.setTurnIndex(baseline.getTurnIndex());
         current.setSessionId(baseline.getSessionId());
 

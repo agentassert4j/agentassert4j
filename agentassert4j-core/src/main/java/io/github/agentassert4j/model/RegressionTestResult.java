@@ -25,6 +25,12 @@ public class RegressionTestResult {
      */
     private Integer inputTokens;
     private Integer outputTokens;
+    /**
+     * 缓存命中与思考 token（null = 供应商未返回；未知不得记 0）
+     */
+    private Integer cacheReadTokens;
+    private Integer cacheWriteTokens;
+    private Integer reasoningTokens;
 
     /**
      * 重放响应的原文文本（null = 未成功调用或响应无文本）。
@@ -130,6 +136,33 @@ public class RegressionTestResult {
 
     public void setOutputTokens(Integer outputTokens) {
         this.outputTokens = outputTokens;
+    }
+
+    /**
+     * 缓存/思考 token（可空——供应商未返回即 null，未知不得记 0）。
+     */
+    public Integer getCacheReadTokens() {
+        return cacheReadTokens;
+    }
+
+    public void setCacheReadTokens(Integer cacheReadTokens) {
+        this.cacheReadTokens = cacheReadTokens;
+    }
+
+    public Integer getCacheWriteTokens() {
+        return cacheWriteTokens;
+    }
+
+    public void setCacheWriteTokens(Integer cacheWriteTokens) {
+        this.cacheWriteTokens = cacheWriteTokens;
+    }
+
+    public Integer getReasoningTokens() {
+        return reasoningTokens;
+    }
+
+    public void setReasoningTokens(Integer reasoningTokens) {
+        this.reasoningTokens = reasoningTokens;
     }
 
     public String getReplayOutput() {
