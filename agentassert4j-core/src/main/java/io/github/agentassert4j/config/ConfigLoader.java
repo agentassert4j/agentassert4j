@@ -44,6 +44,14 @@ public final class ConfigLoader {
      * 规则配置路径系统属性键
      */
     public static final String RULES_PATH_PROPERTY = "agentassert4j.rules.path";
+    /**
+     * 场景配置文件名
+     */
+    public static final String SCENARIOS_CONFIG_FILE = "agentassert4j-scenarios.json";
+    /**
+     * 场景配置路径系统属性键
+     */
+    public static final String SCENARIOS_PATH_PROPERTY = "agentassert4j.scenarios.path";
 
     private static final Pattern ENV_VAR_PATTERN = Pattern.compile("\\$\\{(\\w+)\\}");
 
@@ -89,6 +97,21 @@ public final class ConfigLoader {
             json = resolveEnvVars(json);
         }
         return SkillRulesConfig.fromJson(json);
+    }
+
+    /**
+     * 加载场景配置。加载链与主配置同族（系统属性显式路径 → 工作目录 → 用户主目录
+     * → classpath）；显式路径不可读抛 {@link IllegalStateException}，解析失败安全
+     * 退化为空配置（与 rules.json 同哲学）。
+     *
+     * <p>与主/规则配置不同，本加载不做环境变量替换：场景输入是字面测试数据，
+     * 含 ${VAR} 字样时静默替换反而会篡改用例。</p>
+     *
+     * @return 场景配置（永不为 null）
+     */
+    public static ScenarioConfig loadScenariosConfig() {
+        String json = findAndRead(SCENARIOS_CONFIG_FILE, SCENARIOS_PATH_PROPERTY, new StringBuilder());
+        return ScenarioConfig.fromJson(json);
     }
 
     /**

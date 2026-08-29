@@ -96,6 +96,21 @@ public class SkillRulesConfig {
         return !rules.isEmpty();
     }
 
+    /**
+     * 派生一个合并了单条技能规则的新配置：同键既有声明与新增声明逐集合取并集，
+     * 无同键则新增；本配置自身不变。场景断言据此叠加在站内规则之上——
+     * 多条场景共享同一基础配置各自合并，互不串味。
+     */
+    public SkillRulesConfig merging(String skillId, SkillRule rule) {
+        SkillRulesConfig copy = new SkillRulesConfig();
+        copy.rules.putAll(rules);
+        if (skillId != null && rule != null) {
+            SkillRule existing = copy.rules.get(skillId);
+            copy.rules.put(skillId, existing != null ? existing.mergedWith(rule) : rule);
+        }
+        return copy;
+    }
+
     void addRule(String skillId, SkillRule rule) {
         rules.put(skillId, rule);
     }
@@ -127,6 +142,29 @@ public class SkillRulesConfig {
             this.forbiddenKeywords = forbiddenKeywords;
             this.regexPatterns = regexPatterns;
             this.behaviors = behaviors;
+        }
+
+        /**
+         * 与另一声明逐集合取并集（关键词/行为并集、regex 追加）——
+         * 场景断言叠加在站内规则上时的合并语义，产物仍不可变。
+         */
+        SkillRule mergedWith(SkillRule other) {
+            if (other == null) {
+                return this;
+            }
+            return new SkillRule(union(requiredKeywords, other.requiredKeywords), union(forbiddenKeywords, other.forbiddenKeywords), concat(regexPatterns, other.regexPatterns), union(behaviors, other.behaviors));
+        }
+
+        private static Set<String> union(Set<String> first, Set<String> second) {
+            Set<String> result = new LinkedHashSet<>(first);
+            result.addAll(second);
+            return Collections.unmodifiableSet(result);
+        }
+
+        private static List<RegexPattern> concat(List<RegexPattern> first, List<RegexPattern> second) {
+            List<RegexPattern> result = new ArrayList<>(first);
+            result.addAll(second);
+            return Collections.unmodifiableList(result);
         }
 
         @SuppressWarnings("unchecked")

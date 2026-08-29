@@ -55,17 +55,20 @@ public final class FingerprintExtractor {
      * 带规则配置的指纹提取 — 由上层（recorder / CLI）调用，
      * 从 SkillRulesConfig 获取维度 3-4 的声明式规则。
      *
+     * <p>规则查找键是记录上的业务标签；未声明分组（无标签）统一落到空键——
+     * 这样场景层对 templateHash 绑定的未声明分组注入的断言同样生效。</p>
+     *
      * @param record  交互记录
      * @param rules   规则配置（null 时维度 3-4 保持空）
-     * @param skillId Skill 标识
+     * @param skillId 业务标签（可为 null，视同空键）
      * @return 四维度确定性指纹
      */
     public static DeterministicFingerprint extract(InteractionRecord record, SkillRulesConfig rules, String skillId) {
         DeterministicFingerprint fp = extract(record);
-        if (rules == null || skillId == null) {
+        if (rules == null) {
             return fp;
         }
-        SkillRulesConfig.SkillRule rule = rules.getRulesForSkill(skillId);
+        SkillRulesConfig.SkillRule rule = rules.getRulesForSkill(skillId != null ? skillId : "");
         fp.setRequiredKeywords(rule.getRequiredKeywords());
         fp.setForbiddenKeywords(rule.getForbiddenKeywords());
         fp.setRegexPatterns(rule.getRegexPatterns());

@@ -1,8 +1,6 @@
 package io.github.agentassert4j.cli;
 
-import io.github.agentassert4j.algorithm.ComparatorConfig;
 import io.github.agentassert4j.algorithm.DeterministicComparator;
-import io.github.agentassert4j.cli.llm.OpenAiCompatibleClient;
 import io.github.agentassert4j.config.AgentAssert4jConfig;
 import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.SkillRulesConfig;
@@ -18,7 +16,6 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.HashSet;
 import java.util.concurrent.Callable;
 
 /**
@@ -94,14 +91,12 @@ public class ReplayCommand implements Callable<Integer> {
         try {
             repository = CliSupport.openRepository(db, jsonOutput ? System.err : System.out);
 
-            ComparatorConfig comparatorConfig = ComparatorConfig.defaults();
-            comparatorConfig.setIgnorableFields(new HashSet<>(config.getRegression().getIgnorableFields()));
-            DeterministicComparator comparator = new DeterministicComparator(comparatorConfig);
+            DeterministicComparator comparator = CliSupport.createComparator(config);
 
             if (TextUtil.isBlank(config.getLlm().getApiKey())) {
                 (jsonOutput ? err : out).println("警告：未配置 API Key（agentassert4j.json 的 llm.apiKey 或其 ${ENV} 引用），LLM 调用将失败。");
             }
-            LlmClient client = new OpenAiCompatibleClient(config.getLlm().getEndpoint(), config.getLlm().getApiKey(), config.getLlm().getModel(), OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, config.getLlm().getExtraBody());
+            LlmClient client = CliSupport.createLlmClient(config);
 
             TestExecutionConfig executionConfig = new TestExecutionConfig().timeoutMs(config.getLlm().getTimeoutMs()).temperature(config.getLlm().getTemperature());
             SkillRulesConfig rules = ConfigLoader.loadRulesConfig();

@@ -182,4 +182,58 @@ class SkillRulesConfigTest {
             assertThrows(UnsupportedOperationException.class, () -> rule.getRequiredKeywords().add("x"));
         }
     }
+
+    @Nested
+    @DisplayName("规则合并（场景断言叠加站内规则）")
+    class Merging {
+
+        @Test
+        @DisplayName("同键合并逐集合取并集")
+        void merging_sameKey_unionsSets() {
+            SkillRulesConfig base = SkillRulesConfig.fromJson("{\"skills\":{\"s\":{" + "\"requiredKeywords\":[\"订单号\"],\"forbiddenKeywords\":[\"密码\"]," + "\"behaviors\":[\"mustUseChinese\"]}}}");
+            SkillRulesConfig.SkillRule extra = SkillRulesConfig.fromJson("{\"skills\":{\"tmp\":{" + "\"requiredKeywords\":[\"金额\"],\"forbiddenKeywords\":[\"身份证\"]," + "\"regexPatterns\":[{\"pattern\":\"ORD-\\\\d{4}\"}]," + "\"behaviors\":[\"nonEmptyOutput\"]}}}").getRulesForSkill("tmp");
+
+            SkillRulesConfig merged = base.merging("s", extra);
+            SkillRulesConfig.SkillRule rule = merged.getRulesForSkill("s");
+
+            assertEquals(new HashSet<>(Arrays.asList("订单号", "金额")), rule.getRequiredKeywords());
+            assertEquals(new HashSet<>(Arrays.asList("密码", "身份证")), rule.getForbiddenKeywords());
+            assertEquals(new HashSet<>(Arrays.asList("mustUseChinese", "nonEmptyOutput")), rule.getBehaviors());
+            assertEquals(1, rule.getRegexPatterns().size());
+            assertEquals("ORD-\\d{4}", rule.getRegexPatterns().get(0).getPattern());
+        }
+
+        @Test
+        @DisplayName("无同键则新增条目")
+        void merging_newKey_added() {
+            SkillRulesConfig base = SkillRulesConfig.fromJson("{\"skills\":{\"s\":{\"requiredKeywords\":[\"订单号\"]}}}");
+            SkillRulesConfig.SkillRule extra = SkillRulesConfig.fromJson("{\"skills\":{\"other\":{\"behaviors\":[\"mustUseChinese\"]}}}").getRulesForSkill("other");
+
+            SkillRulesConfig merged = base.merging("other", extra);
+
+            assertEquals(new HashSet<>(Arrays.asList("s", "other")), merged.getDeclaredSkillIds());
+            assertEquals(Collections.singleton("mustUseChinese"), merged.getRulesForSkill("other").getBehaviors());
+        }
+
+        @Test
+        @DisplayName("基础配置在合并后保持不变")
+        void merging_baseUntouched() {
+            SkillRulesConfig base = SkillRulesConfig.fromJson("{\"skills\":{\"s\":{\"requiredKeywords\":[\"订单号\"]}}}");
+            SkillRulesConfig.SkillRule extra = SkillRulesConfig.fromJson("{\"skills\":{\"tmp\":{\"requiredKeywords\":[\"金额\"]}}}").getRulesForSkill("tmp");
+
+            base.merging("s", extra);
+
+            assertEquals(Collections.singleton("订单号"), base.getRulesForSkill("s").getRequiredKeywords(), "多条场景共享基础配置各自合并，不得互相串味");
+        }
+
+        @Test
+        @DisplayName("合并空规则等于原样复制")
+        void merging_emptyRule_noOp() {
+            SkillRulesConfig base = SkillRulesConfig.fromJson("{\"skills\":{\"s\":{\"requiredKeywords\":[\"订单号\"]}}}");
+
+            SkillRulesConfig merged = base.merging("s", SkillRulesConfig.SkillRule.EMPTY);
+
+            assertEquals(Collections.singleton("订单号"), merged.getRulesForSkill("s").getRequiredKeywords());
+        }
+    }
 }

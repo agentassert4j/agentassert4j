@@ -1,15 +1,15 @@
 package io.github.agentassert4j.cli;
 
-import io.github.agentassert4j.algorithm.BehaviorChecker;
-import io.github.agentassert4j.algorithm.DeterministicSkillGrouper;
-import io.github.agentassert4j.algorithm.InMemoryDependencyGraph;
-import io.github.agentassert4j.algorithm.ParameterValueTracer;
+import io.github.agentassert4j.algorithm.*;
+import io.github.agentassert4j.cli.llm.OpenAiCompatibleClient;
 import io.github.agentassert4j.config.AgentAssert4jConfig;
 import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.SkillRulesConfig;
+import io.github.agentassert4j.config.SkillRulesConfig.SkillRule;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.InteractionQueryStore;
+import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 
@@ -218,6 +218,24 @@ final class CliSupport {
     }
 
     /**
+     * 依据主配置 llm 段构造 OpenAI 兼容客户端——replay 与 scenario 两个命令共用
+     * 同一构造（单一来源），端点/密钥/模型/重试/extraBody 口径不得分叉。
+     */
+    static LlmClient createLlmClient(AgentAssert4jConfig config) {
+        return new OpenAiCompatibleClient(config.getLlm().getEndpoint(), config.getLlm().getApiKey(), config.getLlm().getModel(), OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, config.getLlm().getExtraBody());
+    }
+
+    /**
+     * 依据主配置 regression 段构造确定性对比器——replay 与 scenario 两个命令共用
+     * 同一构造（单一来源），ignorableFields 口径不得分叉。
+     */
+    static DeterministicComparator createComparator(AgentAssert4jConfig config) {
+        ComparatorConfig comparatorConfig = ComparatorConfig.defaults();
+        comparatorConfig.setIgnorableFields(new HashSet<>(config.getRegression().getIgnorableFields()));
+        return new DeterministicComparator(comparatorConfig);
+    }
+
+    /**
      * 全库记录按分组键分桶：桶按分组键字典序，桶内保持存储规范序（时间、seq、recordId）。
      * 选例与建档共用本枚举——形状派生组与声明组同权，不因「未声明」失去框架服务资格。
      */
@@ -240,17 +258,36 @@ final class CliSupport {
     }
 
     /**
-     * 规则声明里出现未知 behavior 名时告警——未知名在判定中被静默视为通过，
+     * 规则配置里出现未知 behavior 名时告警——未知名在判定中被静默视为通过，
      * 笔误（如 noErr 写成 noErr0）会让维度 4 满分化、CI 照绿，必须在加载时点破。
      */
     static void warnUnknownBehaviors(SkillRulesConfig rules, PrintStream out) {
-        Set<String> builtins = BehaviorChecker.getBuiltinBehaviorNames();
         for (String skillId : rules.getDeclaredSkillIds()) {
-            for (String behavior : rules.getRulesForSkill(skillId).getBehaviors()) {
-                if (!builtins.contains(behavior)) {
-                    out.println("警告：skill " + skillId + " 声明了未知行为 " + behavior + "（该规则将被忽略）。合法行为名：" + String.join(", ", new TreeSet<>(builtins)));
-                }
+            warnUnknownBehaviors("skill " + skillId, rules.getRulesForSkill(skillId), out);
+        }
+    }
+
+    /**
+     * 单条规则声明的未知 behavior 告警——owner 标明声明来源（skill 标签或场景标识）。
+     */
+    static void warnUnknownBehaviors(String owner, SkillRule rule, PrintStream out) {
+        Set<String> unknown = unknownBehaviors(rule);
+        if (!unknown.isEmpty()) {
+            out.println("警告：" + owner + " 声明了未知行为 " + String.join(", ", unknown) + "（该规则将被忽略）。合法行为名：" + String.join(", ", new TreeSet<>(BehaviorChecker.getBuiltinBehaviorNames())));
+        }
+    }
+
+    /**
+     * 收集单条规则声明里未知的 behavior 名，空集 = 全部可识别。
+     */
+    static Set<String> unknownBehaviors(SkillRule rule) {
+        Set<String> builtins = BehaviorChecker.getBuiltinBehaviorNames();
+        Set<String> unknown = new TreeSet<>();
+        for (String behavior : rule.getBehaviors()) {
+            if (!builtins.contains(behavior)) {
+                unknown.add(behavior);
             }
         }
+        return unknown;
     }
 }

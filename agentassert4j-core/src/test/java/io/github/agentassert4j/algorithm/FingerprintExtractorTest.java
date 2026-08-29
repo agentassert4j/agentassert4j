@@ -275,6 +275,21 @@ class FingerprintExtractorTest {
     }
 
     @Test
+    void extractWithRules_nullSkillId_fallsBackToEmptyKey() {
+        // 未声明分组（无业务标签）统一落到空键规则——场景层对 templateHash
+        // 绑定的未声明分组注入断言依赖此契约
+        InteractionRecord r = record(null, "hello");
+
+        String rulesJson = "{\"skills\":{\"\":{" + "\"requiredKeywords\":[\"keyword1\"]," + "\"behaviors\":[\"nonEmptyOutput\"]}}}";
+        SkillRulesConfig rules = SkillRulesConfig.fromJson(rulesJson);
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r, rules, null);
+
+        assertEquals(Collections.singleton("keyword1"), fp.getRequiredKeywords());
+        assertEquals(Collections.singleton("nonEmptyOutput"), fp.getDeclaredBehaviors());
+    }
+
+    @Test
     void fullExtraction_toolSkill_jsonOutput() {
         InteractionRecord r = record(Collections.singletonList(tc("queryOrder", Collections.singletonMap("orderId", "String"), true)), "{\"orderId\":\"ORD-001\",\"amount\":99.9,\"items\":[{\"name\":\"Widget\"}]}");
 

@@ -1,8 +1,6 @@
 package io.github.agentassert4j.recorder;
 
-import io.github.agentassert4j.model.ArchivedBaseline;
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.SkillProfile;
+import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.spi.StorageRepository;
 
 import java.util.ArrayList;
@@ -130,4 +128,21 @@ class InMemoryStorageRepository implements StorageRepository {
         return Collections.emptyList();
     }
 
+    @Override
+    public void saveScenario(ScenarioDefinition definition) {
+    }
+
+    @Override
+    public List<ScenarioDefinition> findScenarios() {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public void saveScenarioRun(ScenarioRun run) {
+    }
+
+    @Override
+    public List<ScenarioRun> findScenarioRuns(String scenarioId) {
+        return Collections.emptyList();
+    }
 }
