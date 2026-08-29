@@ -2,6 +2,7 @@ package io.github.agentassert4j.model;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -14,10 +15,8 @@ import java.util.Set;
  *   <li>维度 4（15%）：约束行为 — 用户声明式配置</li>
  * </ul>
  *
- * <p><b>TODO: [值对象缺失]</b> 当前未实现 equals/hashCode，跨存储层反序列化后的指纹对象比较
- * 使用引用相等（==）而非值相等。当前 BaselineManagerTest 中测试能通过是因为直接持有对象引用。
- * 一旦出现跨反序列化的值比较需求，必须先实现 equals/hashCode。
- * 实现需注意 Set 和 Map 字段的顺序无关比较。</p>
+ * <p>值对象语义：equals/hashCode 覆盖全部维度字段，供跨存储层反序列化后的指纹值比较；
+ * Set/Map 字段天然顺序无关，regex 列表按声明顺序比较。</p>
  *
  * @author axy-yxa
  * @since 2026-08-26
@@ -128,5 +127,18 @@ public class DeterministicFingerprint {
 
     public void setHasError(boolean hasError) {
         this.hasError = hasError;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof DeterministicFingerprint)) return false;
+        DeterministicFingerprint other = (DeterministicFingerprint) o;
+        return textLengthMagnitude == other.textLengthMagnitude && hasError == other.hasError && Objects.equals(toolCallSet, other.toolCallSet) && Objects.equals(toolParamTypes, other.toolParamTypes) && Objects.equals(outputContentType, other.outputContentType) && Objects.equals(outputFieldPaths, other.outputFieldPaths) && Objects.equals(outputFieldTypeMap, other.outputFieldTypeMap) && Objects.equals(requiredKeywords, other.requiredKeywords) && Objects.equals(forbiddenKeywords, other.forbiddenKeywords) && Objects.equals(regexPatterns, other.regexPatterns) && Objects.equals(declaredBehaviors, other.declaredBehaviors);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(toolCallSet, toolParamTypes, outputContentType, outputFieldPaths, outputFieldTypeMap, textLengthMagnitude, requiredKeywords, forbiddenKeywords, regexPatterns, declaredBehaviors, hasError);
     }
 }

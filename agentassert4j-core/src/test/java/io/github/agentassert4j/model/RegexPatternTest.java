@@ -4,8 +4,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * RegexPattern 的单元测试。
@@ -55,6 +54,37 @@ class RegexPatternTest {
             RegexPattern p = new RegexPattern("([unclosed", "用户笔误");
 
             assertFalse(p.matches("any text"));
+        }
+    }
+
+    @Nested
+    @DisplayName("值等价（指纹值比较的传递依赖）")
+    class ValueEquality {
+
+        @Test
+        @DisplayName("同模式同描述相等且哈希一致")
+        void equal_instancesMatch() {
+            RegexPattern a = new RegexPattern("\\d+", "数字");
+            RegexPattern b = new RegexPattern("\\d+", "数字");
+
+            assertEquals(a, b);
+            assertEquals(a.hashCode(), b.hashCode());
+        }
+
+        @Test
+        @DisplayName("模式或描述不同即不等")
+        void different_fieldsBreakEquality() {
+            RegexPattern base = new RegexPattern("\\d+", "数字");
+
+            assertNotEquals(base, new RegexPattern("\\d{2}", "数字"));
+            assertNotEquals(base, new RegexPattern("\\d+", "位数"));
+        }
+
+        @Test
+        @DisplayName("与 null 及异类比较返回 false")
+        void equals_nullAndForeignType() {
+            assertNotEquals(new RegexPattern("\\d+", "数字"), null);
+            assertNotEquals(new RegexPattern("\\d+", "数字"), "\\d+");
         }
     }
 }

@@ -162,6 +162,63 @@ class ParameterValueTracerTest {
     }
 
     @Test
+    void extractFieldValues_prefersToolResult_overModelResponse() {
+        // 字段值真源=录制的工具返回；模型回复文本在结果可用时不得混入
+        ToolCall call = tc("query", null);
+        call.setResult("{\"orderId\":\"ORD-9\"}");
+        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-1\"}", Collections.singletonList(call));
+
+        Set<String> values = tracer.extractFieldValues(r);
+
+        assertTrue(values.contains("ORD-9"));
+        assertFalse(values.contains("ORD-1"));
+    }
+
+    @Test
+    void extractFieldValues_multipleToolResults_merged() {
+        ToolCall first = tc("a", null);
+        first.setResult("{\"orderId\":\"ORD-1\"}");
+        ToolCall second = tc("b", null);
+        second.setResult("{\"shipId\":\"SHIP-2\"}");
+        InteractionRecord r = record("s1", "已处理", Arrays.asList(first, second));
+
+        Set<String> values = tracer.extractFieldValues(r);
+
+        assertTrue(values.contains("ORD-1"));
+        assertTrue(values.contains("SHIP-2"));
+    }
+
+    @Test
+    void extractFieldValues_toolResultPlainYield_replyNotMined() {
+        // 值源按记录形状二选一：带录制结果的记录即使解析不出叶子值，也不改挖回复文本
+        ToolCall call = tc("query", null);
+        call.setResult("订单已发货，请注意查收");
+        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-1\"}", Collections.singletonList(call));
+
+        assertTrue(tracer.extractFieldValues(r).isEmpty());
+    }
+
+    @Test
+    void extractFieldValues_toolResultNull_usesModelResponse() {
+        // 未捕获工具结果的记录：值源=模型回复文本
+        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-1\"}", Collections.singletonList(tc("query", null)));
+
+        assertTrue(tracer.extractFieldValues(r).contains("ORD-1"));
+    }
+
+    @Test
+    void extractFieldNames_prefersToolResult_overModelResponse() {
+        ToolCall call = tc("query", null);
+        call.setResult("{\"orderId\":\"ORD-9\"}");
+        InteractionRecord r = record("s1", "{\"legacyField\":\"x\"}", Collections.singletonList(call));
+
+        Set<String> names = tracer.extractFieldNames(r);
+
+        assertTrue(names.contains("orderId"));
+        assertFalse(names.contains("legacyField"));
+    }
+
+    @Test
     void extractArgValues_withArguments() {
         InteractionRecord r = record("s1", null, Arrays.asList(tc("tool", objectMap("orderId", "ORD-001", "limit", 10))));
 
@@ -234,6 +291,20 @@ class ParameterValueTracerTest {
 
         assertTrue(tracer.getGraph().getSuccessors("skillA").contains("skillB"));
         assertEquals(1, tracer.getGraph().edgeCount());
+        assertEquals(Confidence.HIGH, tracer.getGraph().getAllEdges().get(0).getConfidence());
+    }
+
+    @Test
+    void traceDependency_highEdge_fromRecordedToolResult() {
+        // 前序模型回复是纯文本，订单号只存在于录制的工具返回里——HIGH 边以录制结果为值源
+        ToolCall prevCall = tc("toolA", null);
+        prevCall.setResult("{\"orderId\":\"ORD-001\"}");
+        InteractionRecord prev = record("skillA", "查询完成", Collections.singletonList(prevCall), 1000);
+        InteractionRecord curr = record("skillB", "ok", Collections.singletonList(tc("toolB", Collections.singletonMap("orderRef", (Object) "ORD-001"))), 2000);
+
+        tracer.traceDependency(Arrays.asList(prev, curr));
+
+        assertTrue(tracer.getGraph().getSuccessors("skillA").contains("skillB"));
         assertEquals(Confidence.HIGH, tracer.getGraph().getAllEdges().get(0).getConfidence());
     }
 

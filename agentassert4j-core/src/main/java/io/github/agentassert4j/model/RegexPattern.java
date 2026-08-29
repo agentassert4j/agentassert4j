@@ -1,5 +1,6 @@
 package io.github.agentassert4j.model;
 
+import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -51,5 +52,18 @@ public class RegexPattern {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof RegexPattern)) return false;
+        RegexPattern other = (RegexPattern) o;
+        return Objects.equals(pattern, other.pattern) && Objects.equals(description, other.description);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(pattern, description);
     }
 }

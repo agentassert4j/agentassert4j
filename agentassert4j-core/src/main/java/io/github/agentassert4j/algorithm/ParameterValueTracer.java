@@ -2,6 +2,7 @@ package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.model.Confidence;
 import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 
@@ -111,24 +112,43 @@ public class ParameterValueTracer {
     }
 
     /**
-     * 从前序工具的 JSON 返回值中提取所有叶子节点的字符串值。
-     * 使用 RecursiveJsonParser 解析，深度限制 3 层。
+     * 从前序交互提取所有叶子节点的字符串值（RecursiveJsonParser 解析，深度限制 3 层）。
      *
-     * <p>TODO: [语义优化] 当前从 InteractionRecord.getModelResponse() 提取值，
-     * 但 modelResponse 是 LLM 的回复文本（可能包含 JSON）。
-     * 更精确的做法是优先从 ToolCall.getResult()（工具实际返回的 JSON）提取，
-     * 仅在无工具调用时降级到 modelResponse。
-     * 待录制层确保 ToolCall.result 完整持久化后再优化此处。</p>
+     * <p>值源按记录形状二选一：任一工具调用带录制结果（ToolCall.result）时取全部工具
+     * 返回——工具返回才是下游参数的真实上游；否则取模型回复文本，它是无工具调用的
+     * 声明记录（纯文本结构化技能）的唯一值源。</p>
      */
     public Set<String> extractFieldValues(InteractionRecord record) {
         Set<String> values = new LinkedHashSet<>();
-        if (record == null || record.getModelResponse() == null) return values;
+        if (record == null) return values;
 
+        if (hasRecordedToolResult(record)) {
+            for (ToolCall call : record.getToolCalls()) {
+                String result = call != null ? call.getResult() : null;
+                if (result == null || result.trim().isEmpty()) continue;
+                Object json = RecursiveJsonParser.parse(result);
+                if (json != null) collectLeafValues(json, values, 0);
+            }
+            return values;
+        }
+
+        if (record.getModelResponse() == null) return values;
         Object json = RecursiveJsonParser.parse(record.getModelResponse());
         if (json != null) {
             collectLeafValues(json, values, 0);
         }
         return values;
+    }
+
+    /**
+     * 记录中是否存在任一非空的录制工具返回——决定字段值源走工具返回还是模型回复文本。
+     */
+    private static boolean hasRecordedToolResult(InteractionRecord record) {
+        if (record.getToolCalls() == null) return false;
+        for (ToolCall call : record.getToolCalls()) {
+            if (call != null && call.getResult() != null && !call.getResult().trim().isEmpty()) return true;
+        }
+        return false;
     }
 
     @SuppressWarnings("unchecked")
@@ -155,13 +175,25 @@ public class ParameterValueTracer {
     }
 
     /**
-     * 从前序工具的 JSON 返回值中提取所有字段名。
+     * 从前序交互提取所有字段名——值源选择同 {@link #extractFieldValues}：
+     * 带录制工具结果的记录取工具返回，否则取模型回复文本。
      */
     @SuppressWarnings("unchecked")
     public Set<String> extractFieldNames(InteractionRecord record) {
         Set<String> names = new LinkedHashSet<>();
-        if (record == null || record.getModelResponse() == null) return names;
+        if (record == null) return names;
 
+        if (hasRecordedToolResult(record)) {
+            for (ToolCall call : record.getToolCalls()) {
+                String result = call != null ? call.getResult() : null;
+                if (result == null || result.trim().isEmpty()) continue;
+                Object json = RecursiveJsonParser.parse(result);
+                if (json != null) collectFieldNames(json, names, 0);
+            }
+            return names;
+        }
+
+        if (record.getModelResponse() == null) return names;
         Object json = RecursiveJsonParser.parse(record.getModelResponse());
         collectFieldNames(json, names, 0);
         return names;
