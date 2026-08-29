@@ -46,6 +46,12 @@ public final class RecorderConfig {
      * 是否脱敏 modelResponse（默认 false）
      */
     private final boolean sanitizeModelResponse;
+    /**
+     * 采集门逃生开关：true 时未声明且无可见工具调用的纯对话也录制（默认 false——
+     * 框架不做提示词管家，纯闲聊没有基线语义；声明了 skillId/templateId
+     * 或带可见 toolCalls 的调用不受本开关影响，一律录制）
+     */
+    private final boolean recordUndeclaredChat;
 
     private RecorderConfig(Builder builder) {
         // 钳位：batchSize/maxBufferSize <= 0（如意图立即刷盘的 0 配置）会让
@@ -62,6 +68,7 @@ public final class RecorderConfig {
         this.sanitizeStrategy = builder.sanitizeStrategy;
         this.sanitizeUserInput = builder.sanitizeUserInput;
         this.sanitizeModelResponse = builder.sanitizeModelResponse;
+        this.recordUndeclaredChat = builder.recordUndeclaredChat;
     }
 
     /**
@@ -121,6 +128,10 @@ public final class RecorderConfig {
         return sanitizeModelResponse;
     }
 
+    public boolean isRecordUndeclaredChat() {
+        return recordUndeclaredChat;
+    }
+
     public static final class Builder {
         private int batchSize = 100;
         private long flushIntervalMs = 5000;
@@ -130,6 +141,7 @@ public final class RecorderConfig {
         private SanitizeStrategy sanitizeStrategy = SanitizeStrategy.MASK;
         private boolean sanitizeUserInput = false;
         private boolean sanitizeModelResponse = false;
+        private boolean recordUndeclaredChat = false;
 
         private Builder() {
         }
@@ -171,6 +183,11 @@ public final class RecorderConfig {
 
         public Builder sanitizeModelResponse(boolean sanitizeModelResponse) {
             this.sanitizeModelResponse = sanitizeModelResponse;
+            return this;
+        }
+
+        public Builder recordUndeclaredChat(boolean recordUndeclaredChat) {
+            this.recordUndeclaredChat = recordUndeclaredChat;
             return this;
         }
 

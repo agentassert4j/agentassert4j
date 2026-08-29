@@ -68,13 +68,13 @@ class CliSupportResolverTest {
     @Test
     @DisplayName("完整 groupKey 精确命中优先于前缀匹配")
     void exactGroupKey_shortCircuitsStrictPrefixSibling() {
-        // chat:abc 是 chat:abcdef 的严格前缀——精确命中不得被误判为歧义前缀
-        saveRecord("r1", "sk1", "abc");
-        saveRecord("r2", "sk2", "abcdef");
+        // skill:sk:abc 是 skill:sk:abcdef 的严格前缀——精确命中不得被误判为歧义前缀
+        saveRecord("r1", "sk", "abc");
+        saveRecord("r2", "sk", "abcdef");
         establishAll();
 
-        assertEquals("chat:abc", CliSupport.resolveGroupKeyTarget(repository, "chat:abc"));
-        assertEquals("chat:abcdef", CliSupport.resolveGroupKeyTarget(repository, "chat:abcdef"));
+        assertEquals("skill:sk:abc", CliSupport.resolveGroupKeyTarget(repository, "skill:sk:abc"));
+        assertEquals("skill:sk:abcdef", CliSupport.resolveGroupKeyTarget(repository, "skill:sk:abcdef"));
     }
 
     @Test
@@ -83,7 +83,7 @@ class CliSupportResolverTest {
         saveRecord("r1", "sk1", "abcdef");
         establishAll();
 
-        String fullKey = "chat:abcdef";
+        String fullKey = "skill:sk1:abcdef";
         assertEquals(fullKey, CliSupport.resolveGroupKeyTarget(repository, fullKey.substring(0, 8)));
     }
 
@@ -93,7 +93,7 @@ class CliSupportResolverTest {
         saveRecord("r1", "queryOrder", "hash-a");
         establishAll();
 
-        assertEquals("chat:hash-a", CliSupport.resolveGroupKeyTarget(repository, "queryOrder"));
+        assertEquals("skill:queryOrder:hash-a", CliSupport.resolveGroupKeyTarget(repository, "queryOrder"));
     }
 
     @Test
@@ -104,7 +104,7 @@ class CliSupportResolverTest {
 
         IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveGroupKeyTarget(repository, "queryOrder"));
         assertTrue(e.getMessage().contains("覆盖多个分组"));
-        assertTrue(e.getMessage().contains("chat:hash-a") && e.getMessage().contains("chat:hash-b"));
+        assertTrue(e.getMessage().contains("skill:queryOrder:hash-a") && e.getMessage().contains("skill:queryOrder:hash-b"));
     }
 
     @Test
@@ -123,7 +123,7 @@ class CliSupportResolverTest {
         saveRecord("r1", "queryOrder", "hash-a");
         establishAll();
 
-        String resolved = CliSupport.resolveBusinessSkillFilter(repository, "chat:hash-a", new PrintStream(output));
+        String resolved = CliSupport.resolveBusinessSkillFilter(repository, "skill:queryOrder", new PrintStream(output));
 
         assertEquals("queryOrder", resolved);
         assertTrue(output.toString().contains("业务标签 queryOrder"));

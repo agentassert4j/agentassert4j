@@ -1,11 +1,13 @@
 package io.github.agentassert4j.recorder;
 
 import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.ToolCall;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,6 +40,9 @@ class InteractionRecorderTest {
         record.setRecordId(id);
         record.setTimestamp(System.currentTimeMillis());
         record.setTemplateHash("hash-" + id);
+        // 声明业务身份：采集门生效后未声明且无工具调用的纯对话被过滤，
+        // 通用助手的记录必须能过门（门行为本身由 CaptureGate 组专门测）
+        record.setSkillId("skill-" + id);
         return record;
     }
 
@@ -136,6 +141,128 @@ class InteractionRecorderTest {
 
         assertEquals(0, recorder.getRecordedCount());
         assertTrue(repo.getStore().isEmpty());
+    }
+
+    @Test
+    void captureGate_undeclaredBareChat_filtered() throws Exception {
+        // 未声明（skillId/templateId 均无）且无工具调用的纯对话 → 过滤，不进管道
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).build();
+
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        InteractionRecord bare = new InteractionRecord();
+        bare.setRecordId("bare-1");
+        bare.setTimestamp(System.currentTimeMillis());
+        bare.setTemplateHash("some-template"); // 模板 hash 是自动捕获值，不是声明
+        recorder.intercept(bare);
+
+        Thread.sleep(200);
+        recorder.stop();
+
+        assertTrue(repo.getStore().isEmpty(), "未声明纯对话不得落库");
+        assertEquals(1, recorder.getFilteredCount(), "过滤量独立计数可见");
+        assertEquals(0, recorder.getRecordedCount(), "被滤记录不进入管道计数");
+    }
+
+    @Test
+    void captureGate_declaredBySkillId_recorded() throws Exception {
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).build();
+
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        InteractionRecord declared = new InteractionRecord();
+        declared.setRecordId("declared-1");
+        declared.setTimestamp(System.currentTimeMillis());
+        declared.setSkillId("order-flow");
+        recorder.intercept(declared);
+
+        Thread.sleep(200);
+        recorder.stop();
+
+        assertEquals(1, repo.getStore().size());
+        assertEquals(0, recorder.getFilteredCount());
+    }
+
+    @Test
+    void captureGate_declaredByTemplateId_recorded() throws Exception {
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).build();
+
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        InteractionRecord declared = new InteractionRecord();
+        declared.setRecordId("declared-2");
+        declared.setTimestamp(System.currentTimeMillis());
+        declared.setTemplateId("tpl-support-v1");
+        recorder.intercept(declared);
+
+        Thread.sleep(200);
+        recorder.stop();
+
+        assertEquals(1, repo.getStore().size());
+    }
+
+    @Test
+    void captureGate_visibleToolCalls_recorded() throws Exception {
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).build();
+
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        InteractionRecord toolCall = new InteractionRecord();
+        toolCall.setRecordId("tool-1");
+        toolCall.setTimestamp(System.currentTimeMillis());
+        ToolCall call = new ToolCall();
+        call.setToolName("getOrder");
+        toolCall.setToolCalls(Collections.singletonList(call));
+        toolCall.setHasToolCalls(true);
+        recorder.intercept(toolCall);
+
+        Thread.sleep(200);
+        recorder.stop();
+
+        assertEquals(1, repo.getStore().size(), "可见工具调用满足采集门，无需声明");
+    }
+
+    @Test
+    void captureGate_escapeHatch_recordsBareChat() throws Exception {
+        // 逃生开关：recordUndeclaredChat=true 时退回全量录制（调试/评估用）
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).recordUndeclaredChat(true).build();
+
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        InteractionRecord bare = new InteractionRecord();
+        bare.setRecordId("bare-2");
+        bare.setTimestamp(System.currentTimeMillis());
+        recorder.intercept(bare);
+
+        Thread.sleep(200);
+        recorder.stop();
+
+        assertEquals(1, repo.getStore().size());
+        assertEquals(0, recorder.getFilteredCount());
+    }
+
+    @Test
+    void captureGate_arrivalClosure_recordedPlusFiltered() {
+        // 到达闭合：recorded（进管道，含后续丢弃）+ filtered（被门滤掉）= 总到达
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).build();
+
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        recorder.intercept(createRecord("in-1"));   // 过门
+        InteractionRecord bare = new InteractionRecord();
+        bare.setRecordId("out-1");
+        recorder.intercept(bare);                    // 被滤
+
+        recorder.stop();
+
+        assertEquals(2, recorder.getRecordedCount() + recorder.getFilteredCount(), "每次到达恰计入一侧：进管道或被过滤");
+        assertEquals(1, recorder.getFilteredCount());
     }
 
     @Test

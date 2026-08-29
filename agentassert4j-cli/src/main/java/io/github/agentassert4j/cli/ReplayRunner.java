@@ -22,8 +22,8 @@ import java.util.TreeSet;
 /**
  * 重放执行流程 — 选例、成本预估、逐例重放、汇总报告与退出码。
  *
- * <p>退出码即 CI gating 契约：0 = 全部 PASS；1 = 存在非 PASS（含 DIFF、
- * REGRESSION、超时与错误——证据不完整同样不允许绿）；2 = 用法/数据问题
+ * <p>退出码即 CI gating 契约：0 = 全部 PASS；1 = 存在 CHANGED（与基线有差异）或
+ * 执行失败——证据不完整同样不允许绿；2 = 用法/数据问题
  * （无匹配用例、冷启动等，报告给指导信息）。</p>
  *
  * <p>输出通道契约：人类模式全部走 out；JSON 模式（--json）stdout 只产出
@@ -187,8 +187,7 @@ public class ReplayRunner {
         RegressionTestExecutor executor = new RegressionTestExecutor(llmClient, comparator, baselineManager, rules);
 
         int pass = 0;
-        int diff = 0;
-        int regression = 0;
+        int changed = 0;
         int failed = 0;
         long totalInputTokens = 0;
         long totalOutputTokens = 0;
@@ -211,36 +210,34 @@ public class ReplayRunner {
             if (comparison != null && result.getStatus() == TestResultStatus.SUCCESS) {
                 if (comparison.getVerdict() == Verdict.PASS) {
                     pass++;
-                } else if (comparison.getVerdict() == Verdict.DIFF) {
-                    diff++;
                 } else {
-                    regression++;
+                    changed++;
                 }
             } else {
                 failed++;
             }
         }
 
-        StringBuilder summary = new StringBuilder("汇总: PASS ").append(pass).append(" | DIFF ").append(diff).append(" | REGRESSION ").append(regression).append(" | 失败 ").append(failed).append("（共 ").append(cases.size()).append("）");
+        StringBuilder summary = new StringBuilder("汇总: PASS ").append(pass).append(" | CHANGED ").append(changed).append(" | 失败 ").append(failed).append("（共 ").append(cases.size()).append("）");
         if (hasTokens) {
             summary.append("，tokens 输入 ").append(totalInputTokens).append(" / 输出 ").append(totalOutputTokens);
         }
         info(summary.toString());
         // 全部用例都没有产出比对结果（超时风暴/凭据失效/网络中断）是基础设施故障
         // 而非行为回归——按「用法/数据问题」退出，防止 CI 把环境故障误读成回归
-        if (failed > 0 && pass + diff + regression == 0) {
+        if (failed > 0 && pass + changed == 0) {
             diagnostic("所有用例均执行失败、无任何比对结果——疑似配置/凭据/网络问题，请检查 llm 配置后重试。");
             return 2;
         }
-        List<String> pending = diff + regression > 0 ? pendingGroupKeys() : null;
-        if (diff + regression > 0 && !jsonMode) {
+        List<String> pending = changed > 0 ? pendingGroupKeys() : null;
+        if (changed > 0 && !jsonMode) {
             info("待裁决: " + String.join(", ", pending));
             info("用 `agentassert4j approve --skill <groupKey 前缀>` 接受，或 `agentassert4j reject --skill <groupKey 前缀>` 拒绝。");
         }
         if (jsonMode) {
-            out.println(replayJson(cases.size(), pass, diff, regression, failed, hasTokens, totalInputTokens, totalOutputTokens, caseJsons, pending == null ? new ArrayList<>() : pending));
+            out.println(replayJson(cases.size(), pass, changed, failed, hasTokens, totalInputTokens, totalOutputTokens, caseJsons, pending == null ? new ArrayList<>() : pending));
         }
-        return diff + regression + failed == 0 ? 0 : 1;
+        return changed + failed == 0 ? 0 : 1;
     }
 
     /**
@@ -428,6 +425,12 @@ public class ReplayRunner {
     /**
      * 单用例的 JSON 对象（紧凑白名单字段）：null 值键整个省略，保持报告最小面。
      */
+    /**
+     * 重放响应原文的证据预算：超限截断并置标志，防病态体积撑爆单行 JSON
+     * （正常模型响应远小于此，上限只拦截极端情况）。
+     */
+    private static final int REPLAY_OUTPUT_EVIDENCE_BUDGET = 65536;
+
     private static String caseJson(InteractionRecord testCase, RegressionTestResult result) {
         StringBuilder sb = new StringBuilder("{");
         sb.append("\"groupKey\":\"").append(RecursiveJsonParser.escape(displayId(testCase))).append('"');
@@ -437,8 +440,25 @@ public class ReplayRunner {
         if (comparison != null) {
             sb.append(",\"verdict\":\"").append(comparison.getVerdict()).append('"');
             sb.append(",\"score\":").append(comparison.getScore());
+            sb.append(",\"dims\":{");
+            sb.append("\"toolSet\":").append(comparison.isToolCallMatch());
+            sb.append(",\"paramTypes\":").append(comparison.isParamTypeMatch());
+            sb.append(",\"outputStructure\":").append(comparison.isStructureMatch());
+            sb.append(",\"contentRules\":").append(comparison.isKeywordMatch() && comparison.isRegexMatch());
+            sb.append(",\"behaviors\":").append(comparison.isBehaviorMatch());
+            sb.append("}");
             if (comparison.getSummary() != null) {
                 sb.append(",\"summary\":\"").append(RecursiveJsonParser.escape(comparison.getSummary())).append('"');
+            }
+            // 重放原文只在判定现场存活（不落库），非 PASS 用例随证据报告带走——
+            // 裁决与案例存档需要「基线怎么答 vs 现在怎么答」的双边原文
+            if (comparison.getVerdict() == Verdict.CHANGED && result.getReplayOutput() != null) {
+                String output = result.getReplayOutput();
+                if (output.length() > REPLAY_OUTPUT_EVIDENCE_BUDGET) {
+                    output = output.substring(0, REPLAY_OUTPUT_EVIDENCE_BUDGET);
+                    sb.append(",\"replayOutputTruncated\":true");
+                }
+                sb.append(",\"replayOutput\":\"").append(RecursiveJsonParser.escape(output)).append('"');
             }
         }
         if (result.getErrorMessage() != null) {
@@ -455,12 +475,13 @@ public class ReplayRunner {
     }
 
     /**
-     * 重放证据报告（单行 JSON）：汇总计数 + 逐用例白名单字段 + 待裁决 groupKeys。
+     * 重放证据报告（单行 JSON）：语义版本 + 汇总计数 + 逐用例白名单字段 + 待裁决 groupKeys。
      * 消费方是 CI 与 agent——无缩进、键名稳定、null 缺省即契约。
+     * 报告头钉判定语义版本，消费方在跨模型/跨部署比较报告时可辨识判定口径。
      */
-    private static String replayJson(int total, int pass, int diff, int regression, int failed, boolean hasTokens, long totalInputTokens, long totalOutputTokens, List<String> caseJsons, List<String> pendingGroupKeys) {
-        StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.replay-report/1\",\"mode\":\"replay\"");
-        sb.append(",\"summary\":{\"total\":").append(total).append(",\"pass\":").append(pass).append(",\"diff\":").append(diff).append(",\"regression\":").append(regression).append(",\"failed\":").append(failed);
+    private static String replayJson(int total, int pass, int changed, int failed, boolean hasTokens, long totalInputTokens, long totalOutputTokens, List<String> caseJsons, List<String> pendingGroupKeys) {
+        StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.replay-report/1\",\"mode\":\"replay\",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
+        sb.append(",\"summary\":{\"total\":").append(total).append(",\"pass\":").append(pass).append(",\"changed\":").append(changed).append(",\"failed\":").append(failed);
         if (hasTokens) {
             sb.append(",\"inputTokens\":").append(totalInputTokens).append(",\"outputTokens\":").append(totalOutputTokens);
         }

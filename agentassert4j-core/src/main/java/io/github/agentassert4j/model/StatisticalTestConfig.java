@@ -45,7 +45,7 @@ public class StatisticalTestConfig {
     private double passThreshold = 1.0;
 
     /**
-     * REGRESSION 比例上限。默认 0.0。范围 [0.0, 1.0)
+     * CHANGED 比例上限（行为翻转容忍线）：占比超过即判 FLAKY。默认 0.0。范围 [0.0, 1.0)
      */
     private double regressionTolerance = 0.0;
 

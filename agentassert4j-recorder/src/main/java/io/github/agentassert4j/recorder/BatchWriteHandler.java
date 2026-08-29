@@ -158,23 +158,20 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
     }
 
     /**
-     * 落库前补全派生字段（skillId/分组键）。
+     * 落库前补全分组键。
      * 在消费线程执行——指纹提取含响应体 JSON 解析，不允许回到业务线程。
-     * skill_id 与 group_key 列有 NOT NULL 约束，上游缺失时回充分组器派生 id，
-     * 否则整批 INSERT 失败；已有值不覆盖（上游显式设置的优先）。
+     * group_key 列有 NOT NULL 约束，上游缺失时回充分组器派生值，否则整批 INSERT 失败；
+     * 已有值不覆盖（上游显式设置的优先）。
+     * 只回填 groupKey：record.skillId 是业务声明位，写入派生 hash 会让后续重派生
+     * 把它误当声明锚，造成存储键与现算键分叉；skill_id 列的 NOT NULL 由存储层空串兜底承接。
      * 单条补全失败不拦截落库——原始交互数据是真源，派生字段缺失可事后重建。
      */
     private void enrich(List<InteractionRecord> records) {
         for (InteractionRecord record : records) {
             try {
-                if (TextUtil.isBlank(record.getGroupKey()) || TextUtil.isBlank(record.getSkillId())) {
+                if (TextUtil.isBlank(record.getGroupKey())) {
                     SkillProfile grouping = DeterministicSkillGrouper.group(record);
-                    if (TextUtil.isBlank(record.getGroupKey())) {
-                        record.setGroupKey(grouping.getGroupKey());
-                    }
-                    if (TextUtil.isBlank(record.getSkillId())) {
-                        record.setSkillId(grouping.getSkillId());
-                    }
+                    record.setGroupKey(grouping.getGroupKey());
                 }
             } catch (RuntimeException e) {
                 log.warn("Enrichment incomplete, record saved without derived fields: {} ({})", record.getRecordId(), e.getMessage());

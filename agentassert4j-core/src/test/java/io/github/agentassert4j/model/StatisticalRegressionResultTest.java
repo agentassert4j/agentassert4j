@@ -33,12 +33,12 @@ class StatisticalRegressionResultTest {
 
     @Test
     void aggregate_passRate90_threshold90_stable() {
-        // 9 PASS + 1 DIFF
+        // 9 PASS + 1 CHANGED，容忍线 20%：CHANGED 占 10% 未超线，PASS 率达标 → STABLE
         List<SampleResult> samples = new ArrayList<>();
         for (int i = 0; i < 9; i++) samples.add(new SampleResult(i + 1, Verdict.PASS, 1.0, null, 100));
-        samples.add(new SampleResult(10, Verdict.DIFF, 0.85, "field changed", 100));
+        samples.add(new SampleResult(10, Verdict.CHANGED, 0.85, "field changed", 100));
 
-        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", samples, 0.9, 0.0);
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", samples, 0.9, 0.2);
 
         assertEquals(StatisticalVerdict.STABLE, result.getStatisticalVerdict());
         assertEquals(0.9, result.getVerdictRates().get(Verdict.PASS), 0.001);
@@ -46,11 +46,12 @@ class StatisticalRegressionResultTest {
 
     @Test
     void aggregate_passRate80_threshold90_unstable() {
+        // CHANGED 占 20% 未超容忍线（不判 FLAKY），但 PASS 率不达标 → UNSTABLE（一致性地偏离基线）
         List<SampleResult> samples = new ArrayList<>();
         for (int i = 0; i < 8; i++) samples.add(new SampleResult(i + 1, Verdict.PASS, 1.0, null, 100));
-        for (int i = 0; i < 2; i++) samples.add(new SampleResult(9 + i, Verdict.DIFF, 0.8, "diff", 100));
+        for (int i = 0; i < 2; i++) samples.add(new SampleResult(9 + i, Verdict.CHANGED, 0.8, "diff", 100));
 
-        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", samples, 0.9, 0.0);
+        StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", samples, 0.9, 0.2);
 
         assertEquals(StatisticalVerdict.UNSTABLE, result.getStatisticalVerdict());
     }
@@ -59,22 +60,22 @@ class StatisticalRegressionResultTest {
     void aggregate_regressionOverTolerance_flaky() {
         List<SampleResult> samples = new ArrayList<>();
         for (int i = 0; i < 7; i++) samples.add(new SampleResult(i + 1, Verdict.PASS, 1.0, null, 100));
-        for (int i = 0; i < 3; i++) samples.add(new SampleResult(8 + i, Verdict.REGRESSION, 0.3, "regression", 100));
+        for (int i = 0; i < 3; i++) samples.add(new SampleResult(8 + i, Verdict.CHANGED, 0.3, "regression", 100));
 
-        // regressionTolerance = 0.2, 但 REGRESSION 占 30%
+        // regressionTolerance = 0.2, 但 CHANGED 占 30%
         StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", samples, 0.9, 0.2);
 
         assertEquals(StatisticalVerdict.FLAKY, result.getStatisticalVerdict());
-        assertEquals(0.3, result.getVerdictRates().get(Verdict.REGRESSION), 0.001);
+        assertEquals(0.3, result.getVerdictRates().get(Verdict.CHANGED), 0.001);
     }
 
     @Test
     void aggregate_regressionWithinTolerance_notFlaky() {
         List<SampleResult> samples = new ArrayList<>();
         for (int i = 0; i < 9; i++) samples.add(new SampleResult(i + 1, Verdict.PASS, 1.0, null, 100));
-        samples.add(new SampleResult(10, Verdict.REGRESSION, 0.3, "reg", 100));
+        samples.add(new SampleResult(10, Verdict.CHANGED, 0.3, "reg", 100));
 
-        // 10% REGRESSION, tolerance 20%
+        // 10% CHANGED, tolerance 20%
         StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", samples, 0.9, 0.2);
 
         // PASS 率 90% >= 0.9 → STABLE
@@ -138,7 +139,7 @@ class StatisticalRegressionResultTest {
 
         StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", samples, 1.0, 0.0);
 
-        assertThrows(UnsupportedOperationException.class, () -> result.getVerdictCounts().put(Verdict.DIFF, 1));
+        assertThrows(UnsupportedOperationException.class, () -> result.getVerdictCounts().put(Verdict.CHANGED, 1));
     }
 
     @Test
@@ -147,7 +148,7 @@ class StatisticalRegressionResultTest {
 
         StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", samples, 1.0, 0.0);
 
-        assertThrows(UnsupportedOperationException.class, () -> result.getVerdictRates().put(Verdict.DIFF, 0.5));
+        assertThrows(UnsupportedOperationException.class, () -> result.getVerdictRates().put(Verdict.CHANGED, 0.5));
     }
 
     @Test
@@ -168,12 +169,12 @@ class StatisticalRegressionResultTest {
         // 6 PASS
         for (int i = 0; i < 6; i++) samples.add(new SampleResult(i + 1, Verdict.PASS, 1.0, null, 100));
         // 2x "tool A missing"
-        samples.add(new SampleResult(7, Verdict.DIFF, 0.7, "tool A missing", 100));
-        samples.add(new SampleResult(8, Verdict.DIFF, 0.7, "tool A missing", 100));
+        samples.add(new SampleResult(7, Verdict.CHANGED, 0.7, "tool A missing", 100));
+        samples.add(new SampleResult(8, Verdict.CHANGED, 0.7, "tool A missing", 100));
         // 1x "field changed"
-        samples.add(new SampleResult(9, Verdict.DIFF, 0.8, "field changed", 100));
+        samples.add(new SampleResult(9, Verdict.CHANGED, 0.8, "field changed", 100));
         // 1x "extra param"
-        samples.add(new SampleResult(10, Verdict.REGRESSION, 0.3, "extra param", 100));
+        samples.add(new SampleResult(10, Verdict.CHANGED, 0.3, "extra param", 100));
 
         StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", samples, 0.9, 0.2);
 
@@ -183,12 +184,12 @@ class StatisticalRegressionResultTest {
 
     @Test
     void aggregate_nullVerdict_treatedAsInfrastructureError() {
-        // 原断言把基础设施错误样本计入 REGRESSION（网络抖动被当成行为回归），随修复改写
+        // 原断言把基础设施错误样本计入差异计数（网络抖动被当成行为回归），随修复改写
         List<SampleResult> samples = Arrays.asList(new SampleResult(1, Verdict.PASS, 1.0, null, 100), new SampleResult(2, null, 0.0, "error", 100));
 
         StatisticalRegressionResult result = StatisticalRegressionResult.aggregate("rec-1", "skill-1", samples, 1.0, 0.0);
 
-        assertEquals(0, result.getVerdictCounts().get(Verdict.REGRESSION).intValue(), "基础设施错误不进回归计数");
+        assertEquals(0, result.getVerdictCounts().get(Verdict.CHANGED).intValue(), "基础设施错误不进回归计数");
         assertEquals(1, result.getErrorSampleCount());
         assertEquals(StatisticalVerdict.STABLE, result.getStatisticalVerdict());
     }

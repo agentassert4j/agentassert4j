@@ -213,12 +213,17 @@ public class ParameterValueTracer {
 
     /**
      * 获取记录的 skillId。
-     * 如果 record 已有 skillId 直接使用，否则通过 DeterministicSkillGrouper 计算。
+     * 如果 record 已有 skillId 直接使用，否则通过 DeterministicSkillGrouper 计算；
+     * 现算失败（如损坏的工具调用形状）退化为 null——单条记录不阻断整张依赖图重建。
      */
     private String getSkillId(InteractionRecord record) {
         if (record.getSkillId() != null && !record.getSkillId().isEmpty()) {
             return record.getSkillId();
         }
-        return DeterministicSkillGrouper.group(record).getSkillId();
+        try {
+            return DeterministicSkillGrouper.group(record).getSkillId();
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 }

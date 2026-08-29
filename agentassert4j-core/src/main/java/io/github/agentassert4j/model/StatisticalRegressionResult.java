@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
  *
  * <p>核心统计指标：</p>
  * <ul>
- *   <li>各 Verdict 的次数和比率（PASS/DIFF/REGRESSION/TIMEOUT/API_ERROR）</li>
+ *   <li>各 Verdict 的次数和比率（PASS/CHANGED；TIMEOUT/API_ERROR 等基础设施样本 verdict 为 null）</li>
  *   <li>综合统计判定（STABLE/UNSTABLE/FLAKY）</li>
  *   <li>score 均值、标准差、最小值</li>
  *   <li>差异模式分布（哪类差异最频繁）</li>
@@ -94,7 +94,7 @@ public class StatisticalRegressionResult {
      * @param skillId             Skill ID
      * @param samples             采样结果列表
      * @param passThreshold       PASS 一致率阈值
-     * @param regressionTolerance REGRESSION 比例上限
+     * @param regressionTolerance CHANGED 比例上限（行为翻转容忍线）
      * @return 聚合统计结果
      */
     public static StatisticalRegressionResult aggregate(String baselineRecordId, String skillId, List<SampleResult> samples, double passThreshold, double regressionTolerance) {
@@ -166,11 +166,11 @@ public class StatisticalRegressionResult {
         result.averageScore = scoreSum / n;
         result.scoreStdDev = n > 1 ? Math.sqrt(Math.max(0, (scoreSumSq - scoreSum * scoreSum / n) / (n - 1))) : 0;
 
-        // 4. 统计判定
+        // 4. 统计判定（二值语义：CHANGED 占比超容忍线 = 行为本身在翻转）
         double passRate = rates.getOrDefault(Verdict.PASS, 0.0);
-        double regressionRate = rates.getOrDefault(Verdict.REGRESSION, 0.0);
+        double changedRate = rates.getOrDefault(Verdict.CHANGED, 0.0);
 
-        if (regressionRate > regressionTolerance) {
+        if (changedRate > regressionTolerance) {
             result.statisticalVerdict = StatisticalVerdict.FLAKY;
         } else if (passRate >= passThreshold) {
             result.statisticalVerdict = StatisticalVerdict.STABLE;

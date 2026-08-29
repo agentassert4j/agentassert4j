@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>错误处理策略：
  * <ul>
+ *   <li>采集门：未声明且无可见工具调用的纯对话默认过滤（recordUndeclaredChat 逃生），过滤量独立计数</li>
  *   <li>RingBuffer 满时丢弃记录，不阻塞生产者</li>
  *   <li>批量写入失败记录丢弃计数器，不重试</li>
  * </ul>
@@ -40,9 +41,15 @@ public class InteractionRecorder implements RecordingInterceptor {
     private final RecorderConfig config;
     private final DataSanitizer sanitizer;
     /**
-     * 到达录制器的记录数（含丢弃）——written + dropped 与之闭合
+     * 到达录制器的记录数（含丢弃）——written + dropped 与之闭合；
+     * 被采集门过滤的记录不计入本数（它们从未进入管道），总到达 = recorded + filtered
      */
     private final AtomicLong recordedCount = new AtomicLong(0);
+    /**
+     * 被采集门过滤的记录数：未声明（skillId/templateId 均无）且无可见工具调用的
+     * 纯对话默认不录——过滤是决策不是故障，与丢弃分列
+     */
+    private final AtomicLong filteredCount = new AtomicLong(0);
     /**
      * 因 RingBuffer 满而丢弃的记录数（生产侧）
      */
@@ -102,11 +109,20 @@ public class InteractionRecorder implements RecordingInterceptor {
 
     /**
      * 实现 RecordingInterceptor SPI：拦截并录制一次 LLM 交互。
-     * 先执行脱敏，再通过 Disruptor 异步入队（纳秒级，不阻塞）。
+     * 先过采集门（声明或可见工具调用才录，否则计数过滤），再执行脱敏，
+     * 最后通过 Disruptor 异步入队（纳秒级，不阻塞）。
      */
     @Override
     public synchronized void intercept(InteractionRecord record) {
         if (!started || record == null) {
+            return;
+        }
+
+        // 采集门：未声明（skillId/templateId 均无）且无可见工具调用的纯对话默认过滤。
+        // 逃生开关 recordUndeclaredChat=true 时全量录制；被滤记录不进入管道，
+        // 不占用 RingBuffer 与 seq，独立计数保证「滤了多少」可见
+        if (!config.isRecordUndeclaredChat() && !isDeclared(record) && !hasVisibleToolCalls(record)) {
+            filteredCount.incrementAndGet();
             return;
         }
 
@@ -154,6 +170,21 @@ public class InteractionRecorder implements RecordingInterceptor {
     }
 
     /**
+     * 采集门判定：业务身份声明（skillId 或 templateId 任一非空）即视为已声明。
+     */
+    private static boolean isDeclared(InteractionRecord record) {
+        return isNonEmpty(record.getSkillId()) || isNonEmpty(record.getTemplateId());
+    }
+
+    private static boolean hasVisibleToolCalls(InteractionRecord record) {
+        return record.isHasToolCalls() && record.getToolCalls() != null && !record.getToolCalls().isEmpty();
+    }
+
+    private static boolean isNonEmpty(String s) {
+        return s != null && !s.isEmpty();
+    }
+
+    /**
      * 手动触发 flush，将缓冲区中的记录立即写入存储。
      */
     public void flush() {
@@ -185,13 +216,20 @@ public class InteractionRecorder implements RecordingInterceptor {
                 log.error("Error during InteractionRecorder shutdown: {}", e.getMessage(), e);
             } finally {
                 started = false;
-                log.info("InteractionRecorder stopped, recorded={}, dropped(ringBuffer={}, bufferOverflow={}), written={}, failed={}", recordedCount.get(), droppedCount.get(), batchHandler != null ? batchHandler.getDroppedCount() : 0, batchHandler != null ? batchHandler.getWrittenCount() : 0, batchHandler != null ? batchHandler.getFailedCount() : 0);
+                log.info("InteractionRecorder stopped, recorded={}, filtered={}, dropped(ringBuffer={}, bufferOverflow={}), written={}, failed={}", recordedCount.get(), filteredCount.get(), droppedCount.get(), batchHandler != null ? batchHandler.getDroppedCount() : 0, batchHandler != null ? batchHandler.getWrittenCount() : 0, batchHandler != null ? batchHandler.getFailedCount() : 0);
             }
         }
     }
 
     public long getRecordedCount() {
         return recordedCount.get();
+    }
+
+    /**
+     * 被采集门过滤的记录数（未声明且无可见工具调用的纯对话）。
+     */
+    public long getFilteredCount() {
+        return filteredCount.get();
     }
 
     /**

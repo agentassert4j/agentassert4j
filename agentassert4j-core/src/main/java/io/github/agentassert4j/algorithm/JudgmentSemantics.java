@@ -7,10 +7,10 @@ package io.github.agentassert4j.algorithm;
  * 引擎版本一致，不一致（含未标记的历史行）即拒绝判定——防止算法升级后静默重解释
  * 用户已批准的历史基线。</p>
  *
- * <p><b>何时必须递增版本</b>：任何会改变「同样行为差异得出什么判定结论」的变更——
- * 指纹维度口径（FingerprintExtractor）、分组键派生规则（DeterministicSkillGrouper）、
- * 比较器裁决矩阵与评分权重（DeterministicComparator）。仅增强捕获保真度（新增遥测列、
- * 转义修正）或纯性能优化不改变判定结论，不递增。</p>
+ * <p><b>版本恒定与递增边界</b>：项目公开发布前版本值固定不变——开发期的一切语义
+ * 变更（指纹维度、分组键派生、比较器裁决）以删除开发库重建承接，不做任何版本
+ * 演进；公开发布后，任何会改变「同样行为差异得出什么判定结论」的变更递增版本
+ * （仅增强捕获保真度或纯性能优化不递增）。</p>
  *
  * <p>版本值一经发布即不可重定义：同一版本号下的判定语义永不改变。</p>
  *
@@ -20,7 +20,7 @@ package io.github.agentassert4j.algorithm;
 public final class JudgmentSemantics {
 
     /**
-     * 当前判定语义版本
+     * 当前判定语义版本（公开发布前恒定，不随开发期语义变更递增）
      */
     public static final String VERSION = "det-v1";
 

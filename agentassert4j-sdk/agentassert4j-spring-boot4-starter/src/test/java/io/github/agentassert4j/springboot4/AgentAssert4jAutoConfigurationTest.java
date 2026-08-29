@@ -6,6 +6,7 @@ import io.github.agentassert4j.recorder.RecorderConfig;
 import io.github.agentassert4j.spi.RecordingInterceptor;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.springai2.RecordingChatModel;
+import io.github.agentassert4j.springai2.RecordingContext;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -86,7 +87,15 @@ class AgentAssert4jAutoConfigurationTest {
         String dbPath = tempDbPath();
         runner.withBean("chatModel", StubChatModel.class).withPropertyValues("agentassert4j.database=" + dbPath).run(context -> {
             ChatModel model = context.getBean("chatModel", ChatModel.class);
-            ChatResponse response = model.call(new Prompt(List.of(new UserMessage("订单 SO-1 在哪"))));
+            ChatResponse response;
+            // 采集门：未声明且无工具调用的纯对话不录——管道测试走标准声明姿势。
+            // 显式 finally 关闭：弹出 ThreadLocal 作用域，防止声明泄漏进测试线程
+            RecordingContext scope = RecordingContext.start(null).withSkillId("order-flow");
+            try {
+                response = model.call(new Prompt(List.of(new UserMessage("订单 SO-1 在哪"))));
+            } finally {
+                scope.close();
+            }
             assertEquals("已发货", response.getResult().getOutput().getText());
 
             InteractionRecorder recorder = context.getBean(InteractionRecorder.class);

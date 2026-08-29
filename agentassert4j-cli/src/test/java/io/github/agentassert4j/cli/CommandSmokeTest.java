@@ -91,7 +91,7 @@ class CommandSmokeTest {
 
         assertEquals(0, exit);
         String text = out.toString();
-        assertTrue(text.contains("chat:hash-old"), "应以 groupKey 列出基线画像: " + text);
+        assertTrue(text.contains("skill:queryOrder:hash-old"), "应以 groupKey 列出基线画像（声明锚点键）: " + text);
         assertTrue(text.contains("BASELINE"), "应展示基线状态: " + text);
         assertFalse(text.contains("无基线"), "已建基线后不应再提示无基线: " + text);
     }

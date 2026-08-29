@@ -128,10 +128,8 @@ class DeterministicComparatorTest {
     }
 
     @Test
-    void diffVerdict_scoreBelow095_noFieldRemoval() {
-        // 工具匹配但参数类型不匹配 → d1 = 0.7 → 0.7*0.60 = 0.42
-        // d2 = 1.0, w2 = 0.40 → 0.40
-        // total = 0.42 + 0.40 = 0.82 → DIFF
+    void changedVerdict_paramTypeMismatch() {
+        // 二值语义：参数类型变化是可行动差异 → CHANGED（不再区分严重度）
         DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 2);
         DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "Integer"),  // param type mismatch
                 "text/plain", null, null, 2);
@@ -139,16 +137,13 @@ class DeterministicComparatorTest {
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
         assertFalse(r.isParamTypeMatch());
-        // toolMatch=true → REGRESSION takes precedence because paramMatch=false
-        // Actually the verdict logic: if (!realRemoved.isEmpty() || !toolMatch || !paramMatch) → REGRESSION
-        // So paramMatch=false → REGRESSION, not DIFF
-        assertEquals(Verdict.REGRESSION, r.getVerdict());
+        assertEquals(Verdict.CHANGED, r.getVerdict());
     }
 
     @Test
-    void diffVerdict_addedFieldsOnly() {
-        // 工具/参数完全匹配，仅新增字段（不触发 REGRESSION）
-        // d2 将因 added fields 而降低（removed 为空 → 0.5 分）
+    void changedVerdict_addedFieldsOnly() {
+        // 二值语义：字段集相等才算无差异——新增字段也是输出结构维的可行动差异
+        // （旧三态下新增字段不影响 verdict 的口径随权重退役一并废除）
         DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("field1"), Collections.singletonMap("field1", "String"), 0);
         // current 多了 field2
         DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("field1", "field2")), stringMap("field1", "String", "field2", "String"), 0);
@@ -157,16 +152,13 @@ class DeterministicComparatorTest {
 
         assertTrue(r.isToolCallMatch());
         assertTrue(r.isParamTypeMatch());
-        // field2 is added, not removed → should not trigger REGRESSION for removed
-        // d1 = 1.0, d2: contentType match(0.2) + removed empty(0.5) + typeOk(0.3) = 1.0
-        // → score = 1.0*0.60 + 1.0*0.40 = 1.0 → PASS
-        assertEquals(Verdict.PASS, r.getVerdict());
+        assertEquals(Verdict.CHANGED, r.getVerdict());
         assertTrue(r.getAddedFields().contains("field2"));
         assertTrue(r.getRemovedFields().isEmpty());
     }
 
     @Test
-    void regression_toolSetChanged() {
+    void changed_toolSetChanged() {
         DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1);
         DeterministicFingerprint current = fp(Collections.singleton("toolB"), Collections.singletonMap("id", "String"),  // 不同工具
                 "text/plain", null, null, 1);
@@ -174,11 +166,11 @@ class DeterministicComparatorTest {
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
         assertFalse(r.isToolCallMatch());
-        assertEquals(Verdict.REGRESSION, r.getVerdict());
+        assertEquals(Verdict.CHANGED, r.getVerdict());
     }
 
     @Test
-    void regression_paramTypesChanged() {
+    void changed_paramTypesChanged() {
         DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1);
         DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "Integer"),  // 类型变化
                 "text/plain", null, null, 1);
@@ -186,11 +178,11 @@ class DeterministicComparatorTest {
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
         assertFalse(r.isParamTypeMatch());
-        assertEquals(Verdict.REGRESSION, r.getVerdict());
+        assertEquals(Verdict.CHANGED, r.getVerdict());
     }
 
     @Test
-    void regression_fieldsRemoved() {
+    void changed_fieldsRemoved() {
         DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("field1", "field2")), stringMap("field1", "String", "field2", "String"), 0);
         DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("field1"),  // field2 被删除
                 Collections.singletonMap("field1", "String"), 0);
@@ -198,12 +190,13 @@ class DeterministicComparatorTest {
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
         assertTrue(r.getRemovedFields().contains("field2"));
-        assertEquals(Verdict.REGRESSION, r.getVerdict());
+        assertEquals(Verdict.CHANGED, r.getVerdict());
     }
 
     @Test
-    void regression_errorFieldAdded() {
-        // AUTO_REGRESSION_FIELDS: 新增 error 类字段 → 自动 REGRESSION
+    void changed_errorFieldAdded() {
+        // error 类字段与普通字段同权：二值语义下直判规则退役，
+        // 「新增 error 字段」= 输出结构维的可行动差异 → CHANGED
         DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("name"), Collections.singletonMap("name", "String"), 0);
         DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("name", "error")),  // 新增 error 字段
                 stringMap("name", "String", "error", "String"), 0);
@@ -211,40 +204,28 @@ class DeterministicComparatorTest {
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
         assertTrue(r.getAddedFields().contains("error"));
-        assertEquals(Verdict.REGRESSION, r.getVerdict());
+        assertEquals(Verdict.CHANGED, r.getVerdict());
     }
 
     @Test
-    void regression_errorCodeFieldAdded() {
-        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("name"), Collections.singletonMap("name", "String"), 0);
-        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("name", "error_code")), stringMap("name", "String", "error_code", "Integer"), 0);
-
-        ComparisonResult r = comparator.compare(baseline, current, "output");
-
-        assertTrue(r.getAddedFields().contains("error_code"));
-        assertEquals(Verdict.REGRESSION, r.getVerdict());
-    }
-
-    @Test
-    void regression_nestedErrorField() {
-        // 嵌套字段 data.error → 取最后一段 "error"
+    void changed_nestedErrorField() {
         DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("data"), Collections.singletonMap("data", "Object"), 0);
         DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("data", "data.error")), stringMap("data", "Object", "data.error", "String"), 0);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
-        assertEquals(Verdict.REGRESSION, r.getVerdict());
+        assertEquals(Verdict.CHANGED, r.getVerdict());
     }
 
     @Test
-    void regression_lowScore() {
-        // 工具集变化 + 参数类型变化 → d1=0 → score 非常低 → REGRESSION
+    void changed_lowScore() {
+        // 工具集变化 + 参数类型变化 → 多维差异 → CHANGED；score 仅作展示参考
         DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1);
         DeterministicFingerprint current = fp(Collections.singleton("toolB"), Collections.singletonMap("id2", "Integer"), "text/plain", null, null, 1);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
-        assertEquals(Verdict.REGRESSION, r.getVerdict());
+        assertEquals(Verdict.CHANGED, r.getVerdict());
         assertTrue(r.getScore() < 0.70);
     }
 
@@ -290,42 +271,36 @@ class DeterministicComparatorTest {
     }
 
     @Test
-    void textPlain_magnitudeOffByOne_d2is07() {
+    void textPlain_magnitudeOffByOne_changed() {
         DeterministicFingerprint baseline = fp(null, null, "text/plain", null, null, 2);
         DeterministicFingerprint current = fp(null, null, "text/plain", null, null, 3);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
-        // d2 = 0.7
-        // score = 1.0*0.60 + 0.7*0.40 = 0.60 + 0.28 = 0.88 → DIFF
-        assertFalse(r.getScore() >= 0.95);
+        // 纯文本仅长度数量级可察：数量级变化 = 输出结构维差异 → CHANGED
+        // （旧三态下 ±1 档落在 DIFF 区间，二值化后同为非 PASS，退出码形状不变）
         assertTrue(r.getScore() >= 0.70);
-        assertEquals(Verdict.DIFF, r.getVerdict());
+        assertEquals(Verdict.CHANGED, r.getVerdict());
     }
 
     @Test
-    void textPlain_magnitudeOffByTwo_d2is02() {
+    void textPlain_magnitudeOffByTwo_changed() {
         DeterministicFingerprint baseline = fp(null, null, "text/plain", null, null, 1);
         DeterministicFingerprint current = fp(null, null, "text/plain", null, null, 3);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
-        // d2 = 0.2
-        // score = 1.0*0.60 + 0.2*0.40 = 0.60 + 0.08 = 0.68 → REGRESSION (< 0.70)
-        assertTrue(r.getScore() < 0.70);
-        assertEquals(Verdict.REGRESSION, r.getVerdict());
+        assertEquals(Verdict.CHANGED, r.getVerdict());
     }
 
     @Test
-    void contentTypeMismatch_d2isZero() {
+    void contentTypeMismatch_changed() {
         DeterministicFingerprint baseline = fp(null, null, "text/plain", null, null, 1);
         DeterministicFingerprint current = fp(null, null, "application/json", Collections.singleton("field1"), Collections.singletonMap("field1", "String"), 0);
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
-        // d2 = 0.0
-        // score = 1.0*0.60 + 0.0*0.40 = 0.60 → REGRESSION
-        assertEquals(Verdict.REGRESSION, r.getVerdict());
+        assertEquals(Verdict.CHANGED, r.getVerdict());
     }
 
     @Test
@@ -408,14 +383,13 @@ class DeterministicComparatorTest {
         DeterministicComparator cmp = new DeterministicComparator(config);
 
         DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("field1", "field2")), stringMap("field1", "String", "field2", "String"), 0);
-        // field2 被删除，但它是 ignorable → 不应触发 REGRESSION
+        // field2 被删除，但它是 ignorable → 归一化后无差异 → PASS
         DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("field1"), Collections.singletonMap("field1", "String"), 0);
 
         ComparisonResult r = cmp.compare(baseline, current, "output");
 
-        // field2 被忽略后 realRemoved 为空 → 不会因字段删除触发 REGRESSION
-        // 但 d2 中 removed 不为空 → d2 会降低
-        assertNotEquals(Verdict.REGRESSION, r.getVerdict());
+        assertEquals(Verdict.PASS, r.getVerdict());
+        assertTrue(r.getRemovedFields().isEmpty());
     }
 
     @Test
@@ -431,24 +405,34 @@ class DeterministicComparatorTest {
     }
 
     @Test
-    void addedErrorField_triggersRegression_evenWhenIgnorable() {
+    void verdictEnum_isBinary() {
+        // 判定枚举的面契约：只有 PASS/CHANGED 两值——
+        // 三态消亡后任何「中间严重度」的回归都应被视为语义回退
+        assertEquals(2, Verdict.values().length);
+        assertNotNull(Verdict.valueOf("PASS"));
+        assertNotNull(Verdict.valueOf("CHANGED"));
+    }
+
+    @Test
+    void addedErrorField_ignorableConfig_honored() {
         ComparatorConfig config = new ComparatorConfig();
         config.setIgnorableFields(Collections.singleton("error"));
 
         DeterministicComparator cmp = new DeterministicComparator(config);
 
         DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("field1"), Collections.singletonMap("field1", "String"), 0);
-        // 当前指纹新增了 error 字段——即使用户把 error 配置为可忽略，
-        // 类字段自动回归的不变量不因 ignorable 配置而放宽
+        // 二值语义下 error 直判规则退役：error 是普通字段，用户把它配置为可忽略
+        // 即声明「该字段的出现不构成行为差异」，归一化后无差异 → PASS
+        // （旧三态下「error 自动回归优先于 ignorable」的不变量随之废除）
         DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("field1", "error")), stringMap("field1", "String", "error", "String"), 0);
 
         ComparisonResult r = cmp.compare(baseline, current, "output");
 
-        assertEquals(Verdict.REGRESSION, r.getVerdict(), "error 字段自动回归与用户 ignorable 配置互斥，ignorable 不得击穿该不变量");
+        assertEquals(Verdict.PASS, r.getVerdict(), "ignorableFields 归一化覆盖一切字段（含 error 类叶子名），这是用户显式声明的口径");
     }
 
     @Test
-    void addedNestedErrorField_triggersRegression_evenWhenIgnorable() {
+    void addedNestedErrorField_ignorableConfig_honored() {
         ComparatorConfig config = new ComparatorConfig();
         config.setIgnorableFields(Collections.singleton("data.error"));
 
@@ -459,7 +443,7 @@ class DeterministicComparatorTest {
 
         ComparisonResult r = cmp.compare(baseline, current, "output");
 
-        assertEquals(Verdict.REGRESSION, r.getVerdict(), "嵌套路径 data.error 的叶子名 error 同样受自动回归不变量保护");
+        assertEquals(Verdict.PASS, r.getVerdict(), "嵌套路径 data.error 同样受 ignorableFields 归一化覆盖");
     }
 
     @Test

@@ -122,38 +122,28 @@ class DeterministicSkillGrouperTest {
     }
 
     @Test
-    void pureChat_nullTemplateHash_fallsBackToUserInputHash_notChatNull() {
-        // templateHash 为 null 时绝不能坍缩为 "chat:null"，否则不同 prompt 的纯对话互相污染同一基线
-        InteractionRecord r1 = record(null, null, false);
-        r1.setUserInput("查询订单状态");
-        InteractionRecord r2 = record(null, null, false);
-        r2.setUserInput("帮我写一首诗");
-
-        SkillProfile p1 = DeterministicSkillGrouper.group(r1);
-        SkillProfile p2 = DeterministicSkillGrouper.group(r2);
-
-        assertNotEquals(p1.getGroupKey(), p2.getGroupKey(), "无模板时必须按 user_input hash 回退分组，不同输入不得坍缩为 chat:null");
-        assertNotEquals(p1.getSkillId(), p2.getSkillId());
-        assertFalse(p1.getGroupKey().contains("null"), "groupKey 不得出现字面 null 坍缩");
-    }
-
-    @Test
-    void pureChat_nullTemplateHash_sameUserInput_sameGroupKey() {
-        InteractionRecord r1 = record(null, null, false);
-        r1.setUserInput("相同的问题");
-        InteractionRecord r2 = record(null, null, false);
-        r2.setUserInput("相同的问题");
-
-        assertEquals(DeterministicSkillGrouper.group(r1).getGroupKey(), DeterministicSkillGrouper.group(r2).getGroupKey(), "同输入同无模板 → 同组（确定性不因回退而破坏）");
-    }
-
-    @Test
-    void pureChat_bothAnchorsAbsent_stableOrphanKey() {
+    void pureChat_nullTemplateHash_defensiveEmptyAnchor() {
+        // 采集门生效后「未声明且无工具调用的纯对话」不会进入分组，本分支仅防御程序化构造：
+        // 派生契约冻结为 "chat:" + templateHash，双缺失时锚空串——确定且不含字面 null
+        // （user_input hash 与 no-anchor 两条兜底路径已随身份锚点收敛物理删除）
         InteractionRecord r = record(null, null, false);
 
         SkillProfile p = DeterministicSkillGrouper.group(r);
 
-        assertEquals("chat:no-anchor", p.getGroupKey(), "双锚点缺失时使用稳定孤儿键，不再含字面 null");
+        assertEquals("chat:", p.getGroupKey(), "防御分支产出稳定空锚键，不得复活 user_input hash 或 no-anchor");
+        assertFalse(p.getGroupKey().contains("null"), "groupKey 不得出现字面 null 坍缩");
+        assertEquals(HashUtil.sha256("chat:"), p.getSkillId());
+    }
+
+    @Test
+    void pureChat_userInputNeverEntersDerivation() {
+        // 身份锚点收敛后 user input 不参与派生：同模板同声明状态 → 同组，与输入内容无关
+        InteractionRecord r1 = record("hash1", null, false);
+        r1.setUserInput("查询订单状态");
+        InteractionRecord r2 = record("hash1", null, false);
+        r2.setUserInput("帮我写一首诗");
+
+        assertEquals(DeterministicSkillGrouper.group(r1).getGroupKey(), DeterministicSkillGrouper.group(r2).getGroupKey(), "同模板未声明 → 同组，用户输入不是身份锚点");
     }
 
     @Test
@@ -163,7 +153,50 @@ class DeterministicSkillGrouperTest {
 
         SkillProfile p = DeterministicSkillGrouper.group(r);
 
-        assertEquals("chat:template-hash-1", p.getGroupKey(), "模板 hash 存在时优先作为锚点（三元组语义），user_input 仅兜底");
+        assertEquals("chat:template-hash-1", p.getGroupKey(), "模板 hash 存在时作为锚点，user_input 仅兜底");
+    }
+
+    @Test
+    void goldenKey_declaredWithTemplate() {
+        // 黄金键（D6 方案 A：派生规则冻结为身份契约）——以下字面键值一经发布即不可改变，
+        // 变更即身份纪元事件（历史基线全部失配），必须升判定语义版本并走显式设计
+        InteractionRecord r = record("tmpl-abc123", Collections.singletonList(tc("getOrder", Collections.singletonMap("orderId", "String"))), true);
+        r.setSkillId("order-flow");
+
+        SkillProfile p = DeterministicSkillGrouper.group(r);
+
+        assertEquals("skill:order-flow:tmpl-abc123", p.getGroupKey(), "声明锚点 + 模板细分，形状不混入身份");
+        assertEquals(HashUtil.sha256("skill:order-flow:tmpl-abc123"), p.getSkillId());
+    }
+
+    @Test
+    void goldenKey_declaredWithoutTemplate() {
+        InteractionRecord r = record(null, null, false);
+        r.setSkillId("faq-bot");
+
+        SkillProfile p = DeterministicSkillGrouper.group(r);
+
+        assertEquals("skill:faq-bot", p.getGroupKey());
+    }
+
+    @Test
+    void goldenKey_declaredShapeAgnostic_toolAndChatMerge() {
+        // 声明记录的同桶多形状分支不靠身份拆分：带工具与不带工具的同声明同模板记录同组，
+        // 形状差异交给指纹对比暴露（这正是回归要抓的对象）
+        InteractionRecord withTool = record("tmpl-1", Collections.singletonList(tc("getOrder", Collections.singletonMap("orderId", "String"))), true);
+        withTool.setSkillId("order-flow");
+        InteractionRecord withoutTool = record("tmpl-1", null, false);
+        withoutTool.setSkillId("order-flow");
+
+        assertEquals(DeterministicSkillGrouper.group(withTool).getGroupKey(), DeterministicSkillGrouper.group(withoutTool).getGroupKey(), "声明锚点优先于形状派生，形状不参与声明记录的身份");
+    }
+
+    @Test
+    void goldenKey_undeclaredToolShapeUnchanged() {
+        // 未声明工具记录的形状派生键保持历史形态（冻结契约的一部分）
+        InteractionRecord r = record("whatever", Collections.singletonList(tc("queryOrderDB", Collections.singletonMap("orderId", "String"))), true);
+
+        assertEquals("queryOrderDB[orderid:string]", DeterministicSkillGrouper.group(r).getGroupKey());
     }
 
     @Test

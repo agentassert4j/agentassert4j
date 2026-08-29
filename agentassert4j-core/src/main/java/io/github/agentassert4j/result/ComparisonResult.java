@@ -15,6 +15,11 @@ public class ComparisonResult {
     private Set<String> addedFields;
     private Set<String> removedFields;
     private boolean fieldTypeMatch;
+    /**
+     * 输出结构维整体结论：contentType、纯文本长度数量级、字段集增删、字段类型的合取。
+     * 供机器消费方（--json dims、统计聚合）免于从明细字段二次拼装
+     */
+    private boolean structureMatch = true;
     private boolean keywordMatch;
     private boolean regexMatch;
     private boolean behaviorMatch;
@@ -61,6 +66,14 @@ public class ComparisonResult {
 
     public void setFieldTypeMatch(boolean fieldTypeMatch) {
         this.fieldTypeMatch = fieldTypeMatch;
+    }
+
+    public boolean isStructureMatch() {
+        return structureMatch;
+    }
+
+    public void setStructureMatch(boolean structureMatch) {
+        this.structureMatch = structureMatch;
     }
 
     public boolean isKeywordMatch() {

@@ -3,6 +3,7 @@ package io.github.agentassert4j.cli;
 import io.github.agentassert4j.algorithm.ComparatorConfig;
 import io.github.agentassert4j.algorithm.DeterministicComparator;
 import io.github.agentassert4j.algorithm.DeterministicSkillGrouper;
+import io.github.agentassert4j.algorithm.JudgmentSemantics;
 import io.github.agentassert4j.config.SkillRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.*;
@@ -129,7 +130,7 @@ class ReplayFlowTest {
 
             ApproveCommand approve = new ApproveCommand();
             approve.db = tempDir.resolve("flow.db").toString();
-            approve.skill = "chat:hash-old";
+            approve.skill = groupKeyOf("skill-1");
             PrintStream originalOut = System.out;
             ByteArrayOutputStream approveOut = new ByteArrayOutputStream();
             PrintStream approveStream = new PrintStream(approveOut, true);
@@ -159,7 +160,7 @@ class ReplayFlowTest {
 
             RejectCommand reject = new RejectCommand();
             reject.db = tempDir.resolve("flow.db").toString();
-            reject.skill = "chat:hash-old";
+            reject.skill = groupKeyOf("skill-1");
             assertEquals(0, reject.call());
 
             SkillProfile profile = repository.findSkillByGroupKey(groupKeyOf("skill-1"));
@@ -331,12 +332,14 @@ class ReplayFlowTest {
         }
 
         @Test
-        @DisplayName("分组失败的记录被告警并剔出判定集，不产生无守卫判定")
-        void ungroupableRecord_warnedAndExcluded() {
-            // 正常记录在前，损坏记录在后（两个无工具名的工具调用会让分组器在排序比较时抛异常）
+        @DisplayName("未声明且形状损坏的记录不进入判定集——无守卫判定结构性不可达")
+        void ungroupableRecord_excludedFromSelection() {
+            // 锚点收敛后：声明记录恒可分组（身份不依赖工具形状）；未声明记录不进
+            // skill 桶、选例不可达。「分组失败剔除出判定集」守卫退居防御纵深——
+            // 直插脏数据（模拟绕过采集门的写入）不再能产生无守卫判定
             repository.saveInteraction(makeRecord("rec-good-1", "skill-1", 1000L, "same answer"));
             repository.saveInteraction(makeRecord("rec-good-2", "skill-1", 1500L, "same answer"));
-            InteractionRecord poisoned = makeRecord("rec-bad-1", "skill-1", 3000L, "same answer");
+            InteractionRecord poisoned = makeRecord("rec-bad-1", null, 3000L, "same answer");
             List<ToolCall> brokenCalls = new ArrayList<>();
             for (int i = 0; i < 2; i++) {
                 ToolCall broken = new ToolCall();
@@ -351,10 +354,9 @@ class ReplayFlowTest {
             int exit = runner.run("new prompt", null, 3, null, false, false, true);
 
             String report = output.toString();
-            assertTrue(report.contains("分组失败"), "无法核验语义的记录必须显式告警: " + report);
-            assertTrue(report.contains("rec-bad-1"), "告警必须点名被剔除的记录");
-            assertEquals(0, exit, "剩余可判定用例应全 PASS");
-            assertEquals(2, stubClient.callCount, "被剔除记录不得参与判定");
+            assertFalse(report.contains("rec-bad-1"), "未声明记录不得进入判定集与报告: " + report);
+            assertEquals(0, exit, "可分组用例全 PASS");
+            assertEquals(2, stubClient.callCount, "仅声明的可分组记录参与判定");
         }
 
         @Test
@@ -440,7 +442,7 @@ class ReplayFlowTest {
             assertEquals(2, exit, "无人审的自动基线不允许在 CI 产绿灯");
             String report = output.toString();
             assertTrue(report.contains("尚无基线"), "必须点名未建档 skill: " + report);
-            assertTrue(report.contains("chat:"), "拒绝名单按 groupKey 列出: " + report);
+            assertTrue(report.contains(groupKeyOf("skill-1")), "拒绝名单按 groupKey 列出: " + report);
             assertEquals(0, stubClient.callCount, "拒绝判定不得发起 LLM 调用");
             assertNull(repository.findSkillByGroupKey(groupKeyOf("skill-1")), "CI 模式不得自动建档");
         }
@@ -690,6 +692,7 @@ class ReplayFlowTest {
             assertEquals(0, exit);
             Map<String, Object> report = parseReport();
             assertEquals("agentassert4j.replay-report/1", report.get("schema"));
+            assertEquals(JudgmentSemantics.VERSION, report.get("judgmentSemantics"), "报告头必须钉判定语义版本");
             assertEquals("replay", report.get("mode"));
             Map<String, Object> summary = nested(report, "summary");
             assertEquals(2, ((Number) summary.get("total")).intValue());
@@ -704,7 +707,7 @@ class ReplayFlowTest {
         @Test
         @DisplayName("非 PASS：verdict/summary/token 落报告，待裁决 groupKeys 非空")
         void json_nonPass_listsPendingGroupKeys() {
-            // 基线无工具、重放多出工具调用 → 新行为按 REGRESSION 计
+            // 基线无工具、重放多出工具调用 → 二值判定 CHANGED
             seedOneSkill();
             stubClient.toolCallResponse = true;
 
@@ -713,16 +716,16 @@ class ReplayFlowTest {
             assertEquals(1, exit);
             Map<String, Object> report = parseReport();
             Map<String, Object> summary = nested(report, "summary");
-            assertEquals(2, ((Number) summary.get("regression")).intValue());
+            assertEquals(2, ((Number) summary.get("changed")).intValue());
             assertEquals(20L, ((Number) summary.get("inputTokens")).longValue(), "汇总 token 必须聚合逐用例实际值");
             List<Object> cases = (List<Object>) report.get("cases");
             Map<String, Object> firstCase = (Map<String, Object>) cases.get(0);
-            assertEquals("REGRESSION", firstCase.get("verdict"));
+            assertEquals("CHANGED", firstCase.get("verdict"));
             assertEquals(10, ((Number) firstCase.get("inputTokens")).intValue());
             assertNotNull(firstCase.get("summary"), "非 PASS 用例必须带差异摘要");
             List<Object> pending = (List<Object>) report.get("pendingGroupKeys");
             assertEquals(1, pending.size(), "差异候选的 groupKey 必须进入待裁决名单");
-            assertTrue(pending.get(0).toString().startsWith("chat:"), "待裁决按 groupKey 报告: " + pending);
+            assertTrue(pending.get(0).toString().startsWith("skill:"), "待裁决按 groupKey 报告（声明锚点键）: " + pending);
         }
 
         @Test

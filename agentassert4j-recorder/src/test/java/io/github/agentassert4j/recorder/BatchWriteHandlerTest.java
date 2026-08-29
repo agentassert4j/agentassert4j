@@ -61,7 +61,7 @@ class BatchWriteHandlerTest {
         @Test
         @DisplayName("enrich 单条失败不炸批：损坏记录以缺失派生字段落库")
         void flush_enrichFailureRecordStillSaved() {
-            // 两个无工具名的工具调用让分组器在排序比较时抛异常——单条损坏
+            // 未声明 + 两个无工具名的工具调用让形状派生在排序比较时抛异常——单条损坏
             // 不得拦截整批落库（SQLite 侧对空派生列有空串兜底 NOT NULL）
             InMemoryStorageRepository repo = new InMemoryStorageRepository();
             RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
@@ -69,6 +69,7 @@ class BatchWriteHandlerTest {
 
             InteractionRecord good = enrichableRecord("r-good");
             InteractionRecord broken = enrichableRecord("r-broken");
+            broken.setSkillId(null); // 未声明才会走形状派生，声明记录的身份不依赖工具调用形状
             List<ToolCall> brokenCalls = new ArrayList<>();
             for (int i = 0; i < 2; i++) {
                 brokenCalls.add(new ToolCall());
@@ -107,8 +108,8 @@ class BatchWriteHandlerTest {
         }
 
         @Test
-        @DisplayName("无 skillId 的记录回充分组派生 id（skill_id 列 NOT NULL，缺失会整批 INSERT 失败）")
-        void flush_noSkillId_backfilledFromGrouper() {
+        @DisplayName("无 skillId 的记录回填 groupKey；skillId 保持声明位不写派生 hash")
+        void flush_noSkillId_groupKeyBackfilled_skillIdUntouched() {
             InMemoryStorageRepository repo = new InMemoryStorageRepository();
             RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
             BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
@@ -120,9 +121,9 @@ class BatchWriteHandlerTest {
             handler.onEvent(event, 0, true);
 
             InteractionRecord saved = repo.getStore().get(0);
-            assertNotNull(saved.getSkillId(), "skillId 必须回充分组器派生 id");
-            assertEquals(DeterministicSkillGrouper.group(saved).getSkillId(), saved.getSkillId());
-            assertNotNull(saved.getGroupKey());
+            assertNotNull(saved.getGroupKey(), "groupKey 必须回充分组器派生值");
+            assertEquals(DeterministicSkillGrouper.group(saved).getGroupKey(), saved.getGroupKey(), "重派生与落库值一致——存储键与现算键不分叉");
+            assertNull(saved.getSkillId(), "skillId 是业务声明位，enrich 不得写入派生 hash（否则重派生把它误当声明锚）");
         }
     }
 
