@@ -88,6 +88,12 @@ public class StatisticalRegressionResult {
     private double estimatedCost;
 
     /**
+     * true = 串行采样因连续 stallThreshold 轮同一失败差异早停，剩余轮次未发放；
+     * actualSampleCount 为实际发放轮数（判定基于已发放样本，不影响退出码语义）
+     */
+    private boolean stalled;
+
+    /**
      * 从采样结果列表聚合统计。
      *
      * @param baselineRecordId    基线记录 ID
@@ -264,5 +270,13 @@ public class StatisticalRegressionResult {
 
     public void setEstimatedCost(double cost) {
         this.estimatedCost = cost;
+    }
+
+    public boolean isStalled() {
+        return stalled;
+    }
+
+    public void setStalled(boolean stalled) {
+        this.stalled = stalled;
     }
 }

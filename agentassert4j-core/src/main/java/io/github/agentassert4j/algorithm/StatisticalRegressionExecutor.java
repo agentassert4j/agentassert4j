@@ -75,12 +75,17 @@ public class StatisticalRegressionExecutor {
         // 执行 N 次采样
         List<SampleResult> samples;
         long totalStart = System.currentTimeMillis();
+        // 停滞早停仅在串行模式检测——并发按批粒度发放，「连续 N 轮」没有逐轮意义
+        boolean stalledResult = false;
 
         if (config.getConcurrency() > 1) {
             samples = executeConcurrent(baseline, newSystemPrompt, userInput, config, effectiveSampleCount);
         } else {
             samples = new ArrayList<>(effectiveSampleCount);
             long consumedTokens = 0;
+            int identicalFailures = 0;
+            String lastFailureSummary = null;
+            boolean stalled = false;
             for (int i = 0; i < effectiveSampleCount; i++) {
                 if (tokenBudgetExhausted(config, consumedTokens)) {
                     // 预算耗尽后不再发调用，占位样本保持分母口径完整
@@ -90,9 +95,24 @@ public class StatisticalRegressionExecutor {
                 SampleResult sample = executeOneSample(baseline, newSystemPrompt, userInput, i + 1, config);
                 consumedTokens += tokensOf(sample);
                 samples.add(sample);
+                // 停滞早停：连续 stallThreshold 轮同一失败差异 → 剩余轮次不再发放，
+                // 防止对已确诊的确定性失败持续烧钱。PASS 与基础设施错误样本重置连击；
+                // 只在失败连击上截停，判定只会更严格不会变绿
+                if (config.getStallThreshold() > 0 && sample.getVerdict() == Verdict.CHANGED) {
+                    String summary = sample.getDiffSummary();
+                    identicalFailures = summary != null && summary.equals(lastFailureSummary) ? identicalFailures + 1 : 1;
+                    lastFailureSummary = summary;
+                    if (identicalFailures >= config.getStallThreshold()) {
+                        stalled = true;
+                        break;
+                    }
+                } else {
+                    identicalFailures = 0;
+                    lastFailureSummary = null;
+                }
             }
+            stalledResult = stalled;
         }
-
         long totalLatency = System.currentTimeMillis() - totalStart;
 
         // 聚合统计
@@ -101,6 +121,7 @@ public class StatisticalRegressionExecutor {
         // 费用按实际发起的调用数估算：预算占位样本未发调用，不计入
         int issuedCalls = samples.size() - countBudgetSamples(samples);
         result.setEstimatedCost(issuedCalls * costPerCall);
+        result.setStalled(stalledResult);
 
         return result;
     }

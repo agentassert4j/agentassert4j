@@ -52,6 +52,10 @@ class ScenarioRunnerTest {
         return new ScenarioRunner(repository, client, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output));
     }
 
+    private ScenarioRunner.Outcome run(ScenarioConfig config, boolean dryRun) {
+        return runner().run(config, dryRun, null, null);
+    }
+
     private void seedDeclaredRecord() {
         InteractionRecord record = new InteractionRecord();
         record.setRecordId("rec-1");
@@ -109,7 +113,7 @@ class ScenarioRunnerTest {
     void run_autoDerivesNoiseBaselineScenarios_perEstablishedGroup() {
         seedDeclaredRecord();
 
-        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.empty(), false);
+        ScenarioRunner.Outcome outcome = run(ScenarioConfig.empty(), false);
 
         assertEquals(1, outcome.getRuns().size(), "每个已建档分组派生一个场景");
         assertTrue(outcome.getSkipped().isEmpty(), "无跳过时跳过清单为空");
@@ -126,7 +130,7 @@ class ScenarioRunnerTest {
         seedDeclaredRecord();
         String configJson = "{\"scenarios\":[{\"scenarioId\":\"kw\",\"skillId\":\"skill-1\"," + "\"userInput\":\"查订单 ORD-001\",\"assertions\":{\"requiredKeywords\":[\"不存在的词\"]}}]}";
 
-        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.fromJson(configJson), false);
+        ScenarioRunner.Outcome outcome = run(ScenarioConfig.fromJson(configJson), false);
 
         assertEquals(1, outcome.getRuns().size());
         assertEquals("DRIFTED", outcome.getRuns().get(0).getVerdict(), "断言失败经规则注入表现为逐轮 CHANGED → DRIFTED");
@@ -140,7 +144,7 @@ class ScenarioRunnerTest {
         seedUndeclaredRecord();
         String configJson = "{\"scenarios\":[{\"scenarioId\":\"tpl-bound\",\"templateHash\":\"hash-old\"," + "\"userInput\":\"查订单 ORD-001\",\"assertions\":{\"requiredKeywords\":[\"不存在的词\"]}}]}";
 
-        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.fromJson(configJson), false);
+        ScenarioRunner.Outcome outcome = run(ScenarioConfig.fromJson(configJson), false);
 
         assertEquals(1, outcome.getRuns().size(), "templateHash 绑定未声明分组应可解析");
         assertEquals("DRIFTED", outcome.getRuns().get(0).getVerdict(), "断言对未声明分组同样生效：缺词 → 逐轮 CHANGED");
@@ -153,7 +157,7 @@ class ScenarioRunnerTest {
         seedDeclaredRecord();
         String configJson = "{\"scenarios\":[{\"scenarioId\":\"new-input\",\"skillId\":\"skill-1\"," + "\"userInput\":\"查订单 {{order_id}} 的物流\",\"variables\":{\"order_id\":\"ORD-777\"}}]}";
 
-        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.fromJson(configJson), false);
+        ScenarioRunner.Outcome outcome = run(ScenarioConfig.fromJson(configJson), false);
 
         assertEquals(1, outcome.getRuns().size());
         assertEquals("查订单 ORD-777 的物流", client.lastRequest.getUserInput());
@@ -163,7 +167,7 @@ class ScenarioRunnerTest {
     void run_autoDerive_replaysBaselineInput() {
         seedDeclaredRecord();
 
-        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.empty(), false);
+        ScenarioRunner.Outcome outcome = run(ScenarioConfig.empty(), false);
 
         assertEquals(1, outcome.getRuns().size());
         assertEquals("查订单 ORD-001", client.lastRequest.getUserInput(), "自动派生重放基线历史输入");
@@ -173,7 +177,7 @@ class ScenarioRunnerTest {
     void run_cacheTelemetry_aggregatedAndPersisted() {
         seedDeclaredRecord();
 
-        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.empty(), false);
+        ScenarioRunner.Outcome outcome = run(ScenarioConfig.empty(), false);
 
         ScenarioRun run = outcome.getRuns().get(0);
         assertEquals(Integer.valueOf(150), run.getCacheReadTokens(), "5 轮 × 30 缓存读 token 聚合");
@@ -189,7 +193,7 @@ class ScenarioRunnerTest {
         seedToolClosingRecord();
         String configJson = "{\"scenarios\":[{\"scenarioId\":\"tpl-input\",\"templateHash\":\"hash-old\"," + "\"userInput\":\"新输入来了\"}]}";
 
-        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.fromJson(configJson), false);
+        ScenarioRunner.Outcome outcome = run(ScenarioConfig.fromJson(configJson), false);
 
         assertTrue(outcome.getRuns().isEmpty());
         assertEquals(1, outcome.getSkipped().size());
@@ -202,7 +206,7 @@ class ScenarioRunnerTest {
         seedDeclaredRecord();
         String configJson = "{\"scenarios\":[{\"scenarioId\":\"ghost\",\"skillId\":\"no-such\",\"userInput\":\"任意\"}]}";
 
-        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.fromJson(configJson), false);
+        ScenarioRunner.Outcome outcome = run(ScenarioConfig.fromJson(configJson), false);
 
         assertTrue(outcome.getRuns().isEmpty(), "跳过的场景不产生执行事实");
         assertEquals(1, outcome.getSkipped().size());
@@ -212,11 +216,56 @@ class ScenarioRunnerTest {
     }
 
     @Test
+    void run_cliBudgetOverride_capsConfiguredRounds() {
+        // CLI 预算旗标全局覆盖场景声明——平台级支出护栏不依赖文件内容
+        seedDeclaredRecord();
+        String configJson = "{\"scenarios\":[{\"scenarioId\":\"capped\",\"skillId\":\"skill-1\"," + "\"userInput\":\"查订单 ORD-001\",\"sampling\":{\"sampleCount\":8}}]}";
+
+        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.fromJson(configJson), false, 3, null);
+
+        assertEquals(3, client.callCount, "覆盖后的调用数上限生效");
+        assertEquals(3, outcome.getRuns().get(0).getSampleCount());
+    }
+
+    @Test
+    void run_cliBudgetOverride_appliesToAutoDerived() {
+        seedDeclaredRecord();
+
+        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.empty(), false, 2, null);
+
+        assertEquals(2, client.callCount, "覆盖对自动派生场景同样生效");
+    }
+
+    @Test
+    void run_stallIdenticalFailures_earlyStops_persistsAndReports() {
+        // 同一失败差异连续 3 轮（默认阈值）→ 早停：声明 5 轮只发 3 次，证据全链可见
+        seedDeclaredRecord();
+        String configJson = "{\"scenarios\":[{\"scenarioId\":\"stalled\",\"skillId\":\"skill-1\"," + "\"userInput\":\"查订单 ORD-001\",\"assertions\":{\"requiredKeywords\":[\"不存在的词\"]}}]}";
+
+        ScenarioRunner.Outcome outcome = run(ScenarioConfig.fromJson(configJson), false);
+
+        assertEquals(1, outcome.getRuns().size());
+        assertEquals(3, client.callCount, "剩余 2 轮因停滞早停不再发放");
+        ScenarioRun stalledRun = outcome.getRuns().get(0);
+        assertEquals(3, stalledRun.getSampleCount());
+        assertEquals("DRIFTED", stalledRun.getVerdict());
+        assertTrue(stalledRun.isStalled());
+        assertEquals("{\"stalled\":true}", stalledRun.getMetadata(), "停滞事实进吸收层落库");
+        List<ScenarioRun> persisted = repository.findScenarioRuns("stalled");
+        assertEquals("{\"stalled\":true}", persisted.get(0).getMetadata(), "metadata 写读往返");
+
+        String json = ScenarioRunCommand.reportsJson(outcome, false);
+        assertTrue(json.contains("\"stalled\":true"), "证据报告披露停滞: " + json);
+        assertTrue(json.contains("\"cacheReadTokens\":90"), "报告带缓存遥测（3 轮 × 30）: " + json);
+        assertTrue(json.contains("\"skipped\":[]"), "报告带跳过清单");
+    }
+
+    @Test
     void run_unknownBehaviorInAssertions_scenarioSkipped() {
         seedDeclaredRecord();
         String configJson = "{\"scenarios\":[{\"scenarioId\":\"typo\",\"skillId\":\"skill-1\"," + "\"userInput\":\"查订单 ORD-001\",\"assertions\":{\"behaviors\":[\"noErr0\"]}}]}";
 
-        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.fromJson(configJson), false);
+        ScenarioRunner.Outcome outcome = run(ScenarioConfig.fromJson(configJson), false);
 
         assertTrue(outcome.getRuns().isEmpty(), "断言不可兑现的场景不执行");
         assertEquals(1, outcome.getSkipped().size());
@@ -228,7 +277,7 @@ class ScenarioRunnerTest {
     void run_dryRun_zeroLlmCalls() {
         seedDeclaredRecord();
 
-        ScenarioRunner.Outcome outcome = runner().run(ScenarioConfig.empty(), true);
+        ScenarioRunner.Outcome outcome = run(ScenarioConfig.empty(), true);
 
         assertTrue(outcome.getRuns().isEmpty());
         assertEquals(1, outcome.getPlanned().size(), "dry-run 产出计划");

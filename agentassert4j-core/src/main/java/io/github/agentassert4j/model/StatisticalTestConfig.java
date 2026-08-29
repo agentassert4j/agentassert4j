@@ -70,6 +70,13 @@ public class StatisticalTestConfig {
      */
     private long maxTotalTokens = 0;
 
+    /**
+     * 停滞早停阈值：串行采样中连续 N 轮产出同一失败差异摘要即停止发放剩余轮次
+     * （结果标记 stalled，防对已确诊的确定性失败持续烧钱）；0 = 关闭。默认 3。
+     * 仅串行模式生效；PASS 与基础设施错误样本重置连击
+     */
+    private int stallThreshold = 3;
+
     public StatisticalTestConfig() {
     }
 
@@ -99,6 +106,7 @@ public class StatisticalTestConfig {
         // 预算上限：负数按 0（不限）处理，非钳到 1——单次调用本身不受预算约束
         maxTotalCalls = Math.max(0, maxTotalCalls);
         maxTotalTokens = Math.max(0, maxTotalTokens);
+        stallThreshold = Math.max(0, Math.min(100, stallThreshold));
     }
 
     public long getTimeoutMs() {
@@ -187,5 +195,13 @@ public class StatisticalTestConfig {
 
     public void setMaxTotalTokens(long maxTotalTokens) {
         this.maxTotalTokens = maxTotalTokens;
+    }
+
+    public int getStallThreshold() {
+        return stallThreshold;
+    }
+
+    public void setStallThreshold(int stallThreshold) {
+        this.stallThreshold = stallThreshold;
     }
 }

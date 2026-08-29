@@ -50,11 +50,14 @@ public class ScenarioRunner {
     /**
      * 执行场景集：声明场景逐个执行；配置为空时自动派生。
      *
-     * @param config 场景配置（empty = 自动派生）
-     * @param dryRun 只列出将执行的场景与预计调用量，不发起真实调用
+     * @param config                 场景配置（empty = 自动派生）
+     * @param dryRun                 只列出将执行的场景与预计调用量，不发起真实调用
+     * @param maxTotalCallsOverride  整轮调用次数上限的全局覆盖（null = 按场景声明）；
+     *                               显式给出时对全部场景生效，含自动派生场景
+     * @param maxTotalTokensOverride 整轮 token 消耗上限的全局覆盖（null = 按场景声明，同上）
      * @return 本次执行的产出（执行事实 + 计划 + 跳过清单）
      */
-    public Outcome run(ScenarioConfig config, boolean dryRun) {
+    public Outcome run(ScenarioConfig config, boolean dryRun, Integer maxTotalCallsOverride, Long maxTotalTokensOverride) {
         // 断言注入与建档共用站内规则口径（与重放同源）：建档也带规则，
         // 指纹的维度 3-4 才不会因「哪个命令先建档」而不同
         SkillRulesConfig baseRules = ConfigLoader.loadRulesConfig();
@@ -68,6 +71,10 @@ public class ScenarioRunner {
 
         List<Skip> skipped = new ArrayList<>();
         List<PlannedScenario> planned = config.getScenarios().isEmpty() ? deriveFromGroups(skipped) : planFromConfig(config, skipped);
+        for (PlannedScenario plannedScenario : planned) {
+            plannedScenario.overrideMaxTotalCalls = maxTotalCallsOverride;
+            plannedScenario.overrideMaxTotalTokens = maxTotalTokensOverride;
+        }
 
         for (Skip skip : skipped) {
             out.println("警告：场景 " + skip.scenarioId + " 已跳过——" + skip.reason);
@@ -168,6 +175,8 @@ public class ScenarioRunner {
         InteractionRecord baseline;
         ScenarioConfig.Scenario source;
         int sampleCount;
+        Integer overrideMaxTotalCalls;
+        Long overrideMaxTotalTokens;
 
         private StatisticalTestConfig testConfig() {
             StatisticalTestConfig config = new StatisticalTestConfig();
@@ -181,6 +190,13 @@ public class ScenarioRunner {
                 config.setMaxTotalTokens(source.getMaxTotalTokens());
                 config.setPassThreshold(source.getPassThreshold());
                 config.setRegressionTolerance(source.getRegressionTolerance());
+            }
+            // CLI 预算旗标显式给出时全局覆盖场景声明——平台级支出护栏不依赖文件内容
+            if (overrideMaxTotalCalls != null) {
+                config.setMaxTotalCalls(overrideMaxTotalCalls);
+            }
+            if (overrideMaxTotalTokens != null) {
+                config.setMaxTotalTokens(overrideMaxTotalTokens);
             }
             return config;
         }
@@ -314,6 +330,12 @@ public class ScenarioRunner {
         run.setReasoningTokens(aggregateNullableToken(result.getSamples(), SampleResult::getReasoningTokens));
         run.setLatencyMs(result.getTotalLatencyMs());
         run.setCostUsd(result.getEstimatedCost() > 0 ? result.getEstimatedCost() : null);
+        run.setStalled(result.isStalled());
+        if (result.isStalled()) {
+            // 停滞事实进吸收层——scenario_runs 无独立列，metadata 是扩展属性的持久化池
+            run.setMetadata("{\"stalled\":true}");
+            out.println("  警告：场景 " + planned.scenarioId + " 连续 " + result.getActualSampleCount() + " 轮同一失败差异，停滞早停（声明 " + planned.sampleCount + " 轮）。");
+        }
         repository.saveScenarioRun(run);
         return run;
     }

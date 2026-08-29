@@ -18,8 +18,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * StatisticalRegressionExecutor 的单元测试。
@@ -256,8 +255,8 @@ class StatisticalRegressionExecutorTest {
 
         // 通过/失败样本与基线（"old response"，12 字符）同处一个文本量级档（2 位长度档），
         // 判定差异只由关键词规则驱动——量级守卫不构成混淆变量
-        private static final String PASS_CONTENT = "您的订单已发货，请留意查收，如有问题请联系客服。";
-        private static final String FAIL_CONTENT = "response text";
+        static final String PASS_CONTENT = "您的订单已发货，请留意查收，如有问题请联系客服。";
+        static final String FAIL_CONTENT = "response text";
 
         /**
          * 可编程内容序列桩：前 passCount 次采样返回含关键词内容（PASS），
@@ -357,6 +356,114 @@ class StatisticalRegressionExecutorTest {
 
             StatisticalRegressionExecutor pass = executorWithSequence(1, 0);
             assertEquals(StatisticalVerdict.STABLE, pass.execute(makeBaseline(), "prompt", null, StatisticalTestConfig.defaults()).getStatisticalVerdict());
+        }
+
+        @Test
+        @DisplayName("并发预算遵守率不变量：maxTotalCalls=5 并发 3 → 恰好 5 次调用")
+        void concurrent_budgetExactIssuance() {
+            StatisticalRegressionExecutor wired = executorWithSequence(10, 0);
+            StatisticalTestConfig config = config(10, 1.0, 0.0);
+            config.setMaxTotalCalls(5);
+            config.setConcurrency(3);
+
+            StatisticalRegressionResult result = wired.execute(makeBaseline(), "prompt", null, config);
+
+            assertEquals(5, stubClient.callCount.get(), "调用数预算在发放前截断，任何模式下不得超发");
+            assertEquals(5, result.getActualSampleCount());
+            assertFalse(result.isStalled(), "预算截断不是停滞");
+        }
+    }
+
+    @Nested
+    @DisplayName("停滞早停（治理层）")
+    class StallEarlyStop {
+
+        /**
+         * 可编程判定序列：'p' → PASS 内容，'f' → 关键词失败内容（结构量级与基线同档），
+         * 'g' → 空内容（关键词+行为+结构多重失败，差异摘要与 'f' 不同）。
+         */
+        private StatisticalRegressionExecutor executorWithPattern(String pattern, int stallThreshold) {
+            List<String> sequence = new ArrayList<>();
+            for (char c : pattern.toCharArray()) {
+                if (c == 'p') {
+                    sequence.add(GoldenVerdict.PASS_CONTENT);
+                } else if (c == 'f') {
+                    sequence.add(GoldenVerdict.FAIL_CONTENT);
+                } else {
+                    sequence.add("");
+                }
+            }
+            stubClient.contentSequence = sequence;
+            SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{" + "\"requiredKeywords\":[\"订单\"],\"behaviors\":[\"nonEmptyOutput\"]}}}");
+            return new StatisticalRegressionExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), rules);
+        }
+
+        private StatisticalTestConfig config(int sampleCount, int stallThreshold) {
+            StatisticalTestConfig config = new StatisticalTestConfig();
+            config.setSampleCount(sampleCount);
+            config.setStallThreshold(stallThreshold);
+            config.setConcurrency(1);
+            return config;
+        }
+
+        @Test
+        @DisplayName("连续 3 轮同一失败差异 → 第 3 轮后早停，结果标记 stalled")
+        void stall_stopsIssuance_marksResult() {
+            StatisticalRegressionExecutor wired = executorWithPattern("ffffffffff", 3);
+
+            StatisticalRegressionResult result = wired.execute(makeBaseline(), "prompt", null, config(10, 3));
+
+            assertEquals(3, stubClient.callCount.get(), "剩余 7 轮不再发放");
+            assertEquals(3, result.getActualSampleCount(), "实际发放轮数即样本数（无占位回填）");
+            assertTrue(result.isStalled());
+            assertEquals(StatisticalVerdict.FLAKY, result.getStatisticalVerdict());
+        }
+
+        @Test
+        @DisplayName("PASS 重置连击：失败被通过打断则不构成停滞")
+        void stall_resetOnPass() {
+            StatisticalRegressionExecutor wired = executorWithPattern("pffpffpffpff", 3);
+
+            StatisticalRegressionResult result = wired.execute(makeBaseline(), "prompt", null, config(12, 3));
+
+            assertEquals(12, stubClient.callCount.get());
+            assertFalse(result.isStalled());
+        }
+
+        @Test
+        @DisplayName("失败差异指纹不同 → 连击清零重计，不误判停滞")
+        void stall_resetOnDifferentDiff() {
+            // f 与 g 的失败差异摘要不同（g 为关键词+行为+结构多重失败）：连续计数分别独立
+            StatisticalRegressionExecutor wired = executorWithPattern("ffgggfff", 3);
+
+            StatisticalRegressionResult result = wired.execute(makeBaseline(), "prompt", null, config(8, 3));
+
+            assertEquals(5, stubClient.callCount.get(), "g 连击到第 3 轮早停");
+            assertTrue(result.isStalled());
+        }
+
+        @Test
+        @DisplayName("阈值 0 = 关闭：全量轮次照常发放")
+        void stall_disabledWhenZero() {
+            StatisticalRegressionExecutor wired = executorWithPattern("ffffffffff", 0);
+
+            StatisticalRegressionResult result = wired.execute(makeBaseline(), "prompt", null, config(10, 0));
+
+            assertEquals(10, stubClient.callCount.get());
+            assertFalse(result.isStalled());
+        }
+
+        @Test
+        @DisplayName("并发模式不做停滞检测（按批粒度发放，「连续」无逐轮意义）")
+        void stall_notInConcurrentMode() {
+            StatisticalRegressionExecutor wired = executorWithPattern("ffffffffff", 3);
+            StatisticalTestConfig config = config(10, 3);
+            config.setConcurrency(3);
+
+            StatisticalRegressionResult result = wired.execute(makeBaseline(), "prompt", null, config);
+
+            assertEquals(10, stubClient.callCount.get());
+            assertFalse(result.isStalled());
         }
     }
 

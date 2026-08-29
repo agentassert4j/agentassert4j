@@ -44,6 +44,12 @@ public class ScenarioRunCommand implements Callable<Integer> {
     @Option(names = "--dry-run", description = "只列出将执行的场景与预计调用量，不发起真实调用")
     boolean dryRun;
 
+    @Option(names = "--max-total-calls", description = "整轮 LLM 调用次数上限，全局覆盖场景声明（0 = 不限）")
+    Integer maxTotalCalls;
+
+    @Option(names = "--max-total-tokens", description = "整轮 token 消耗上限，全局覆盖场景声明（0 = 不限）")
+    Long maxTotalTokens;
+
     PrintStream out = System.out;
     PrintStream err = System.err;
 
@@ -61,10 +67,10 @@ public class ScenarioRunCommand implements Callable<Integer> {
             }
             LlmClient client = CliSupport.createLlmClient(mainConfig);
             ScenarioRunner runner = new ScenarioRunner(repository, client, CliSupport.createComparator(mainConfig), reportOut);
-            ScenarioRunner.Outcome outcome = runner.run(config, dryRun);
+            ScenarioRunner.Outcome outcome = runner.run(config, dryRun, maxTotalCalls, maxTotalTokens);
 
             if (jsonMode) {
-                out.println(reportsJson(outcome));
+                out.println(reportsJson(outcome, dryRun));
             }
             return exitCode(outcome);
         } catch (RuntimeException e) {
@@ -128,7 +134,7 @@ public class ScenarioRunCommand implements Callable<Integer> {
      * 证据报告（单行 JSON）：run 模式给执行事实，dry-run 模式给执行计划；
      * 两模式都带跳过清单——跳过是证据缺口，必须与判定同场披露。
      */
-    private String reportsJson(ScenarioRunner.Outcome outcome) {
+    static String reportsJson(ScenarioRunner.Outcome outcome, boolean dryRun) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.scenario-report/1\",\"mode\":\"");
         sb.append(dryRun ? "dry-run" : "run");
         sb.append("\",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
@@ -168,9 +174,17 @@ public class ScenarioRunCommand implements Callable<Integer> {
             item.append(",\"failCount\":").append(run.getFailCount());
             item.append(",\"inputTokens\":").append(run.getInputTokens());
             item.append(",\"outputTokens\":").append(run.getOutputTokens());
+            item.append(",\"cacheReadTokens\":").append(numberOrNull(run.getCacheReadTokens()));
+            item.append(",\"cacheWriteTokens\":").append(numberOrNull(run.getCacheWriteTokens()));
+            item.append(",\"reasoningTokens\":").append(numberOrNull(run.getReasoningTokens()));
+            item.append(",\"stalled\":").append(run.isStalled());
             item.append("}");
             items.add(item.toString());
         }
         return "[" + String.join(",", items) + "]";
+    }
+
+    private static String numberOrNull(Integer value) {
+        return value != null ? value.toString() : "null";
     }
 }

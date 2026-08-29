@@ -29,6 +29,12 @@ public class ScenarioRun {
     private String reportRef;
     private String metadata;
 
+    /**
+     * 停滞早停标记（瞬态执行现场标记，不落列）：证据报告据此输出 "stalled" 布尔事实；
+     * 持久化面以 metadata 的 {"stalled":true} 为准
+     */
+    private transient boolean stalled;
+
     public String getRunId() {
         return runId;
     }
@@ -163,5 +169,13 @@ public class ScenarioRun {
 
     public void setMetadata(String metadata) {
         this.metadata = metadata;
+    }
+
+    public boolean isStalled() {
+        return stalled;
+    }
+
+    public void setStalled(boolean stalled) {
+        this.stalled = stalled;
     }
 }
