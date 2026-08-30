@@ -128,21 +128,4 @@ class InMemoryStorageRepository implements StorageRepository {
         return Collections.emptyList();
     }
 
-    @Override
-    public void saveScenario(ScenarioDefinition definition) {
-    }
-
-    @Override
-    public List<ScenarioDefinition> findScenarios() {
-        return Collections.emptyList();
-    }
-
-    @Override
-    public void saveScenarioRun(ScenarioRun run) {
-    }
-
-    @Override
-    public List<ScenarioRun> findScenarioRuns(String scenarioId) {
-        return Collections.emptyList();
-    }
 }

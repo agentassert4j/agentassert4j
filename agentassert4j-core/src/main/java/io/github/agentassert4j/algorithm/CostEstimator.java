@@ -85,25 +85,6 @@ public final class CostEstimator {
     }
 
     /**
-     * 统计模式成本预估 — 每条用例重放 sampleCount 次，每次一条恰好一次调用。
-     * 模型不在价格快照中时只报调用次数、不编造费用（与 {@link #estimate} 同口径）。
-     *
-     * @param testCases   待测用例列表
-     * @param model       模型名称
-     * @param sampleCount 采样次数
-     * @return 预估字符串，如 "预估 5 用例 x 10 次 = 50 次 API 调用，约 $0.2000（模型：gpt-4o）"
-     */
-    public static String estimateStatistical(List<InteractionRecord> testCases, String model, int sampleCount) {
-        int totalSamples = testCases.size() * sampleCount;
-        Double costPerCall = estimateCallCostUsd(model, PREVIEW_INPUT_TOKENS, PREVIEW_OUTPUT_TOKENS);
-        if (costPerCall == null) {
-            return String.format("预估 %d 用例 x %d 次 = %d 次 API 调用（模型：%s 不在价格快照中，费用未知）", testCases.size(), sampleCount, totalSamples, model);
-        }
-        double estimatedCost = totalSamples * costPerCall;
-        return String.format("预估 %d 用例 x %d 次 = %d 次 API 调用，约 $%.4f（模型：%s）", testCases.size(), sampleCount, totalSamples, estimatedCost, model);
-    }
-
-    /**
      * 按调用实际 token 量计价（美元）；模型不在价格快照中时返回 null。
      * 由捕获侧在调用时刻调用，结果冻结进记录的成本列。
      *

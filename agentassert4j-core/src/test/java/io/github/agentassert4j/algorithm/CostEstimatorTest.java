@@ -99,16 +99,6 @@ class CostEstimatorTest {
     }
 
     @Test
-    void estimateStatistical_multiTurnRecord_countsAsSingleCall() {
-        List<InteractionRecord> cases = Collections.singletonList(makeRecord(1));
-        String result = CostEstimator.estimateStatistical(cases, "deepseek-chat", 5);
-
-        // 1 用例 x 5 采样 = 5 次调用（轮次不放大调用数）
-        assertTrue(result.contains("预估 1 用例 x 5 次 = 5 次 API 调用"));
-        assertTrue(result.contains("$0.0025"), "5 x 0.00049 = 0.00245 四舍五入到 0.0025: " + result);
-    }
-
-    @Test
     void estimate_unknownModel_noFabricatedCurrency() {
         // 无价格不出货币数：预估文案对快照外模型只报调用次数（内网私有模型是常态客群）
         List<InteractionRecord> cases = Collections.singletonList(makeRecord(0));
@@ -117,15 +107,5 @@ class CostEstimatorTest {
         assertTrue(result.contains("预估 1 次 API 调用"));
         assertTrue(result.contains("费用未知"), "无价格模型必须明示费用未知: " + result);
         assertFalse(result.contains("$"), "无价格不得出现任何货币金额: " + result);
-    }
-
-    @Test
-    void estimateStatistical_unknownModel_noFabricatedCurrency() {
-        List<InteractionRecord> cases = Collections.singletonList(makeRecord(0));
-        String result = CostEstimator.estimateStatistical(cases, "my-private-model", 5);
-
-        assertTrue(result.contains("预估 1 用例 x 5 次 = 5 次 API 调用"));
-        assertTrue(result.contains("费用未知"));
-        assertFalse(result.contains("$"));
     }
 }

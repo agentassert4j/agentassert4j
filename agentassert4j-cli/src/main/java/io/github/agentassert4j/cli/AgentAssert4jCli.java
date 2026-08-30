@@ -19,7 +19,7 @@ import picocli.CommandLine.Command;
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "agentassert4j", version = "AgentAssert4j 1.0.0-SNAPSHOT", description = "AI Agent 行为回归测试框架 — 基线、重放、裁决", subcommands = {BaselineCommand.class, StatusCommand.class, ReplayCommand.class, ScenarioCommand.class, ApproveCommand.class, RejectCommand.class, RollbackCommand.class, RulesCommand.class, GraphCommand.class}, mixinStandardHelpOptions = true)
+@Command(name = "agentassert4j", version = "AgentAssert4j 1.0.0-SNAPSHOT", description = "AI Agent 行为回归测试框架 — 基线、重放、裁决", subcommands = {BaselineCommand.class, StatusCommand.class, ReplayCommand.class, ApproveCommand.class, RejectCommand.class, RollbackCommand.class, RulesCommand.class, GraphCommand.class}, mixinStandardHelpOptions = true)
 public class AgentAssert4jCli {
 
     public static void main(String[] args) {

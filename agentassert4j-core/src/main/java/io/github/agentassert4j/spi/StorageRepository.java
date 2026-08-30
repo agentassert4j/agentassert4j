@@ -1,7 +1,7 @@
 package io.github.agentassert4j.spi;
 
 /**
- * 存储仓库 SPI 门面 — 聚合七个读写域子接口 + 生命周期。
+ * 存储仓库 SPI 门面 — 聚合六个读写域子接口 + 生命周期。
  *
  * <p>遵循 JDBC 模式：接口在 core，实现在独立模块。
  * 插件发现优先级：CLI 显式配置 > Spring Boot AutoConfig > ServiceLoader > 默认 SQLite。</p>
@@ -13,7 +13,7 @@ package io.github.agentassert4j.spi;
  * @author axy-yxa
  * @since 2026-08-26
  */
-public interface StorageRepository extends InteractionWriteStore, InteractionQueryStore, SkillStore, TemplateTextStore, GraphStore, BaselineArchiveStore, ScenarioStore {
+public interface StorageRepository extends InteractionWriteStore, InteractionQueryStore, SkillStore, TemplateTextStore, GraphStore, BaselineArchiveStore {
 
     /**
      * 存储后端类型标识（如 "sqlite"）

@@ -28,7 +28,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *   <li>DeterministicComparator — 真实指纹对比 + Verdict 判定</li>
  *   <li>BehaviorChecker — 内置行为校验（真实输出）</li>
  *   <li>RegressionTestExecutor — 文本/工具/多轮全链路重放</li>
- *   <li>StatisticalRegressionExecutor — 串行/并发/退化不中断</li>
  *   <li>CostEstimator — 真实 token 消耗验证</li>
  * </ol>
  *
@@ -557,92 +556,6 @@ class DeepSeekIntegrationTest {
     }
 
     @Nested
-    @DisplayName("7. StatisticalRegressionExecutor — 多次真实采样")
-    class StatisticalTests {
-
-        @Test
-        @DisplayName("7.1 串行采样 5 次 — 完整统计验证")
-        void testSerialSampling5() throws Exception {
-            InteractionRecord baseline = makeTextBaseline("stat-serial-1", "7+8等于几？只回答数字。", "15");
-            String newPrompt = "你是数学助手，只回答数字。";
-
-            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null);
-
-            StatisticalTestConfig config = new StatisticalTestConfig();
-            config.setSampleCount(5);
-            config.setConcurrency(1);
-            config.setTemperature(0.0);
-            config.setPassThreshold(0.9);
-            config.setRegressionTolerance(0.0);
-
-            StatisticalRegressionResult result = executor.execute(baseline, newPrompt, null, config);
-
-            assertEquals(5, result.getActualSampleCount());
-            assertEquals(5, result.getSamples().size());
-
-            // Verdict 统计完整性
-            int totalCount = result.getVerdictCounts().values().stream().mapToInt(i -> i).sum();
-            assertEquals(5, totalCount, "verdict 计数之和应 = 采样数");
-
-            // Score 统计
-            assertTrue(result.getAverageScore() >= 0);
-            assertTrue(result.getAverageScore() <= 1);
-            assertTrue(result.getScoreStdDev() >= 0);
-            assertTrue(result.getMinScore() >= 0);
-
-            // 耗时
-            assertTrue(result.getTotalLatencyMs() > 0);
-            assertTrue(result.getEstimatedCost() > 0);
-
-            // 统计判定
-            assertNotNull(result.getStatisticalVerdict());
-
-            System.out.println("[7.1] Verdict=" + result.getStatisticalVerdict() + ", Avg=" + String.format("%.4f", result.getAverageScore()) + ", StdDev=" + String.format("%.4f", result.getScoreStdDev()) + ", Min=" + String.format("%.4f", result.getMinScore()) + ", Latency=" + result.getTotalLatencyMs() + "ms" + ", Cost=$" + String.format("%.4f", result.getEstimatedCost()));
-            System.out.println("[7.1] Counts: " + result.getVerdictCounts());
-
-            for (SampleResult s : result.getSamples()) {
-                System.out.println("  #" + s.getSampleIndex() + ": " + s.getVerdict() + " score=" + String.format("%.4f", s.getScore()) + " latency=" + s.getLatencyMs() + "ms" + (s.getErrorMessage() != null ? " err=" + s.getErrorMessage() : ""));
-            }
-        }
-
-        @Test
-        @DisplayName("7.2 并发采样 5 次")
-        void testConcurrentSampling5() throws Exception {
-            InteractionRecord baseline = makeTextBaseline("stat-conc-1", "9*9等于几？只回答数字。", "81");
-            String newPrompt = "你是数学助手。";
-
-            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null);
-
-            StatisticalTestConfig config = new StatisticalTestConfig();
-            config.setSampleCount(5);
-            config.setConcurrency(5);
-            config.setTemperature(0.0);
-
-            StatisticalRegressionResult result = executor.execute(baseline, newPrompt, null, config);
-
-            assertEquals(5, result.getActualSampleCount());
-            assertNotNull(result.getStatisticalVerdict());
-
-            System.out.println("[7.2] Verdict=" + result.getStatisticalVerdict() + ", Latency=" + result.getTotalLatencyMs() + "ms (5 concurrent)");
-        }
-
-        @Test
-        @DisplayName("7.3 单次模式等价性")
-        void testSingleMode() throws Exception {
-            InteractionRecord baseline = makeTextBaseline("stat-single-1", "10/2等于几？", "5");
-
-            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null);
-
-            StatisticalRegressionResult result = executor.execute(baseline, "你是数学助手。", null, StatisticalTestConfig.defaults());
-
-            assertEquals(1, result.getActualSampleCount());
-            assertNotNull(result.getStatisticalVerdict());
-
-            System.out.println("[7.3] Single: Verdict=" + result.getStatisticalVerdict() + ", Score=" + String.format("%.4f", result.getAverageScore()));
-        }
-    }
-
-    @Nested
     @DisplayName("8. CostEstimator — 真实 token 消耗验证")
     class CostEstimatorTests {
 
@@ -672,24 +585,6 @@ class DeepSeekIntegrationTest {
             // DeepSeek Chat 定价（2026参考）: input $0.27/M, output $1.10/M
             double realCost = inTokens * 0.27 / 1_000_000 + outTokens * 1.10 / 1_000_000;
             System.out.println("[8.1] 真实费用估算: $" + String.format("%.6f", realCost));
-        }
-
-        @Test
-        @DisplayName("8.2 统计模式费用预估")
-        void testStatisticalCostEstimate() {
-            List<InteractionRecord> testCases = new ArrayList<>();
-            for (int i = 0; i < 3; i++) {
-                InteractionRecord r = new InteractionRecord();
-                r.setTurnIndex(0);
-                r.setUserInput("test " + i);
-                testCases.add(r);
-            }
-
-            String estimate = CostEstimator.estimateStatistical(testCases, "deepseek-chat", 5);
-            assertNotNull(estimate);
-            assertTrue(estimate.contains("15 次"), "3 用例 x 5 次 = 15 次");
-
-            System.out.println("[8.2] " + estimate);
         }
     }
 
@@ -828,49 +723,6 @@ class DeepSeekIntegrationTest {
 
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
             System.out.println("[9.3] 重放: Verdict=" + result.getComparison().getVerdict() + ", Score=" + String.format("%.4f", result.getComparison().getScore()));
-        }
-
-        @Test
-        @DisplayName("9.4 统计回归完整生命周期 — 5次采样 + STABLE/UNSTABLE/FLAKY")
-        void testStatisticalLifecycle() throws Exception {
-            InteractionRecord baseline = makeTextBaseline("lifecycle-stat-1", "2的10次方等于多少？只回答数字。", "1024");
-            String newPrompt = "你是数学助手，精确计算，只回答数字。";
-
-            StatisticalRegressionExecutor executor = new StatisticalRegressionExecutor(client, new DeterministicComparator(ComparatorConfig.defaults()), null);
-
-            StatisticalTestConfig config = new StatisticalTestConfig();
-            config.setSampleCount(5);
-            config.setConcurrency(2);
-            config.setTemperature(0.0);
-            config.setPassThreshold(0.9);
-
-            StatisticalRegressionResult result = executor.execute(baseline, newPrompt, null, config);
-
-            // 完整断言
-            assertEquals(5, result.getActualSampleCount());
-            assertNotNull(result.getStatisticalVerdict());
-            assertTrue(result.getTotalLatencyMs() > 0);
-            assertTrue(result.getEstimatedCost() > 0);
-
-            // Verdict 分布完整性
-            double rateSum = result.getVerdictRates().values().stream().mapToDouble(d -> d).sum();
-            assertEquals(1.0, rateSum, 0.01, "Verdict 速率之和应 ≈ 1.0");
-
-            // 样本完整性
-            for (SampleResult s : result.getSamples()) {
-                assertNotNull(s.getVerdict());
-                assertTrue(s.getScore() >= 0 && s.getScore() <= 1);
-                assertTrue(s.getLatencyMs() >= 0);
-            }
-
-            System.out.println("[9.4] === 统计回归生命周期 ===");
-            System.out.println("  Verdict: " + result.getStatisticalVerdict());
-            System.out.println("  AvgScore: " + String.format("%.4f", result.getAverageScore()));
-            System.out.println("  StdDev: " + String.format("%.4f", result.getScoreStdDev()));
-            System.out.println("  Counts: " + result.getVerdictCounts());
-            System.out.println("  Rates: " + result.getVerdictRates());
-            System.out.println("  Latency: " + result.getTotalLatencyMs() + "ms");
-            System.out.println("  Cost: $" + String.format("%.4f", result.getEstimatedCost()));
         }
     }
 }

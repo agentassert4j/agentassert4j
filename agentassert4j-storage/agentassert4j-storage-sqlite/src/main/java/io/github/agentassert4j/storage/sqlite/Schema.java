@@ -126,54 +126,6 @@ final class Schema {
                     "  updated_at   INTEGER NOT NULL" +
                     ")",
 
-            // 场景声明实体（scenario_id 业务主键 upsert；input_spec/assertions 以 JSON
-            // 文本存储，声明结构稳定后再展开成列）
-            "CREATE TABLE IF NOT EXISTS scenarios (" +
-                    "  scenario_id  TEXT PRIMARY KEY," +
-                    "  name         TEXT NOT NULL," +
-                    "  template_id  TEXT," +
-                    "  input_spec   TEXT NOT NULL," +
-                    "  assertions   TEXT NOT NULL," +
-                    "  version      INTEGER NOT NULL," +
-                    "  metadata     TEXT," +
-                    "  created_at   INTEGER NOT NULL," +
-                    "  updated_at   INTEGER NOT NULL" +
-                    ")",
-
-            // 场景执行事实（只追加；遥测列与 interactions 同形）
-            "CREATE TABLE IF NOT EXISTS scenario_runs (" +
-                    "  run_id             TEXT PRIMARY KEY," +
-                    "  scenario_id        TEXT NOT NULL," +
-                    "  started_at         INTEGER NOT NULL," +
-                    "  verdict            TEXT NOT NULL," +
-                    "  sample_count       INTEGER NOT NULL," +
-                    "  pass_count         INTEGER NOT NULL," +
-                    "  fail_count         INTEGER NOT NULL," +
-                    "  input_tokens       INTEGER," +
-                    "  output_tokens      INTEGER," +
-                    "  cache_read_tokens  INTEGER," +
-                    "  cache_write_tokens INTEGER," +
-                    "  reasoning_tokens   INTEGER," +
-                    "  latency_ms         INTEGER," +
-                    "  ttft_ms            INTEGER," +
-                    "  cost_usd           REAL," +
-                    "  report_ref         TEXT," +
-                    "  metadata           TEXT" +
-                    ")",
-
-            "CREATE INDEX IF NOT EXISTS idx_scenario_runs_scenario ON scenario_runs(scenario_id)",
-
-            // 回归执行历史（只追加——一次影响分析回归的整体判定与成本证据）
-            "CREATE TABLE IF NOT EXISTS check_runs (" +
-                    "  run_id          TEXT PRIMARY KEY," +
-                    "  started_at      INTEGER NOT NULL," +
-                    "  trigger_desc    TEXT," +
-                    "  affected_skills TEXT," +
-                    "  verdict         TEXT NOT NULL," +
-                    "  total_cost_usd  REAL," +
-                    "  report_ref      TEXT," +
-                    "  metadata        TEXT" +
-                    ")"
     };
 
     private Schema() {

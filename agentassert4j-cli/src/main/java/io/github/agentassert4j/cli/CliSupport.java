@@ -218,7 +218,7 @@ final class CliSupport {
     }
 
     /**
-     * 依据主配置 llm 段构造 OpenAI 兼容客户端——replay 与 scenario 两个命令共用
+     * 依据主配置 llm 段构造 OpenAI 兼容客户端——重放类命令共用
      * 同一构造（单一来源），端点/密钥/模型/重试/extraBody 口径不得分叉。
      */
     static LlmClient createLlmClient(AgentAssert4jConfig config) {
@@ -226,7 +226,7 @@ final class CliSupport {
     }
 
     /**
-     * 依据主配置 regression 段构造确定性对比器——replay 与 scenario 两个命令共用
+     * 依据主配置 regression 段构造确定性对比器——重放类命令共用
      * 同一构造（单一来源），ignorableFields 口径不得分叉。
      */
     static DeterministicComparator createComparator(AgentAssert4jConfig config) {
