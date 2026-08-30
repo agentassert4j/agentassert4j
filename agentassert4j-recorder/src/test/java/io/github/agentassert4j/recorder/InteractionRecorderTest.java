@@ -144,9 +144,10 @@ class InteractionRecorderTest {
     }
 
     @Test
-    void captureGate_undeclaredBareChat_filtered() throws Exception {
-        // 未声明（skillId/templateId 均无）且无工具调用的纯对话 → 过滤，不进管道
-        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).build();
+    void captureGate_filterMode_undeclaredBareChat_filtered() throws Exception {
+        // 过滤模式（recordUndeclaredChat=false）：未声明（skillId/templateId 均无）
+        // 且无工具调用的纯对话 → 过滤，不进管道
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).recordUndeclaredChat(false).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
@@ -248,9 +249,10 @@ class InteractionRecorderTest {
     }
 
     @Test
-    void captureGate_escapeHatch_recordsBareChat() throws Exception {
-        // 逃生开关：recordUndeclaredChat=true 时退回全量录制（调试/评估用）
-        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).recordUndeclaredChat(true).build();
+    void captureGate_default_recordsBareChat() throws Exception {
+        // 默认全量录制：未声明纯对话也进管道（任务链完整性优先于流量卫生，
+        // 链条终点的最终回答组装往往正是纯文本调用）
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
@@ -258,6 +260,7 @@ class InteractionRecorderTest {
         InteractionRecord bare = new InteractionRecord();
         bare.setRecordId("bare-2");
         bare.setTimestamp(System.currentTimeMillis());
+        bare.setTemplateHash("some-template");
         recorder.intercept(bare);
 
         Thread.sleep(200);
@@ -268,9 +271,46 @@ class InteractionRecorderTest {
     }
 
     @Test
+    void captureGate_filterMode_warnEmitsOnceThenEveryHundred() {
+        // 告警节律：首条被滤记录一次，此后每满 100 条重申一次累计数
+        RecorderConfig config = RecorderConfig.builder().recordUndeclaredChat(false).build();
+
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        for (int i = 1; i <= 100; i++) {
+            InteractionRecord bare = new InteractionRecord();
+            bare.setRecordId("warn-" + i);
+            bare.setTimestamp(System.currentTimeMillis());
+            recorder.intercept(bare);
+        }
+
+        recorder.stop();
+
+        assertEquals(100, recorder.getFilteredCount());
+        assertEquals(2, recorder.getFilteredWarnEmissions(), "第 1 条与第 100 条各发一次告警");
+    }
+
+    @Test
+    void disabledRecorder_recordsNothing() {
+        // 总开关：enabled=false 时整体 no-op——不启动管道、不消费、不计数
+        RecorderConfig config = RecorderConfig.builder().enabled(false).build();
+
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+        recorder.intercept(createRecord("off-1"));
+        recorder.stop();
+
+        assertFalse(recorder.isStarted(), "禁用态下 start 不启动管道");
+        assertTrue(repo.getStore().isEmpty(), "禁用态下不落库");
+        assertEquals(0, recorder.getRecordedCount());
+        assertEquals(0, recorder.getFilteredCount());
+    }
+
+    @Test
     void captureGate_arrivalClosure_recordedPlusFiltered() {
         // 到达闭合：recorded（进管道，含后续丢弃）+ filtered（被门滤掉）= 总到达
-        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).build();
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).recordUndeclaredChat(false).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();

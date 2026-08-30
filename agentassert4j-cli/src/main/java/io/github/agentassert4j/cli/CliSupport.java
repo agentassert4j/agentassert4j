@@ -13,7 +13,12 @@ import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 
+import java.io.FileDescriptor;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 import java.io.PrintStream;
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
@@ -28,6 +33,30 @@ import java.util.*;
 final class CliSupport {
 
     private CliSupport() {
+    }
+
+    /**
+     * 把 stdout/stderr 换成 UTF-8 直写通道。Windows 控制台默认 GBK 时，
+     * CLI 输出的中文与 JSON 符号会以错误编码落盘/显示；这里绕过控制台
+     * 编码器，直接以 UTF-8 字节写标准流文件描述符——UTF-8 终端与 CI
+     * 日志收集器按 UTF-8 解码即正确。仅 main 入口调用，不影响测试注入
+     * 的 PrintStream。
+     */
+    static void installUtf8Console() {
+        System.setOut(utf8PrintStream(new FileOutputStream(FileDescriptor.out)));
+        System.setErr(utf8PrintStream(new FileOutputStream(FileDescriptor.err)));
+    }
+
+    /**
+     * 以 UTF-8 编码包装字节输出流（自动 flush）。
+     */
+    static PrintStream utf8PrintStream(OutputStream out) {
+        try {
+            return new PrintStream(out, true, StandardCharsets.UTF_8.name());
+        } catch (UnsupportedEncodingException e) {
+            // JVM 规范强制支持 UTF-8，此分支不可达
+            throw new IllegalStateException("UTF-8 charset must be supported", e);
+        }
     }
 
     /**

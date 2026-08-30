@@ -4,10 +4,12 @@ import io.github.agentassert4j.algorithm.BaselineManager;
 import io.github.agentassert4j.algorithm.DeterministicSkillGrouper;
 import io.github.agentassert4j.config.SkillRulesConfig;
 import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.RegexPattern;
 import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 
 import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -86,8 +88,47 @@ public class BaselineService {
                 repository.saveSkillProfile(created);
             }
             out.println("  " + displayLabel(records) + groupKey + ": " + (hadBaseline ? "已按当前判定语义重建基线（" + created.getVersionTag() + "）" : "新建基线"));
+            warnSeedRuleViolations(out, records.get(0), rules);
         }
         return established;
+    }
+
+    /**
+     * 种子记录对声明规则的现场断言：建档时即验证种子响应满足内容规则声明
+     * （必需关键词全含、禁用关键词不出现、正则命中）。违反只告警不阻断——
+     * 不满足只说明「该组每次重放都会在内容规则维度判出差异」，是规则声明的
+     * 质量问题而非建档故障；建档现场指出它，避免基线建在必然假差异上。
+     */
+    private static void warnSeedRuleViolations(PrintStream out, InteractionRecord seed, SkillRulesConfig rules) {
+        if (rules == null || !rules.hasRules() || seed == null) {
+            return;
+        }
+        SkillRulesConfig.SkillRule rule = rules.getRulesForSkill(seed.getSkillId());
+        String response = seed.getModelResponse() != null ? seed.getModelResponse() : "";
+        List<String> violations = new ArrayList<>();
+        for (String keyword : rule.getRequiredKeywords()) {
+            if (!response.contains(keyword)) {
+                violations.add("缺少必需关键词「" + keyword + "」");
+            }
+        }
+        for (String keyword : rule.getForbiddenKeywords()) {
+            if (response.contains(keyword)) {
+                violations.add("出现禁用关键词「" + keyword + "」");
+            }
+        }
+        if (rule.getRegexPatterns() != null) {
+            for (RegexPattern pattern : rule.getRegexPatterns()) {
+                if (!pattern.matches(response)) {
+                    violations.add("正则不命中「" + pattern.getPattern() + "」");
+                }
+            }
+        }
+        if (!violations.isEmpty()) {
+            out.println("  警告：种子记录不满足声明规则（该组后续重放都会在内容规则维度判差异，请检查 rules 声明是否过窄）：");
+            for (String violation : violations) {
+                out.println("    - " + violation);
+            }
+        }
     }
 
     /**

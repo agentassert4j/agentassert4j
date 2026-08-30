@@ -47,13 +47,21 @@ public final class RecorderConfig {
      */
     private final boolean sanitizeModelResponse;
     /**
-     * 采集门逃生开关：true 时未声明且无可见工具调用的纯对话也录制（默认 false——
-     * 框架不做提示词管家，纯闲聊没有基线语义；声明了 skillId/templateId
-     * 或带可见 toolCalls 的调用不受本开关影响，一律录制）
+     * 采集门开关：true（默认）时全量录制——任务链的完整性优先于流量卫生，
+     * 链条终点（最终回答组装）往往正是纯文本调用；false 时未声明且无可见
+     * 工具调用的纯对话被过滤（超大流量场景的量级卫生选项），过滤量独立
+     * 计数并告警。声明了 skillId/templateId 或带可见 toolCalls 的调用不受
+     * 本开关影响，一律录制
      */
     private final boolean recordUndeclaredChat;
     /**
-     * 应用级默认 skillId：记录未声明且无工具调用时，以此身份过采集门并作为
+     * 录制总开关：false 时录制器不启动管道、不消费任何记录——生产打包形态
+     * 的门（发布后的正常运行不录制，需要取证时临时打开）。默认 true。
+     * Spring starter 另有同键条件装配（agentassert4j.enabled），两层防线语义一致
+     */
+    private final boolean enabled;
+    /**
+     * 应用级默认 skillId：记录未声明且无工具调用时，以此身份作为
      * 业务声明锚点（单技能应用零代码即得跨提示词编辑的稳定身份）。
      * 空串 = 无默认（默认值）；显式 per-call 声明（RecordingContext）优先级更高
      */
@@ -75,13 +83,15 @@ public final class RecorderConfig {
         this.sanitizeUserInput = builder.sanitizeUserInput;
         this.sanitizeModelResponse = builder.sanitizeModelResponse;
         this.recordUndeclaredChat = builder.recordUndeclaredChat;
+        this.enabled = builder.enabled;
         this.defaultSkillId = builder.defaultSkillId;
     }
 
     /**
      * 返回默认配置：
      * batchSize=100, flushIntervalMs=5000, maxBufferSize=500,
-     * ringBufferSize=16384, sanitizeStrategy=MASK, sanitizeUserInput/modelResponse=false
+     * ringBufferSize=16384, sanitizeStrategy=MASK, sanitizeUserInput/modelResponse=false,
+     * recordUndeclaredChat=true（全量录制）, enabled=true
      */
     public static RecorderConfig defaults() {
         return builder().build();
@@ -139,6 +149,10 @@ public final class RecorderConfig {
         return recordUndeclaredChat;
     }
 
+    public boolean isEnabled() {
+        return enabled;
+    }
+
     public String getDefaultSkillId() {
         return defaultSkillId;
     }
@@ -152,7 +166,8 @@ public final class RecorderConfig {
         private SanitizeStrategy sanitizeStrategy = SanitizeStrategy.MASK;
         private boolean sanitizeUserInput = false;
         private boolean sanitizeModelResponse = false;
-        private boolean recordUndeclaredChat = false;
+        private boolean recordUndeclaredChat = true;
+        private boolean enabled = true;
         private String defaultSkillId = "";
 
         private Builder() {
@@ -200,6 +215,11 @@ public final class RecorderConfig {
 
         public Builder recordUndeclaredChat(boolean recordUndeclaredChat) {
             this.recordUndeclaredChat = recordUndeclaredChat;
+            return this;
+        }
+
+        public Builder enabled(boolean enabled) {
+            this.enabled = enabled;
             return this;
         }
 

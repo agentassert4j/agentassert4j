@@ -23,6 +23,7 @@ import picocli.CommandLine.Command;
 public class AgentAssert4jCli {
 
     public static void main(String[] args) {
+        CliSupport.installUtf8Console();
         int exitCode = new CommandLine(new AgentAssert4jCli()).execute(args);
         System.exit(exitCode);
     }

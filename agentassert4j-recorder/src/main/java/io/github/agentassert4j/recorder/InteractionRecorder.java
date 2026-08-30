@@ -25,7 +25,8 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>错误处理策略：
  * <ul>
- *   <li>采集门：未声明且无可见工具调用的纯对话默认过滤（recordUndeclaredChat 逃生），过滤量独立计数</li>
+ *   <li>采集门：默认全量录制；recordUndeclaredChat=false 时未声明且无可见工具调用的纯对话被过滤，过滤量独立计数并告警</li>
+ *   <li>enabled=false 时录制器不启动管道、不消费记录（生产打包形态）</li>
  *   <li>RingBuffer 满时丢弃记录，不阻塞生产者</li>
  *   <li>批量写入失败记录丢弃计数器，不重试</li>
  * </ul>
@@ -68,6 +69,12 @@ public class InteractionRecorder implements RecordingInterceptor {
     private Disruptor<InteractionEvent> disruptor;
     private BatchWriteHandler batchHandler;
     private volatile boolean started = false;
+    /**
+     * 过滤告警的重申间隔：首条被滤记录告警一次，此后每满 100 条重申一次累计数——
+     * 静默丢数据比丢数据本身更危险
+     */
+    private static final long FILTERED_WARN_INTERVAL = 100;
+    private final AtomicLong filteredWarnEmissions = new AtomicLong(0);
 
     /**
      * 创建录制器。
@@ -87,9 +94,14 @@ public class InteractionRecorder implements RecordingInterceptor {
     /**
      * 启动 Disruptor 和定时 flush 线程。
      * 必须在 {@link #intercept(InteractionRecord)} 之前调用。
+     * enabled=false 时不启动任何管道，本录制器整体退化为 no-op。
      */
     public synchronized void start() {
         if (started) {
+            return;
+        }
+        if (!config.isEnabled()) {
+            log.info("InteractionRecorder disabled by configuration, no recording will happen");
             return;
         }
 
@@ -109,7 +121,8 @@ public class InteractionRecorder implements RecordingInterceptor {
 
     /**
      * 实现 RecordingInterceptor SPI：拦截并录制一次 LLM 交互。
-     * 先过采集门（声明或可见工具调用才录，否则计数过滤），再执行脱敏，
+     * 先落应用级默认声明（如配置），再过采集门（默认全量录制，过滤模式仅
+     * 在 recordUndeclaredChat=false 时生效），然后执行脱敏，
      * 最后通过 Disruptor 异步入队（纳秒级，不阻塞）。
      */
     @Override
@@ -118,17 +131,25 @@ public class InteractionRecorder implements RecordingInterceptor {
             return;
         }
 
-        // 采集门：未声明（skillId/templateId 均无）且无可见工具调用的纯对话默认过滤。
-        // 配置了应用级默认 skillId 时，未声明记录先以默认身份过门（单技能应用零声明成本）；
-        // 逃生开关 recordUndeclaredChat=true 时全量录制。被滤记录不进入管道，
-        // 不占用 RingBuffer 与 seq，独立计数保证「滤了多少」可见
+        // 默认声明：未声明且无可见工具调用的记录先以应用级默认 skillId 落到
+        // 声明位（单技能应用零声明成本；声明锚点在身份优先级中高于模板哈希）
+        if (!isDeclared(record) && !hasVisibleToolCalls(record) && isNonEmpty(config.getDefaultSkillId())) {
+            record.setSkillId(config.getDefaultSkillId());
+        }
+
+        // 采集门：默认全量录制（任务链完整性优先于流量卫生，链条终点的最终
+        // 回答组装往往正是纯文本调用）；recordUndeclaredChat=false 时未声明且
+        // 无可见工具调用的纯对话被过滤——过滤是决策不是故障，与丢弃分列。
+        // 被滤记录不进入管道、不占用 RingBuffer 与 seq，独立计数保证
+        // 「滤了多少」可见；首条与每满 100 条各发一次 WARN，静默丢数据比
+        // 丢数据本身更危险
         if (!config.isRecordUndeclaredChat() && !isDeclared(record) && !hasVisibleToolCalls(record)) {
-            if (isNonEmpty(config.getDefaultSkillId())) {
-                record.setSkillId(config.getDefaultSkillId());
-            } else {
-                filteredCount.incrementAndGet();
-                return;
+            long filtered = filteredCount.incrementAndGet();
+            if (filtered == 1 || filtered % FILTERED_WARN_INTERVAL == 0) {
+                filteredWarnEmissions.incrementAndGet();
+                log.warn("Capture gate filtered undeclared interaction: declare skillId/templateId or set recordUndeclaredChat=true to record; filtered total={}", filtered);
             }
+            return;
         }
 
         // 与 stop() 互斥：无锁窗口内关停完成会把事件发布进已停摆的
@@ -235,6 +256,13 @@ public class InteractionRecorder implements RecordingInterceptor {
      */
     public long getFilteredCount() {
         return filteredCount.get();
+    }
+
+    /**
+     * 过滤告警的发放次数（首条被滤记录一次，此后每满 100 条重申一次）。
+     */
+    long getFilteredWarnEmissions() {
+        return filteredWarnEmissions.get();
     }
 
     /**
