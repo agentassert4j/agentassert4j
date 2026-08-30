@@ -1,6 +1,7 @@
 package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.config.InvocationRulesConfig;
+import io.github.agentassert4j.model.BaselineStep;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.result.ComparisonResult;
@@ -39,12 +40,45 @@ public final class TaskAligner {
      * @param rules      规则配置（维度 3-4 口径，两侧同源；null = 无规则）
      */
     public static TaskAlignment align(TaskChain baseline, TaskChain newChain, DeterministicComparator comparator, InvocationRulesConfig rules) {
-        TaskAlignment alignment = new TaskAlignment();
+        TaskAlignment alignment = align(baselineStepsOf(baseline, rules), newChain, comparator, rules);
         alignment.setBaselineTime(baseline.firstTimestamp());
         alignment.setNewChainTime(newChain.firstTimestamp());
-        alignment.setPrefixDependent(hasSessionPrefix(baseline) || hasSessionPrefix(newChain));
+        alignment.setPrefixDependent(alignment.isPrefixDependent() || hasSessionPrefix(baseline));
+        return alignment;
+    }
 
-        Map<String, List<InteractionRecord>> baselineGroups = groupByInvocation(baseline.getRecords());
+    /**
+     * 基线链的指纹步骤化。
+     */
+    public static LinkedHashMap<String, List<BaselineStep>> baselineStepsOf(TaskChain baseline, InvocationRulesConfig rules) {
+        LinkedHashMap<String, List<BaselineStep>> steps = new LinkedHashMap<>();
+        for (InteractionRecord record : baseline.getRecords()) {
+            String key = record.getInvocationKey();
+            if (key == null || key.isEmpty()) {
+                continue;
+            }
+            BaselineStep step = new BaselineStep();
+            step.setInvocationKey(key);
+            step.setRecordId(record.getRecordId());
+            step.setFingerprint(FingerprintExtractor.extract(record, rules, record.getInvocationId()));
+            steps.computeIfAbsent(key, k -> new ArrayList<>()).add(step);
+        }
+        return steps;
+    }
+
+    /**
+     * 基线侧步骤由调用方给定的对齐。
+     *
+     * @param baselineSteps 基线侧步骤（每键有序，指纹为比对依据）
+     * @param newChain      新链（最新链）
+     * @param comparator    对比器
+     * @param rules         规则配置（新链侧现场重提口径；null = 无规则）
+     */
+    public static TaskAlignment align(Map<String, List<BaselineStep>> baselineSteps, TaskChain newChain, DeterministicComparator comparator, InvocationRulesConfig rules) {
+        TaskAlignment alignment = new TaskAlignment();
+        alignment.setPrefixDependent(hasSessionPrefix(newChain));
+
+        Map<String, List<BaselineStep>> baselineGroups = baselineSteps;
         Map<String, List<InteractionRecord>> newGroups = groupByInvocation(newChain.getRecords());
 
         boolean anyChanged = false;
@@ -57,21 +91,21 @@ public final class TaskAligner {
         }
 
         for (String key : invocationOrder) {
-            List<InteractionRecord> baseRecords = baselineGroups.get(key);
+            List<BaselineStep> baseSteps = baselineGroups.get(key);
             List<InteractionRecord> newRecords = newGroups.get(key);
             StepAlignment step = new StepAlignment();
             step.setInvocationKey(key);
-            if (baseRecords == null) {
+            if (baseSteps == null) {
                 step.setKind(StepKind.ADDED);
                 step.setNewRecordId(newRecords.get(0).getRecordId());
                 anyChanged = true;
             } else if (newRecords == null) {
                 step.setKind(StepKind.MISSING);
-                step.setBaselineRecordId(baseRecords.get(0).getRecordId());
+                step.setBaselineRecordId(baseSteps.get(0).getRecordId());
                 anyChanged = true;
             } else {
                 step.setKind(StepKind.MATCHED);
-                alignMatched(step, baseRecords, newRecords, comparator, rules);
+                alignMatched(step, baseSteps, newRecords, comparator, rules);
                 if (step.getVerdict() == Verdict.CHANGED) {
                     anyChanged = true;
                 }
@@ -83,17 +117,17 @@ public final class TaskAligner {
         return alignment;
     }
 
-    private static void alignMatched(StepAlignment step, List<InteractionRecord> baseRecords, List<InteractionRecord> newRecords, DeterministicComparator comparator, InvocationRulesConfig rules) {
-        int paired = Math.min(baseRecords.size(), newRecords.size());
-        step.setSurplusCount(Math.abs(baseRecords.size() - newRecords.size()));
-        step.setBaselineRecordId(baseRecords.get(0).getRecordId());
+    private static void alignMatched(StepAlignment step, List<BaselineStep> baseSteps, List<InteractionRecord> newRecords, DeterministicComparator comparator, InvocationRulesConfig rules) {
+        int paired = Math.min(baseSteps.size(), newRecords.size());
+        step.setSurplusCount(Math.abs(baseSteps.size() - newRecords.size()));
+        step.setBaselineRecordId(baseSteps.get(0).getRecordId());
         step.setNewRecordId(newRecords.get(0).getRecordId());
 
         ComparisonResult firstComparison = null;
         for (int i = 0; i < paired; i++) {
-            InteractionRecord b = baseRecords.get(i);
+            BaselineStep b = baseSteps.get(i);
             InteractionRecord n = newRecords.get(i);
-            ComparisonResult comparison = comparator.compare(FingerprintExtractor.extract(b, rules, b.getInvocationId()), FingerprintExtractor.extract(n, rules, n.getInvocationId()), n.getModelResponse());
+            ComparisonResult comparison = comparator.compare(b.getFingerprint(), FingerprintExtractor.extract(n, rules, n.getInvocationId()), n.getModelResponse());
             if (firstComparison == null) {
                 firstComparison = comparison;
             }
@@ -101,7 +135,7 @@ public final class TaskAligner {
                 // 步骤 verdict 取首个 CHANGED 配对（差异明细随之），停止后续配对
                 step.setVerdict(Verdict.CHANGED);
                 step.setComparison(comparison);
-                step.setBaselineModelResponse(b.getModelResponse());
+                step.setBaselineModelResponse(b.getSampleOutput());
                 step.setNewModelResponse(n.getModelResponse());
                 step.setBaselineRecordId(b.getRecordId());
                 step.setNewRecordId(n.getRecordId());

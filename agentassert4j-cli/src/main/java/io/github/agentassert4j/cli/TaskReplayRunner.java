@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 任务域重放执行流程 — 望远镜视角：以任务链（一次用户请求触发的全部记录）为回放单元。
+ * 任务域重放执行流程 — 以任务链（一次用户请求触发的全部记录）为回放单元。
  *
  * <p>两个互斥模式（旗标矩阵见 replay 命令帮助）：</p>
  * <ul>
@@ -323,7 +323,7 @@ public class TaskReplayRunner {
         if (affected) {
             return selected;
         }
-        // 望远镜语义：文本前缀命中多条链时取最新一条为回放对象（最新录制代表当前行为）
+        // 文本前缀命中多条链时取最新一条为回放对象（最新录制代表当前行为）
         return selected.isEmpty() ? selected : new ArrayList<>(java.util.Collections.singletonList(selected.get(selected.size() - 1)));
     }
 

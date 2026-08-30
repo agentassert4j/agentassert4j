@@ -15,7 +15,7 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "baseline", description = "为已录制的交互建立基线（幂等，可重复执行）", mixinStandardHelpOptions = true)
+@Command(name = "baseline", description = "为已录制的交互建立基线（幂等，可重复执行）；export 子命令导出验收包", mixinStandardHelpOptions = true, subcommands = {BaselineExportCommand.class})
 public class BaselineCommand implements Callable<Integer> {
 
     // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流

@@ -23,7 +23,7 @@ import java.util.Collections;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * TaskReplayRunner 的单元测试 — 任务域黄金测试：
+ * TaskReplayRunner 的单元测试 — 任务域行为：
  * 冻结重放分歧即停、预算恰发、真实对比配对、退出码 0/1/2。
  *
  * @author axy-yxa

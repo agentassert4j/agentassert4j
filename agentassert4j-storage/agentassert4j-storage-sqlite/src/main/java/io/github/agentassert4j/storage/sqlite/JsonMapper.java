@@ -1,16 +1,20 @@
 package io.github.agentassert4j.storage.sqlite;
 
 import io.github.agentassert4j.model.*;
+import io.github.agentassert4j.util.FingerprintJson;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 模型 ↔ SQLite JSON 列 的映射层。
  *
- * <p>字符串转义与 JSON 语法的唯一真源是 core 的 RecursiveJsonParser（RFC 8259 完整转义，
+ * <p>字符串转义与 JSON 语法统一走 core 的 RecursiveJsonParser（RFC 8259 完整转义，
  * 含 &lt;0x20 控制字符）；本类只在标准 Java 类型（Map/List/String/Number/Boolean）与模型字段
  * 之间搬运，不含手写转义/解析逻辑。</p>
  *
@@ -94,46 +98,11 @@ final class JsonMapper {
      * 读侧把 "{}" 映射回 null）。
      */
     static String fingerprintToJson(DeterministicFingerprint fp) {
-        if (fp == null) {
-            return "{}";
-        }
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("toolCallSet", sortedList(fp.getToolCallSet()));
-        m.put("toolParamTypes", sortedStringMap(fp.getToolParamTypes()));
-        m.put("outputContentType", fp.getOutputContentType());
-        m.put("outputFieldPaths", sortedList(fp.getOutputFieldPaths()));
-        m.put("outputFieldTypeMap", sortedStringMap(fp.getOutputFieldTypeMap()));
-        m.put("textLengthMagnitude", fp.getTextLengthMagnitude());
-        m.put("requiredKeywords", sortedList(fp.getRequiredKeywords()));
-        m.put("forbiddenKeywords", sortedList(fp.getForbiddenKeywords()));
-        m.put("regexPatterns", regexPatternsToList(fp.getRegexPatterns()));
-        m.put("declaredBehaviors", sortedList(fp.getDeclaredBehaviors()));
-        m.put("hasError", fp.isHasError());
-        return RecursiveJsonParser.serialize(m);
+        return FingerprintJson.toJson(fp);
     }
 
     static DeterministicFingerprint fingerprintFromDb(String json) {
-        Object parsed = RecursiveJsonParser.parse(json);
-        if (!(parsed instanceof Map)) {
-            return null;
-        }
-        Map<?, ?> m = (Map<?, ?>) parsed;
-        if (m.isEmpty()) {
-            return null;
-        }
-        DeterministicFingerprint fp = new DeterministicFingerprint();
-        fp.setToolCallSet(stringSet(m.get("toolCallSet")));
-        fp.setToolParamTypes(asStringMap(m.get("toolParamTypes")));
-        fp.setOutputContentType(asString(m.get("outputContentType")));
-        fp.setOutputFieldPaths(stringSet(m.get("outputFieldPaths")));
-        fp.setOutputFieldTypeMap(asStringMap(m.get("outputFieldTypeMap")));
-        fp.setTextLengthMagnitude(asInt(m.get("textLengthMagnitude")));
-        fp.setRequiredKeywords(stringSet(m.get("requiredKeywords")));
-        fp.setForbiddenKeywords(stringSet(m.get("forbiddenKeywords")));
-        fp.setRegexPatterns(regexPatternsFromDb(m.get("regexPatterns")));
-        fp.setDeclaredBehaviors(stringSet(m.get("declaredBehaviors")));
-        fp.setHasError(asBool(m.get("hasError")));
-        return fp;
+        return FingerprintJson.fromJson(json);
     }
 
     static InvocationProfile toInvocationProfile(ResultSet rs) throws SQLException {
@@ -191,20 +160,6 @@ final class JsonMapper {
         return m;
     }
 
-    private static List<Object> regexPatternsToList(List<RegexPattern> patterns) {
-        List<Object> out = new ArrayList<>();
-        if (patterns == null) {
-            return out;
-        }
-        for (RegexPattern p : patterns) {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("pattern", p.getPattern());
-            m.put("description", p.getDescription());
-            out.add(m);
-        }
-        return out;
-    }
-
     private static List<RegexPattern> regexPatternsFromDb(Object value) {
         List<RegexPattern> result = new ArrayList<>();
         if (!(value instanceof List)) {
@@ -252,27 +207,6 @@ final class JsonMapper {
             out.put(String.valueOf(e.getKey()), e.getValue() != null ? String.valueOf(e.getValue()) : null);
         }
         return out;
-    }
-
-    private static Set<String> stringSet(Object v) {
-        Set<String> out = new LinkedHashSet<>();
-        if (!(v instanceof List)) {
-            return out;
-        }
-        for (Object item : (List<?>) v) {
-            if (item != null) {
-                out.add(String.valueOf(item));
-            }
-        }
-        return out;
-    }
-
-    private static List<Object> sortedList(Set<String> set) {
-        return set == null ? new ArrayList<>() : new ArrayList<>(new TreeSet<>(set));
-    }
-
-    private static Map<String, Object> sortedStringMap(Map<String, String> map) {
-        return map == null ? new TreeMap<>() : new TreeMap<>(map);
     }
 
 }

@@ -20,7 +20,7 @@ import java.util.concurrent.Callable;
 
 /**
  * replay 命令 — 用新 System Prompt 重放录制用例并对比基线；双 scope 并存：
- * --invocation（显微镜：单调用点稳定性）与 --task/--affected（望远镜：整链任务回归）。
+ * --invocation（单调用点重放）与 --task/--affected（整链任务回归）。
  *
  * <p>退出码即 CI gating：0 全部 PASS；1 存在行为差异（CHANGED/缺步骤/新增步骤）；
  * 2 用法/数据问题（含预算耗尽无判定）。</p>
@@ -48,7 +48,7 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--invocation"}, description = "仅重放该调用点：业务 invocationId 或 invocationKey 唯一前缀（完整列表见 status 命令）")
     String invocation;
 
-    @Option(names = {"--task"}, description = "任务域回放：请求文本前缀选链（望远镜——整链回归）；提供 --prompt 为冻结重放，缺省为真实对比")
+    @Option(names = {"--task"}, description = "任务域回放：请求文本前缀选链（整链回归）；提供 --prompt 为冻结重放，缺省为真实对比")
     String task;
 
     @Option(names = {"--affected"}, description = "任务选择器：图查受影响调用点 → 含它的任务链逐链冻结重放（要求 --prompt 与 --old-prompt）")

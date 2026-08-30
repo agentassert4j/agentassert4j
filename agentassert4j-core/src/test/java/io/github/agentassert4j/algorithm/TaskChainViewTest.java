@@ -12,7 +12,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * TaskChainView 的单元测试 — 任务链派生规则黄金测试：
+ * TaskChainView 的单元测试 — 任务链派生规则：
  * 任务键 = (会话, 请求文本)，携带前推覆盖 tool 轮，声明 taskKey 优先。
  * 派生是纯函数，规则一经发布冻结。
  *
@@ -32,7 +32,7 @@ class TaskChainViewTest {
     }
 
     @Test
-    @DisplayName("黄金派生：请求→tool 轮（空输入）→回答同归一链")
+    @DisplayName("请求→tool 轮（空输入）→回答同归一链")
     void golden_requestCarriesToolRounds() {
         List<TaskChain> chains = TaskChainView.resolveSession("s1", Arrays.asList(record("r1", 1000L, "查订单 ORD-001"), record("r2", 2000L, null), record("r3", 3000L, null)));
 
@@ -45,7 +45,7 @@ class TaskChainViewTest {
     }
 
     @Test
-    @DisplayName("黄金派生：两个提问成两条链，链序=规范序")
+    @DisplayName("两个提问成两条链，链序=规范序")
     void golden_twoQuestions_twoChains() {
         List<TaskChain> chains = TaskChainView.resolveSession("s1", Arrays.asList(record("r1", 1000L, "查订单"), record("r2", 1500L, null), record("r3", 2000L, "申请退款"), record("r4", 2500L, null)));
 
