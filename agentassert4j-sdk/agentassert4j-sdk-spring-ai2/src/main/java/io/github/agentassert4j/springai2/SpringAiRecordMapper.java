@@ -40,7 +40,7 @@ final class SpringAiRecordMapper {
     }
 
     /**
-     * 编排观察合并（梯 2，直调 ChatModel 且模型实现内部消费工具调用的姿势）：
+     * 编排观察合并（直调 ChatModel 且模型实现内部消费工具调用的姿势）：
      * 响应无可见 toolCalls 时观察缓冲承载完整编排 [A, B, …]——参数经
      * RecursiveJsonParser 解析后用 ArgTypeUtil.derive 派生类型，与 native 路径
      * 同词表。响应自带 toolCalls 时（ChatClient 逐轮姿势）缓冲静默丢弃，

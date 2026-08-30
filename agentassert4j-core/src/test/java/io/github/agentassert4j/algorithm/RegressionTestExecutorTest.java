@@ -50,7 +50,7 @@ class RegressionTestExecutorTest {
 
     @Test
     void buildReplayRequest_inputOverride_reachesRequest() {
-        // 场景层语义：新输入覆盖末位 user 帧（多轮上下文与工具定义仍原样保留）
+        // 新输入覆盖末位 user 帧（多轮上下文与工具定义仍原样保留）
         InteractionRecord baseline = makeBaseline("old prompt hash", "user input");
         TestExecutionConfig config = TestExecutionConfig.defaults();
 
@@ -552,7 +552,7 @@ class RegressionTestExecutorTest {
     }
 
     @Nested
-    @DisplayName("链式半重放（梯 2 编排记录的专用重放契约）")
+    @DisplayName("链式半重放（编排观察记录的专用重放契约）")
     class ChainedReplay {
 
         private LlmResponse toolDecision(String name, String orderId) {
@@ -575,7 +575,7 @@ class RegressionTestExecutorTest {
         }
 
         /**
-         * 两步编排的基线：get_order → get_logistics，每轮结果齐备（梯 2 观察形态）。
+         * 两步编排的基线：get_order → get_logistics，每轮结果齐备（编排观察形态）。
          */
         private InteractionRecord chainBaseline() {
             InteractionRecord r = new InteractionRecord();

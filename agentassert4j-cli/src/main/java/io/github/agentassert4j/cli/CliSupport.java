@@ -301,7 +301,7 @@ final class CliSupport {
     }
 
     /**
-     * 单条规则声明的未知 behavior 告警——owner 标明声明来源（调用点 标签或场景标识）。
+     * 单条规则声明的未知 behavior 告警——owner 标明声明来源（调用点标签）。
      */
     static void warnUnknownBehaviors(String owner, InvocationRule rule, PrintStream out) {
         Set<String> unknown = unknownBehaviors(rule);

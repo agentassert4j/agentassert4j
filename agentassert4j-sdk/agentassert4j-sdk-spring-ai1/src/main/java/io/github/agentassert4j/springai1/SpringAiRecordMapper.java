@@ -41,7 +41,7 @@ final class SpringAiRecordMapper {
     }
 
     /**
-     * 编排观察合并（梯 2）：内部工具执行模式下响应无可见 toolCalls（被回路消费），
+     * 编排观察合并：内部工具执行模式下响应无可见 toolCalls（被回路消费），
      * 观察缓冲承载完整编排 [A, B, …]——参数经 RecursiveJsonParser 解析后用
      * ArgTypeUtil.derive 派生类型，与 native 路径同词表。响应自带 toolCalls 时
      * （ChatClient 逐轮姿势）缓冲静默丢弃，避免同一决策双计。

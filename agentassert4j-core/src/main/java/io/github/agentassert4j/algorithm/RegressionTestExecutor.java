@@ -53,7 +53,7 @@ public class RegressionTestExecutor {
      * @param baseline        历史交互（基线）
      * @param newSystemPrompt 新 System Prompt
      * @param userInput       本次调用的用户输入；null = 原样复用基线记录的历史输入
-     *                        （重放语义）。场景层传入新输入，实现「新输入的首次调用」
+     *                        （重放语义）；非 null 覆盖末位 user 帧，实现「新输入的首次调用」
      * @param config          执行配置
      * @return 回归测试结果
      */
@@ -68,7 +68,7 @@ public class RegressionTestExecutor {
             return result;
         }
 
-        // 梯 2 记录（编排观察产出：完整工具编排 + 每轮录制结果）走链式半重放——
+        // 编排观察记录（工具回调层旁路产出：完整工具编排 + 每轮录制结果）走链式半重放——
         // 单发重放拼不出「第 2 轮输入含第 1 轮工具结果」的当时上下文，且会把整段
         // 编排一次性重新决策，工具维必然假阳性
         if (isChainReplayable(baseline)) {
@@ -118,7 +118,7 @@ public class RegressionTestExecutor {
             result.setComparison(comparison);
             result.setCandidateFingerprint(currentFp);
             // served 模型与 token 消耗随结果上抛：前者供精确模型身份比对，
-            // 后者供统计执行的 token 预算扣减与场景层遥测聚合；缓存/思考
+            // 后者供调用方做费用与预算核算；缓存/思考
             // token 可空（供应商未返回时保持 null，未知不得记 0）
             result.setServedModel(response.getServedModel());
             result.setInputTokens(response.getInputTokens());
@@ -145,7 +145,7 @@ public class RegressionTestExecutor {
         // 替换 System Prompt
         request.setSystemPrompt(newSystemPrompt);
 
-        // 用户输入：null = 重放语义，原样复用历史输入；场景层传入新输入覆盖
+        // 用户输入：null = 重放语义，原样复用历史输入；传入新输入覆盖
         // 末位 user 帧（「新输入的首次调用」语义落在这里，上下文与工具原样保留）
         request.setUserInput(userInput != null ? userInput : baseline.getUserInput());
 
@@ -287,7 +287,7 @@ public class RegressionTestExecutor {
     }
 
     /**
-     * 链式半重放（梯 2 编排观察记录的专用重放契约）：拿基线录制的旧结果当道具，
+     * 链式半重放（编排观察记录的专用重放契约）：拿基线录制的旧结果当道具，
      * 逐轮重建「当时输入」逐轮比对模型决策。每轮把响应的 tool_calls 与基线编排的
      * 下一个片段逐项比对（工具名 + 参数解析后严格相等）；全部轮次匹配则末轮四维
      * 比对收口；某轮分歧则精确到轮的定位后立即停止（分歧即停：旧结果配新决策是

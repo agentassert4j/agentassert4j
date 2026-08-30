@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * TaskChainView 的单元测试 — 任务链派生规则黄金测试：
  * 任务键 = (会话, 请求文本)，携带前推覆盖 tool 轮，声明 taskKey 优先。
- * 派生是纯函数，规则一经发布冻结（T1 契约 §一）。
+ * 派生是纯函数，规则一经发布冻结。
  *
  * @author axy-yxa
  * @since 2026-08-30

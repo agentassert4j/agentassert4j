@@ -52,11 +52,11 @@ public final class FingerprintExtractor {
     }
 
     /**
-     * 带规则配置的指纹提取 — 由上层（recorder / CLI）调用，
+     * 带规则配置的指纹提取 — 建档与重放判定路径共用，
      * 从 InvocationRulesConfig 获取维度 3-4 的声明式规则。
      *
-     * <p>规则查找键是记录上的业务标签；未声明分组（无标签）统一落到空键——
-     * 这样场景层对 templateHash 锚定的未声明调用点注入的断言同样生效。</p>
+     * <p>规则查找键是记录上的业务标签；未声明调用点（无标签）统一落到空键——
+     * 调用方可用空键为未声明调用点统一注入断言。</p>
      *
      * @param record       交互记录
      * @param rules        规则配置（null 时维度 3-4 保持空）

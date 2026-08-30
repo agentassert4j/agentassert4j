@@ -276,8 +276,8 @@ class FingerprintExtractorTest {
 
     @Test
     void extractWithRules_nullInvocationId_fallsBackToEmptyKey() {
-        // 未声明分组（无业务标签）统一落到空键规则——场景层对 templateHash
-        // 绑定的未声明分组注入断言依赖此契约
+        // 未声明调用点（无业务标签）统一落到空键规则——调用方对未声明
+        // 调用点统一注入断言依赖此契约
         InteractionRecord r = record(null, "hello");
 
         String rulesJson = "{\"invocations\":{\"\":{" + "\"requiredKeywords\":[\"keyword1\"]," + "\"behaviors\":[\"nonEmptyOutput\"]}}}";
