@@ -8,6 +8,7 @@ import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.InvocationRulesConfig.InvocationRule;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
+import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.spi.InteractionQueryStore;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
@@ -228,10 +229,17 @@ final class CliSupport {
     }
 
     /**
-     * 单条记录的分组键：优先用落库存储值（enrich 写入，录入即定格——存储键与
-     * 现算键不得分叉），缺失时按分组器现算；无法分组的记录返回 null。
+     * 全库任务链（跨会话，按链首时间升序）——任务域命令的统一派生入口。
      */
-    private static String invocationKeyOfRecord(InteractionRecord record) {
+    static java.util.List<TaskChain> taskChains(StorageRepository repository) {
+        return TaskChainView.resolveAll(repository);
+    }
+
+    /**
+     * 单条记录的调用点键：优先用落库存储值（enrich 写入，录入即定格——存储键与
+     * 现算键不得分叉），缺失时按解析器现算；无法解析的记录返回 null。
+     */
+    static String invocationKeyOfRecord(InteractionRecord record) {
         if (record.getInvocationKey() != null && !record.getInvocationKey().isEmpty()) {
             return record.getInvocationKey();
         }
