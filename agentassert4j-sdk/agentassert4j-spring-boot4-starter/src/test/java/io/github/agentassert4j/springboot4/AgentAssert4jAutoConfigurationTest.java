@@ -72,10 +72,10 @@ class AgentAssert4jAutoConfigurationTest {
     }
 
     @Test
-    @DisplayName("应用级默认 skillId：未声明调用按默认身份录制")
-    void defaultSkillId_recordsUndeclaredCalls() {
+    @DisplayName("应用级默认 invocationId：未声明调用按默认身份录制")
+    void defaultInvocationId_recordsUndeclaredCalls() {
         String dbPath = tempDbPath();
-        runner.withBean("chatModel", StubChatModel.class).withPropertyValues("agentassert4j.database=" + dbPath, "agentassert4j.skill-id=order-flow").run(context -> {
+        runner.withBean("chatModel", StubChatModel.class).withPropertyValues("agentassert4j.database=" + dbPath, "agentassert4j.invocation-id=order-flow").run(context -> {
             ChatModel model = context.getBean("chatModel", ChatModel.class);
             model.call(new Prompt(List.of(new UserMessage("订单 SO-1 在哪"))));
 
@@ -87,7 +87,7 @@ class AgentAssert4jAutoConfigurationTest {
             StorageRepository repository = context.getBean(StorageRepository.class);
             List<String> sessions = repository.findAllSessionIds();
             InteractionRecord record = repository.findBySessionId(sessions.iterator().next()).get(0);
-            assertEquals("order-flow", record.getSkillId(), "默认 skillId 落到记录声明位");
+            assertEquals("order-flow", record.getInvocationId(), "默认 invocationId 落到记录声明位");
         });
     }
 
@@ -110,7 +110,7 @@ class AgentAssert4jAutoConfigurationTest {
             ChatResponse response;
             // 采集门：未声明且无工具调用的纯对话不录——管道测试走标准声明姿势。
             // 显式 finally 关闭：弹出 ThreadLocal 作用域，防止声明泄漏进测试线程
-            RecordingContext scope = RecordingContext.start(null).withSkillId("order-flow");
+            RecordingContext scope = RecordingContext.start(null).withInvocationId("order-flow");
             try {
                 response = model.call(new Prompt(List.of(new UserMessage("订单 SO-1 在哪"))));
             } finally {
@@ -131,7 +131,7 @@ class AgentAssert4jAutoConfigurationTest {
             assertEquals("订单 SO-1 在哪", records.get(0).getUserInput());
             assertEquals("已发货", records.get(0).getModelResponse());
             assertEquals("deepseek-v4-flash", records.get(0).getServedModel());
-            assertNotNull(records.get(0).getSkillId(), "消费侧富化必须回填 skillId");
+            assertNotNull(records.get(0).getInvocationId(), "消费侧富化必须回填 invocationId");
         });
     }
 

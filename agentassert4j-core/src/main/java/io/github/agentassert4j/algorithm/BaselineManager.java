@@ -1,18 +1,19 @@
 package io.github.agentassert4j.algorithm;
 
-import io.github.agentassert4j.config.SkillRulesConfig;
+import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.spi.StorageRepository;
 
 /**
  * 基线生命周期管理 — 框架只报告差异（侦探），接受与否由开发者裁决（法官）。
  *
- * <p>画像三态流转：BASELINE（当前认可的行为标准）→ 变更产生 CANDIDATE（待
- * approve/reject）→ approve 后旧基线进入 ARCHIVED（可 rollback 回溯）。</p>
+ * <p>治理主体 = 调用点（invocation）的模板版本史。三态流转：BASELINE（当前认可的
+ * 行为标准）→ 变更产生 CANDIDATE（待 approve/reject）→ approve 后旧基线按模板版本
+ * 归档（可 rollback 回溯）。</p>
  *
  * <p>线程契约：生命周期方法以实例监视器互斥，同一 JVM 内并发调用安全
- * （统计执行器并发采样、SDK 多线程接入均落在此契约内）；跨进程并发写同一存储
- * 不受此保护，仍需调用方自行保证排他。</p>
+ * （SDK 多线程接入均落在此契约内）；跨进程并发写同一存储不受此保护，
+ * 仍需调用方自行保证排他。</p>
  *
  * @author axy-yxa
  * @since 2026-08-26
@@ -26,81 +27,81 @@ public class BaselineManager {
     }
 
     /**
-     * 批准新基线：候选 → 基线，旧基线归档。
+     * 批准新基线：候选 → 基线，旧基线按模板版本归档。
      *
      * <p>归档与保存是两步独立写入，无跨表事务：保存失败经 StorageException 向上可见，
      * 重试时归档去重守卫保证不产生重复归档行， approve 可安全重放。</p>
      *
-     * @param groupKey Skill 的分组键（DeterministicSkillGrouper 生成的 groupKey）
-     * @param approver 审批人身份，随活跃画像与归档行留痕（纯治理元数据，永不参与判定）
+     * @param invocationKey 调用点键（InvocationResolver 派生）
+     * @param approver      审批人身份，随活跃画像与归档行留痕（纯治理元数据，永不参与判定）
      * @throws IllegalStateException 无候选指纹时抛出
      */
-    public synchronized void approve(String groupKey, String approver) {
-        SkillProfile profile = repository.findSkillByGroupKey(groupKey);
+    public synchronized void approve(String invocationKey, String approver) {
+        InvocationProfile profile = repository.findInvocationByKey(invocationKey);
         if (profile == null) {
-            throw new IllegalStateException("Skill profile not found: " + groupKey);
+            throw new IllegalStateException("Invocation profile not found: " + invocationKey);
         }
 
         DeterministicFingerprint candidate = profile.getCandidateFingerprint();
         if (candidate == null) {
-            throw new IllegalStateException("No candidate to approve for skill: " + groupKey);
+            throw new IllegalStateException("No candidate to approve for invocation: " + invocationKey);
         }
 
         // 旧基线归档（可回溯）；回滚恢复的旧基线已在归档中，跳过避免同 tag 重复行。
         // 归档行携带的是旧基线自身获批时的审批人与语义版本，必须先于新审批信息写入前快照
-        archiveIfAbsent(groupKey, profile);
+        archiveIfAbsent(invocationKey, profile);
 
         // 候选提升为基线
         profile.setFingerprint(candidate);
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);
         // 更新版本标签：跳过归档中已占用的 tag，保证 tag↔指纹一一对应（回滚后不产生同 tag 双指纹）
-        profile.setVersionTag(nextAvailableVersionTag(groupKey, profile.getVersionTag()));
+        profile.setVersionTag(nextAvailableVersionTag(invocationKey, profile.getVersionTag()));
         stampApproval(profile, approver);
-        repository.saveSkillProfile(profile);
+        repository.saveInvocationProfile(profile);
     }
 
     /**
      * 否决候选：丢弃候选，保留旧基线。
      * 开发者需自行回滚 Prompt（回滚是 git 的职责，不是测试框架的职责）。
      *
-     * @param groupKey Skill 的分组键
+     * @param invocationKey 调用点键
      * @throws IllegalStateException 无候选指纹时抛出（与 approve 对称）
      */
-    public synchronized void reject(String groupKey) {
-        SkillProfile profile = repository.findSkillByGroupKey(groupKey);
+    public synchronized void reject(String invocationKey) {
+        InvocationProfile profile = repository.findInvocationByKey(invocationKey);
         if (profile == null) {
-            throw new IllegalStateException("Skill profile not found: " + groupKey);
+            throw new IllegalStateException("Invocation profile not found: " + invocationKey);
         }
         if (profile.getCandidateFingerprint() == null) {
-            throw new IllegalStateException("No candidate to reject for skill: " + groupKey);
+            throw new IllegalStateException("No candidate to reject for invocation: " + invocationKey);
         }
 
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);
-        repository.saveSkillProfile(profile);
+        repository.saveInvocationProfile(profile);
     }
 
     /**
      * 回滚到指定版本的归档基线。
      *
-     * @param groupKey   Skill 的分组键
-     * @param versionTag 目标版本标签
+     * @param invocationKey 调用点键
+     * @param versionTag    目标版本标签
      * @throws IllegalStateException 无归档基线时抛出
      */
-    public synchronized void rollback(String groupKey, String versionTag) {
-        ArchivedBaseline archived = repository.findArchivedBaseline(groupKey, versionTag);
+    public synchronized void rollback(String invocationKey, String versionTag) {
+        ArchivedTemplateVersion archived = repository.findArchivedVersion(invocationKey, versionTag);
         if (archived == null) {
-            throw new IllegalStateException("No archived baseline found for skill: " + groupKey + ", version: " + versionTag);
+            throw new IllegalStateException("No archived template version found for invocation: " + invocationKey + ", version: " + versionTag);
         }
 
-        SkillProfile profile = repository.findSkillByGroupKey(groupKey);
+        InvocationProfile profile = repository.findInvocationByKey(invocationKey);
         if (profile == null) {
-            throw new IllegalStateException("Skill profile not found: " + groupKey);
+            throw new IllegalStateException("Invocation profile not found: " + invocationKey);
         }
 
         // 当前基线也归档（若该 tag 未曾归档过）
-        archiveIfAbsent(groupKey, profile);
+        archiveIfAbsent(invocationKey, profile);
 
         // 恢复归档基线——审批人与语义版本随基线一起回退：
         // 活跃行的治理事实必须始终描述当前基线自身的获批历史
@@ -111,7 +112,7 @@ public class BaselineManager {
         profile.setAlgoVersion(archived.getAlgoVersion());
         profile.setApprovedBy(archived.getApprovedBy());
         profile.setApprovedAt(archived.getApprovedAt());
-        repository.saveSkillProfile(profile);
+        repository.saveInvocationProfile(profile);
     }
 
     /**
@@ -119,34 +120,34 @@ public class BaselineManager {
      * 回归执行器在对比结果非 PASS 时调用——候选必须经持久层落库，
      * 否则 approve 在新进程中不可达（重放与裁决通常不在同一进程）。
      *
-     * @param baseline  产生候选时所用基线交互记录（groupKey 由分组器从记录重算）
+     * @param baseline  产生候选时所用基线交互记录（invocationKey 由解析器从记录重算）
      * @param candidate 回归测试提取的新指纹
-     * @throws IllegalStateException 该 Skill 无画像时抛出（先录制建立基线）
+     * @throws IllegalStateException 该调用点无画像时抛出（先录制建立基线）
      */
     public synchronized void recordCandidate(InteractionRecord baseline, DeterministicFingerprint candidate) {
         if (baseline == null || candidate == null) {
             return;
         }
 
-        String groupKey = DeterministicSkillGrouper.group(baseline).getGroupKey();
-        SkillProfile profile = repository.findSkillByGroupKey(groupKey);
+        String invocationKey = InvocationResolver.resolve(baseline).getInvocationKey();
+        InvocationProfile profile = repository.findInvocationByKey(invocationKey);
         if (profile == null) {
-            throw new IllegalStateException("Skill profile not found: " + groupKey);
+            throw new IllegalStateException("Invocation profile not found: " + invocationKey);
         }
 
         profile.setCandidateFingerprint(candidate);
         profile.setBaselineStatus(BaselineStatus.CANDIDATE);
-        repository.saveSkillProfile(profile);
+        repository.saveInvocationProfile(profile);
     }
 
     /**
      * 首次录制自动建立基线。
-     * 如果该 Skill 已有基线，不做任何操作（幂等）。
+     * 如果该调用点已有基线，不做任何操作（幂等）。
      *
      * @param record   首次录制的交互记录
      * @param approver 使该基线成为基线的操作者身份（自动建立同样留痕，纯治理元数据）
      */
-    public synchronized void autoEstablishBaseline(InteractionRecord record, String approver, SkillRulesConfig rules) {
+    public synchronized void autoEstablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules) {
         establish(record, approver, false, rules);
     }
 
@@ -156,24 +157,24 @@ public class BaselineManager {
      * 被替换的旧基线先归档留痕（含其治理事实），rollback 可恢复——恢复出的
      * 旧语义基线会被重放入口的版本校验拒绝判定，属预期，再次重建即可。
      *
-     * @param record   该 skill 的任一已录制交互
+     * @param record   该调用点的任一已录制交互
      * @param approver 重建操作者身份
      * @param rules    规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
-     * @throws IllegalStateException 该 Skill 无画像且无录制数据可分组时抛出
+     * @throws IllegalStateException 该调用点无画像且无录制数据可解析时抛出
      */
-    public synchronized void reestablishBaseline(InteractionRecord record, String approver, SkillRulesConfig rules) {
+    public synchronized void reestablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules) {
         establish(record, approver, true, rules);
     }
 
-    private void establish(InteractionRecord record, String approver, boolean overwrite, SkillRulesConfig rules) {
+    private void establish(InteractionRecord record, String approver, boolean overwrite, InvocationRulesConfig rules) {
         if (record == null) {
             return;
         }
-        // 画像字段（skillId/groupKey/skillName）全部以分组器产出为基底——
-        // 记录上的 skillId 只是可选业务声明位，未声明记录（形状派生身份）同样建档
+        // 画像字段（label/invocationName）全部以解析器产出为基底——
+        // 记录上的 invocationId 只是可选业务声明位，未声明记录（模板/请求锚点身份）同样建档
 
-        SkillProfile grouping = DeterministicSkillGrouper.group(record);
-        SkillProfile existing = repository.findSkillByGroupKey(grouping.getGroupKey());
+        InvocationProfile grouping = InvocationResolver.resolve(record);
+        InvocationProfile existing = repository.findInvocationByKey(grouping.getInvocationKey());
 
         if (!overwrite && existing != null && existing.getFingerprint() != null) {
             // 已有基线，不覆盖
@@ -182,31 +183,31 @@ public class BaselineManager {
         if (overwrite && existing != null) {
             // 被替换基线先行归档：重建不是不可逆操作，rollback 可恢复旧语义基线
             //（归档快照的是旧基线自身的指纹与治理事实，必须先于覆盖写入）
-            archiveIfAbsent(grouping.getGroupKey(), existing);
+            archiveIfAbsent(grouping.getInvocationKey(), existing);
         }
 
         // 提取指纹作为基线
         // 规则口径必须与重放判定同源（三参提取注入维度 3-4）；
         // 存档指纹只作展示与审计，任何对比一律现场重提，不消费存档值
-        DeterministicFingerprint fingerprint = FingerprintExtractor.extract(record, rules, record.getSkillId());
+        DeterministicFingerprint fingerprint = FingerprintExtractor.extract(record, rules, record.getInvocationId());
 
-        // 以分组器产出为基底：skill_name/skill_type 等展示列来自分组的派生结果，
+        // 以解析器产出为基底：invocation_name/invocation_type 等展示列来自解析的派生结果，
         // 裸画像会违反存储层的 NOT NULL 契约
-        SkillProfile profile = existing != null ? existing : grouping;
+        InvocationProfile profile = existing != null ? existing : grouping;
         profile.setFingerprint(fingerprint);
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);
-        profile.setVersionTag(overwrite ? nextAvailableVersionTag(grouping.getGroupKey(), profile.getVersionTag()) : "v1");
+        profile.setVersionTag(overwrite ? nextAvailableVersionTag(grouping.getInvocationKey(), profile.getVersionTag()) : "v1");
         profile.setTotalRecords(existing != null ? existing.getTotalRecords() : 1);
         stampApproval(profile, approver);
 
-        repository.saveSkillProfile(profile);
+        repository.saveInvocationProfile(profile);
     }
 
     /**
      * 盖上审批痕迹：语义版本 + 审批人 + 时间。建立/批准/重建三条成为基线的路径共用。
      */
-    private void stampApproval(SkillProfile profile, String approver) {
+    private void stampApproval(InvocationProfile profile, String approver) {
         profile.setAlgoVersion(JudgmentSemantics.VERSION);
         // 空白身份归一为 null：approvedBy=null 是「未经审批链盖章」的异常信号，
         // 空白串落库会稀释该信号。core 只归一调用方传入的身份，不嗅探环境
@@ -236,24 +237,25 @@ public class BaselineManager {
     }
 
     /**
-     * 归档当前基线——同 tag 已存在归档行时跳过（回滚恢复的基线本就在归档中）；
+     * 归档当前基线为模板版本行——同 tag 已存在归档行时跳过（回滚恢复的基线本就在归档中）；
      * 无版本标签的基线无回滚句柄，不归档。
      */
-    private void archiveIfAbsent(String groupKey, SkillProfile profile) {
+    private void archiveIfAbsent(String invocationKey, InvocationProfile profile) {
         if (profile.getFingerprint() == null || profile.getVersionTag() == null) {
             return;
         }
-        if (repository.findArchivedBaseline(groupKey, profile.getVersionTag()) == null) {
-            // 归档行是该基线的完整快照：指纹、版本标签之外，语义版本与审批事实一并留痕，
-            // 回滚时据此恢复活跃行的治理信息
-            ArchivedBaseline archived = new ArchivedBaseline();
-            archived.setSkillId(groupKey);
+        if (repository.findArchivedVersion(invocationKey, profile.getVersionTag()) == null) {
+            // 归档行是该基线的完整快照：指纹、版本标签之外，模板哈希、语义版本与
+            // 审批事实一并留痕，回滚时据此恢复活跃行的治理信息
+            ArchivedTemplateVersion archived = new ArchivedTemplateVersion();
+            archived.setInvocationKey(invocationKey);
+            archived.setTemplateHash(profile.getTemplateHash());
             archived.setFingerprint(profile.getFingerprint());
             archived.setVersionTag(profile.getVersionTag());
             archived.setAlgoVersion(profile.getAlgoVersion());
             archived.setApprovedBy(profile.getApprovedBy());
             archived.setApprovedAt(profile.getApprovedAt());
-            repository.archiveBaseline(archived);
+            repository.archiveTemplateVersion(archived);
         }
     }
 
@@ -261,9 +263,9 @@ public class BaselineManager {
      * 递增版本标签并跳过归档中已占用的 tag——保证任一 tag 在归档与活跃态之间
      * 始终只对应一个指纹，rollback(tag) 不产生歧义。
      */
-    private String nextAvailableVersionTag(String groupKey, String currentTag) {
+    private String nextAvailableVersionTag(String invocationKey, String currentTag) {
         String next = generateVersionTag(currentTag);
-        while (repository.findArchivedBaseline(groupKey, next) != null) {
+        while (repository.findArchivedVersion(invocationKey, next) != null) {
             next = generateVersionTag(next);
         }
         return next;

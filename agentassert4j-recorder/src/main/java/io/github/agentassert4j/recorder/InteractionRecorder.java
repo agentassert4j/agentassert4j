@@ -47,7 +47,7 @@ public class InteractionRecorder implements RecordingInterceptor {
      */
     private final AtomicLong recordedCount = new AtomicLong(0);
     /**
-     * 被采集门过滤的记录数：未声明（skillId/templateId 均无）且无可见工具调用的
+     * 被采集门过滤的记录数：未声明（invocationId/templateId 均无）且无可见工具调用的
      * 纯对话默认不录——过滤是决策不是故障，与丢弃分列
      */
     private final AtomicLong filteredCount = new AtomicLong(0);
@@ -131,10 +131,10 @@ public class InteractionRecorder implements RecordingInterceptor {
             return;
         }
 
-        // 默认声明：未声明且无可见工具调用的记录先以应用级默认 skillId 落到
+        // 默认声明：未声明且无可见工具调用的记录先以应用级默认 invocationId 落到
         // 声明位（单技能应用零声明成本；声明锚点在身份优先级中高于模板哈希）
-        if (!isDeclared(record) && !hasVisibleToolCalls(record) && isNonEmpty(config.getDefaultSkillId())) {
-            record.setSkillId(config.getDefaultSkillId());
+        if (!isDeclared(record) && !hasVisibleToolCalls(record) && isNonEmpty(config.getDefaultInvocationId())) {
+            record.setInvocationId(config.getDefaultInvocationId());
         }
 
         // 采集门：默认全量录制（任务链完整性优先于流量卫生，链条终点的最终
@@ -147,7 +147,7 @@ public class InteractionRecorder implements RecordingInterceptor {
             long filtered = filteredCount.incrementAndGet();
             if (filtered == 1 || filtered % FILTERED_WARN_INTERVAL == 0) {
                 filteredWarnEmissions.incrementAndGet();
-                log.warn("Capture gate filtered undeclared interaction: declare skillId/templateId or set recordUndeclaredChat=true to record; filtered total={}", filtered);
+                log.warn("Capture gate filtered undeclared interaction: declare invocationId/templateId or set recordUndeclaredChat=true to record; filtered total={}", filtered);
             }
             return;
         }
@@ -196,10 +196,10 @@ public class InteractionRecorder implements RecordingInterceptor {
     }
 
     /**
-     * 采集门判定：业务身份声明（skillId 或 templateId 任一非空）即视为已声明。
+     * 采集门判定：业务身份声明（invocationId 或 templateId 任一非空）即视为已声明。
      */
     private static boolean isDeclared(InteractionRecord record) {
-        return isNonEmpty(record.getSkillId()) || isNonEmpty(record.getTemplateId());
+        return isNonEmpty(record.getInvocationId()) || isNonEmpty(record.getTemplateId());
     }
 
     private static boolean hasVisibleToolCalls(InteractionRecord record) {

@@ -1,7 +1,7 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.config.ConfigLoader;
-import io.github.agentassert4j.config.SkillRulesConfig;
+import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.spi.StorageRepository;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -26,8 +26,8 @@ public class BaselineCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
     String db;
 
-    @Option(names = {"--skill"}, description = "只处理该 skill：业务 skillId 或 groupKey 唯一前缀（缺省全部 skill）")
-    String skill;
+    @Option(names = {"--invocation"}, description = "只处理该调用点：业务 invocationId 或 invocationKey 唯一前缀（缺省全部调用点）")
+    String invocation;
 
     @Option(names = {"--approver"}, description = "操作者身份，随基线审批留痕（缺省取当前系统用户）")
     String approver;
@@ -41,11 +41,11 @@ public class BaselineCommand implements Callable<Integer> {
         try {
             repository = CliSupport.openRepository(db, out);
             String actor = approver != null && !approver.trim().isEmpty() ? approver.trim() : CliSupport.currentActor();
-            String resolvedSkill = CliSupport.resolveBusinessSkillFilter(repository, skill, out);
-            SkillRulesConfig rules = ConfigLoader.loadRulesConfig();
+            String resolvedInvocation = CliSupport.resolveInvocationFilter(repository, invocation, out);
+            InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
             CliSupport.warnUnknownBehaviors(rules, out);
-            int established = new BaselineService(repository).establishMissing(System.out, actor, force, resolvedSkill, rules);
-            out.println(established > 0 ? "完成：" + established + " 个 skill " + (force ? "重建" : "新建") + "基线。" : "完成：所有 skill 均已有基线。");
+            int established = new BaselineService(repository).establishMissing(System.out, actor, force, resolvedInvocation, rules);
+            out.println(established > 0 ? "完成：" + established + " 个 调用点 " + (force ? "重建" : "新建") + "基线。" : "完成：所有 调用点 均已有基线。");
             return 0;
         } catch (IllegalStateException e) {
             err.println(e.getMessage());

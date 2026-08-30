@@ -36,8 +36,8 @@ public class RulesCommand implements Callable<Integer> {
         out.println();
         out.println("规则文件示例（agentassert4j-rules.json，与 agentassert4j.json 同目录查找）:");
         out.println("{");
-        out.println("  \"skills\": {");
-        out.println("    \"<业务 skillId>\": {");
+        out.println("  \"invocations\": {");
+        out.println("    \"<业务 invocationId>\": {");
         out.println("      \"requiredKeywords\": [\"订单\"],");
         out.println("      \"forbiddenKeywords\": [\"抱歉\"],");
         out.println("      \"regexPatterns\": [\"\\\\d{6,}\"],");

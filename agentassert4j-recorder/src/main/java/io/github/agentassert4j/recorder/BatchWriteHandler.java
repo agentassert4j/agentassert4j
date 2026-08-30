@@ -1,9 +1,9 @@
 package io.github.agentassert4j.recorder;
 
 import com.lmax.disruptor.EventHandler;
-import io.github.agentassert4j.algorithm.DeterministicSkillGrouper;
+import io.github.agentassert4j.algorithm.InvocationResolver;
 import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.SkillProfile;
+import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.InteractionWriteStore;
 import io.github.agentassert4j.util.TextUtil;
 import org.slf4j.Logger;
@@ -162,16 +162,16 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
      * 在消费线程执行——指纹提取含响应体 JSON 解析，不允许回到业务线程。
      * group_key 列有 NOT NULL 约束，上游缺失时回充分组器派生值，否则整批 INSERT 失败；
      * 已有值不覆盖（上游显式设置的优先）。
-     * 只回填 groupKey：record.skillId 是业务声明位，写入派生 hash 会让后续重派生
-     * 把它误当声明锚，造成存储键与现算键分叉；skill_id 列的 NOT NULL 由存储层空串兜底承接。
+     * 只回填 invocationKey：record.invocationId 是业务声明位，写入派生 hash 会让后续重派生
+     * 把它误当声明锚，造成存储键与现算键分叉；invocation_id 列的 NOT NULL 由存储层空串兜底承接。
      * 单条补全失败不拦截落库——原始交互数据是真源，派生字段缺失可事后重建。
      */
     private void enrich(List<InteractionRecord> records) {
         for (InteractionRecord record : records) {
             try {
-                if (TextUtil.isBlank(record.getGroupKey())) {
-                    SkillProfile grouping = DeterministicSkillGrouper.group(record);
-                    record.setGroupKey(grouping.getGroupKey());
+                if (TextUtil.isBlank(record.getInvocationKey())) {
+                    InvocationProfile grouping = InvocationResolver.resolve(record);
+                    record.setInvocationKey(grouping.getInvocationKey());
                 }
             } catch (RuntimeException e) {
                 log.warn("Enrichment incomplete, record saved without derived fields: {} ({})", record.getRecordId(), e.getMessage());

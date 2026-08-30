@@ -17,9 +17,14 @@ import java.util.Set;
 public interface InteractionQueryStore {
 
     /**
-     * 按 Skill 查询该 Skill 的全部交互记录
+     * 按声明标签查询该标签的全部交互记录
      */
-    List<InteractionRecord> findBySkillId(String skillId);
+    List<InteractionRecord> findByInvocationId(String invocationId);
+
+    /**
+     * 按调用点键查询该调用点的全部交互记录（影响分析选例与治理目标解析用）
+     */
+    List<InteractionRecord> findByInvocationKey(String invocationKey);
 
     /**
      * 按模板 hash 查询使用该模板的全部交互记录
@@ -27,9 +32,9 @@ public interface InteractionQueryStore {
     List<InteractionRecord> findByTemplateHash(String hash);
 
     /**
-     * 影响分析核心查询：通过模板 hash 反查关联的 Skill
+     * 影响分析核心查询：通过模板 hash 反查关联的调用点键
      */
-    Set<String> findSkillIdsByTemplateHash(String hash);
+    Set<String> findInvocationKeysByTemplateHash(String hash);
 
     /**
      * 按 session 查询（依赖链重建用），返回按确定性排序键有序

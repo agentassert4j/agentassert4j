@@ -2,9 +2,9 @@ package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.ComparatorConfig;
 import io.github.agentassert4j.algorithm.DeterministicComparator;
-import io.github.agentassert4j.algorithm.DeterministicSkillGrouper;
+import io.github.agentassert4j.algorithm.InvocationResolver;
 import io.github.agentassert4j.algorithm.JudgmentSemantics;
-import io.github.agentassert4j.config.SkillRulesConfig;
+import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.spi.LlmApiException;
@@ -48,7 +48,7 @@ class ReplayFlowTest {
         repository.initialize();
         stubClient = new StubLlmClient();
         output = new ByteArrayOutputStream();
-        runner = new ReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new SkillRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), false);
+        runner = new ReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), false);
     }
 
     @AfterEach
@@ -63,13 +63,15 @@ class ReplayFlowTest {
         repository.saveInteraction(makeRecord("rec-2", "skill-1", 2000L, "same answer"));
     }
 
-    private InteractionRecord makeRecord(String recordId, String skillId, long timestamp, String response) {
+    private InteractionRecord makeRecord(String recordId, String invocationId, long timestamp, String response) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(recordId);
         r.setSessionId("session-1");
         r.setTimestamp(timestamp);
         r.setSeq(timestamp);
-        r.setSkillId(skillId);
+        r.setInvocationId(invocationId);
+        // 模拟生产 enrich：声明记录走声明锚点，未声明记录走模板锚点
+        r.setInvocationKey(invocationId == null || invocationId.isEmpty() ? "template:hash-old" : "invocation:" + invocationId + ":hash-old");
         r.setTemplateHash("hash-old");
         r.setUserInput("查订单 ORD-001");
         r.setTurnIndex(0);
@@ -79,8 +81,8 @@ class ReplayFlowTest {
         return r;
     }
 
-    private String groupKeyOf(String skillId) {
-        return DeterministicSkillGrouper.group(repository.findBySkillId(skillId).get(0)).getGroupKey();
+    private String invocationKeyOf(String invocationId) {
+        return InvocationResolver.resolve(repository.findByInvocationId(invocationId).get(0)).getInvocationKey();
     }
 
     @Nested
@@ -102,7 +104,7 @@ class ReplayFlowTest {
             assertTrue(report.contains("PASS 2"), "两条用例均应 PASS");
             assertEquals(2, stubClient.callCount);
 
-            SkillProfile profile = repository.findSkillByGroupKey(groupKeyOf("skill-1"));
+            InvocationProfile profile = repository.findInvocationByKey(invocationKeyOf("skill-1"));
             assertNotNull(profile.getFingerprint());
             assertNull(profile.getCandidateFingerprint(), "PASS 不产生候选");
             assertEquals(BaselineStatus.BASELINE, profile.getBaselineStatus());
@@ -124,13 +126,13 @@ class ReplayFlowTest {
             int exit = runner.run("new prompt", null, 3, null, false, false, true);
 
             assertEquals(1, exit, "存在非 PASS 时退出码必须为 1");
-            SkillProfile profile = repository.findSkillByGroupKey(groupKeyOf("skill-1"));
+            InvocationProfile profile = repository.findInvocationByKey(invocationKeyOf("skill-1"));
             assertNotNull(profile.getCandidateFingerprint(), "差异候选必须落库供跨进程裁决");
             assertEquals(BaselineStatus.CANDIDATE, profile.getBaselineStatus());
 
             ApproveCommand approve = new ApproveCommand();
             approve.db = tempDir.resolve("flow.db").toString();
-            approve.skill = groupKeyOf("skill-1");
+            approve.invocation = invocationKeyOf("skill-1");
             PrintStream originalOut = System.out;
             ByteArrayOutputStream approveOut = new ByteArrayOutputStream();
             PrintStream approveStream = new PrintStream(approveOut, true);
@@ -145,7 +147,7 @@ class ReplayFlowTest {
 
             assertEquals(0, approveExit);
             assertTrue(approveOut.toString().contains("候选差异"), "裁决时必须渲染候选与基线的差异证据: " + approveOut);
-            SkillProfile approved = repository.findSkillByGroupKey(groupKeyOf("skill-1"));
+            InvocationProfile approved = repository.findInvocationByKey(invocationKeyOf("skill-1"));
             assertEquals(BaselineStatus.BASELINE, approved.getBaselineStatus());
             assertEquals("v2", approved.getVersionTag(), "approve 后版本递增");
             assertNull(approved.getCandidateFingerprint());
@@ -160,10 +162,10 @@ class ReplayFlowTest {
 
             RejectCommand reject = new RejectCommand();
             reject.db = tempDir.resolve("flow.db").toString();
-            reject.skill = groupKeyOf("skill-1");
+            reject.invocation = invocationKeyOf("skill-1");
             assertEquals(0, reject.call());
 
-            SkillProfile profile = repository.findSkillByGroupKey(groupKeyOf("skill-1"));
+            InvocationProfile profile = repository.findInvocationByKey(invocationKeyOf("skill-1"));
             assertEquals(BaselineStatus.BASELINE, profile.getBaselineStatus());
             assertEquals("v1", profile.getVersionTag());
             assertNull(profile.getCandidateFingerprint());
@@ -223,16 +225,16 @@ class ReplayFlowTest {
         }
 
         @Test
-        @DisplayName("--skill 接受 groupKey 前缀（与 status/approve 的用户标识一致）")
-        void skillFilter_acceptsGroupKeyPrefix() {
+        @DisplayName("--skill 接受 invocationKey 前缀（与 status/approve 的用户标识一致）")
+        void invocationFilter_acceptsInvocationKeyPrefix() {
             seedOneSkill();
             stubClient.responseText = "same answer";
 
-            String prefix = groupKeyOf("skill-1").substring(0, 10);
+            String prefix = invocationKeyOf("skill-1").substring(0, 10);
             int exit = runner.run("new prompt", prefix, 3, null, false, false, true);
 
-            assertEquals(0, exit, "groupKey 前缀必须解析到对应 skill: " + output);
-            assertTrue(output.toString().contains("按 groupKey 前缀匹配到"));
+            assertEquals(0, exit, "invocationKey 前缀必须解析到对应 skill: " + output);
+            assertTrue(output.toString().contains("按 invocationKey 前缀匹配到"));
             assertEquals(2, stubClient.callCount);
         }
 
@@ -243,15 +245,15 @@ class ReplayFlowTest {
             repository.saveInteraction(makeRecord("rec-b", "skill-B", 2000L, "same answer"));
             stubClient.responseText = "same answer";
 
-            // 两 skill 共用同一 templateHash → 同一 groupKey，任何前缀都同时命中两个标签
-            String prefix = groupKeyOf("skill-A").substring(0, 8);
+            // 两 skill 共用同一 templateHash → 同一 invocationKey，任何前缀都同时命中两个标签
+            String prefix = invocationKeyOf("skill-A").substring(0, 8);
             // 歧义在 run 内部显式抛出（生产侧由 ReplayCommand 兜底转退出码 2）
             assertThrows(IllegalStateException.class, () -> runner.run("new prompt", prefix, 3, null, false, false, true));
             assertEquals(0, stubClient.callCount, "歧义路径不得发起任何 LLM 调用");
         }
 
         @Test
-        @DisplayName("groupKey 前缀零命中 → 走「未找到用例」退出码 2")
+        @DisplayName("invocationKey 前缀零命中 → 走「未找到用例」退出码 2")
         void prefixNoMatch_fallsThroughToNoCases() {
             seedOneSkill();
 
@@ -275,9 +277,9 @@ class ReplayFlowTest {
             runner.run("new prompt", null, 3, null, false, false, true);
             int callsAfterFirstRun = stubClient.callCount;
 
-            SkillProfile profile = repository.findSkillByGroupKey(groupKeyOf("skill-1"));
+            InvocationProfile profile = repository.findInvocationByKey(invocationKeyOf("skill-1"));
             profile.setAlgoVersion("det-v0");
-            repository.saveSkillProfile(profile);
+            repository.saveInvocationProfile(profile);
 
             output.reset();
             int exit = runner.run("new prompt", null, 3, null, false, false, true);
@@ -294,9 +296,9 @@ class ReplayFlowTest {
             stubClient.responseText = "same answer";
             runner.run("new prompt", null, 3, null, false, false, true);
 
-            SkillProfile profile = repository.findSkillByGroupKey(groupKeyOf("skill-1"));
+            InvocationProfile profile = repository.findInvocationByKey(invocationKeyOf("skill-1"));
             profile.setAlgoVersion(null);
-            repository.saveSkillProfile(profile);
+            repository.saveInvocationProfile(profile);
 
             int exit = runner.run("new prompt", null, 3, null, false, false, true);
 
@@ -309,11 +311,11 @@ class ReplayFlowTest {
             seedOneSkill();
             stubClient.responseText = "same answer";
             runner.run("new prompt", null, 3, null, false, false, true);
-            String groupKey = groupKeyOf("skill-1");
+            String invocationKey = invocationKeyOf("skill-1");
 
-            SkillProfile profile = repository.findSkillByGroupKey(groupKey);
+            InvocationProfile profile = repository.findInvocationByKey(invocationKey);
             profile.setAlgoVersion("det-v0");
-            repository.saveSkillProfile(profile);
+            repository.saveInvocationProfile(profile);
 
             BaselineCommand baseline = new BaselineCommand();
             baseline.db = tempDir.resolve("flow.db").toString();
@@ -321,7 +323,7 @@ class ReplayFlowTest {
             baseline.force = true;
             assertEquals(0, baseline.call());
 
-            SkillProfile rebuilt = repository.findSkillByGroupKey(groupKey);
+            InvocationProfile rebuilt = repository.findInvocationByKey(invocationKey);
             assertEquals("rebuilder", rebuilt.getApprovedBy());
             assertNotNull(rebuilt.getAlgoVersion());
             assertEquals("v2", rebuilt.getVersionTag(), "重建版本顺延，不与既有 tag 冲突");
@@ -332,31 +334,23 @@ class ReplayFlowTest {
         }
 
         @Test
-        @DisplayName("未声明且形状损坏的记录不进入判定集——无守卫判定结构性不可达")
-        void ungroupableRecord_excludedFromSelection() {
-            // 声明记录恒可分组（身份不依赖工具形状）；未声明记录不进
-            // skill 桶、选例不可达。「分组失败剔除出判定集」守卫退居防御纵深——
-            // 直插脏数据（模拟绕过采集门的写入）不再能产生无守卫判定
+        @DisplayName("绕过录制管道的直插记录（派生列空缺）现场重派生、照常判定")
+        void blankKeyRecord_rederivedOnSelection() {
+            // 直插记录（未走录制 enrich）派生列为空：选例按「存储键优先、
+            // 现场重派生兜底」自愈，不因派生列缺失漏出判定集——
+            // 判定正确性不依赖写入方版本。键派生对畸形内容全防御，
+            // 旧「分组失败剔除」守卫随形状退出身份而结构性不可达，退居纯防御
             repository.saveInteraction(makeRecord("rec-good-1", "skill-1", 1000L, "same answer"));
-            repository.saveInteraction(makeRecord("rec-good-2", "skill-1", 1500L, "same answer"));
-            InteractionRecord poisoned = makeRecord("rec-bad-1", null, 3000L, "same answer");
-            List<ToolCall> brokenCalls = new ArrayList<>();
-            for (int i = 0; i < 2; i++) {
-                ToolCall broken = new ToolCall();
-                broken.setArguments(Collections.<String, Object>emptyMap());
-                brokenCalls.add(broken);
-            }
-            poisoned.setToolCalls(brokenCalls);
-            poisoned.setHasToolCalls(true);
-            repository.saveInteraction(poisoned);
+            InteractionRecord raw = makeRecord("rec-raw-1", "skill-1", 1500L, "same answer");
+            raw.setInvocationKey("");
+            repository.saveInteraction(raw);
             stubClient.responseText = "same answer";
 
             int exit = runner.run("new prompt", null, 3, null, false, false, true);
 
-            String report = output.toString();
-            assertFalse(report.contains("rec-bad-1"), "未声明记录不得进入判定集与报告: " + report);
-            assertEquals(0, exit, "可分组用例全 PASS");
-            assertEquals(2, stubClient.callCount, "仅声明的可分组记录参与判定");
+            assertEquals(0, exit, "可解析用例全 PASS");
+            assertEquals(2, stubClient.callCount, "空键记录现场重派生后参与判定");
+            assertTrue(output.toString().contains("rec-raw-1"), "自愈记录进入判定集与报告: " + output);
         }
 
         @Test
@@ -382,8 +376,8 @@ class ReplayFlowTest {
 
             assertEquals(0, exit, "形状组重放判定可达: " + output);
             assertEquals(1, stubClient.callCount);
-            String shapeGroupKey = DeterministicSkillGrouper.group(shape).getGroupKey();
-            SkillProfile profile = repository.findSkillByGroupKey(shapeGroupKey);
+            String shapeInvocationKey = InvocationResolver.resolve(shape).getInvocationKey();
+            InvocationProfile profile = repository.findInvocationByKey(shapeInvocationKey);
             assertNotNull(profile, "形状组基线已自动建立");
             assertEquals(BaselineStatus.BASELINE, profile.getBaselineStatus());
         }
@@ -457,23 +451,23 @@ class ReplayFlowTest {
             seedOneSkill();
             stubClient.responseText = "same answer";
             runner.run("new prompt", null, 3, null, false, false, true);
-            String groupKey = groupKeyOf("skill-1");
-            String originalApprover = repository.findSkillByGroupKey(groupKey).getApprovedBy();
+            String invocationKey = invocationKeyOf("skill-1");
+            String originalApprover = repository.findInvocationByKey(invocationKey).getApprovedBy();
 
             BaselineCommand baseline = new BaselineCommand();
             baseline.db = tempDir.resolve("flow.db").toString();
             baseline.approver = "rebuilder";
             baseline.force = true;
             assertEquals(0, baseline.call());
-            assertNotEquals(originalApprover, repository.findSkillByGroupKey(groupKey).getApprovedBy());
+            assertNotEquals(originalApprover, repository.findInvocationByKey(invocationKey).getApprovedBy());
 
             RollbackCommand rollback = new RollbackCommand();
             rollback.db = tempDir.resolve("flow.db").toString();
-            rollback.skill = groupKey;
+            rollback.invocation = invocationKey;
             rollback.version = "v1";
             assertEquals(0, rollback.call(), "force 覆盖的旧基线必须可经 rollback 恢复");
 
-            SkillProfile restored = repository.findSkillByGroupKey(groupKey);
+            InvocationProfile restored = repository.findInvocationByKey(invocationKey);
             assertEquals("v1", restored.getVersionTag());
             assertEquals(originalApprover, restored.getApprovedBy());
         }
@@ -493,9 +487,9 @@ class ReplayFlowTest {
             assertEquals(2, exit, "无人审的自动基线不允许在 CI 产绿灯");
             String report = output.toString();
             assertTrue(report.contains("尚无基线"), "必须点名未建档 skill: " + report);
-            assertTrue(report.contains(groupKeyOf("skill-1")), "拒绝名单按 groupKey 列出: " + report);
+            assertTrue(report.contains(invocationKeyOf("skill-1")), "拒绝名单按 invocationKey 列出: " + report);
             assertEquals(0, stubClient.callCount, "拒绝判定不得发起 LLM 调用");
-            assertNull(repository.findSkillByGroupKey(groupKeyOf("skill-1")), "CI 模式不得自动建档");
+            assertNull(repository.findInvocationByKey(invocationKeyOf("skill-1")), "CI 模式不得自动建档");
         }
 
         @Test
@@ -518,7 +512,7 @@ class ReplayFlowTest {
             int exit = runner.run("new prompt", null, 3, null, true, false, true);
 
             assertEquals(0, exit);
-            assertNull(repository.findSkillByGroupKey(groupKeyOf("skill-1")), "dry-run 不得建档");
+            assertNull(repository.findInvocationByKey(invocationKeyOf("skill-1")), "dry-run 不得建档");
             assertTrue(repository.loadGraph() == null || repository.loadGraph().isEmpty(), "dry-run 不得写图快照");
         }
 
@@ -610,8 +604,8 @@ class ReplayFlowTest {
             int established = new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, "skill-a", null);
 
             assertEquals(1, established);
-            assertNotNull(repository.findSkillByGroupKey(groupKeyOf("skill-a")), "目标 skill 必须建档");
-            assertNull(repository.findSkillByGroupKey(groupKeyOf("skill-b")), "非目标 skill 不得被波及");
+            assertNotNull(repository.findInvocationByKey(invocationKeyOf("skill-a")), "目标 skill 必须建档");
+            assertNull(repository.findInvocationByKey(invocationKeyOf("skill-b")), "非目标 skill 不得被波及");
         }
     }
 
@@ -628,12 +622,12 @@ class ReplayFlowTest {
 
             ApproveCommand approve = new ApproveCommand();
             approve.db = tempDir.resolve("flow.db").toString();
-            approve.skill = groupKeyOf("skill-1");
+            approve.invocation = invocationKeyOf("skill-1");
             assertEquals(0, approve.call(), "先 approve 制造归档 v1");
 
             RollbackCommand rollback = new RollbackCommand();
             rollback.db = tempDir.resolve("flow.db").toString();
-            rollback.skill = groupKeyOf("skill-1");
+            rollback.invocation = invocationKeyOf("skill-1");
             rollback.version = "v9";
             PrintStream originalErr = System.err;
             ByteArrayOutputStream errOut = new ByteArrayOutputStream();
@@ -712,7 +706,7 @@ class ReplayFlowTest {
         void setUpJson() {
             jsonOut = new ByteArrayOutputStream();
             jsonErr = new ByteArrayOutputStream();
-            jsonRunner = new ReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new SkillRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(jsonOut, true), new PrintStream(jsonErr, true), true);
+            jsonRunner = new ReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(jsonOut, true), new PrintStream(jsonErr, true), true);
         }
 
         @SuppressWarnings("unchecked")
@@ -750,14 +744,14 @@ class ReplayFlowTest {
             assertEquals(2, ((Number) summary.get("pass")).intValue());
             List<Object> cases = (List<Object>) report.get("cases");
             assertEquals(2, cases.size(), "逐用例数组必须与判定数闭合");
-            List<Object> pending = (List<Object>) report.get("pendingGroupKeys");
+            List<Object> pending = (List<Object>) report.get("pendingInvocationKeys");
             assertTrue(pending.isEmpty(), "全 PASS 无待裁决");
             assertEquals("", jsonErr.toString(), "JSON 模式诊断通道应保持安静");
         }
 
         @Test
-        @DisplayName("非 PASS：verdict/summary/token 落报告，待裁决 groupKeys 非空")
-        void json_nonPass_listsPendingGroupKeys() {
+        @DisplayName("非 PASS：verdict/summary/token 落报告，待裁决 invocationKeys 非空")
+        void json_nonPass_listsPendingInvocationKeys() {
             // 基线无工具、重放多出工具调用 → 二值判定 CHANGED
             seedOneSkill();
             stubClient.toolCallResponse = true;
@@ -774,9 +768,9 @@ class ReplayFlowTest {
             assertEquals("CHANGED", firstCase.get("verdict"));
             assertEquals(10, ((Number) firstCase.get("inputTokens")).intValue());
             assertNotNull(firstCase.get("summary"), "非 PASS 用例必须带差异摘要");
-            List<Object> pending = (List<Object>) report.get("pendingGroupKeys");
-            assertEquals(1, pending.size(), "差异候选的 groupKey 必须进入待裁决名单");
-            assertTrue(pending.get(0).toString().startsWith("skill:"), "待裁决按 groupKey 报告（声明锚点键）: " + pending);
+            List<Object> pending = (List<Object>) report.get("pendingInvocationKeys");
+            assertEquals(1, pending.size(), "差异候选的 invocationKey 必须进入待裁决名单");
+            assertTrue(pending.get(0).toString().startsWith("invocation:"), "待裁决按 invocationKey 报告（声明锚点键）: " + pending);
         }
 
         @Test

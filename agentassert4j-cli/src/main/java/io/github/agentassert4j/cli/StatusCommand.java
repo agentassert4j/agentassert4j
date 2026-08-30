@@ -1,8 +1,8 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.InMemoryDependencyGraph;
-import io.github.agentassert4j.model.ArchivedBaseline;
-import io.github.agentassert4j.model.SkillProfile;
+import io.github.agentassert4j.model.ArchivedTemplateVersion;
+import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -15,15 +15,15 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 
 /**
- * status 命令 — 查看已录制 Skill 与基线状态（裁决前后的巡检入口）。
+ * status 命令 — 查看已录制调用点与基线状态（裁决前后的巡检入口）。
  *
- * <p>groupKey 是 skill 的稳定标识（分组器确定性产出），approve/reject 的
- * --skill 以它（或其唯一前缀）为目标。</p>
+ * <p>invocationKey 是 调用点 的稳定标识（分组器确定性产出），approve/reject 的
+ * --调用点 以它（或其唯一前缀）为目标。</p>
  *
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "status", description = "查看已录制 Skill 与基线状态", mixinStandardHelpOptions = true)
+@Command(name = "status", description = "查看已录制调用点与基线状态", mixinStandardHelpOptions = true)
 public class StatusCommand implements Callable<Integer> {
 
     // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
@@ -34,7 +34,7 @@ public class StatusCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
     String db;
 
-    @Option(names = {"--diff"}, description = "对存在候选指纹的 skill 渲染候选与基线的逐维差异")
+    @Option(names = {"--diff"}, description = "对存在候选指纹的 调用点 渲染候选与基线的逐维差异")
     boolean diff;
 
     @Override
@@ -42,14 +42,14 @@ public class StatusCommand implements Callable<Integer> {
         StorageRepository repository = null;
         try {
             repository = CliSupport.openRepository(db, out);
-            List<SkillProfile> profiles = repository.findAllSkills();
-            Map<String, String> labelsByGroupKey = businessLabelsByGroupKey(repository);
+            List<InvocationProfile> profiles = repository.findAllInvocations();
+            Map<String, String> labelsByInvocationKey = businessLabelsByInvocationKey(repository);
 
-            out.println("groupKey                                              状态       版本   候选  归档版本      业务标签");
-            for (SkillProfile profile : profiles) {
-                String archivedTags = archivedVersionTags(repository, profile.getGroupKey());
-                out.printf("  %-50s %-9s %-6s %-4s %-12s %s%n", profile.getGroupKey(), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "有" : "-", archivedTags.isEmpty() ? "-" : archivedTags, labelsByGroupKey.getOrDefault(profile.getGroupKey(), "-"));
-                printTemplateText(repository, profile.getGroupKey());
+            out.println("invocationKey                                              状态       版本   候选  归档版本      业务标签");
+            for (InvocationProfile profile : profiles) {
+                String archivedTags = archivedVersionTags(repository, profile.getInvocationKey());
+                out.printf("  %-50s %-9s %-6s %-4s %-12s %s%n", profile.getInvocationKey(), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "有" : "-", archivedTags.isEmpty() ? "-" : archivedTags, labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), "-"));
+                printTemplateText(repository, profile.getInvocationKey());
                 if (diff) {
                     printCandidateDiff(profile);
                 }
@@ -73,23 +73,23 @@ public class StatusCommand implements Callable<Integer> {
     }
 
     /**
-     * groupKey → 业务标签（逗号连接）。业务标签是用户代码里的标识，
-     * groupKey 是分组器派生键——两套体系的对照必须就地可见，
-     * 否则用户对着自己的代码认不出哪行是哪个 skill。
+     * invocationKey → 业务标签（逗号连接）。业务标签是用户代码里的标识，
+     * invocationKey 是分组器派生键——两套体系的对照必须就地可见，
+     * 否则用户对着自己的代码认不出哪行是哪个 调用点。
      */
-    private static Map<String, String> businessLabelsByGroupKey(StorageRepository repository) {
+    private static Map<String, String> businessLabelsByInvocationKey(StorageRepository repository) {
         Map<String, List<String>> mapping = new LinkedHashMap<>();
-        for (String skillId : CliSupport.recordedSkillIds(repository)) {
-            String groupKey = new BaselineService(repository).groupKeyOfFirstRecord(skillId);
-            if (groupKey == null) {
+        for (String invocationId : CliSupport.recordedInvocationIds(repository)) {
+            String invocationKey = new BaselineService(repository).invocationKeyOfFirstRecord(invocationId);
+            if (invocationKey == null) {
                 continue;
             }
-            List<String> labels = mapping.get(groupKey);
+            List<String> labels = mapping.get(invocationKey);
             if (labels == null) {
                 labels = new ArrayList<>();
-                mapping.put(groupKey, labels);
+                mapping.put(invocationKey, labels);
             }
-            labels.add(skillId);
+            labels.add(invocationId);
         }
         Map<String, String> result = new LinkedHashMap<>();
         for (Map.Entry<String, List<String>> entry : mapping.entrySet()) {
@@ -101,10 +101,10 @@ public class StatusCommand implements Callable<Integer> {
     /**
      * 归档版本标签列表（最近归档在前）——rollback --version 的可选值来源。
      */
-    private static String archivedVersionTags(StorageRepository repository, String groupKey) {
+    private static String archivedVersionTags(StorageRepository repository, String invocationKey) {
         try {
             List<String> tags = new ArrayList<>();
-            for (ArchivedBaseline archived : repository.findArchivedBaselines(groupKey)) {
+            for (ArchivedTemplateVersion archived : repository.findArchivedVersions(invocationKey)) {
                 tags.add(archived.getVersionTag());
             }
             return String.join(",", tags);
@@ -117,7 +117,7 @@ public class StatusCommand implements Callable<Integer> {
     /**
      * 候选差异渲染（与 approve/reject 输出同源）——巡检时预览裁决证据。
      */
-    private void printCandidateDiff(SkillProfile profile) {
+    private void printCandidateDiff(InvocationProfile profile) {
         if (profile.getCandidateFingerprint() == null) {
             return;
         }
@@ -132,13 +132,13 @@ public class StatusCommand implements Callable<Integer> {
      * （以 templateHash 为键），这里回放给审阅者——审批面对的模板一目了然。
      * 文本缺席（老数据或 userInput 锚点的会话）静默跳过，不阻断巡检。
      */
-    private void printTemplateText(StorageRepository repository, String groupKey) {
-        if (groupKey == null || !groupKey.startsWith("chat:")) {
+    private void printTemplateText(StorageRepository repository, String invocationKey) {
+        if (invocationKey == null || !invocationKey.startsWith("chat:")) {
             return;
         }
         String text;
         try {
-            text = repository.findTemplateText(groupKey.substring("chat:".length()));
+            text = repository.findTemplateText(invocationKey.substring("chat:".length()));
         } catch (RuntimeException e) {
             return;
         }
@@ -154,22 +154,22 @@ public class StatusCommand implements Callable<Integer> {
     /**
      * 已录制业务标签中尚无对应基线画像的（记录标签 → 分组 → 画像缺失）。
      */
-    private static List<String> uncoveredBusinessTags(StorageRepository repository, List<SkillProfile> profiles) {
+    private static List<String> uncoveredBusinessTags(StorageRepository repository, List<InvocationProfile> profiles) {
         List<String> uncovered = new ArrayList<>();
-        for (String skillId : CliSupport.recordedSkillIds(repository)) {
-            String groupKey = new BaselineService(repository).groupKeyOfFirstRecord(skillId);
-            if (groupKey == null) {
+        for (String invocationId : CliSupport.recordedInvocationIds(repository)) {
+            String invocationKey = new BaselineService(repository).invocationKeyOfFirstRecord(invocationId);
+            if (invocationKey == null) {
                 continue;
             }
             boolean covered = false;
-            for (SkillProfile profile : profiles) {
-                if (groupKey.equals(profile.getGroupKey())) {
+            for (InvocationProfile profile : profiles) {
+                if (invocationKey.equals(profile.getInvocationKey())) {
                     covered = true;
                     break;
                 }
             }
             if (!covered) {
-                uncovered.add(skillId);
+                uncovered.add(invocationId);
             }
         }
         return uncovered;

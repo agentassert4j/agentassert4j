@@ -24,9 +24,10 @@ class ParameterValueTracerTest {
         tracer = new ParameterValueTracer();
     }
 
-    private InteractionRecord record(String skillId, String modelResponse, List<ToolCall> toolCalls) {
+    private InteractionRecord record(String invocationId, String modelResponse, List<ToolCall> toolCalls) {
         InteractionRecord r = new InteractionRecord();
-        r.setSkillId(skillId);
+        r.setInvocationId(invocationId);
+        r.setInvocationKey("invocation:" + invocationId + ":hash");
         r.setModelResponse(modelResponse);
         r.setToolCalls(toolCalls);
         r.setHasToolCalls(toolCalls != null && !toolCalls.isEmpty());
@@ -34,8 +35,8 @@ class ParameterValueTracerTest {
         return r;
     }
 
-    private InteractionRecord record(String skillId, String modelResponse, List<ToolCall> toolCalls, long timestamp) {
-        InteractionRecord r = record(skillId, modelResponse, toolCalls);
+    private InteractionRecord record(String invocationId, String modelResponse, List<ToolCall> toolCalls, long timestamp) {
+        InteractionRecord r = record(invocationId, modelResponse, toolCalls);
         r.setTimestamp(timestamp);
         return r;
     }
@@ -289,7 +290,7 @@ class ParameterValueTracerTest {
 
         tracer.traceDependency(Arrays.asList(prev, curr));
 
-        assertTrue(tracer.getGraph().getSuccessors("skillA").contains("skillB"));
+        assertTrue(tracer.getGraph().getSuccessors("invocation:" + "skillA" + ":hash").contains("invocation:" + "skillB" + ":hash"));
         assertEquals(1, tracer.getGraph().edgeCount());
         assertEquals(Confidence.HIGH, tracer.getGraph().getAllEdges().get(0).getConfidence());
     }
@@ -304,7 +305,7 @@ class ParameterValueTracerTest {
 
         tracer.traceDependency(Arrays.asList(prev, curr));
 
-        assertTrue(tracer.getGraph().getSuccessors("skillA").contains("skillB"));
+        assertTrue(tracer.getGraph().getSuccessors("invocation:" + "skillA" + ":hash").contains("invocation:" + "skillB" + ":hash"));
         assertEquals(Confidence.HIGH, tracer.getGraph().getAllEdges().get(0).getConfidence());
     }
 
@@ -317,7 +318,7 @@ class ParameterValueTracerTest {
 
         tracer.traceDependency(Arrays.asList(prev, curr));
 
-        assertTrue(tracer.getGraph().getSuccessors("skillA").contains("skillB"));
+        assertTrue(tracer.getGraph().getSuccessors("invocation:" + "skillA" + ":hash").contains("invocation:" + "skillB" + ":hash"));
         assertEquals(Confidence.LOW, tracer.getGraph().getAllEdges().get(0).getConfidence());
     }
 
@@ -370,8 +371,8 @@ class ParameterValueTracerTest {
 
         // A → B, B → C
         assertEquals(2, tracer.getGraph().edgeCount());
-        assertTrue(tracer.getGraph().getSuccessors("skillA").contains("skillB"));
-        assertTrue(tracer.getGraph().getSuccessors("skillB").contains("skillC"));
+        assertTrue(tracer.getGraph().getSuccessors("invocation:" + "skillA" + ":hash").contains("invocation:" + "skillB" + ":hash"));
+        assertTrue(tracer.getGraph().getSuccessors("invocation:" + "skillB" + ":hash").contains("invocation:" + "skillC" + ":hash"));
     }
 
     @Test
@@ -381,7 +382,7 @@ class ParameterValueTracerTest {
 
         tracer.rebuildGraph(repo);
 
-        assertTrue(tracer.getGraph().getSuccessors("skillA").contains("skillB"));
+        assertTrue(tracer.getGraph().getSuccessors("invocation:" + "skillA" + ":hash").contains("invocation:" + "skillB" + ":hash"));
     }
 
     @Test
@@ -404,7 +405,7 @@ class ParameterValueTracerTest {
 
         tracer.rebuildGraph(repo);
 
-        assertTrue(tracer.getGraph().getSuccessors("skillA").contains("skillB"), "同 timestamp 时必须按 recordId 平局决胜，保证依赖边方向确定");
+        assertTrue(tracer.getGraph().getSuccessors("invocation:" + "skillA" + ":hash").contains("invocation:" + "skillB" + ":hash"), "同 timestamp 时必须按 recordId 平局决胜，保证依赖边方向确定");
     }
 
     private static Map<String, Object> objectMap(Object... kv) {
@@ -446,7 +447,12 @@ class ParameterValueTracerTest {
         }
 
         @Override
-        public List<InteractionRecord> findBySkillId(String skillId) {
+        public List<InteractionRecord> findByInvocationId(String invocationId) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<InteractionRecord> findByInvocationKey(String invocationKey) {
             return Collections.emptyList();
         }
 
@@ -456,7 +462,7 @@ class ParameterValueTracerTest {
         }
 
         @Override
-        public Set<String> findSkillIdsByTemplateHash(String hash) {
+        public Set<String> findInvocationKeysByTemplateHash(String hash) {
             return Collections.emptySet();
         }
 
@@ -471,16 +477,16 @@ class ParameterValueTracerTest {
         }
 
         @Override
-        public void saveSkillProfile(SkillProfile p) {
+        public void saveInvocationProfile(InvocationProfile p) {
         }
 
         @Override
-        public SkillProfile findSkillByGroupKey(String key) {
+        public InvocationProfile findInvocationByKey(String key) {
             return null;
         }
 
         @Override
-        public List<SkillProfile> findAllSkills() {
+        public List<InvocationProfile> findAllInvocations() {
             return Collections.emptyList();
         }
 
@@ -503,16 +509,16 @@ class ParameterValueTracerTest {
         }
 
         @Override
-        public void archiveBaseline(ArchivedBaseline archived) {
+        public void archiveTemplateVersion(ArchivedTemplateVersion archived) {
         }
 
         @Override
-        public ArchivedBaseline findArchivedBaseline(String skillId, String tag) {
+        public ArchivedTemplateVersion findArchivedVersion(String invocationId, String tag) {
             return null;
         }
 
         @Override
-        public List<ArchivedBaseline> findArchivedBaselines(String skillId) {
+        public List<ArchivedTemplateVersion> findArchivedVersions(String invocationId) {
             return Collections.emptyList();
         }
     }

@@ -49,7 +49,7 @@ class SqliteStorageRepositoryTest {
 
         repo.saveInteraction(r);
 
-        InteractionRecord loaded = repo.findBySkillId("skill-1").get(0);
+        InteractionRecord loaded = repo.findByInvocationId("skill-1").get(0);
         assertNull(loaded.getModelResponse());
         assertTrue(loaded.isHasToolCalls());
     }
@@ -59,12 +59,12 @@ class SqliteStorageRepositoryTest {
         InteractionRecord r = createSampleRecord("rec-1", "session-1", "skill-1", "hash-abc");
         repo.saveInteraction(r);
 
-        List<InteractionRecord> results = repo.findBySkillId("skill-1");
+        List<InteractionRecord> results = repo.findByInvocationId("skill-1");
         assertEquals(1, results.size());
         InteractionRecord loaded = results.get(0);
         assertEquals("rec-1", loaded.getRecordId());
         assertEquals("session-1", loaded.getSessionId());
-        assertEquals("skill-1", loaded.getSkillId());
+        assertEquals("skill-1", loaded.getInvocationId());
         assertEquals("hash-abc", loaded.getTemplateHash());
         assertEquals("hello", loaded.getUserInput());
         assertEquals("response text", loaded.getModelResponse());
@@ -83,15 +83,20 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
-    void findSkillIdsByTemplateHash() {
-        repo.saveInteraction(createSampleRecord("r1", "s1", "sk-alpha", "hash-111"));
-        repo.saveInteraction(createSampleRecord("r2", "s2", "sk-beta", "hash-111"));
+    void findInvocationKeysByTemplateHash() {
+        // 反查返回调用点键（不是声明标签）：键空间统一，声明与否同路
+        InteractionRecord r1 = createSampleRecord("r1", "s1", "sk-alpha", "hash-111");
+        r1.setInvocationKey("invocation:sk-alpha:hash-111");
+        repo.saveInteraction(r1);
+        InteractionRecord r2 = createSampleRecord("r2", "s2", "sk-beta", "hash-111");
+        r2.setInvocationKey("template:hash-111");
+        repo.saveInteraction(r2);
         repo.saveInteraction(createSampleRecord("r3", "s3", "sk-gamma", "hash-222"));
 
-        Set<String> skillIds = repo.findSkillIdsByTemplateHash("hash-111");
-        assertEquals(2, skillIds.size());
-        assertTrue(skillIds.contains("sk-alpha"));
-        assertTrue(skillIds.contains("sk-beta"));
+        Set<String> invocationKeys = repo.findInvocationKeysByTemplateHash("hash-111");
+        assertEquals(2, invocationKeys.size());
+        assertTrue(invocationKeys.contains("invocation:sk-alpha:hash-111"));
+        assertTrue(invocationKeys.contains("template:hash-111"));
     }
 
     @Test
@@ -128,12 +133,13 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
-    void saveAndFindSkillProfile() {
-        SkillProfile p = new SkillProfile();
-        p.setSkillId("sk-001");
-        p.setGroupKey("queryOrder[orderId:String]");
-        p.setSkillName("queryOrder");
-        p.setSkillType(SkillType.TOOL_SKILL);
+    void saveAndFindInvocationProfile() {
+        InvocationProfile p = new InvocationProfile();
+        p.setLabel("order-flow");
+        p.setInvocationKey("invocation:order-flow:tmpl-1");
+        p.setTemplateHash("tmpl-1");
+        p.setInvocationName("queryOrder");
+        p.setInvocationType(InvocationType.TOOL);
         p.setBaselineStatus(BaselineStatus.BASELINE);
         p.setVersionTag("v1.0");
         p.setTotalRecords(42);
@@ -144,13 +150,14 @@ class SqliteStorageRepositoryTest {
         fp.setToolCallSet(tools);
         p.setFingerprint(fp);
 
-        repo.saveSkillProfile(p);
+        repo.saveInvocationProfile(p);
 
-        SkillProfile loaded = repo.findSkillByGroupKey("queryOrder[orderId:String]");
+        InvocationProfile loaded = repo.findInvocationByKey("invocation:order-flow:tmpl-1");
         assertNotNull(loaded);
-        assertEquals("sk-001", loaded.getSkillId());
-        assertEquals("queryOrder", loaded.getSkillName());
-        assertEquals(SkillType.TOOL_SKILL, loaded.getSkillType());
+        assertEquals("order-flow", loaded.getLabel());
+        assertEquals("tmpl-1", loaded.getTemplateHash());
+        assertEquals("queryOrder", loaded.getInvocationName());
+        assertEquals(InvocationType.TOOL, loaded.getInvocationType());
         assertEquals(BaselineStatus.BASELINE, loaded.getBaselineStatus());
         assertEquals("v1.0", loaded.getVersionTag());
         assertEquals(42, loaded.getTotalRecords());
@@ -159,11 +166,11 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
-    void findAllSkills() {
+    void findAllInvocations() {
         saveMinimalProfile("sk1", "gk1", "Tool1");
         saveMinimalProfile("sk2", "gk2", "Tool2");
 
-        List<SkillProfile> all = repo.findAllSkills();
+        List<InvocationProfile> all = repo.findAllInvocations();
         assertEquals(2, all.size());
     }
 
@@ -223,18 +230,18 @@ class SqliteStorageRepositoryTest {
         tools.add("toolX");
         fp.setToolCallSet(tools);
 
-        ArchivedBaseline archived = new ArchivedBaseline();
-        archived.setSkillId("sk-001");
+        ArchivedTemplateVersion archived = new ArchivedTemplateVersion();
+        archived.setInvocationKey("invocation:order-flow:tmpl-1");
         archived.setFingerprint(fp);
         archived.setVersionTag("v1.0");
         archived.setAlgoVersion("det-v1");
         archived.setApprovedBy("tester");
         archived.setApprovedAt(123L);
-        repo.archiveBaseline(archived);
+        repo.archiveTemplateVersion(archived);
 
-        ArchivedBaseline loaded = repo.findArchivedBaseline("sk-001", "v1.0");
+        ArchivedTemplateVersion loaded = repo.findArchivedVersion("invocation:order-flow:tmpl-1", "v1.0");
         assertNotNull(loaded);
-        assertEquals("sk-001", loaded.getSkillId());
+        assertEquals("invocation:order-flow:tmpl-1", loaded.getInvocationKey());
         assertEquals("v1.0", loaded.getVersionTag());
         assertNotNull(loaded.getFingerprint());
         assertTrue(loaded.getFingerprint().getToolCallSet().contains("toolX"));
@@ -248,65 +255,65 @@ class SqliteStorageRepositoryTest {
     @Test
     void archiveAndFindBaseline_nullApprovedAtRoundTripsAsNull() {
         // 可空治理列的写读对称：approvedAt=null 绑定与读回的 wasNull 两侧都要钉住
-        ArchivedBaseline archived = new ArchivedBaseline();
-        archived.setSkillId("sk-null-at");
+        ArchivedTemplateVersion archived = new ArchivedTemplateVersion();
+        archived.setInvocationKey("invocation:null-at:tmpl-1");
         archived.setVersionTag("v1");
         archived.setAlgoVersion("det-v1");
         archived.setApprovedBy("alice");
         archived.setApprovedAt(null);
-        repo.archiveBaseline(archived);
+        repo.archiveTemplateVersion(archived);
 
-        ArchivedBaseline loaded = repo.findArchivedBaseline("sk-null-at", "v1");
+        ArchivedTemplateVersion loaded = repo.findArchivedVersion("invocation:null-at:tmpl-1", "v1");
         assertNotNull(loaded);
         assertEquals("alice", loaded.getApprovedBy());
         assertNull(loaded.getApprovedAt());
     }
 
     @Test
-    void findArchivedBaseline_notFound() {
-        assertNull(repo.findArchivedBaseline("nonexistent", "v99"));
+    void findArchivedTemplateVersion_notFound() {
+        assertNull(repo.findArchivedVersion("nonexistent", "v99"));
     }
 
     @Test
-    void findArchivedBaselines_listsBySkillLatestFirst() {
-        // 列表查询是 rollback 版本发现的数据源：只含目标 skill，且最近归档在前
-        ArchivedBaseline older = new ArchivedBaseline();
-        older.setSkillId("sk-list");
+    void findArchivedVersions_listsByInvocationLatestFirst() {
+        // 列表查询是 rollback 版本发现的数据源：只含目标调用点，且最近归档在前
+        ArchivedTemplateVersion older = new ArchivedTemplateVersion();
+        older.setInvocationKey("invocation:order-flow:tmpl-1");
         older.setVersionTag("v1");
-        repo.archiveBaseline(older);
-        ArchivedBaseline newer = new ArchivedBaseline();
-        newer.setSkillId("sk-list");
+        repo.archiveTemplateVersion(older);
+        ArchivedTemplateVersion newer = new ArchivedTemplateVersion();
+        newer.setInvocationKey("invocation:order-flow:tmpl-1");
         newer.setVersionTag("v2");
-        repo.archiveBaseline(newer);
-        ArchivedBaseline otherSkill = new ArchivedBaseline();
-        otherSkill.setSkillId("sk-other");
+        repo.archiveTemplateVersion(newer);
+        ArchivedTemplateVersion otherSkill = new ArchivedTemplateVersion();
+        otherSkill.setInvocationKey("invocation:other-flow:tmpl-1");
         otherSkill.setVersionTag("v1");
-        repo.archiveBaseline(otherSkill);
+        repo.archiveTemplateVersion(otherSkill);
 
-        List<ArchivedBaseline> rows = repo.findArchivedBaselines("sk-list");
+        List<ArchivedTemplateVersion> rows = repo.findArchivedVersions("invocation:order-flow:tmpl-1");
         assertEquals(2, rows.size());
         assertEquals("v2", rows.get(0).getVersionTag(), "最近归档的行必须排在最前");
         assertEquals("v1", rows.get(1).getVersionTag());
-        assertTrue(repo.findArchivedBaselines("no-such-skill").isEmpty());
+        assertTrue(repo.findArchivedVersions("invocation:no-such:tmpl-1").isEmpty());
     }
 
     @Test
-    void findArchivedBaseline_duplicateTag_latestArchiveWins() {
+    void findArchivedTemplateVersion_duplicateTag_latestArchiveWins() {
         // 同 skill 同版本多行归档时最近归档者胜（生产实现的 tiebreaker 契约）
-        ArchivedBaseline first = new ArchivedBaseline();
-        first.setSkillId("sk-dup");
+        ArchivedTemplateVersion first = new ArchivedTemplateVersion();
+        first.setInvocationKey("invocation:dup-flow:tmpl-1");
         first.setVersionTag("v1");
         first.setApprovedBy("older");
         first.setApprovedAt(1L);
-        repo.archiveBaseline(first);
-        ArchivedBaseline second = new ArchivedBaseline();
-        second.setSkillId("sk-dup");
+        repo.archiveTemplateVersion(first);
+        ArchivedTemplateVersion second = new ArchivedTemplateVersion();
+        second.setInvocationKey("invocation:dup-flow:tmpl-1");
         second.setVersionTag("v1");
         second.setApprovedBy("newer");
         second.setApprovedAt(2L);
-        repo.archiveBaseline(second);
+        repo.archiveTemplateVersion(second);
 
-        assertEquals("newer", repo.findArchivedBaseline("sk-dup", "v1").getApprovedBy());
+        assertEquals("newer", repo.findArchivedVersion("invocation:dup-flow:tmpl-1", "v1").getApprovedBy());
     }
 
     @Test
@@ -329,7 +336,7 @@ class SqliteStorageRepositoryTest {
             List<InteractionRecord> batch = Arrays.asList(createSampleRecord("rec-atom-1", "s-atom", "sk-atom", "h1"), createSampleRecord("rec-atom-2", "s-atom", "sk-atom", "h1"), createSampleRecord("rec-atom-3", "s-atom", "sk-atom", "h1"));
 
             assertThrows(IllegalStateException.class, () -> failing.saveInteractions(batch));
-            assertTrue(failing.findBySkillId("sk-atom").isEmpty(), "半批不得落盘——失败批次必须整批回滚");
+            assertTrue(failing.findByInvocationId("sk-atom").isEmpty(), "半批不得落盘——失败批次必须整批回滚");
         } finally {
             failing.close();
         }
@@ -365,7 +372,7 @@ class SqliteStorageRepositoryTest {
 
         int total = 0;
         for (int t = 0; t < threads; t++) {
-            total += repo.findBySkillId("sk-c" + t).size();
+            total += repo.findByInvocationId("sk-c" + t).size();
         }
         assertEquals(threads * batchesPerThread * 5, total, "并发批量写入必须全量落库（缺行=事务交织丢批）");
     }
@@ -388,7 +395,7 @@ class SqliteStorageRepositoryTest {
 
         repo.saveInteraction(r);
 
-        List<InteractionRecord> loaded = repo.findBySkillId("sk1");
+        List<InteractionRecord> loaded = repo.findByInvocationId("sk1");
         assertEquals(1, loaded.size());
         List<ToolCall> loadedTc = loaded.get(0).getToolCalls();
         assertEquals(1, loadedTc.size());
@@ -407,7 +414,7 @@ class SqliteStorageRepositoryTest {
 
         repo.saveInteraction(r);
 
-        List<InteractionRecord> loaded = repo.findBySkillId("sk1");
+        List<InteractionRecord> loaded = repo.findByInvocationId("sk1");
         assertEquals(1, loaded.size());
         List<TurnContext> loadedTurns = loaded.get(0).getPreviousTurns();
         assertEquals(2, loadedTurns.size());
@@ -435,7 +442,7 @@ class SqliteStorageRepositoryTest {
 
         repo.saveInteraction(r);
 
-        List<ToolCall> loadedTc = repo.findBySkillId("sk-e").get(0).getToolCalls();
+        List<ToolCall> loadedTc = repo.findByInvocationId("sk-e").get(0).getToolCalls();
         assertEquals(resultWithSpecials, loadedTc.get(0).getResult(), "tool result 读回必须与原文一致（真实换行/引号/反斜杠），不得残留转义序列");
         assertEquals(argValueWithNewline, loadedTc.get(0).getArguments().get("note"), "arguments 值读回同样必须反转义");
 
@@ -444,7 +451,7 @@ class SqliteStorageRepositoryTest {
         InteractionRecord r2 = createSampleRecord("esc-2", "sess-e", "sk-e", "h-e");
         r2.setPreviousTurns(turns);
         repo.saveInteraction(r2);
-        List<InteractionRecord> all = repo.findBySkillId("sk-e");
+        List<InteractionRecord> all = repo.findByInvocationId("sk-e");
         assertEquals(2, all.size(), "esc-2 是新 record_id，必须正常落库");
         TurnContext loadedTurn = all.stream().filter(x -> "esc-2".equals(x.getRecordId())).findFirst().get().getPreviousTurns().get(0);
         assertEquals("内容\"引号\"\n换行", loadedTurn.getContent(), "previousTurns 内容读回必须反转义");
@@ -507,12 +514,12 @@ class SqliteStorageRepositoryTest {
         r.setUsageRaw("{\"prompt_tokens\":2048,\"completion_tokens\":100}");
         r.setTtftMs(120L);
         r.setCostUsd(0.0021);
-        r.setGroupKey("queryOrder[orderId:string]");
+        r.setInvocationKey("queryOrder[orderId:string]");
         r.setMetadata("{\"agent.role\":\"build\"}");
         r.setRecorderVersion("1.0.0-SNAPSHOT");
         repo.saveInteraction(r);
 
-        InteractionRecord loaded = repo.findBySkillId("sk-v1").get(0);
+        InteractionRecord loaded = repo.findByInvocationId("sk-v1").get(0);
         assertEquals(42L, loaded.getSeq());
         assertEquals("order-extract", loaded.getTemplateId());
         assertEquals("var-fp-1", loaded.getVariablesFingerprint());
@@ -532,7 +539,7 @@ class SqliteStorageRepositoryTest {
         assertTrue(loaded.getUsageRaw().contains("prompt_tokens"));
         assertEquals(Long.valueOf(120L), loaded.getTtftMs());
         assertEquals(Double.valueOf(0.0021), loaded.getCostUsd(), 1e-9);
-        assertEquals("queryOrder[orderId:string]", loaded.getGroupKey());
+        assertEquals("queryOrder[orderId:string]", loaded.getInvocationKey());
         assertTrue(loaded.getMetadata().contains("agent.role"));
         assertEquals("1.0.0-SNAPSHOT", loaded.getRecorderVersion());
     }
@@ -544,18 +551,18 @@ class SqliteStorageRepositoryTest {
         r.setModelResponse("changed response");
         repo.saveInteraction(r); // 崩溃重放双写场景：同 record_id 不得覆盖已有历史
 
-        List<InteractionRecord> results = repo.findBySkillId("sk1");
+        List<InteractionRecord> results = repo.findByInvocationId("sk1");
         assertEquals(1, results.size(), "只追加历史表：record_id 冲突必须静默跳过");
         assertEquals("response text", results.get(0).getModelResponse(), "已落库的原始行不得被重放覆盖");
     }
 
     @Test
     void skillProfileGovernanceColumnsRoundTrip() {
-        SkillProfile p = new SkillProfile();
-        p.setSkillId("sk-gov");
-        p.setGroupKey("gov-key");
-        p.setSkillName("gov");
-        p.setSkillType(SkillType.TOOL_SKILL);
+        InvocationProfile p = new InvocationProfile();
+        p.setLabel("gov-flow");
+        p.setInvocationKey("gov-key");
+        p.setInvocationName("gov");
+        p.setInvocationType(InvocationType.TOOL);
         p.setBaselineStatus(BaselineStatus.BASELINE);
         p.setVersionTag("v2");
         p.setAlgoVersion("1.0");
@@ -566,21 +573,21 @@ class SqliteStorageRepositoryTest {
         DeterministicFingerprint fp = new DeterministicFingerprint();
         fp.setToolCallSet(new HashSet<>());
         p.setFingerprint(fp);
-        repo.saveSkillProfile(p);
+        repo.saveInvocationProfile(p);
 
-        SkillProfile loaded = repo.findSkillByGroupKey("gov-key");
+        InvocationProfile loaded = repo.findInvocationByKey("gov-key");
         assertEquals("1.0", loaded.getAlgoVersion());
         assertEquals("orderId:string", loaded.getParamSignature());
         assertEquals("axy-yxa", loaded.getApprovedBy());
         assertEquals(Long.valueOf(1735689600000L), loaded.getApprovedAt());
     }
 
-    private InteractionRecord createSampleRecord(String id, String sessionId, String skillId, String promptHash) {
+    private InteractionRecord createSampleRecord(String id, String sessionId, String invocationId, String promptHash) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(id);
         r.setSessionId(sessionId);
         r.setTimestamp(System.currentTimeMillis());
-        r.setSkillId(skillId);
+        r.setInvocationId(invocationId);
         r.setTemplateHash(promptHash);
         r.setUserInput("hello");
         r.setModelResponse("response text");
@@ -591,18 +598,18 @@ class SqliteStorageRepositoryTest {
         return r;
     }
 
-    private void saveMinimalProfile(String skillId, String groupKey, String name) {
-        SkillProfile p = new SkillProfile();
-        p.setSkillId(skillId);
-        p.setGroupKey(groupKey);
-        p.setSkillName(name);
-        p.setSkillType(SkillType.TOOL_SKILL);
+    private void saveMinimalProfile(String invocationId, String invocationKey, String name) {
+        InvocationProfile p = new InvocationProfile();
+        p.setLabel(invocationId);
+        p.setInvocationKey(invocationKey);
+        p.setInvocationName(name);
+        p.setInvocationType(InvocationType.TOOL);
         p.setBaselineStatus(BaselineStatus.BASELINE);
         p.setTotalRecords(5);
         DeterministicFingerprint fp = new DeterministicFingerprint();
         fp.setToolCallSet(new HashSet<>());
         p.setFingerprint(fp);
-        repo.saveSkillProfile(p);
+        repo.saveInvocationProfile(p);
     }
 
     @Test
@@ -614,15 +621,15 @@ class SqliteStorageRepositoryTest {
         r.setRecordId("rec-closed");
         r.setSessionId("s");
         r.setTimestamp(1L);
-        r.setSkillId("sk");
+        r.setInvocationId("sk");
         r.setModelResponse("m");
 
         assertThrows(StorageException.class, () -> repo.saveInteraction(r));
         assertThrows(StorageException.class, () -> repo.saveInteractions(Collections.singletonList(r)));
-        assertThrows(StorageException.class, () -> repo.findSkillIdsByTemplateHash("h"));
+        assertThrows(StorageException.class, () -> repo.findInvocationKeysByTemplateHash("h"));
         assertThrows(StorageException.class, () -> repo.findAllSessionIds());
-        assertThrows(StorageException.class, () -> repo.findAllSkills());
-        assertThrows(StorageException.class, () -> repo.saveSkillProfile(new SkillProfile()));
+        assertThrows(StorageException.class, () -> repo.findAllInvocations());
+        assertThrows(StorageException.class, () -> repo.saveInvocationProfile(new InvocationProfile()));
         assertThrows(StorageException.class, () -> repo.loadGraph());
 
         // tearDown 会对已关连接再 close，保持幂等
@@ -634,7 +641,7 @@ class SqliteStorageRepositoryTest {
         r.setRecordId("rec-nasty");
         r.setSessionId("sess-nasty");
         r.setTimestamp(42L);
-        r.setSkillId("sk");
+        r.setInvocationId("sk");
         r.setUserInput("引号\" 反斜杠\\ 换行\n 回车\r 制表\t 控制\u0001符 emoji 😀");
         r.setModelResponse("line1\nline2 \"quoted\" \\tail\\");
         r.setTurnIndex(1);
@@ -691,11 +698,11 @@ class SqliteStorageRepositoryTest {
 
     @Test
     void fingerprintColumns_roundTripHostileContent() {
-        SkillProfile p = new SkillProfile();
-        p.setSkillId("sk-fp");
-        p.setGroupKey("gk-fp");
-        p.setSkillName("n");
-        p.setSkillType(SkillType.TOOL_SKILL);
+        InvocationProfile p = new InvocationProfile();
+        p.setLabel("fp-flow");
+        p.setInvocationKey("invocation:fp-flow:tmpl-1");
+        p.setInvocationName("n");
+        p.setInvocationType(InvocationType.TOOL);
         p.setBaselineStatus(BaselineStatus.CANDIDATE);
         p.setVersionTag("v1");
 
@@ -717,9 +724,9 @@ class SqliteStorageRepositoryTest {
         candidate.setTextLengthMagnitude(1);
         p.setCandidateFingerprint(candidate);
 
-        repo.saveSkillProfile(p);
+        repo.saveInvocationProfile(p);
 
-        SkillProfile back = repo.findSkillByGroupKey("gk-fp");
+        InvocationProfile back = repo.findInvocationByKey("invocation:fp-flow:tmpl-1");
         assertNotNull(back);
         DeterministicFingerprint bf = back.getFingerprint();
         assertEquals(fp.getToolCallSet(), bf.getToolCallSet());
@@ -741,15 +748,15 @@ class SqliteStorageRepositoryTest {
     @Test
     void fingerprintColumn_nullRoundTripsAsNull() {
         // fingerprint 列 NOT NULL：null 指纹以 "{}" 落库，读侧映射回 null
-        SkillProfile p = new SkillProfile();
-        p.setSkillId("sk-null");
-        p.setGroupKey("gk-null");
-        p.setSkillName("n");
-        p.setSkillType(SkillType.TOOL_SKILL);
+        InvocationProfile p = new InvocationProfile();
+        p.setLabel("null-flow");
+        p.setInvocationKey("invocation:null-flow:tmpl-1");
+        p.setInvocationName("n");
+        p.setInvocationType(InvocationType.TOOL);
         p.setBaselineStatus(BaselineStatus.BASELINE);
-        repo.saveSkillProfile(p);
+        repo.saveInvocationProfile(p);
 
-        SkillProfile back = repo.findSkillByGroupKey("gk-null");
+        InvocationProfile back = repo.findInvocationByKey("invocation:null-flow:tmpl-1");
         assertNull(back.getFingerprint());
         assertNull(back.getCandidateFingerprint());
     }

@@ -136,13 +136,13 @@ public class InteractionRecord {
      */
     private String sessionId;
     /**
-     * Skill ID（由 SkillGrouper 分组后回填）
+     * 调用点声明标签（SDK 显式声明或应用级默认，可空；是业务身份，不参与判定）
      */
-    private String skillId;
+    private String invocationId;
     /**
-     * 确定性分组键（DeterministicSkillGrouper 生成）
+     * 调用点键（InvocationResolver 派生，录入即定格；溯源与治理身份，永不进指纹）
      */
-    private String groupKey;
+    private String invocationKey;
 
     /**
      * 是否包含多模态输入（图片/音频/视频）
@@ -423,20 +423,20 @@ public class InteractionRecord {
         this.sessionId = sessionId;
     }
 
-    public String getSkillId() {
-        return skillId;
+    public String getInvocationId() {
+        return invocationId;
     }
 
-    public void setSkillId(String skillId) {
-        this.skillId = skillId;
+    public void setInvocationId(String invocationId) {
+        this.invocationId = invocationId;
     }
 
-    public String getGroupKey() {
-        return groupKey;
+    public String getInvocationKey() {
+        return invocationKey;
     }
 
-    public void setGroupKey(String groupKey) {
-        this.groupKey = groupKey;
+    public void setInvocationKey(String invocationKey) {
+        this.invocationKey = invocationKey;
     }
 
 

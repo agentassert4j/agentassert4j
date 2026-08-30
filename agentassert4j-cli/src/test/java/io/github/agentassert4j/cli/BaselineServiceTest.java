@@ -1,9 +1,9 @@
 package io.github.agentassert4j.cli;
 
-import io.github.agentassert4j.algorithm.DeterministicSkillGrouper;
-import io.github.agentassert4j.config.SkillRulesConfig;
+import io.github.agentassert4j.algorithm.InvocationResolver;
+import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.SkillProfile;
+import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,7 +51,7 @@ class BaselineServiceTest {
     void seedMissingRequiredKeyword_establishSucceedsWithWarning() {
         repository.saveInteraction(makeRecord("rec-1", "skill-1", 1000L, "已为您查询订单状态。"));
         repository.saveInteraction(makeRecord("rec-2", "skill-1", 2000L, "已为您查询订单状态。"));
-        SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单号\"]}}}");
+        InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"requiredKeywords\":[\"订单号\"]}}}");
         PrintStream out = new PrintStream(output, true);
 
         int established = new BaselineService(repository).establishMissing(out, "tester", false, null, rules);
@@ -60,7 +60,7 @@ class BaselineServiceTest {
         String report = output.toString();
         assertTrue(report.contains("种子记录不满足声明规则"), "必须输出种子违例告警: " + report);
         assertTrue(report.contains("缺少必需关键词「订单号」"), "告警列出违例关键词: " + report);
-        SkillProfile profile = repository.findSkillByGroupKey(groupKeyOf("skill-1"));
+        InvocationProfile profile = repository.findInvocationByKey(invocationKeyOf("skill-1"));
         assertNotNull(profile, "基线已建立");
         assertNotNull(profile.getFingerprint(), "基线指纹已落库");
     }
@@ -69,7 +69,7 @@ class BaselineServiceTest {
     @DisplayName("种子响应满足全部声明：不输出告警")
     void seedSatisfiesRules_noWarning() {
         repository.saveInteraction(makeRecord("rec-1", "skill-1", 1000L, "订单号 ORD-001 已出库"));
-        SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单号\"]}}}");
+        InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"requiredKeywords\":[\"订单号\"]}}}");
         PrintStream out = new PrintStream(output, true);
 
         new BaselineService(repository).establishMissing(out, "tester", false, null, rules);
@@ -81,7 +81,7 @@ class BaselineServiceTest {
     @DisplayName("禁用关键词与正则同样参与种子断言")
     void seedForbiddenAndRegex_checked() {
         repository.saveInteraction(makeRecord("rec-1", "skill-1", 1000L, "订单号 ORD-001，抱歉给您带来困扰"));
-        SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单号\"]," + "\"forbiddenKeywords\":[\"抱歉\"]," + "\"regexPatterns\":[{\"pattern\":\"状态[:：]\\\\w+\",\"description\":\"状态行\"}]}}}");
+        InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"requiredKeywords\":[\"订单号\"]," + "\"forbiddenKeywords\":[\"抱歉\"]," + "\"regexPatterns\":[{\"pattern\":\"状态[:：]\\\\w+\",\"description\":\"状态行\"}]}}}");
         PrintStream out = new PrintStream(output, true);
 
         new BaselineService(repository).establishMissing(out, "tester", false, null, rules);
@@ -91,13 +91,13 @@ class BaselineServiceTest {
         assertTrue(report.contains("正则不命中"), "正则违例可见: " + report);
     }
 
-    private InteractionRecord makeRecord(String recordId, String skillId, long timestamp, String response) {
+    private InteractionRecord makeRecord(String recordId, String invocationId, long timestamp, String response) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(recordId);
         r.setSessionId("session-1");
         r.setTimestamp(timestamp);
         r.setSeq(timestamp);
-        r.setSkillId(skillId);
+        r.setInvocationId(invocationId);
         r.setTemplateHash("hash-old");
         r.setUserInput("查订单 ORD-001");
         r.setTurnIndex(0);
@@ -107,7 +107,7 @@ class BaselineServiceTest {
         return r;
     }
 
-    private String groupKeyOf(String skillId) {
-        return DeterministicSkillGrouper.group(repository.findBySkillId(skillId).get(0)).getGroupKey();
+    private String invocationKeyOf(String invocationId) {
+        return InvocationResolver.resolve(repository.findByInvocationId(invocationId).get(0)).getInvocationKey();
     }
 }

@@ -1,7 +1,7 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.BaselineManager;
-import io.github.agentassert4j.model.SkillProfile;
+import io.github.agentassert4j.model.InvocationProfile;
 import picocli.CommandLine.Command;
 
 /**
@@ -14,12 +14,12 @@ import picocli.CommandLine.Command;
 public class RejectCommand extends AdjudicateCommand {
 
     @Override
-    void apply(BaselineManager manager, String groupKey) {
-        manager.reject(groupKey);
+    void apply(BaselineManager manager, String invocationKey) {
+        manager.reject(invocationKey);
     }
 
     @Override
-    String describeResult(SkillProfile profile) {
+    String describeResult(InvocationProfile profile) {
         return "已拒绝，保留基线 " + profile.getVersionTag();
     }
 }

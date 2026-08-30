@@ -1,27 +1,38 @@
 package io.github.agentassert4j.model;
 
 /**
- * Skill 画像 — 同一组交互记录的聚合视图。
+ * 调用点画像 — 一个调用点（invocation）的登记与治理载体。
  *
- * <p>groupKey 确定性分组规则：
- * <ul>
- *   <li>有工具调用：sorted(toolNames).join("+") + "[" + paramSignature + "]"</li>
- *   <li>无工具调用："chat:" + templateHash（无模板时回退 SHA-256(userInput)，
- *       双缺失为 "chat:no-anchor"）</li>
- * </ul></p>
+ * <p>三分模型中的「调用点」= 产生调用的模板/代码位置，是变更单元与治理主体
+ * （治理对象 = 调用点的模板版本史）。主键即 {@link #invocationKey}（派生键），
+ * 不设代理哈希标识。一条录制交互（case）是回归最小单元，期望永远现场重提，
+ * 本画像的存档指纹只作展示与审计。</p>
  *
  * @author axy-yxa
  * @since 2026-08-26
  */
-public class SkillProfile {
+public class InvocationProfile {
 
-    private String skillId;
-    private String skillName;
-    private SkillType skillType;
     /**
-     * 确定性分组键
+     * 调用点键（InvocationResolver 派生，唯一身份）
      */
-    private String groupKey;
+    private String invocationKey;
+    /**
+     * 声明标签（业务身份，可空；未声明调用点键即身份）
+     */
+    private String label;
+    /**
+     * 派生展示名
+     */
+    private String invocationName;
+    /**
+     * 视图分类：有工具调用 / 纯对话（不影响判定）
+     */
+    private InvocationType invocationType;
+    /**
+     * 建档时模板哈希（视图与归档引用；参数类型签名类同属视图域）
+     */
+    private String templateHash;
     /**
      * 参数类型签名，如 "orderId:String"
      */
@@ -53,36 +64,44 @@ public class SkillProfile {
      */
     private Long approvedAt;
 
-    public String getSkillId() {
-        return skillId;
+    public String getInvocationKey() {
+        return invocationKey;
     }
 
-    public void setSkillId(String skillId) {
-        this.skillId = skillId;
+    public void setInvocationKey(String invocationKey) {
+        this.invocationKey = invocationKey;
     }
 
-    public String getSkillName() {
-        return skillName;
+    public String getLabel() {
+        return label;
     }
 
-    public void setSkillName(String skillName) {
-        this.skillName = skillName;
+    public void setLabel(String label) {
+        this.label = label;
     }
 
-    public SkillType getSkillType() {
-        return skillType;
+    public String getInvocationName() {
+        return invocationName;
     }
 
-    public void setSkillType(SkillType skillType) {
-        this.skillType = skillType;
+    public void setInvocationName(String invocationName) {
+        this.invocationName = invocationName;
     }
 
-    public String getGroupKey() {
-        return groupKey;
+    public InvocationType getInvocationType() {
+        return invocationType;
     }
 
-    public void setGroupKey(String groupKey) {
-        this.groupKey = groupKey;
+    public void setInvocationType(InvocationType invocationType) {
+        this.invocationType = invocationType;
+    }
+
+    public String getTemplateHash() {
+        return templateHash;
+    }
+
+    public void setTemplateHash(String templateHash) {
+        this.templateHash = templateHash;
     }
 
     public String getParamSignature() {

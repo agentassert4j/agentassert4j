@@ -114,9 +114,9 @@ Layer 4: agentassert4j-spring-boot3-starter ← 聚合 core + sdk-spring-ai1 + s
 
 ```
 io.github.agentassert4j/
-├── model/      核心数据模型（InteractionRecord, ToolCall, SkillProfile 等）
+├── model/      核心数据模型（InteractionRecord, ToolCall, InvocationProfile 等）
 ├── spi/        全部 SPI 接口（StorageRepository, LlmClient, RecordingInterceptor 等）
-├── algorithm/  纯算法（SkillGrouper, FingerprintExtractor, Comparator 等）
+├── algorithm/  纯算法（InvocationResolver, FingerprintExtractor, Comparator 等）
 ├── result/     判定结果模型（ComparisonResult, Verdict, StatisticalVerdict）
 ├── util/       纯 Java 工具（HashUtil, RecursiveJsonParser, TextDiffUtils）
 └── config/     配置加载（agentassert4j.json / agentassert4j-rules.json 解析）
@@ -166,7 +166,7 @@ io.github.agentassert4j/
 
 1. 所有模型类使用 POJO 风格：private 字段 + getter/setter，无业务逻辑
 2. 工具类以 `Util` 结尾，构造方法 private（如 `TypeInferUtil`）
-3. 枚举类以含义命名（如 `BaselineStatus`、`SkillType`），注释说明每个值的语义
+3. 枚举类以含义命名（如 `BaselineStatus`、`InvocationType`），注释说明每个值的语义
 4. 跨包引用必须显式 import（即使是同 base package 的子包）
 5. 有工厂方法的模型（如 `AnalysisResult.noBaseline()`）放在 model 包
 
@@ -193,7 +193,7 @@ io.github.agentassert4j/
 
 **必须标注 TODO 的场景**：
 
-1. 因后续模块未实现而写死的硬编码值（如 group_key 写空串，待 SkillGrouper 实现）
+1. 因后续模块未实现而写死的硬编码值（如 invocation_key 写空串，待调用点解析实现）
 2. 因核心算法未完成而暂存的占位值（如 fingerprint 暂存 null，待 FingerprintExtractor 实现）
 3. 因依赖组件未就绪而做的简化实现（如 JSON 序列化省略嵌套字段，待 RecursiveJsonParser 统一）
 4. 与其他模块存在代码重复，后续需统一消除的技术债（如手写 JSON 解析待 RecursiveJsonParser 替代）
@@ -438,7 +438,7 @@ sdk-spring-ai1 与 spring-boot3-starter 随 Spring AI 保持 17，不受此条�
 2. **对不合理需求提出建议**：当某个需求/优化方向的技术成本明显超过收益时，**有义务**指出并建议调整，而不是闷头实现。维护者掌握产品全局，AI 掌握实现细节——实现层面「划不划算」的判断是 AI 的职责。
 
 **优化决策思考框架（动手前必过）**：
-- **先量化，再决定**：任何性能优化先回答「真实场景下的成本到底多少」，不停留在「理论上会慢」。虚构的极端场景不是真实负载——本项目的真实负载是「单 JVM 内数十 Skill、日均数千次交互」量级，先按此量级算账。
+- **先量化，再决定**：任何性能优化先回答「真实场景下的成本到底多少」，不停留在「理论上会慢」。虚构的极端场景不是真实负载——本项目的真实负载是「单 JVM 内数十调用点、日均数千次交互」量级，先按此量级算账。
 - **算清两本账再选方案**：A 层（固定开销）+ B 层（业务逻辑）。常见误判只看 B 层忽视 A 层——如新增一个 schema 列（B 层极便宜），连带的是永久契约承诺、序列化/反序列化两侧与测试面扩大（A 层）。
 - **复杂度是负债**：本项目中每个 SPI 接口、每个存储列、每个配置项都是发布后的永久契约或单向门数据（§12.4）。新增复杂度必须换来真实场景下可度量的收益，不为「看起来更优」买单。
 - **需求可以裁剪**：砍掉某功能若能让实现复杂度大幅下降，应建议裁剪而非硬扛。功能完整性是产品决策，技术成本是工程判断——后者先给数据，让前者有依据。

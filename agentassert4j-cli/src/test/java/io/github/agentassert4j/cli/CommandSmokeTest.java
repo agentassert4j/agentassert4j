@@ -54,7 +54,7 @@ class CommandSmokeTest {
         r.setSessionId("session-1");
         r.setTimestamp(1000L);
         r.setSeq(1L);
-        r.setSkillId("queryOrder");
+        r.setInvocationId("queryOrder");
         r.setTemplateHash("hash-old");
         r.setUserInput("查订单");
         r.setTurnIndex(0);
@@ -91,7 +91,7 @@ class CommandSmokeTest {
 
         assertEquals(0, exit);
         String text = out.toString();
-        assertTrue(text.contains("skill:queryOrder:hash-old"), "应以 groupKey 列出基线画像（声明锚点键）: " + text);
+        assertTrue(text.contains("invocation:queryOrder:hash-old"), "应以 invocationKey 列出基线画像（声明锚点键）: " + text);
         assertTrue(text.contains("BASELINE"), "应展示基线状态: " + text);
         assertFalse(text.contains("无基线"), "已建基线后不应再提示无基线: " + text);
     }
@@ -155,7 +155,7 @@ class CommandSmokeTest {
         assertEquals(0, exit);
         String text = out.toString();
         assertTrue(text.contains("归档版本"), "rollback 的可选值来源必须可见: " + text);
-        assertTrue(text.contains("业务标签"), "groupKey 与业务标签的对照必须就地可见: " + text);
+        assertTrue(text.contains("业务标签"), "invocationKey 与业务标签的对照必须就地可见: " + text);
         assertTrue(text.contains("queryOrder"), "业务标签列应展示用户代码里的标识: " + text);
     }
 
@@ -167,7 +167,7 @@ class CommandSmokeTest {
         System.setErr(new PrintStream(errOut, true));
         int exit;
         try {
-            exit = new CommandLine(new AgentAssert4jCli()).execute("approve", "--db", dbPath, "--skill", "chat:x", "--all");
+            exit = new CommandLine(new AgentAssert4jCli()).execute("approve", "--db", dbPath, "--invocation", "chat:x", "--all");
         } finally {
             System.setErr(originalErr);
         }

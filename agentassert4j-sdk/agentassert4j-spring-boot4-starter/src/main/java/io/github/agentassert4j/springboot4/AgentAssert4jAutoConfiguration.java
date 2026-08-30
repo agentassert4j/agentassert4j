@@ -58,7 +58,7 @@ public class AgentAssert4jAutoConfiguration {
     @Bean(destroyMethod = "stop")
     @ConditionalOnMissingBean(InteractionRecorder.class)
     public InteractionRecorder agentAssert4jInteractionRecorder(StorageRepository repository, AgentAssert4jProperties properties) {
-        InteractionRecorder recorder = new InteractionRecorder(repository, RecorderConfig.builder().defaultSkillId(properties.getSkillId()).build());
+        InteractionRecorder recorder = new InteractionRecorder(repository, RecorderConfig.builder().defaultInvocationId(properties.getInvocationId()).build());
         recorder.start();
         return recorder;
     }

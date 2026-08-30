@@ -1,6 +1,6 @@
 package io.github.agentassert4j.algorithm;
 
-import io.github.agentassert4j.config.SkillRulesConfig;
+import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.result.ComparisonResult;
@@ -72,6 +72,33 @@ class RegressionTestExecutorTest {
         assertEquals(3, request.getPreviousTurns().size());
         assertEquals("q1", request.getPreviousTurns().get(0).getContent());
         assertEquals("a1", request.getPreviousTurns().get(1).getContent());
+    }
+
+    @Test
+    void buildReplayRequest_previousTurnsFieldLevelFidelity() {
+        // 任务重放的生命线：tool 轮的关联三元组（toolCallId/toolName/arguments）
+        // 必须逐字段保真——丢弃会被服务端 400 拒绝整个请求，变形则重建不出「当时输入」
+        InteractionRecord baseline = makeBaseline("hash", "current input");
+        TurnContext assistantCall = new TurnContext("assistant", "");
+        assistantCall.setToolCallId("call-42");
+        assistantCall.setToolName("getOrder");
+        assistantCall.setToolArguments("{\"orderId\":\"ORD-001\"}");
+        TurnContext toolResult = new TurnContext("tool", "result payload");
+        toolResult.setToolCallId("call-42");
+        baseline.setPreviousTurns(Arrays.asList(new TurnContext("user", "q1"), assistantCall, toolResult));
+
+        LlmRequest request = executor.buildReplayRequest(baseline, "prompt", null, TestExecutionConfig.defaults());
+
+        assertEquals(3, request.getPreviousTurns().size());
+        TurnContext injectedAssistant = request.getPreviousTurns().get(1);
+        assertEquals("assistant", injectedAssistant.getRole());
+        assertEquals("call-42", injectedAssistant.getToolCallId(), "toolCallId 是重放请求与原对话对齐的关联键");
+        assertEquals("getOrder", injectedAssistant.getToolName());
+        assertEquals("{\"orderId\":\"ORD-001\"}", injectedAssistant.getToolArguments());
+        TurnContext injectedTool = request.getPreviousTurns().get(2);
+        assertEquals("tool", injectedTool.getRole());
+        assertEquals("call-42", injectedTool.getToolCallId(), "tool 帧必须携带同一关联键");
+        assertEquals("result payload", injectedTool.getContent());
     }
 
     @Test
@@ -168,7 +195,7 @@ class RegressionTestExecutorTest {
         RegressionTestResult result = executor.execute(baseline, "new prompt", null, config);
 
         assertEquals("rec-1", result.getBaselineRecordId());
-        assertEquals("skill-1", result.getSkillId());
+        assertEquals("skill-1", result.getInvocationId());
         assertEquals(TestResultStatus.SUCCESS, result.getStatus());
         assertNotNull(result.getComparison());
         assertNotNull(result.getCandidateFingerprint());
@@ -245,13 +272,13 @@ class RegressionTestExecutorTest {
         // 基线带工具调用，重放响应为纯文本 → 工具集维度必然差异（非 PASS）
         InteractionRecord baseline = makeBaselineWithToolCall("hash", "input");
         baselineManager.autoEstablishBaseline(baseline, "tester", null);
-        String groupKey = DeterministicSkillGrouper.group(baseline).getGroupKey();
+        String invocationKey = InvocationResolver.resolve(baseline).getInvocationKey();
         stubClient.response = makeTextResponse("plain answer");
 
         wired.execute(baseline, "new prompt", null, TestExecutionConfig.defaults());
 
         // 候选必须经持久层落库，否则 approve 在另一进程不可达
-        SkillProfile profile = repo.findSkillByGroupKey(groupKey);
+        InvocationProfile profile = repo.findInvocationByKey(invocationKey);
         assertNotNull(profile);
         assertNotNull(profile.getCandidateFingerprint());
         assertEquals(BaselineStatus.CANDIDATE, profile.getBaselineStatus());
@@ -267,14 +294,14 @@ class RegressionTestExecutorTest {
         InteractionRecord baseline = makeBaseline("hash", "input");
         baseline.setModelResponse("same answer");
         baselineManager.autoEstablishBaseline(baseline, "tester", null);
-        String groupKey = DeterministicSkillGrouper.group(baseline).getGroupKey();
+        String invocationKey = InvocationResolver.resolve(baseline).getInvocationKey();
         stubClient.response = makeTextResponse("same answer");
 
         RegressionTestResult result = wired.execute(baseline, "new prompt", null, TestExecutionConfig.defaults());
 
         assertEquals(Verdict.PASS, result.getComparison().getVerdict());
-        assertNull(repo.findSkillByGroupKey(groupKey).getCandidateFingerprint());
-        assertEquals(BaselineStatus.BASELINE, repo.findSkillByGroupKey(groupKey).getBaselineStatus());
+        assertNull(repo.findInvocationByKey(invocationKey).getCandidateFingerprint());
+        assertEquals(BaselineStatus.BASELINE, repo.findInvocationByKey(invocationKey).getBaselineStatus());
     }
 
     @Test
@@ -366,7 +393,7 @@ class RegressionTestExecutorTest {
         @Test
         @DisplayName("requiredKeywords 缺失 → keywordMatch=false 且判定非 PASS")
         void requiredKeywordMissing_failsComparison() {
-            SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
+            InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
             RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null, rules);
             stubClient.response = makeTextResponse("回答里没有关键词");
 
@@ -379,7 +406,7 @@ class RegressionTestExecutorTest {
         @Test
         @DisplayName("requiredKeywords 命中 → 判定不受影响")
         void requiredKeywordPresent_staysPass() {
-            SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
+            InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"requiredKeywords\":[\"订单\"]}}}");
             RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null, rules);
             // 基线与重放输出完全同形（含关键词）→ PASS
             InteractionRecord baseline = makeBaseline("hash", "input");
@@ -395,7 +422,7 @@ class RegressionTestExecutorTest {
         @Test
         @DisplayName("forbiddenKeywords 出现 → keywordMatch=false")
         void forbiddenKeywordPresent_failsComparison() {
-            SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"forbiddenKeywords\":[\"密码\"]}}}");
+            InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"forbiddenKeywords\":[\"密码\"]}}}");
             RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null, rules);
             stubClient.response = makeTextResponse("请提供密码");
 
@@ -407,7 +434,7 @@ class RegressionTestExecutorTest {
         @Test
         @DisplayName("behaviors 约束不满足 → behaviorMatch=false")
         void declaredBehaviorViolated_failsComparison() {
-            SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"skill-1\":{\"behaviors\":[\"mustUseChinese\"]}}}");
+            InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"behaviors\":[\"mustUseChinese\"]}}}");
             RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null, rules);
             stubClient.response = makeTextResponse("english only answer");
 
@@ -419,7 +446,7 @@ class RegressionTestExecutorTest {
         @Test
         @DisplayName("规则声明给其他 skill → 本 skill 不受影响")
         void rulesForOtherSkill_notApplied() {
-            SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"other-skill\":{\"requiredKeywords\":[\"订单\"]}}}");
+            InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"other-skill\":{\"requiredKeywords\":[\"订单\"]}}}");
             RegressionTestExecutor wired = new RegressionTestExecutor(stubClient, new DeterministicComparator(ComparatorConfig.defaults()), null, rules);
             InteractionRecord baseline = makeBaseline("hash", "input");
             baseline.setModelResponse("same answer");
@@ -478,7 +505,7 @@ class RegressionTestExecutorTest {
     private InteractionRecord makeBaseline(String promptHash, String userInput) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId("rec-1");
-        r.setSkillId("skill-1");
+        r.setInvocationId("skill-1");
         r.setTemplateHash(promptHash);
         r.setUserInput(userInput);
         r.setTurnIndex(0);
@@ -553,7 +580,7 @@ class RegressionTestExecutorTest {
         private InteractionRecord chainBaseline() {
             InteractionRecord r = new InteractionRecord();
             r.setRecordId("rec-chain");
-            r.setSkillId("skill-1");
+            r.setInvocationId("skill-1");
             r.setSessionId("session-1");
             r.setTemplateHash("hash-old");
             r.setUserInput("查订单 SO-1");

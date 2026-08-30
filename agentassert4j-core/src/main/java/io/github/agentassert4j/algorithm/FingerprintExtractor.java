@@ -1,6 +1,6 @@
 package io.github.agentassert4j.algorithm;
 
-import io.github.agentassert4j.config.SkillRulesConfig;
+import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.ToolCall;
@@ -53,22 +53,22 @@ public final class FingerprintExtractor {
 
     /**
      * 带规则配置的指纹提取 — 由上层（recorder / CLI）调用，
-     * 从 SkillRulesConfig 获取维度 3-4 的声明式规则。
+     * 从 InvocationRulesConfig 获取维度 3-4 的声明式规则。
      *
      * <p>规则查找键是记录上的业务标签；未声明分组（无标签）统一落到空键——
-     * 这样场景层对 templateHash 绑定的未声明分组注入的断言同样生效。</p>
+     * 这样场景层对 templateHash 锚定的未声明调用点注入的断言同样生效。</p>
      *
-     * @param record  交互记录
-     * @param rules   规则配置（null 时维度 3-4 保持空）
-     * @param skillId 业务标签（可为 null，视同空键）
+     * @param record       交互记录
+     * @param rules        规则配置（null 时维度 3-4 保持空）
+     * @param invocationId 声明标签（可为 null，视同空键）
      * @return 四维度确定性指纹
      */
-    public static DeterministicFingerprint extract(InteractionRecord record, SkillRulesConfig rules, String skillId) {
+    public static DeterministicFingerprint extract(InteractionRecord record, InvocationRulesConfig rules, String invocationId) {
         DeterministicFingerprint fp = extract(record);
         if (rules == null) {
             return fp;
         }
-        SkillRulesConfig.SkillRule rule = rules.getRulesForSkill(skillId != null ? skillId : "");
+        InvocationRulesConfig.InvocationRule rule = rules.getRulesForInvocation(invocationId != null ? invocationId : "");
         fp.setRequiredKeywords(rule.getRequiredKeywords());
         fp.setForbiddenKeywords(rule.getForbiddenKeywords());
         fp.setRegexPatterns(rule.getRegexPatterns());
@@ -89,7 +89,7 @@ public final class FingerprintExtractor {
 
         // toolParamTypes：合并所有工具的参数类型
         // 归一化 toLowerCase()：确保存储层反序列化后的比较一致
-        // （与 DeterministicSkillGrouper 的 paramSignature 归一化策略对齐）
+        // （与 InvocationResolver 的 paramSignature 归一化策略对齐）
         Map<String, String> paramTypes = new HashMap<>();
         for (ToolCall tc : record.getToolCalls()) {
             if (tc.getArgTypes() != null) {

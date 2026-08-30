@@ -70,9 +70,9 @@ public class ParameterValueTracer {
             InteractionRecord prev = chain.get(i - 1);
             InteractionRecord curr = chain.get(i);
 
-            String prevSkill = getSkillId(prev);
-            String currSkill = getSkillId(curr);
-            if (prevSkill == null || currSkill == null || prevSkill.equals(currSkill)) continue;
+            String prevInvocation = invocationKeyOf(prev);
+            String currInvocation = invocationKeyOf(curr);
+            if (prevInvocation == null || currInvocation == null || prevInvocation.equals(currInvocation)) continue;
 
             // ====== 第 1 层：字段值精确匹配 ======
             Set<String> prevFieldValues = extractFieldValues(prev);
@@ -81,7 +81,7 @@ public class ParameterValueTracer {
             boolean valueMatched = false;
             for (String prevVal : prevFieldValues) {
                 if (isMeaningfulValue(prevVal) && currArgValues.contains(prevVal)) {
-                    graph.addEdge(prevSkill, currSkill, Confidence.HIGH, null);
+                    graph.addEdge(prevInvocation, currInvocation, Confidence.HIGH, null);
                     valueMatched = true;
                     break; // 一条精确匹配就够了
                 }
@@ -101,7 +101,7 @@ public class ParameterValueTracer {
                         String cPrefix = extractPrefix(cName);
                         if (pPrefix.equals(cPrefix)) {
                             // 前缀匹配，建 LOW 边
-                            graph.addEdge(prevSkill, currSkill, Confidence.LOW, null);
+                            graph.addEdge(prevInvocation, currInvocation, Confidence.LOW, null);
                             prefixMatched = true;
                             break; // 当前对只需建一条 LOW 边
                         }
@@ -244,16 +244,16 @@ public class ParameterValueTracer {
     }
 
     /**
-     * 获取记录的 skillId。
-     * 如果 record 已有 skillId 直接使用，否则通过 DeterministicSkillGrouper 计算；
+     * 记录的调用点键（依赖图节点身份单一空间）。
+     * 优先用落库存储值（enrich 写入，录入即定格），缺失时通过 InvocationResolver 现算；
      * 现算失败（如损坏的工具调用形状）退化为 null——单条记录不阻断整张依赖图重建。
      */
-    private String getSkillId(InteractionRecord record) {
-        if (record.getSkillId() != null && !record.getSkillId().isEmpty()) {
-            return record.getSkillId();
+    private String invocationKeyOf(InteractionRecord record) {
+        if (record.getInvocationKey() != null && !record.getInvocationKey().isEmpty()) {
+            return record.getInvocationKey();
         }
         try {
-            return DeterministicSkillGrouper.group(record).getSkillId();
+            return InvocationResolver.resolve(record).getInvocationKey();
         } catch (RuntimeException e) {
             return null;
         }

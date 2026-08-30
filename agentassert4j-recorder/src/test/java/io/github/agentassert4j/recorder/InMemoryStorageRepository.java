@@ -1,6 +1,8 @@
 package io.github.agentassert4j.recorder;
 
-import io.github.agentassert4j.model.*;
+import io.github.agentassert4j.model.ArchivedTemplateVersion;
+import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 
 import java.util.ArrayList;
@@ -58,7 +60,12 @@ class InMemoryStorageRepository implements StorageRepository {
     }
 
     @Override
-    public List<InteractionRecord> findBySkillId(String skillId) {
+    public List<InteractionRecord> findByInvocationId(String invocationId) {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public List<InteractionRecord> findByInvocationKey(String invocationKey) {
         return Collections.emptyList();
     }
 
@@ -68,7 +75,7 @@ class InMemoryStorageRepository implements StorageRepository {
     }
 
     @Override
-    public Set<String> findSkillIdsByTemplateHash(String hash) {
+    public Set<String> findInvocationKeysByTemplateHash(String hash) {
         return Collections.emptySet();
     }
 
@@ -83,16 +90,16 @@ class InMemoryStorageRepository implements StorageRepository {
     }
 
     @Override
-    public void saveSkillProfile(SkillProfile p) {
+    public void saveInvocationProfile(InvocationProfile p) {
     }
 
     @Override
-    public SkillProfile findSkillByGroupKey(String key) {
+    public InvocationProfile findInvocationByKey(String key) {
         return null;
     }
 
     @Override
-    public List<SkillProfile> findAllSkills() {
+    public List<InvocationProfile> findAllInvocations() {
         return Collections.emptyList();
     }
 
@@ -115,16 +122,16 @@ class InMemoryStorageRepository implements StorageRepository {
     }
 
     @Override
-    public void archiveBaseline(ArchivedBaseline archived) {
+    public void archiveTemplateVersion(ArchivedTemplateVersion archived) {
     }
 
     @Override
-    public ArchivedBaseline findArchivedBaseline(String skillId, String versionTag) {
+    public ArchivedTemplateVersion findArchivedVersion(String invocationId, String versionTag) {
         return null;
     }
 
     @Override
-    public List<ArchivedBaseline> findArchivedBaselines(String skillId) {
+    public List<ArchivedTemplateVersion> findArchivedVersions(String invocationId) {
         return Collections.emptyList();
     }
 

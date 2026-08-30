@@ -1,6 +1,8 @@
 package io.github.agentassert4j.algorithm;
 
-import io.github.agentassert4j.model.*;
+import io.github.agentassert4j.model.ArchivedTemplateVersion;
+import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 
 import java.util.*;
@@ -16,9 +18,9 @@ import java.util.stream.Collectors;
 class SimpleTestRepo implements StorageRepository {
 
     final List<InteractionRecord> interactions = new ArrayList<>();
-    final Map<String, SkillProfile> skillProfiles = new HashMap<>();
+    final Map<String, InvocationProfile> invocationProfiles = new HashMap<>();
     final Map<String, String> promptTexts = new HashMap<>();
-    final List<ArchivedBaseline> archivedBaselines = new ArrayList<>();
+    final List<ArchivedTemplateVersion> archivedBaselines = new ArrayList<>();
     String graphJson;
 
     @Override
@@ -45,8 +47,8 @@ class SimpleTestRepo implements StorageRepository {
     }
 
     @Override
-    public List<InteractionRecord> findBySkillId(String skillId) {
-        return interactions.stream().filter(r -> skillId.equals(r.getSkillId())).collect(Collectors.toList());
+    public List<InteractionRecord> findByInvocationId(String invocationId) {
+        return interactions.stream().filter(r -> invocationId.equals(r.getInvocationId())).collect(Collectors.toList());
     }
 
     @Override
@@ -55,8 +57,13 @@ class SimpleTestRepo implements StorageRepository {
     }
 
     @Override
-    public Set<String> findSkillIdsByTemplateHash(String hash) {
-        return interactions.stream().filter(r -> hash.equals(r.getTemplateHash())).map(InteractionRecord::getSkillId).filter(id -> id != null && !id.isEmpty()).collect(Collectors.toSet());
+    public Set<String> findInvocationKeysByTemplateHash(String hash) {
+        return interactions.stream().filter(r -> hash.equals(r.getTemplateHash())).map(InteractionRecord::getInvocationKey).filter(id -> id != null && !id.isEmpty()).collect(Collectors.toSet());
+    }
+
+    @Override
+    public List<InteractionRecord> findByInvocationKey(String invocationKey) {
+        return interactions.stream().filter(r -> invocationKey.equals(r.getInvocationKey())).collect(Collectors.toList());
     }
 
     @Override
@@ -70,18 +77,18 @@ class SimpleTestRepo implements StorageRepository {
     }
 
     @Override
-    public void saveSkillProfile(SkillProfile p) {
-        skillProfiles.put(p.getGroupKey(), p);
+    public void saveInvocationProfile(InvocationProfile p) {
+        invocationProfiles.put(p.getInvocationKey(), p);
     }
 
     @Override
-    public SkillProfile findSkillByGroupKey(String key) {
-        return skillProfiles.get(key);
+    public InvocationProfile findInvocationByKey(String key) {
+        return invocationProfiles.get(key);
     }
 
     @Override
-    public List<SkillProfile> findAllSkills() {
-        return new ArrayList<>(skillProfiles.values());
+    public List<InvocationProfile> findAllInvocations() {
+        return new ArrayList<>(invocationProfiles.values());
     }
 
     @Override
@@ -105,18 +112,18 @@ class SimpleTestRepo implements StorageRepository {
     }
 
     @Override
-    public void archiveBaseline(ArchivedBaseline archived) {
+    public void archiveTemplateVersion(ArchivedTemplateVersion archived) {
         archived.setArchivedAt(System.currentTimeMillis());
         archivedBaselines.add(archived);
     }
 
     @Override
-    public ArchivedBaseline findArchivedBaseline(String skillId, String versionTag) {
+    public ArchivedTemplateVersion findArchivedVersion(String invocationKey, String versionTag) {
         // 与 SQLite 实现的 tiebreaker 语义一致：同 skill 同版本多行归档时最近归档者胜，
         // 避免 Core 单测结论与生产实现方向相反
-        ArchivedBaseline latest = null;
-        for (ArchivedBaseline ab : archivedBaselines) {
-            if (skillId.equals(ab.getSkillId()) && versionTag.equals(ab.getVersionTag())) {
+        ArchivedTemplateVersion latest = null;
+        for (ArchivedTemplateVersion ab : archivedBaselines) {
+            if (invocationKey.equals(ab.getInvocationKey()) && versionTag.equals(ab.getVersionTag())) {
                 latest = ab;
             }
         }
@@ -124,12 +131,12 @@ class SimpleTestRepo implements StorageRepository {
     }
 
     @Override
-    public List<ArchivedBaseline> findArchivedBaselines(String skillId) {
+    public List<ArchivedTemplateVersion> findArchivedVersions(String invocationKey) {
         // 与 SQLite 实现一致：最近归档在前（插入序反向）
-        List<ArchivedBaseline> result = new ArrayList<>();
+        List<ArchivedTemplateVersion> result = new ArrayList<>();
         for (int i = archivedBaselines.size() - 1; i >= 0; i--) {
-            ArchivedBaseline ab = archivedBaselines.get(i);
-            if (skillId.equals(ab.getSkillId())) {
+            ArchivedTemplateVersion ab = archivedBaselines.get(i);
+            if (invocationKey.equals(ab.getInvocationKey())) {
                 result.add(ab);
             }
         }

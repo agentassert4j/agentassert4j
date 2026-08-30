@@ -42,7 +42,7 @@ class InteractionRecorderTest {
         record.setTemplateHash("hash-" + id);
         // 声明业务身份：未声明且无工具调用的纯对话会被采集门过滤，
         // 通用助手的记录必须能过门（门行为由下方专门的门测试覆盖）
-        record.setSkillId("skill-" + id);
+        record.setInvocationId("skill-" + id);
         return record;
     }
 
@@ -145,7 +145,7 @@ class InteractionRecorderTest {
 
     @Test
     void captureGate_filterMode_undeclaredBareChat_filtered() throws Exception {
-        // 过滤模式（recordUndeclaredChat=false）：未声明（skillId/templateId 均无）
+        // 过滤模式（recordUndeclaredChat=false）：未声明（invocationId/templateId 均无）
         // 且无工具调用的纯对话 → 过滤，不进管道
         RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).recordUndeclaredChat(false).build();
 
@@ -167,7 +167,7 @@ class InteractionRecorderTest {
     }
 
     @Test
-    void captureGate_declaredBySkillId_recorded() throws Exception {
+    void captureGate_declaredByInvocationId_recorded() throws Exception {
         RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
@@ -176,7 +176,7 @@ class InteractionRecorderTest {
         InteractionRecord declared = new InteractionRecord();
         declared.setRecordId("declared-1");
         declared.setTimestamp(System.currentTimeMillis());
-        declared.setSkillId("order-flow");
+        declared.setInvocationId("order-flow");
         recorder.intercept(declared);
 
         Thread.sleep(200);
@@ -228,9 +228,9 @@ class InteractionRecorderTest {
     }
 
     @Test
-    void captureGate_defaultSkillId_undeclaredRecordedWithDefault() throws Exception {
-        // 应用级默认声明：未声明记录以默认 skillId 过门并落到声明位
-        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).defaultSkillId("order-flow").build();
+    void captureGate_defaultInvocationId_undeclaredRecordedWithDefault() throws Exception {
+        // 应用级默认声明：未声明记录以默认 invocationId 过门并落到声明位
+        RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).defaultInvocationId("order-flow").build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
@@ -244,7 +244,7 @@ class InteractionRecorderTest {
         recorder.stop();
 
         assertEquals(1, repo.getStore().size());
-        assertEquals("order-flow", repo.getStore().get(0).getSkillId(), "默认 skillId 落到记录声明位");
+        assertEquals("order-flow", repo.getStore().get(0).getInvocationId(), "默认 invocationId 落到记录声明位");
         assertEquals(0, recorder.getFilteredCount());
     }
 

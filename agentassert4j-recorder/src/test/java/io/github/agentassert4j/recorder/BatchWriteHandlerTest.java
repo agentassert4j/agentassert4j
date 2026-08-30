@@ -1,14 +1,11 @@
 package io.github.agentassert4j.recorder;
 
-import io.github.agentassert4j.algorithm.DeterministicSkillGrouper;
+import io.github.agentassert4j.algorithm.InvocationResolver;
 import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.ToolCall;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -36,7 +33,7 @@ class BatchWriteHandlerTest {
             InteractionRecord record = new InteractionRecord();
             record.setRecordId(id);
             record.setTimestamp(System.currentTimeMillis());
-            record.setSkillId("skill-1");
+            record.setInvocationId("skill-1");
             record.setSessionId("session-1");
             record.setUserInput("查订单 ORD-001");
             record.setModelResponse("{\"data\":{\"orderId\":\"ORD-001\"}}");
@@ -44,7 +41,7 @@ class BatchWriteHandlerTest {
         }
 
         @Test
-        @DisplayName("缺失的 groupKey 在落库前补全")
+        @DisplayName("缺失的 invocationKey 在落库前补全")
         void flush_enrichesMissingDerivedFields() {
             InMemoryStorageRepository repo = new InMemoryStorageRepository();
             RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
@@ -55,27 +52,30 @@ class BatchWriteHandlerTest {
             handler.onEvent(event, 0, true);
 
             InteractionRecord saved = repo.getStore().get(0);
-            assertEquals(DeterministicSkillGrouper.group(saved).getGroupKey(), saved.getGroupKey(), "groupKey 必须由分组器补全，存储与画像才可关联");
+            assertEquals(InvocationResolver.resolve(saved).getInvocationKey(), saved.getInvocationKey(), "invocationKey 必须由分组器补全，存储与画像才可关联");
         }
 
         @Test
         @DisplayName("enrich 单条失败不炸批：损坏记录以缺失派生字段落库")
         void flush_enrichFailureRecordStillSaved() {
-            // 未声明 + 两个无工具名的工具调用让形状派生在排序比较时抛异常——单条损坏
-            // 不得拦截整批落库（SQLite 侧对空派生列有空串兜底 NOT NULL）
+            // 键派生本身对畸形内容全防御（键不依赖工具调用形状），故用故障注入
+            // 驱动 enrich 的防御分支——单条解析异常不得拦截整批落库
+            //（SQLite 侧对空派生列有空串兜底 NOT NULL）
             InMemoryStorageRepository repo = new InMemoryStorageRepository();
             RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
             BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
 
             InteractionRecord good = enrichableRecord("r-good");
-            InteractionRecord broken = enrichableRecord("r-broken");
-            broken.setSkillId(null); // 未声明才会走形状派生，声明记录的身份不依赖工具调用形状
-            List<ToolCall> brokenCalls = new ArrayList<>();
-            for (int i = 0; i < 2; i++) {
-                brokenCalls.add(new ToolCall());
-            }
-            broken.setToolCalls(brokenCalls);
-            broken.setHasToolCalls(true);
+            // 故障注入：读取声明位即抛异常的损坏记录（匿名子类，绕开静态解析器无法打桩的限制）
+            InteractionRecord broken = new InteractionRecord() {
+                @Override
+                public String getInvocationId() {
+                    throw new IllegalStateException("corrupt record");
+                }
+            };
+            broken.setRecordId("r-broken");
+            broken.setTimestamp(System.currentTimeMillis());
+            broken.setSessionId("session-1");
 
             InteractionEvent goodEvent = new InteractionEvent();
             goodEvent.setRecord(good);
@@ -86,7 +86,7 @@ class BatchWriteHandlerTest {
 
             assertEquals(2, repo.getStore().size(), "enrich 单条失败不得拦截整批落库");
             InteractionRecord savedBroken = repo.getStore().get(1);
-            assertNull(savedBroken.getGroupKey(), "损坏记录的派生字段保持缺失，由存储层空串兜底");
+            assertNull(savedBroken.getInvocationKey(), "损坏记录的派生字段保持缺失，由存储层空串兜底");
         }
 
         @Test
@@ -97,19 +97,19 @@ class BatchWriteHandlerTest {
             BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
 
             InteractionRecord record = enrichableRecord("r1");
-            record.setGroupKey("custom-group-key");
+            record.setInvocationKey("custom-group-key");
 
             InteractionEvent event = new InteractionEvent();
             event.setRecord(record);
             handler.onEvent(event, 0, true);
 
             InteractionRecord saved = repo.getStore().get(0);
-            assertEquals("custom-group-key", saved.getGroupKey());
+            assertEquals("custom-group-key", saved.getInvocationKey());
         }
 
         @Test
-        @DisplayName("无 skillId 的记录回填 groupKey；skillId 保持声明位不写派生 hash")
-        void flush_noSkillId_groupKeyBackfilled_skillIdUntouched() {
+        @DisplayName("无 invocationId 的记录回填 invocationKey；invocationId 保持声明位不写派生 hash")
+        void flush_noInvocationId_invocationKeyBackfilled_invocationIdUntouched() {
             InMemoryStorageRepository repo = new InMemoryStorageRepository();
             RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
             BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
@@ -121,9 +121,9 @@ class BatchWriteHandlerTest {
             handler.onEvent(event, 0, true);
 
             InteractionRecord saved = repo.getStore().get(0);
-            assertNotNull(saved.getGroupKey(), "groupKey 必须回充分组器派生值");
-            assertEquals(DeterministicSkillGrouper.group(saved).getGroupKey(), saved.getGroupKey(), "重派生与落库值一致——存储键与现算键不分叉");
-            assertNull(saved.getSkillId(), "skillId 是业务声明位，enrich 不得写入派生 hash（否则重派生把它误当声明锚）");
+            assertNotNull(saved.getInvocationKey(), "invocationKey 必须回充分组器派生值");
+            assertEquals(InvocationResolver.resolve(saved).getInvocationKey(), saved.getInvocationKey(), "重派生与落库值一致——存储键与现算键不分叉");
+            assertNull(saved.getInvocationId(), "invocationId 是业务声明位，enrich 不得写入派生 hash（否则重派生把它误当声明锚）");
         }
     }
 

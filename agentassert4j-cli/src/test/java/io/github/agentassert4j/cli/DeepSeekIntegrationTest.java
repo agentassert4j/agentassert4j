@@ -108,7 +108,7 @@ class DeepSeekIntegrationTest {
     private InteractionRecord makeTextBaseline(String recordId, String userInput, String baselineResponse) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(recordId);
-        r.setSkillId("integration-skill");
+        r.setInvocationId("integration-skill");
         r.setTemplateHash("fake-hash");
         r.setUserInput(userInput);
         r.setTurnIndex(0);
@@ -122,7 +122,7 @@ class DeepSeekIntegrationTest {
     private InteractionRecord makeToolCallBaseline(String recordId, String userInput, String toolName, Map<String, Object> args) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(recordId);
-        r.setSkillId("integration-skill");
+        r.setInvocationId("integration-skill");
         r.setTemplateHash("fake-hash");
         r.setUserInput(userInput);
         r.setTurnIndex(0);
@@ -602,7 +602,7 @@ class DeepSeekIntegrationTest {
             LlmResponse baselineResp = callLlm(originalPrompt, userInput);
             InteractionRecord baseline = responseToRecord(baselineResp);
             baseline.setRecordId("lifecycle-text-1");
-            baseline.setSkillId("math-skill");
+            baseline.setInvocationId("math-skill");
             baseline.setTemplateHash(HashUtil.sha256(originalPrompt));
 
             System.out.println("[9.1] 基线响应: " + baselineResp.getContent());
@@ -648,7 +648,7 @@ class DeepSeekIntegrationTest {
             LlmResponse baselineResp = client.chat(baselineReq, 30000);
             InteractionRecord baseline = responseToRecord(baselineResp, baselineReq);
             baseline.setRecordId("lifecycle-tool-1");
-            baseline.setSkillId("weather-skill");
+            baseline.setInvocationId("weather-skill");
 
             System.out.println("[9.2] 基线 toolCalls: " + (baselineResp.getToolCalls().isEmpty() ? "无" : baselineResp.getToolCalls().size()));
 
@@ -701,7 +701,7 @@ class DeepSeekIntegrationTest {
             // 构建基线并重放
             InteractionRecord baseline = new InteractionRecord();
             baseline.setRecordId("lifecycle-multi-1");
-            baseline.setSkillId("chat-skill");
+            baseline.setInvocationId("chat-skill");
             baseline.setTemplateHash(HashUtil.sha256(prompt));
             baseline.setUserInput("我叫什么名字？只回答名字。");
             baseline.setTurnIndex(2);

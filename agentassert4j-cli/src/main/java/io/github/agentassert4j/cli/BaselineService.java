@@ -1,11 +1,11 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.BaselineManager;
-import io.github.agentassert4j.algorithm.DeterministicSkillGrouper;
-import io.github.agentassert4j.config.SkillRulesConfig;
+import io.github.agentassert4j.algorithm.InvocationResolver;
+import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.model.RegexPattern;
-import io.github.agentassert4j.model.SkillProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 
 import java.io.PrintStream;
@@ -16,8 +16,8 @@ import java.util.Map;
 /**
  * 基线建立服务 — baseline 命令与 replay 前置步骤共用的落基线逻辑。
  *
- * <p>按 skillId 遍历已录制交互（存储返回规范序），逐条调用幂等的
- * autoEstablishBaseline：首个基线由该 skill 最早的交互建立，已存在基线不覆盖。
+ * <p>按 invocationId 遍历已录制交互（存储返回规范序），逐条调用幂等的
+ * autoEstablishBaseline：首个基线由该 调用点 最早的交互建立，已存在基线不覆盖。
  * 重复执行安全——画像属于可从 interactions 重建的派生数据。</p>
  *
  * @author axy-yxa
@@ -34,37 +34,37 @@ public class BaselineService {
     /**
      * 为已录制且尚无基线的分组建立基线。
      *
-     * @param out         报告输出流
-     * @param actor       操作者身份（审批留痕）
-     * @param force       以当前判定语义重建基线：已有基线也被当前算法新指纹覆盖
-     *                    （判定语义版本升级后的恢复路径），版本标签按归档占用顺延
-     * @param skillFilter 仅处理该业务 skillId 或分组键前缀（null = 全部；调用方经
-     *                    CliSupport 预解析，groupKey 前缀已在解析层换算成业务标签）
-     * @param rules       规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
+     * @param out              报告输出流
+     * @param actor            操作者身份（审批留痕）
+     * @param force            以当前判定语义重建基线：已有基线也被当前算法新指纹覆盖
+     *                         （判定语义版本升级后的恢复路径），版本标签按归档占用顺延
+     * @param invocationFilter 仅处理该业务 invocationId 或分组键前缀（null = 全部；调用方经
+     *                         CliSupport 预解析，invocationKey 前缀已在解析层换算成业务标签）
+     * @param rules            规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
      * @return 本次新建/重建基线的分组数
      */
-    public int establishMissing(PrintStream out, String actor, boolean force, String skillFilter, SkillRulesConfig rules) {
+    public int establishMissing(PrintStream out, String actor, boolean force, String invocationFilter, InvocationRulesConfig rules) {
         BaselineManager manager = new BaselineManager(repository);
         int established = 0;
 
-        for (Map.Entry<String, List<InteractionRecord>> bucket : CliSupport.groupBuckets(repository).entrySet()) {
-            String groupKey = bucket.getKey();
+        for (Map.Entry<String, List<InteractionRecord>> bucket : CliSupport.invocationBuckets(repository).entrySet()) {
+            String invocationKey = bucket.getKey();
             List<InteractionRecord> records = bucket.getValue();
-            if (skillFilter != null && !bucketCoversFilter(records, groupKey, skillFilter)) {
+            if (invocationFilter != null && !bucketCoversFilter(records, invocationKey, invocationFilter)) {
                 continue;
             }
 
-            SkillProfile existing = repository.findSkillByGroupKey(groupKey);
+            InvocationProfile existing = repository.findInvocationByKey(invocationKey);
             boolean hadBaseline = existing != null && existing.getFingerprint() != null;
             if (hadBaseline && !force) {
-                out.println("  " + displayLabel(records) + groupKey + ": 基线已存在（" + existing.getVersionTag() + "）");
+                out.println("  " + displayLabel(records) + invocationKey + ": 基线已存在（" + existing.getVersionTag() + "）");
                 continue;
             }
 
             if (force) {
                 if (hadBaseline) {
                     // 破坏性操作必须留痕：被覆盖的旧基线进入归档，rollback 可恢复
-                    out.println("  警告：分组 " + groupKey + " 的既有基线 " + existing.getVersionTag() + "（审批人 " + existing.getApprovedBy() + "）将被当前语义重建覆盖，旧基线已归档、可用 rollback 恢复。");
+                    out.println("  警告：分组 " + invocationKey + " 的既有基线 " + existing.getVersionTag() + "（审批人 " + existing.getApprovedBy() + "）将被当前语义重建覆盖，旧基线已归档、可用 rollback 恢复。");
                 }
                 // 重建取桶内规范序首条可分组记录（分桶已剔除不可分组记录）；
                 // 逐条调用会让版本标签随记录数连跳
@@ -82,12 +82,12 @@ public class BaselineService {
 
             established++;
             // 首条记录建立画像时 totalRecords=1，回填该分组的真实记录数
-            SkillProfile created = repository.findSkillByGroupKey(groupKey);
+            InvocationProfile created = repository.findInvocationByKey(invocationKey);
             if (created != null) {
                 created.setTotalRecords(records.size());
-                repository.saveSkillProfile(created);
+                repository.saveInvocationProfile(created);
             }
-            out.println("  " + displayLabel(records) + groupKey + ": " + (hadBaseline ? "已按当前判定语义重建基线（" + created.getVersionTag() + "）" : "新建基线"));
+            out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "已按当前判定语义重建基线（" + created.getVersionTag() + "）" : "新建基线"));
             warnSeedRuleViolations(out, records.get(0), rules);
         }
         return established;
@@ -99,11 +99,11 @@ public class BaselineService {
      * 不满足只说明「该组每次重放都会在内容规则维度判出差异」，是规则声明的
      * 质量问题而非建档故障；建档现场指出它，避免基线建在必然假差异上。
      */
-    private static void warnSeedRuleViolations(PrintStream out, InteractionRecord seed, SkillRulesConfig rules) {
+    private static void warnSeedRuleViolations(PrintStream out, InteractionRecord seed, InvocationRulesConfig rules) {
         if (rules == null || !rules.hasRules() || seed == null) {
             return;
         }
-        SkillRulesConfig.SkillRule rule = rules.getRulesForSkill(seed.getSkillId());
+        InvocationRulesConfig.InvocationRule rule = rules.getRulesForInvocation(seed.getInvocationId());
         String response = seed.getModelResponse() != null ? seed.getModelResponse() : "";
         List<String> violations = new ArrayList<>();
         for (String keyword : rule.getRequiredKeywords()) {
@@ -134,13 +134,13 @@ public class BaselineService {
     /**
      * 桶是否覆盖过滤值：桶内任一记录的业务标签精确等于过滤值，或分组键以其为前缀。
      */
-    private static boolean bucketCoversFilter(List<InteractionRecord> records, String groupKey, String filter) {
+    private static boolean bucketCoversFilter(List<InteractionRecord> records, String invocationKey, String filter) {
         for (InteractionRecord record : records) {
-            if (filter.equals(record.getSkillId())) {
+            if (filter.equals(record.getInvocationId())) {
                 return true;
             }
         }
-        return groupKey.startsWith(filter);
+        return invocationKey.startsWith(filter);
     }
 
     /**
@@ -148,8 +148,8 @@ public class BaselineService {
      */
     private static String displayLabel(List<InteractionRecord> records) {
         for (InteractionRecord record : records) {
-            if (record.getSkillId() != null && !record.getSkillId().isEmpty()) {
-                return record.getSkillId() + " → ";
+            if (record.getInvocationId() != null && !record.getInvocationId().isEmpty()) {
+                return record.getInvocationId() + " → ";
             }
         }
         return "";
@@ -158,20 +158,20 @@ public class BaselineService {
     /**
      * 该业务标签下首条可分组记录（存储规范序）对应的分组键；无可分组记录返回 null。
      */
-    String groupKeyOfFirstRecord(String skillId) {
-        List<InteractionRecord> records = repository.findBySkillId(skillId);
+    String invocationKeyOfFirstRecord(String invocationId) {
+        List<InteractionRecord> records = repository.findByInvocationId(invocationId);
         InteractionRecord first = firstGroupableRecord(records);
-        return first != null ? DeterministicSkillGrouper.group(first).getGroupKey() : null;
+        return first != null ? InvocationResolver.resolve(first).getInvocationKey() : null;
     }
 
     /**
      * 返回列表中第一条能被分组器处理的记录——个别损坏记录（如工具名缺失）
-     * 跳过处理，不让单条数据问题中断整个 skill 的建档。
+     * 跳过处理，不让单条数据问题中断整个调用点的建档。
      */
     private static InteractionRecord firstGroupableRecord(List<InteractionRecord> records) {
         for (InteractionRecord record : records) {
             try {
-                DeterministicSkillGrouper.group(record);
+                InvocationResolver.resolve(record);
                 return record;
             } catch (RuntimeException e) {
                 // 单条分组失败，试下一条

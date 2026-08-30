@@ -132,14 +132,14 @@ class RecordingChatModelTest {
         CapturingInterceptor interceptor = new CapturingInterceptor();
         RecordingChatModel model = RecordingChatModel.wrap(stub, interceptor);
 
-        try (RecordingContext ctx = RecordingContext.start("session-7").withSkillId("refund")) {
+        try (RecordingContext ctx = RecordingContext.start("session-7").withInvocationId("refund")) {
             model.call(new Prompt(List.of(new UserMessage("hi"))));
         }
         model.call(new Prompt(List.of(new UserMessage("again"))));
 
         assertEquals(2, interceptor.records.size());
         assertEquals("session-7", interceptor.records.get(0).getSessionId());
-        assertEquals("refund", interceptor.records.get(0).getSkillId());
+        assertEquals("refund", interceptor.records.get(0).getInvocationId());
         assertTrue(interceptor.records.get(1).getSessionId() == null || interceptor.records.get(1).getSessionId().isEmpty(), "作用域关闭后不再携带会话标注");
     }
 
@@ -152,13 +152,13 @@ class RecordingChatModelTest {
         CapturingInterceptor interceptor = new CapturingInterceptor();
         RecordingChatModel model = RecordingChatModel.wrap(stub, interceptor);
 
-        try (RecordingContext ctx = RecordingContext.start("session-async").withSkillId("stream-skill")) {
+        try (RecordingContext ctx = RecordingContext.start("session-async").withInvocationId("stream-invocation")) {
             model.stream(new Prompt(List.of(new UserMessage("hi")))).blockLast();
         }
 
         assertEquals(1, interceptor.records.size());
         assertEquals("session-async", interceptor.records.get(0).getSessionId(), "上下文必须在调用线程捕获——聚合回调发生在异步完成信号线程");
-        assertEquals("stream-skill", interceptor.records.get(0).getSkillId());
+        assertEquals("stream-invocation", interceptor.records.get(0).getInvocationId());
     }
 
     /**

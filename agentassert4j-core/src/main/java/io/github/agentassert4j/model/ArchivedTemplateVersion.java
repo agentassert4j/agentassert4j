@@ -1,17 +1,25 @@
 package io.github.agentassert4j.model;
 
 /**
- * 基线归档记录 — approve/rollback 时被替换的旧基线整体快照。
+ * 调用点模板版本归档行 — approve/rollback 时被替换的基线按模板版本整体快照。
  *
- * <p>除指纹与版本标签外，归档行同时留存该基线自身获批时的语义版本与审批事实，
+ * <p>治理主体 = 调用点的模板版本史：除指纹与版本标签外，归档行同时留存该版本
+ * 对应的模板哈希（经 prompt_texts 可反查模板原文）与获批时的语义版本、审批事实，
  * 回滚时据此恢复活跃画像的治理信息。</p>
  *
  * @author axy-yxa
  * @since 2026-08-26
  */
-public class ArchivedBaseline {
+public class ArchivedTemplateVersion {
 
-    private String skillId;
+    /**
+     * 所属调用点键
+     */
+    private String invocationKey;
+    /**
+     * 该版本对应的模板哈希
+     */
+    private String templateHash;
     private DeterministicFingerprint fingerprint;
     private String versionTag;
     /**
@@ -28,12 +36,20 @@ public class ArchivedBaseline {
     private Long approvedAt;
     private long archivedAt;
 
-    public String getSkillId() {
-        return skillId;
+    public String getInvocationKey() {
+        return invocationKey;
     }
 
-    public void setSkillId(String skillId) {
-        this.skillId = skillId;
+    public void setInvocationKey(String invocationKey) {
+        this.invocationKey = invocationKey;
+    }
+
+    public String getTemplateHash() {
+        return templateHash;
+    }
+
+    public void setTemplateHash(String templateHash) {
+        this.templateHash = templateHash;
     }
 
     public DeterministicFingerprint getFingerprint() {

@@ -50,7 +50,7 @@ public final class RecorderConfig {
      * 采集门开关：true（默认）时全量录制——任务链的完整性优先于流量卫生，
      * 链条终点（最终回答组装）往往正是纯文本调用；false 时未声明且无可见
      * 工具调用的纯对话被过滤（超大流量场景的量级卫生选项），过滤量独立
-     * 计数并告警。声明了 skillId/templateId 或带可见 toolCalls 的调用不受
+     * 计数并告警。声明了 invocationId/templateId 或带可见 toolCalls 的调用不受
      * 本开关影响，一律录制
      */
     private final boolean recordUndeclaredChat;
@@ -61,11 +61,11 @@ public final class RecorderConfig {
      */
     private final boolean enabled;
     /**
-     * 应用级默认 skillId：记录未声明且无工具调用时，以此身份作为
+     * 应用级默认 invocationId：记录未声明且无工具调用时，以此身份作为
      * 业务声明锚点（单技能应用零代码即得跨提示词编辑的稳定身份）。
      * 空串 = 无默认（默认值）；显式 per-call 声明（RecordingContext）优先级更高
      */
-    private final String defaultSkillId;
+    private final String defaultInvocationId;
 
     private RecorderConfig(Builder builder) {
         // 钳位：batchSize/maxBufferSize <= 0（如意图立即刷盘的 0 配置）会让
@@ -84,7 +84,7 @@ public final class RecorderConfig {
         this.sanitizeModelResponse = builder.sanitizeModelResponse;
         this.recordUndeclaredChat = builder.recordUndeclaredChat;
         this.enabled = builder.enabled;
-        this.defaultSkillId = builder.defaultSkillId;
+        this.defaultInvocationId = builder.defaultInvocationId;
     }
 
     /**
@@ -153,8 +153,8 @@ public final class RecorderConfig {
         return enabled;
     }
 
-    public String getDefaultSkillId() {
-        return defaultSkillId;
+    public String getDefaultInvocationId() {
+        return defaultInvocationId;
     }
 
     public static final class Builder {
@@ -168,7 +168,7 @@ public final class RecorderConfig {
         private boolean sanitizeModelResponse = false;
         private boolean recordUndeclaredChat = true;
         private boolean enabled = true;
-        private String defaultSkillId = "";
+        private String defaultInvocationId = "";
 
         private Builder() {
         }
@@ -223,8 +223,8 @@ public final class RecorderConfig {
             return this;
         }
 
-        public Builder defaultSkillId(String defaultSkillId) {
-            this.defaultSkillId = defaultSkillId != null ? defaultSkillId : "";
+        public Builder defaultInvocationId(String defaultInvocationId) {
+            this.defaultInvocationId = defaultInvocationId != null ? defaultInvocationId : "";
             return this;
         }
 

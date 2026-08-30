@@ -31,7 +31,7 @@ final class Schema {
                     "  timestamp             INTEGER NOT NULL," +
                     // seq 由录制器进程内单调分配，与 timestamp 组成确定性排序键
                     "  seq                   INTEGER," +
-                    // Prompt 身份三元组；template_hash 可空——无 system prompt 的对话由分组器回退到 user_input hash
+                    // Prompt 身份三元组；template_hash 可空——无 system prompt 的调用点由解析器回退到请求锚点
                     "  template_id           TEXT," +
                     "  template_hash         TEXT," +
                     "  variables_fingerprint TEXT," +
@@ -41,8 +41,8 @@ final class Schema {
                     "  model                 TEXT," +
                     "  served_model          TEXT," +
                     "  endpoint              TEXT," +
-                    "  skill_id              TEXT NOT NULL," +
-                    "  group_key             TEXT NOT NULL," +
+                    "  invocation_id         TEXT NOT NULL," +
+                    "  invocation_key        TEXT NOT NULL," +
                     "  user_input            TEXT," +
                     "  turn_index            INTEGER DEFAULT 0," +
                     // 请求保真
@@ -75,9 +75,9 @@ final class Schema {
 
             // (session_id, seq) 是确定性排序键，复合索引前缀同时覆盖 session_id 单列查询
             "CREATE INDEX IF NOT EXISTS idx_session_seq ON interactions(session_id, seq)",
-            "CREATE INDEX IF NOT EXISTS idx_skill_id ON interactions(skill_id)",
+            "CREATE INDEX IF NOT EXISTS idx_invocation_id ON interactions(invocation_id)",
             "CREATE INDEX IF NOT EXISTS idx_template_hash ON interactions(template_hash)",
-            "CREATE INDEX IF NOT EXISTS idx_group_key ON interactions(group_key)",
+            "CREATE INDEX IF NOT EXISTS idx_invocation_key ON interactions(invocation_key)",
             "CREATE INDEX IF NOT EXISTS idx_timestamp ON interactions(timestamp)",
 
             // Prompt 原文库（hash 不可逆，原文只能存这里，删除即永久丢失）
@@ -87,12 +87,13 @@ final class Schema {
                     "  created_at   INTEGER NOT NULL" +
                     ")",
 
-            // Skill 画像表
-            "CREATE TABLE IF NOT EXISTS skill_profiles (" +
-                    "  skill_id              TEXT PRIMARY KEY," +
-                    "  group_key             TEXT UNIQUE NOT NULL," +
-                    "  skill_name            TEXT NOT NULL," +
-                    "  skill_type            TEXT NOT NULL," +
+            // 调用点画像表（治理主体 = 调用点的模板版本史）
+            "CREATE TABLE IF NOT EXISTS invocations (" +
+                    "  invocation_key        TEXT PRIMARY KEY," +
+                    "  label                 TEXT," +
+                    "  template_hash         TEXT," +
+                    "  invocation_name       TEXT NOT NULL," +
+                    "  invocation_type       TEXT NOT NULL," +
                     "  fingerprint           TEXT NOT NULL," +
                     "  candidate_fingerprint TEXT," +
                     "  baseline_status       TEXT DEFAULT 'BASELINE'," +
@@ -105,19 +106,20 @@ final class Schema {
                     "  updated_at            INTEGER NOT NULL" +
                     ")",
 
-            // 审批时旧基线的归档表
-            "CREATE TABLE IF NOT EXISTS archived_baselines (" +
-                    "  id            INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "  skill_id      TEXT NOT NULL," +
-                    "  fingerprint   TEXT NOT NULL," +
-                    "  version_tag   TEXT," +
-                    "  algo_version  TEXT," +
-                    "  approved_by   TEXT," +
-                    "  approved_at   INTEGER," +
-                    "  archived_at   INTEGER NOT NULL" +
+            // 审批时旧基线按模板版本的归档表
+            "CREATE TABLE IF NOT EXISTS invocation_template_versions (" +
+                    "  id             INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "  invocation_key TEXT NOT NULL," +
+                    "  template_hash  TEXT," +
+                    "  fingerprint    TEXT NOT NULL," +
+                    "  version_tag    TEXT," +
+                    "  algo_version   TEXT," +
+                    "  approved_by    TEXT," +
+                    "  approved_at    INTEGER," +
+                    "  archived_at    INTEGER NOT NULL" +
                     ")",
 
-            "CREATE INDEX IF NOT EXISTS idx_archived_skill ON archived_baselines(skill_id)",
+            "CREATE INDEX IF NOT EXISTS idx_archived_invocation ON invocation_template_versions(invocation_key)",
 
             // 依赖图快照（整图 JSON；图是派生数据，可随时重建）
             "CREATE TABLE IF NOT EXISTS graph_snapshot (" +

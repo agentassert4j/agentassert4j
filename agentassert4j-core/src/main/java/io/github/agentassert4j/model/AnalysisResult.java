@@ -11,8 +11,8 @@ import java.util.Set;
  */
 public class AnalysisResult {
 
-    private Set<String> directSkills;
-    private Set<String> allAffectedSkills;
+    private Set<String> directInvocations;
+    private Set<String> allAffectedInvocations;
     private List<InteractionRecord> testCases;
     /**
      * 冷启动引导提示
@@ -27,10 +27,9 @@ public class AnalysisResult {
     public AnalysisResult() {
     }
 
-    public AnalysisResult(Set<String> directSkills, Set<String> allAffectedSkills,
-                          List<InteractionRecord> testCases) {
-        this.directSkills = directSkills;
-        this.allAffectedSkills = allAffectedSkills;
+    public AnalysisResult(Set<String> directInvocations, Set<String> allAffectedInvocations, List<InteractionRecord> testCases) {
+        this.directInvocations = directInvocations;
+        this.allAffectedInvocations = allAffectedInvocations;
         this.testCases = testCases;
         this.hasBaseline = true;
     }
@@ -50,20 +49,20 @@ public class AnalysisResult {
         return r;
     }
 
-    public Set<String> getDirectSkills() {
-        return directSkills;
+    public Set<String> getDirectInvocations() {
+        return directInvocations;
     }
 
-    public void setDirectSkills(Set<String> directSkills) {
-        this.directSkills = directSkills;
+    public void setDirectInvocations(Set<String> directInvocations) {
+        this.directInvocations = directInvocations;
     }
 
-    public Set<String> getAllAffectedSkills() {
-        return allAffectedSkills;
+    public Set<String> getAllAffectedInvocations() {
+        return allAffectedInvocations;
     }
 
-    public void setAllAffectedSkills(Set<String> allAffectedSkills) {
-        this.allAffectedSkills = allAffectedSkills;
+    public void setAllAffectedInvocations(Set<String> allAffectedInvocations) {
+        this.allAffectedInvocations = allAffectedInvocations;
     }
 
     public List<InteractionRecord> getTestCases() {

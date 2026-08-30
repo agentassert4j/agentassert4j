@@ -483,8 +483,8 @@ public class DataSanitizer {
         copy.setCostUsd(original.getCostUsd());
         copy.setHasToolCalls(original.isHasToolCalls());
         copy.setSessionId(original.getSessionId());
-        copy.setSkillId(original.getSkillId());
-        copy.setGroupKey(original.getGroupKey());
+        copy.setInvocationId(original.getInvocationId());
+        copy.setInvocationKey(original.getInvocationKey());
         copy.setMultimodalInput(original.isMultimodalInput());
         copy.setMultimodalContent(original.getMultimodalContent());
         copy.setMetadata(original.getMetadata());

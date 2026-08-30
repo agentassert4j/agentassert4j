@@ -65,14 +65,14 @@ class DataSanitizerTest {
     void sanitize_copyCarriesDerivedFields() {
         DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "password"));
         InteractionRecord record = createTestRecord();
-        record.setSkillId("skill-1");
-        record.setGroupKey("gk-1");
+        record.setInvocationId("skill-1");
+        record.setInvocationKey("gk-1");
 
         InteractionRecord result = sanitizer.sanitize(record);
 
         assertNotSame(record, result, "有脱敏配置时必须拷贝隔离");
-        assertEquals("skill-1", result.getSkillId());
-        assertEquals("gk-1", result.getGroupKey(), "拷贝不得丢失分组键");
+        assertEquals("skill-1", result.getInvocationId());
+        assertEquals("gk-1", result.getInvocationKey(), "拷贝不得丢失分组键");
     }
 
     @Test

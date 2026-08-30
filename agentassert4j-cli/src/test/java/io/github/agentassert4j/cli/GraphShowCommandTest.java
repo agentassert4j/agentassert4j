@@ -62,9 +62,10 @@ class GraphShowCommandTest {
 
         assertEquals(0, exit);
         String output = stdout.toString();
-        assertTrue(output.contains("queryOrder"), "节点必须含上游 skill");
-        assertTrue(output.contains("refundOrder"), "节点必须含下游 skill");
-        assertTrue(output.contains("queryOrder -> refundOrder"), "值流边必须渲染");
+        // 图节点身份 = 调用点键（声明锚点：invocation:标签:模板哈希）
+        assertTrue(output.contains("invocation:queryOrder:hash-r-1"), "节点必须含上游调用点键");
+        assertTrue(output.contains("invocation:refundOrder:hash-r-2"), "节点必须含下游调用点键");
+        assertTrue(output.contains("invocation:queryOrder:hash-r-1 -> invocation:refundOrder:hash-r-2"), "值流边必须渲染");
         assertTrue(output.contains("HIGH"), "字段值精确匹配是 HIGH 置信度");
         assertTrue(output.contains("环：无"));
     }
@@ -86,13 +87,13 @@ class GraphShowCommandTest {
      * 同一会话内的链式记录：responseJson 是上游 LLM 回复（含可提取字段值），
      * argValue 是下游工具参数值（与上游字段值相等即 HIGH 边）。
      */
-    private void saveChainRecord(String recordId, String skillId, long timestamp, String argValue, String responseJson) {
+    private void saveChainRecord(String recordId, String invocationId, long timestamp, String argValue, String responseJson) {
         InteractionRecord record = new InteractionRecord();
         record.setRecordId(recordId);
         record.setSessionId("session-graph");
         record.setTimestamp(timestamp);
         record.setSeq(timestamp);
-        record.setSkillId(skillId);
+        record.setInvocationId(invocationId);
         record.setTemplateHash("hash-" + recordId);
         record.setUserInput("输入 " + recordId);
         record.setTurnIndex(0);
@@ -100,7 +101,7 @@ class GraphShowCommandTest {
         List<ToolCall> calls = new ArrayList<>();
         if (argValue != null) {
             ToolCall call = new ToolCall();
-            call.setToolName(skillId);
+            call.setToolName(invocationId);
             Map<String, Object> args = new LinkedHashMap<>();
             args.put("order_id", argValue);
             call.setArguments(args);

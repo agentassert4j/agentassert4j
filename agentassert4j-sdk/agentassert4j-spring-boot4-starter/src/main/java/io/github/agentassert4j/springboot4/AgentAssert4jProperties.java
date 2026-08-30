@@ -25,10 +25,10 @@ public class AgentAssert4jProperties {
     private String database = "agentassert4j.db";
 
     /**
-     * 应用级默认 skillId：记录未声明且无工具调用时以此身份录制。
+     * 应用级默认调用点标签：记录未声明时的声明位，随记录落 invocation_id 列。
      * 单技能应用配置一次即得稳定身份；多技能应用在代码里用 RecordingContext 显式声明。
      */
-    private String skillId = "";
+    private String invocationId = "";
 
     public boolean isEnabled() {
         return enabled;
@@ -46,11 +46,11 @@ public class AgentAssert4jProperties {
         this.database = database;
     }
 
-    public String getSkillId() {
-        return skillId;
+    public String getInvocationId() {
+        return invocationId;
     }
 
-    public void setSkillId(String skillId) {
-        this.skillId = skillId;
+    public void setInvocationId(String invocationId) {
+        this.invocationId = invocationId;
     }
 }

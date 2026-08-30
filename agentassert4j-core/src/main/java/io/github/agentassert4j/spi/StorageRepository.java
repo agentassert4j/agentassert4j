@@ -13,7 +13,7 @@ package io.github.agentassert4j.spi;
  * @author axy-yxa
  * @since 2026-08-26
  */
-public interface StorageRepository extends InteractionWriteStore, InteractionQueryStore, SkillStore, TemplateTextStore, GraphStore, BaselineArchiveStore {
+public interface StorageRepository extends InteractionWriteStore, InteractionQueryStore, InvocationStore, TemplateTextStore, GraphStore, TemplateVersionArchiveStore {
 
     /**
      * 存储后端类型标识（如 "sqlite"）

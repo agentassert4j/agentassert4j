@@ -10,7 +10,7 @@ import java.util.Map;
  * SDK 用线程绑定的临时作用域补齐：</p>
  * <pre>{@code
  * try (RecordingContext ctx = RecordingContext.start("session-1")
- *         .withSkillId("order-refund")) {
+ *         .withInvocationId("order-refund")) {
  *     chatClient.prompt()...call();
  * }
  * }</pre>
@@ -27,7 +27,7 @@ public final class RecordingContext implements AutoCloseable {
 
     private final RecordingContext previous;
     private final String sessionId;
-    private String skillId;
+    private String invocationId;
     private String templateId;
     private final Map<String, String> metadata = new LinkedHashMap<>();
 
@@ -50,10 +50,10 @@ public final class RecordingContext implements AutoCloseable {
     }
 
     /**
-     * 声明业务技能标识（记录的 skillId，分组与 CLI 裁决的可操作标签）。
+     * 声明调用点标签（记录的 invocationId，调用点解析与 CLI 裁决的可操作标签）。
      */
-    public RecordingContext withSkillId(String skillId) {
-        this.skillId = skillId;
+    public RecordingContext withInvocationId(String invocationId) {
+        this.invocationId = invocationId;
         return this;
     }
 
@@ -79,8 +79,8 @@ public final class RecordingContext implements AutoCloseable {
         return sessionId;
     }
 
-    String skillId() {
-        return skillId;
+    String invocationId() {
+        return invocationId;
     }
 
     String templateId() {

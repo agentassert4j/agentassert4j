@@ -8,11 +8,11 @@ import picocli.CommandLine.Command;
  *
  * <p>典型流程：</p>
  * <pre>
- * agentassert4j status                        # 查看已录制 skill 与基线状态
- * agentassert4j replay --prompt new.txt       # 全量选例重放（每 skill 3 条）
+ * agentassert4j status                        # 查看已录制 调用点 与基线状态
+ * agentassert4j replay --prompt new.txt       # 全量选例重放（每 调用点 3 条）
  * agentassert4j replay --old-prompt old.txt --prompt new.txt   # 依赖图裁剪影响集
- * agentassert4j approve --skill queryOrder    # 接受候选为新基线
- * agentassert4j rollback --skill chat:ab12 --version v1   # 恢复到归档基线
+ * agentassert4j approve --调用点 queryOrder    # 接受候选为新基线
+ * agentassert4j rollback --调用点 chat:ab12 --version v1   # 恢复到归档基线
  * agentassert4j graph show                   # 现场重建并查看依赖图谱
  * </pre>
  *

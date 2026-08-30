@@ -1,6 +1,6 @@
 package io.github.agentassert4j.algorithm;
 
-import io.github.agentassert4j.config.SkillRulesConfig;
+import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.ToolCall;
@@ -252,9 +252,9 @@ class FingerprintExtractorTest {
     void extractWithRules_overridesDim3And4() {
         InteractionRecord r = record(null, "hello");
 
-        // 构建 SkillRulesConfig
-        String rulesJson = "{\"skills\":{\"testSkill\":{" + "\"requiredKeywords\":[\"keyword1\"]," + "\"forbiddenKeywords\":[\"badword\"]," + "\"behaviors\":[\"nonEmptyOutput\"]}}}";
-        SkillRulesConfig rules = SkillRulesConfig.fromJson(rulesJson);
+        // 构建 InvocationRulesConfig
+        String rulesJson = "{\"invocations\":{\"testSkill\":{" + "\"requiredKeywords\":[\"keyword1\"]," + "\"forbiddenKeywords\":[\"badword\"]," + "\"behaviors\":[\"nonEmptyOutput\"]}}}";
+        InvocationRulesConfig rules = InvocationRulesConfig.fromJson(rulesJson);
 
         DeterministicFingerprint fp = FingerprintExtractor.extract(r, rules, "testSkill");
 
@@ -275,13 +275,13 @@ class FingerprintExtractorTest {
     }
 
     @Test
-    void extractWithRules_nullSkillId_fallsBackToEmptyKey() {
+    void extractWithRules_nullInvocationId_fallsBackToEmptyKey() {
         // 未声明分组（无业务标签）统一落到空键规则——场景层对 templateHash
         // 绑定的未声明分组注入断言依赖此契约
         InteractionRecord r = record(null, "hello");
 
-        String rulesJson = "{\"skills\":{\"\":{" + "\"requiredKeywords\":[\"keyword1\"]," + "\"behaviors\":[\"nonEmptyOutput\"]}}}";
-        SkillRulesConfig rules = SkillRulesConfig.fromJson(rulesJson);
+        String rulesJson = "{\"invocations\":{\"\":{" + "\"requiredKeywords\":[\"keyword1\"]," + "\"behaviors\":[\"nonEmptyOutput\"]}}}";
+        InvocationRulesConfig rules = InvocationRulesConfig.fromJson(rulesJson);
 
         DeterministicFingerprint fp = FingerprintExtractor.extract(r, rules, null);
 

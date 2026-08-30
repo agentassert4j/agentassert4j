@@ -83,12 +83,12 @@ public final class ConfigLoader {
      *
      * @return 规则配置（永不为 null）
      */
-    public static SkillRulesConfig loadRulesConfig() {
+    public static InvocationRulesConfig loadRulesConfig() {
         String json = findAndRead(RULES_CONFIG_FILE, RULES_PATH_PROPERTY, new StringBuilder());
         if (json != null) {
             json = resolveEnvVars(json);
         }
-        return SkillRulesConfig.fromJson(json);
+        return InvocationRulesConfig.fromJson(json);
     }
 
     /**

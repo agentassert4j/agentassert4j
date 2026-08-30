@@ -3,7 +3,7 @@ package io.github.agentassert4j.cli;
 import io.github.agentassert4j.algorithm.DeterministicComparator;
 import io.github.agentassert4j.config.AgentAssert4jConfig;
 import io.github.agentassert4j.config.ConfigLoader;
-import io.github.agentassert4j.config.SkillRulesConfig;
+import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
@@ -43,16 +43,16 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--old-prompt"}, description = "变更前 System Prompt 文件路径（提供后按依赖图裁剪影响集；缺省全量选例）")
     String oldPromptPath;
 
-    @Option(names = {"--skill"}, description = "仅重放该 skill：业务 skillId 或 groupKey 唯一前缀（完整列表见 status 命令）")
-    String skill;
+    @Option(names = {"--invocation"}, description = "仅重放该调用点：业务 invocationId 或 invocationKey 唯一前缀（完整列表见 status 命令）")
+    String invocation;
 
-    @Option(names = {"--max-cases"}, defaultValue = "3", description = "默认选例模式下每 skill 的用例上限（默认 3）")
+    @Option(names = {"--max-cases"}, defaultValue = "3", description = "默认选例模式下每 调用点 的用例上限（默认 3）")
     int maxCases;
 
-    @Option(names = {"--selection"}, defaultValue = "newest", description = "选例策略：newest=每 skill 最新录制（默认），oldest=最旧录制")
+    @Option(names = {"--selection"}, defaultValue = "newest", description = "选例策略：newest=每 调用点 最新录制（默认），oldest=最旧录制")
     String selection;
 
-    @Option(names = {"--ci", "--no-establish"}, description = "CI 模式：不为无基线的 skill 自动建档，存在未建档 skill 时拒绝判定（退出码 2）——防止无人审的自动基线产出绿灯")
+    @Option(names = {"--ci", "--no-establish"}, description = "CI 模式：不为无基线的 调用点 自动建档，存在未建档 调用点 时拒绝判定（退出码 2）——防止无人审的自动基线产出绿灯")
     boolean ciMode;
 
     @Option(names = {"--dry-run"}, description = "只打印选例与成本预估，不调用 LLM（只读：不建档、不写图快照）")
@@ -99,11 +99,11 @@ public class ReplayCommand implements Callable<Integer> {
             LlmClient client = CliSupport.createLlmClient(config);
 
             TestExecutionConfig executionConfig = new TestExecutionConfig().timeoutMs(config.getLlm().getTimeoutMs()).temperature(config.getLlm().getTemperature());
-            SkillRulesConfig rules = ConfigLoader.loadRulesConfig();
+            InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
             CliSupport.warnUnknownBehaviors(rules, jsonOutput ? System.err : System.out);
 
             boolean newestFirst = "newest".equals(selection);
-            return new ReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(newPrompt, skill, maxCases, oldPromptHash, dryRun, ciMode, newestFirst);
+            return new ReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(newPrompt, invocation, maxCases, oldPromptHash, dryRun, ciMode, newestFirst);
         } catch (RuntimeException e) {
             err.println("replay 失败：" + e.getMessage());
             return 2;

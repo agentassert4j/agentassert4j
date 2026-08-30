@@ -1,7 +1,7 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.BaselineManager;
-import io.github.agentassert4j.model.SkillProfile;
+import io.github.agentassert4j.model.InvocationProfile;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -18,12 +18,12 @@ public class ApproveCommand extends AdjudicateCommand {
     String approver;
 
     @Override
-    void apply(BaselineManager manager, String groupKey) {
-        manager.approve(groupKey, resolvedApprover());
+    void apply(BaselineManager manager, String invocationKey) {
+        manager.approve(invocationKey, resolvedApprover());
     }
 
     @Override
-    String describeResult(SkillProfile profile) {
+    String describeResult(InvocationProfile profile) {
         return "已批准（审批人 " + resolvedApprover() + "），基线 " + profile.getVersionTag() + "（旧基线已归档）";
     }
 

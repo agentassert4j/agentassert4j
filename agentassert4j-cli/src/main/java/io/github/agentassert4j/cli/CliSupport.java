@@ -4,27 +4,23 @@ import io.github.agentassert4j.algorithm.*;
 import io.github.agentassert4j.cli.llm.OpenAiCompatibleClient;
 import io.github.agentassert4j.config.AgentAssert4jConfig;
 import io.github.agentassert4j.config.ConfigLoader;
-import io.github.agentassert4j.config.SkillRulesConfig;
-import io.github.agentassert4j.config.SkillRulesConfig.SkillRule;
+import io.github.agentassert4j.config.InvocationRulesConfig;
+import io.github.agentassert4j.config.InvocationRulesConfig.InvocationRule;
 import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.SkillProfile;
+import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.InteractionQueryStore;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 
-import java.io.FileDescriptor;
-import java.io.FileOutputStream;
-import java.io.OutputStream;
-import java.io.PrintStream;
-import java.io.UnsupportedEncodingException;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
- * CLI 支撑工具 — 存储打开、skill 枚举、依赖图加载、--skill 目标解析的共用逻辑。
+ * CLI 支撑工具 — 存储打开、调用点 枚举、依赖图加载、--调用点 目标解析的共用逻辑。
  *
- * <p>skill 枚举走「session 全量 → 记录提取」通道，不扩张查询域接口；
+ * <p>调用点 枚举走「session 全量 → 记录提取」通道，不扩张查询域接口；
  * 图快照缺失或损坏时退化为空图（图是可从交互记录重建的派生数据）。</p>
  *
  * @author axy-yxa
@@ -95,18 +91,18 @@ final class CliSupport {
     }
 
     /**
-     * 枚举已录制的 skillId（按字典序稳定）。
+     * 枚举已录制的 invocationId（按字典序稳定）。
      */
-    static Set<String> recordedSkillIds(InteractionQueryStore repository) {
-        Set<String> skillIds = new TreeSet<>();
+    static Set<String> recordedInvocationIds(InteractionQueryStore repository) {
+        Set<String> invocationIds = new TreeSet<>();
         for (String sessionId : repository.findAllSessionIds()) {
             for (InteractionRecord record : repository.findBySessionId(sessionId)) {
-                if (record.getSkillId() != null && !record.getSkillId().isEmpty()) {
-                    skillIds.add(record.getSkillId());
+                if (record.getInvocationId() != null && !record.getInvocationId().isEmpty()) {
+                    invocationIds.add(record.getInvocationId());
                 }
             }
         }
-        return skillIds;
+        return invocationIds;
     }
 
 
@@ -131,116 +127,116 @@ final class CliSupport {
     }
 
     /**
-     * 解析 --skill 过滤值（选例类命令用：replay/baseline）。与某业务 skillId
-     * 精确相等时按原义使用；否则尝试 groupKey 唯一前缀匹配并换算回业务标签
-     * （画像上的 skillId 是分组器派生的内部标识，与记录上的业务标签是两套体系）。
+     * 解析 --调用点 过滤值（选例类命令用：replay/baseline）。与某业务 invocationId
+     * 精确相等时按原义使用；否则尝试 invocationKey 唯一前缀匹配并换算回业务标签
+     * （画像上的 invocationId 是分组器派生的内部标识，与记录上的业务标签是两套体系）。
      * 完全无命中时原样返回，由调用方的「未找到用例」路径兜底。
      *
-     * @return 业务 skillId 过滤值（null 语义由调用方维持）
+     * @return 业务 invocationId 过滤值（null 语义由调用方维持）
      */
-    static String resolveBusinessSkillFilter(StorageRepository repository, String filter, PrintStream out) {
+    static String resolveInvocationFilter(StorageRepository repository, String filter, PrintStream out) {
         if (filter == null || filter.isEmpty()) {
             return null;
         }
-        Set<String> businessIds = recordedSkillIds(repository);
+        Set<String> businessIds = recordedInvocationIds(repository);
         if (businessIds.contains(filter)) {
             return filter;
         }
-        List<SkillProfile> prefixMatches = new ArrayList<>();
-        for (SkillProfile profile : repository.findAllSkills()) {
-            if (profile.getGroupKey() != null && profile.getGroupKey().startsWith(filter)) {
+        List<InvocationProfile> prefixMatches = new ArrayList<>();
+        for (InvocationProfile profile : repository.findAllInvocations()) {
+            if (profile.getInvocationKey() != null && profile.getInvocationKey().startsWith(filter)) {
                 prefixMatches.add(profile);
             }
         }
         if (prefixMatches.size() > 1) {
             List<String> keys = new ArrayList<>();
-            for (SkillProfile profile : prefixMatches) {
-                keys.add(profile.getGroupKey());
+            for (InvocationProfile profile : prefixMatches) {
+                keys.add(profile.getInvocationKey());
             }
-            throw new IllegalStateException("--skill " + filter + " 前缀匹配到多个 skill：" + String.join(", ", keys) + "，请提供更长前缀。");
+            throw new IllegalStateException("--invocation " + filter + " 前缀匹配到多个调用点：" + String.join(", ", keys) + "，请提供更长前缀。");
         }
         if (prefixMatches.isEmpty()) {
             return filter;
         }
-        String targetGroupKey = prefixMatches.get(0).getGroupKey();
+        String targetInvocationKey = prefixMatches.get(0).getInvocationKey();
         List<String> businessMatches = new ArrayList<>();
-        for (String skillId : businessIds) {
-            List<InteractionRecord> records = repository.findBySkillId(skillId);
-            if (!records.isEmpty() && targetGroupKey.equals(groupKeyOfRecord(records.get(0)))) {
-                businessMatches.add(skillId);
+        for (String invocationId : businessIds) {
+            List<InteractionRecord> records = repository.findByInvocationId(invocationId);
+            if (!records.isEmpty() && targetInvocationKey.equals(invocationKeyOfRecord(records.get(0)))) {
+                businessMatches.add(invocationId);
             }
         }
         if (businessMatches.size() == 1) {
-            out.println("提示：--skill " + filter + " 按 groupKey 前缀匹配到 " + targetGroupKey + "（业务标签 " + businessMatches.get(0) + "）");
+            out.println("提示：--调用点 " + filter + " 按 invocationKey 前缀匹配到 " + targetInvocationKey + "（业务标签 " + businessMatches.get(0) + "）");
             return businessMatches.get(0);
         }
         if (businessMatches.size() > 1) {
-            throw new IllegalStateException("--skill " + filter + " 对应分组覆盖多个业务标签：" + String.join(", ", businessMatches) + "，请使用确切的业务标签。");
+            throw new IllegalStateException("--invocation " + filter + " 对应调用点键覆盖多个业务标签：" + String.join(", ", businessMatches) + "，请使用确切的业务标签。");
         }
         return filter;
     }
 
     /**
-     * 解析 --skill 目标值（画像操作类命令用：approve/reject/rollback），返回唯一 groupKey。
-     * 解析优先级：完整 groupKey 精确命中（即使它是其他 key 的前缀）＞ 业务标签（该标签
-     * 覆盖多个分组时报错并列出）＞ groupKey 唯一前缀。无命中或多命中均抛
+     * 解析 --调用点 目标值（画像操作类命令用：approve/reject/rollback），返回唯一 invocationKey。
+     * 解析优先级：完整 invocationKey 精确命中（即使它是其他 key 的前缀）＞ 业务标签（该标签
+     * 覆盖多个分组时报错并列出）＞ invocationKey 唯一前缀。无命中或多命中均抛
      * {@link IllegalStateException}，由命令层转译为退出码 2。
      */
-    static String resolveGroupKeyTarget(StorageRepository repository, String filter) {
+    static String resolveInvocationKeyTarget(StorageRepository repository, String filter) {
         if (filter == null || filter.isEmpty()) {
-            throw new IllegalStateException("缺少目标 skill。");
+            throw new IllegalStateException("缺少目标 调用点。");
         }
-        for (SkillProfile profile : repository.findAllSkills()) {
-            if (filter.equals(profile.getGroupKey())) {
+        for (InvocationProfile profile : repository.findAllInvocations()) {
+            if (filter.equals(profile.getInvocationKey())) {
                 return filter;
             }
         }
-        Set<String> businessIds = recordedSkillIds(repository);
+        Set<String> businessIds = recordedInvocationIds(repository);
         if (businessIds.contains(filter)) {
-            Set<String> groupKeys = new LinkedHashSet<>();
-            for (InteractionRecord record : repository.findBySkillId(filter)) {
-                String groupKey = groupKeyOfRecord(record);
-                if (groupKey != null) {
-                    groupKeys.add(groupKey);
+            Set<String> invocationKeys = new LinkedHashSet<>();
+            for (InteractionRecord record : repository.findByInvocationId(filter)) {
+                String invocationKey = invocationKeyOfRecord(record);
+                if (invocationKey != null) {
+                    invocationKeys.add(invocationKey);
                 }
             }
-            if (groupKeys.isEmpty()) {
-                throw new IllegalStateException("业务标签 " + filter + " 下没有可分组的录制记录，无法定位 skill。");
+            if (invocationKeys.isEmpty()) {
+                throw new IllegalStateException("业务标签 " + filter + " 下没有可分组的录制记录，无法定位 调用点。");
             }
-            if (groupKeys.size() > 1) {
-                throw new IllegalStateException("业务标签 " + filter + " 覆盖多个分组：" + String.join(", ", groupKeys) + "，请用 groupKey（或其唯一前缀）指定。");
+            if (invocationKeys.size() > 1) {
+                throw new IllegalStateException("业务标签 " + filter + " 覆盖多个调用点：" + String.join(", ", invocationKeys) + "，请用 invocationKey（或其唯一前缀）指定。");
             }
-            return groupKeys.iterator().next();
+            return invocationKeys.iterator().next();
         }
-        List<SkillProfile> prefixMatches = new ArrayList<>();
-        for (SkillProfile profile : repository.findAllSkills()) {
-            if (profile.getGroupKey() != null && profile.getGroupKey().startsWith(filter)) {
+        List<InvocationProfile> prefixMatches = new ArrayList<>();
+        for (InvocationProfile profile : repository.findAllInvocations()) {
+            if (profile.getInvocationKey() != null && profile.getInvocationKey().startsWith(filter)) {
                 prefixMatches.add(profile);
             }
         }
         if (prefixMatches.isEmpty()) {
-            throw new IllegalStateException("没有匹配 " + filter + " 的 skill（业务标签或 groupKey 前缀，完整列表见 status 命令）。");
+            throw new IllegalStateException("没有匹配 " + filter + " 的调用点（业务标签或 invocationKey 前缀，完整列表见 status 命令）。");
         }
         if (prefixMatches.size() > 1) {
             List<String> keys = new ArrayList<>();
-            for (SkillProfile profile : prefixMatches) {
-                keys.add(profile.getGroupKey());
+            for (InvocationProfile profile : prefixMatches) {
+                keys.add(profile.getInvocationKey());
             }
-            throw new IllegalStateException("前缀匹配到多个 skill：" + String.join(", ", keys) + "，请提供更长的前缀。");
+            throw new IllegalStateException("前缀匹配到多个调用点：" + String.join(", ", keys) + "，请提供更长的前缀。");
         }
-        return prefixMatches.get(0).getGroupKey();
+        return prefixMatches.get(0).getInvocationKey();
     }
 
     /**
      * 单条记录的分组键：优先用落库存储值（enrich 写入，录入即定格——存储键与
      * 现算键不得分叉），缺失时按分组器现算；无法分组的记录返回 null。
      */
-    private static String groupKeyOfRecord(InteractionRecord record) {
-        if (record.getGroupKey() != null && !record.getGroupKey().isEmpty()) {
-            return record.getGroupKey();
+    private static String invocationKeyOfRecord(InteractionRecord record) {
+        if (record.getInvocationKey() != null && !record.getInvocationKey().isEmpty()) {
+            return record.getInvocationKey();
         }
         try {
-            return DeterministicSkillGrouper.group(record).getGroupKey();
+            return InvocationResolver.resolve(record).getInvocationKey();
         } catch (RuntimeException e) {
             return null;
         }
@@ -268,15 +264,15 @@ final class CliSupport {
      * 全库记录按分组键分桶：桶按分组键字典序，桶内保持存储规范序（时间、seq、recordId）。
      * 选例与建档共用本枚举——形状派生组与声明组同权，不因「未声明」失去框架服务资格。
      */
-    static Map<String, List<InteractionRecord>> groupBuckets(StorageRepository repository) {
+    static Map<String, List<InteractionRecord>> invocationBuckets(StorageRepository repository) {
         Map<String, List<InteractionRecord>> buckets = new TreeMap<>();
         for (String sessionId : repository.findAllSessionIds()) {
             for (InteractionRecord record : repository.findBySessionId(sessionId)) {
-                String groupKey = groupKeyOfRecord(record);
-                if (groupKey == null) {
+                String invocationKey = invocationKeyOfRecord(record);
+                if (invocationKey == null) {
                     continue;
                 }
-                buckets.computeIfAbsent(groupKey, k -> new ArrayList<>()).add(record);
+                buckets.computeIfAbsent(invocationKey, k -> new ArrayList<>()).add(record);
             }
         }
         Comparator<InteractionRecord> canonical = Comparator.comparing(InteractionRecord::getTimestamp).thenComparing(InteractionRecord::getSeq).thenComparing(InteractionRecord::getRecordId);
@@ -290,16 +286,16 @@ final class CliSupport {
      * 规则配置里出现未知 behavior 名时告警——未知名在判定中被静默视为通过，
      * 笔误（如 noErr 写成 noErr0）会让维度 4 满分化、CI 照绿，必须在加载时点破。
      */
-    static void warnUnknownBehaviors(SkillRulesConfig rules, PrintStream out) {
-        for (String skillId : rules.getDeclaredSkillIds()) {
-            warnUnknownBehaviors("skill " + skillId, rules.getRulesForSkill(skillId), out);
+    static void warnUnknownBehaviors(InvocationRulesConfig rules, PrintStream out) {
+        for (String invocationId : rules.getDeclaredInvocationIds()) {
+            warnUnknownBehaviors("调用点 " + invocationId, rules.getRulesForInvocation(invocationId), out);
         }
     }
 
     /**
-     * 单条规则声明的未知 behavior 告警——owner 标明声明来源（skill 标签或场景标识）。
+     * 单条规则声明的未知 behavior 告警——owner 标明声明来源（调用点 标签或场景标识）。
      */
-    static void warnUnknownBehaviors(String owner, SkillRule rule, PrintStream out) {
+    static void warnUnknownBehaviors(String owner, InvocationRule rule, PrintStream out) {
         Set<String> unknown = unknownBehaviors(rule);
         if (!unknown.isEmpty()) {
             out.println("警告：" + owner + " 声明了未知行为 " + String.join(", ", unknown) + "（该规则将被忽略）。合法行为名：" + String.join(", ", new TreeSet<>(BehaviorChecker.getBuiltinBehaviorNames())));
@@ -309,7 +305,7 @@ final class CliSupport {
     /**
      * 收集单条规则声明里未知的 behavior 名，空集 = 全部可识别。
      */
-    static Set<String> unknownBehaviors(SkillRule rule) {
+    static Set<String> unknownBehaviors(InvocationRule rule) {
         Set<String> builtins = BehaviorChecker.getBuiltinBehaviorNames();
         Set<String> unknown = new TreeSet<>();
         for (String behavior : rule.getBehaviors()) {

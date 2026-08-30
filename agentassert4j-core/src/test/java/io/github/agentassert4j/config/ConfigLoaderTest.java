@@ -194,13 +194,13 @@ class ConfigLoaderTest {
         void validRulesFile() throws IOException {
             Path tempFile = Files.createTempFile("agentassert4j-rules", ".json");
             try {
-                String content = "{\"skills\":{\"queryOrder\":{\"requiredKeywords\":[\"订单号\"]}}}";
+                String content = "{\"invocations\":{\"queryOrder\":{\"requiredKeywords\":[\"订单号\"]}}}";
                 Files.write(tempFile, content.getBytes(StandardCharsets.UTF_8));
                 System.setProperty(ConfigLoader.RULES_PATH_PROPERTY, tempFile.toString());
 
-                SkillRulesConfig config = ConfigLoader.loadRulesConfig();
+                InvocationRulesConfig config = ConfigLoader.loadRulesConfig();
                 assertTrue(config.hasRules());
-                assertEquals(1, config.getDeclaredSkillIds().size());
+                assertEquals(1, config.getDeclaredInvocationIds().size());
             } finally {
                 Files.deleteIfExists(tempFile);
             }

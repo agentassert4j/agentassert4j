@@ -1,6 +1,6 @@
 package io.github.agentassert4j.cli;
 
-import io.github.agentassert4j.config.SkillRulesConfig;
+import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * --skill 目标解析的契约测试 — 业务标签、groupKey、唯一前缀三种写法在
+ * --invocation 目标解析的契约测试 — 业务标签、invocationKey、唯一前缀三种写法在
  * 选例类命令与画像操作类命令上的统一语义。
  *
  * @author axy-yxa
@@ -45,13 +45,13 @@ class CliSupportResolverTest {
         }
     }
 
-    private void saveRecord(String recordId, String skillId, String templateHash) {
+    private void saveRecord(String recordId, String invocationId, String templateHash) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(recordId);
-        r.setSessionId("session-" + skillId);
+        r.setSessionId("session-" + invocationId);
         r.setTimestamp(1000L);
         r.setSeq(1L);
-        r.setSkillId(skillId);
+        r.setInvocationId(invocationId);
         r.setTemplateHash(templateHash);
         r.setUserInput("查订单");
         r.setTurnIndex(0);
@@ -66,34 +66,34 @@ class CliSupportResolverTest {
     }
 
     @Test
-    @DisplayName("完整 groupKey 精确命中优先于前缀匹配")
-    void exactGroupKey_shortCircuitsStrictPrefixSibling() {
-        // skill:sk:abc 是 skill:sk:abcdef 的严格前缀——精确命中不得被误判为歧义前缀
+    @DisplayName("完整 invocationKey 精确命中优先于前缀匹配")
+    void exactInvocationKey_shortCircuitsStrictPrefixSibling() {
+        // invocation:sk:abc 是 invocation:sk:abcdef 的严格前缀——精确命中不得被误判为歧义前缀
         saveRecord("r1", "sk", "abc");
         saveRecord("r2", "sk", "abcdef");
         establishAll();
 
-        assertEquals("skill:sk:abc", CliSupport.resolveGroupKeyTarget(repository, "skill:sk:abc"));
-        assertEquals("skill:sk:abcdef", CliSupport.resolveGroupKeyTarget(repository, "skill:sk:abcdef"));
+        assertEquals("invocation:sk:abc", CliSupport.resolveInvocationKeyTarget(repository, "invocation:sk:abc"));
+        assertEquals("invocation:sk:abcdef", CliSupport.resolveInvocationKeyTarget(repository, "invocation:sk:abcdef"));
     }
 
     @Test
-    @DisplayName("唯一前缀解析到完整 groupKey")
+    @DisplayName("唯一前缀解析到完整 invocationKey")
     void uniquePrefix_resolvesToFullKey() {
         saveRecord("r1", "sk1", "abcdef");
         establishAll();
 
-        String fullKey = "skill:sk1:abcdef";
-        assertEquals(fullKey, CliSupport.resolveGroupKeyTarget(repository, fullKey.substring(0, 8)));
+        String fullKey = "invocation:sk1:abcdef";
+        assertEquals(fullKey, CliSupport.resolveInvocationKeyTarget(repository, fullKey.substring(0, 8)));
     }
 
     @Test
     @DisplayName("业务标签解析到其唯一分组键")
-    void businessLabel_resolvesToGroupKey() {
+    void businessLabel_resolvesToInvocationKey() {
         saveRecord("r1", "queryOrder", "hash-a");
         establishAll();
 
-        assertEquals("skill:queryOrder:hash-a", CliSupport.resolveGroupKeyTarget(repository, "queryOrder"));
+        assertEquals("invocation:queryOrder:hash-a", CliSupport.resolveInvocationKeyTarget(repository, "queryOrder"));
     }
 
     @Test
@@ -102,9 +102,9 @@ class CliSupportResolverTest {
         saveRecord("r1", "queryOrder", "hash-a");
         saveRecord("r2", "queryOrder", "hash-b");
 
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveGroupKeyTarget(repository, "queryOrder"));
-        assertTrue(e.getMessage().contains("覆盖多个分组"));
-        assertTrue(e.getMessage().contains("skill:queryOrder:hash-a") && e.getMessage().contains("skill:queryOrder:hash-b"));
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "queryOrder"));
+        assertTrue(e.getMessage().contains("覆盖多个调用点"));
+        assertTrue(e.getMessage().contains("invocation:queryOrder:hash-a") && e.getMessage().contains("invocation:queryOrder:hash-b"));
     }
 
     @Test
@@ -113,7 +113,7 @@ class CliSupportResolverTest {
         saveRecord("r1", "sk1", "hash-a");
         establishAll();
 
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveGroupKeyTarget(repository, "no-such"));
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "no-such"));
         assertTrue(e.getMessage().contains("没有匹配"));
     }
 
@@ -123,7 +123,7 @@ class CliSupportResolverTest {
         saveRecord("r1", "queryOrder", "hash-a");
         establishAll();
 
-        String resolved = CliSupport.resolveBusinessSkillFilter(repository, "skill:queryOrder", new PrintStream(output));
+        String resolved = CliSupport.resolveInvocationFilter(repository, "invocation:queryOrder", new PrintStream(output));
 
         assertEquals("queryOrder", resolved);
         assertTrue(output.toString().contains("业务标签 queryOrder"));
@@ -134,13 +134,13 @@ class CliSupportResolverTest {
     void businessFilter_exactLabelPassthrough() {
         saveRecord("r1", "queryOrder", "hash-a");
 
-        assertEquals("queryOrder", CliSupport.resolveBusinessSkillFilter(repository, "queryOrder", new PrintStream(output)));
+        assertEquals("queryOrder", CliSupport.resolveInvocationFilter(repository, "queryOrder", new PrintStream(output)));
     }
 
     @Test
     @DisplayName("未知 behavior 名在规则加载时告警并列出合法名")
     void unknownBehavior_warnedAtLoad() {
-        SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"svc\":{\"behaviors\":[\"noSuchBehavior\"]}}}");
+        InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"svc\":{\"behaviors\":[\"noSuchBehavior\"]}}}");
 
         CliSupport.warnUnknownBehaviors(rules, new PrintStream(output));
 
@@ -152,7 +152,7 @@ class CliSupportResolverTest {
     @Test
     @DisplayName("合法 behavior 名不产生告警")
     void knownBehavior_noWarning() {
-        SkillRulesConfig rules = SkillRulesConfig.fromJson("{\"skills\":{\"svc\":{\"behaviors\":[\"mustUseChinese\"]}}}");
+        InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"svc\":{\"behaviors\":[\"mustUseChinese\"]}}}");
 
         CliSupport.warnUnknownBehaviors(rules, new PrintStream(output));
 

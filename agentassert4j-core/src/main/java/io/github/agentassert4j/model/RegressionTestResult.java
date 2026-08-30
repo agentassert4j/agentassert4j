@@ -11,7 +11,7 @@ import io.github.agentassert4j.result.ComparisonResult;
 public class RegressionTestResult {
 
     private String baselineRecordId;
-    private String skillId;
+    private String invocationId;
     private ComparisonResult comparison;
     private DeterministicFingerprint candidateFingerprint;
     private TestResultStatus status;
@@ -74,12 +74,12 @@ public class RegressionTestResult {
         this.baselineRecordId = baselineRecordId;
     }
 
-    public String getSkillId() {
-        return skillId;
+    public String getInvocationId() {
+        return invocationId;
     }
 
-    public void setSkillId(String skillId) {
-        this.skillId = skillId;
+    public void setInvocationId(String invocationId) {
+        this.invocationId = invocationId;
     }
 
     public ComparisonResult getComparison() {

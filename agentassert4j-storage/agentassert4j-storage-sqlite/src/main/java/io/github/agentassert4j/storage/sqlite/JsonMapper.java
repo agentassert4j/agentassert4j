@@ -136,12 +136,13 @@ final class JsonMapper {
         return fp;
     }
 
-    static SkillProfile toSkillProfile(ResultSet rs) throws SQLException {
-        SkillProfile p = new SkillProfile();
-        p.setSkillId(rs.getString("skill_id"));
-        p.setGroupKey(rs.getString("group_key"));
-        p.setSkillName(rs.getString("skill_name"));
-        p.setSkillType(SkillType.valueOf(rs.getString("skill_type")));
+    static InvocationProfile toInvocationProfile(ResultSet rs) throws SQLException {
+        InvocationProfile p = new InvocationProfile();
+        p.setInvocationKey(rs.getString("invocation_key"));
+        p.setLabel(rs.getString("label"));
+        p.setTemplateHash(rs.getString("template_hash"));
+        p.setInvocationName(rs.getString("invocation_name"));
+        p.setInvocationType(InvocationType.valueOf(rs.getString("invocation_type")));
         p.setFingerprint(fingerprintFromDb(rs.getString("fingerprint")));
         p.setCandidateFingerprint(fingerprintFromDb(rs.getString("candidate_fingerprint")));
         String status = rs.getString("baseline_status");
@@ -156,9 +157,10 @@ final class JsonMapper {
         return p;
     }
 
-    static ArchivedBaseline toArchivedBaseline(ResultSet rs) throws SQLException {
-        ArchivedBaseline ab = new ArchivedBaseline();
-        ab.setSkillId(rs.getString("skill_id"));
+    static ArchivedTemplateVersion toArchivedTemplateVersion(ResultSet rs) throws SQLException {
+        ArchivedTemplateVersion ab = new ArchivedTemplateVersion();
+        ab.setInvocationKey(rs.getString("invocation_key"));
+        ab.setTemplateHash(rs.getString("template_hash"));
         ab.setFingerprint(fingerprintFromDb(rs.getString("fingerprint")));
         ab.setVersionTag(rs.getString("version_tag"));
         ab.setAlgoVersion(rs.getString("algo_version"));

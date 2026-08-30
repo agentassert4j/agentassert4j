@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 图谱边 — 依赖图谱中两个 Skill 之间的数据流关系。
+ * 图谱边 — 依赖图谱中两个调用点之间的数据流关系。
  *
  * <p>三种置信度：
  * <ul>

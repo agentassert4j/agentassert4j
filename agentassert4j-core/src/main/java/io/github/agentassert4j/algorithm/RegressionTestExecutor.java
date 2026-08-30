@@ -1,6 +1,6 @@
 package io.github.agentassert4j.algorithm;
 
-import io.github.agentassert4j.config.SkillRulesConfig;
+import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.result.ComparisonResult;
@@ -30,7 +30,7 @@ public class RegressionTestExecutor {
     private final LlmClient llmClient;
     private final DeterministicComparator comparator;
     private final BaselineManager baselineManager;
-    private final SkillRulesConfig rules;
+    private final InvocationRulesConfig rules;
 
     /**
      * 完整构造器。
@@ -38,9 +38,9 @@ public class RegressionTestExecutor {
      * @param llmClient       LLM 客户端
      * @param comparator      确定性对比器
      * @param baselineManager 基线管理器：对比结果非 PASS 时把候选指纹落库供 approve/reject 裁决（传 null 跳过）
-     * @param rules           声明式规则配置：维度 3-4（内容规则/约束行为）按 skillId 查找注入（传 null 跳过规则判定）
+     * @param rules           声明式规则配置：维度 3-4（内容规则/约束行为）按声明标签查找注入（传 null 跳过规则判定）
      */
-    public RegressionTestExecutor(LlmClient llmClient, DeterministicComparator comparator, BaselineManager baselineManager, SkillRulesConfig rules) {
+    public RegressionTestExecutor(LlmClient llmClient, DeterministicComparator comparator, BaselineManager baselineManager, InvocationRulesConfig rules) {
         this.llmClient = llmClient;
         this.comparator = comparator;
         this.baselineManager = baselineManager;
@@ -63,7 +63,7 @@ public class RegressionTestExecutor {
         if (config.isDryRun()) {
             RegressionTestResult result = new RegressionTestResult();
             result.setBaselineRecordId(baseline.getRecordId());
-            result.setSkillId(baseline.getSkillId());
+            result.setInvocationId(baseline.getInvocationId());
             result.setStatus(TestResultStatus.SKIP);
             return result;
         }
@@ -97,8 +97,8 @@ public class RegressionTestExecutor {
         try {
             InteractionRecord current = buildCurrentRecord(baseline, response, newSystemPrompt, userInput);
 
-            DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline, rules, baseline.getSkillId());
-            DeterministicFingerprint currentFp = FingerprintExtractor.extract(current, rules, current.getSkillId());
+            DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline, rules, baseline.getInvocationId());
+            DeterministicFingerprint currentFp = FingerprintExtractor.extract(current, rules, current.getInvocationId());
 
             ComparisonResult comparison = comparator.compare(baselineFp, currentFp, response.getContent());
 
@@ -114,7 +114,7 @@ public class RegressionTestExecutor {
 
             RegressionTestResult result = new RegressionTestResult();
             result.setBaselineRecordId(baseline.getRecordId());
-            result.setSkillId(baseline.getSkillId());
+            result.setInvocationId(baseline.getInvocationId());
             result.setComparison(comparison);
             result.setCandidateFingerprint(currentFp);
             // served 模型与 token 消耗随结果上抛：前者供精确模型身份比对，
@@ -212,7 +212,7 @@ public class RegressionTestExecutor {
         InteractionRecord current = new InteractionRecord();
         current.setRecordId(UUID.randomUUID().toString());
         current.setTimestamp(System.currentTimeMillis());
-        current.setSkillId(baseline.getSkillId());
+        current.setInvocationId(baseline.getInvocationId());
         current.setTemplateHash(HashUtil.sha256(newPrompt));
         current.setUserInput(userInput != null ? userInput : baseline.getUserInput());
         current.setTurnIndex(baseline.getTurnIndex());
@@ -354,7 +354,7 @@ public class RegressionTestExecutor {
             InteractionRecord current = new InteractionRecord();
             current.setRecordId(UUID.randomUUID().toString());
             current.setTimestamp(System.currentTimeMillis());
-            current.setSkillId(baseline.getSkillId());
+            current.setInvocationId(baseline.getInvocationId());
             current.setTemplateHash(HashUtil.sha256(newSystemPrompt));
             current.setUserInput(effectiveInput != null ? effectiveInput : baseline.getUserInput());
             current.setTurnIndex(baseline.getTurnIndex());
@@ -375,13 +375,13 @@ public class RegressionTestExecutor {
             current.setInputTokens(response.getInputTokens());
             current.setOutputTokens(response.getOutputTokens());
 
-            DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline, rules, baseline.getSkillId());
-            DeterministicFingerprint currentFp = FingerprintExtractor.extract(current, rules, current.getSkillId());
+            DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline, rules, baseline.getInvocationId());
+            DeterministicFingerprint currentFp = FingerprintExtractor.extract(current, rules, current.getInvocationId());
             ComparisonResult comparison = comparator.compare(baselineFp, currentFp, response.getContent());
 
             RegressionTestResult result = new RegressionTestResult();
             result.setBaselineRecordId(baseline.getRecordId());
-            result.setSkillId(baseline.getSkillId());
+            result.setInvocationId(baseline.getInvocationId());
             result.setComparison(comparison);
             result.setCandidateFingerprint(currentFp);
             if (baselineManager != null && comparison.getVerdict() != Verdict.PASS) {
@@ -498,7 +498,7 @@ public class RegressionTestExecutor {
         comparison.setSummary("第 " + round + " 轮工具决策分歧（链式半重放于分歧处停止）：基线为 " + expected + "，实际为 " + actual);
         RegressionTestResult result = new RegressionTestResult();
         result.setBaselineRecordId(baseline.getRecordId());
-        result.setSkillId(baseline.getSkillId());
+        result.setInvocationId(baseline.getInvocationId());
         result.setComparison(comparison);
         return result;
     }
