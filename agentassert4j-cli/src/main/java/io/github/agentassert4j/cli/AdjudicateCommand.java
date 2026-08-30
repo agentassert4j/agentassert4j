@@ -32,6 +32,9 @@ abstract class AdjudicateCommand implements Callable<Integer> {
     @Option(names = {"--invocation"}, description = "目标调用点：业务 invocationId、invocationKey 或其唯一前缀（完整列表见 status 命令）")
     String invocation;
 
+    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 报告")
+    boolean jsonOutput;
+
     @Option(names = {"--all"}, description = "裁决所有存在候选指纹的调用点")
     boolean all;
 
@@ -61,6 +64,9 @@ abstract class AdjudicateCommand implements Callable<Integer> {
                 // approve/reject 在管理器内部改写画像，回读展示结果状态
                 InvocationProfile reloaded = repository.findInvocationByKey(target.getInvocationKey());
                 out.println("  " + target.getInvocationKey() + ": " + describeResult(reloaded != null ? reloaded : target));
+            }
+            if (jsonOutput) {
+                out.println("{\"schema\":\"agentassert4j.adjudication/1\",\"ok\":true}");
             }
             return 0;
         } catch (IllegalStateException e) {

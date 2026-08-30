@@ -2,6 +2,7 @@ package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.BehaviorChecker;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
 
 import java.io.PrintStream;
 import java.util.Set;
@@ -25,10 +26,21 @@ public class RulesCommand implements Callable<Integer> {
     PrintStream out = System.out;
     PrintStream err = System.err;
 
+    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 行为目录")
+    boolean jsonOutput;
 
     @Override
     public Integer call() {
         Set<String> builtins = new TreeSet<>(BehaviorChecker.getBuiltinBehaviorNames());
+        if (jsonOutput) {
+            StringBuilder items = new StringBuilder();
+            for (String name : builtins) {
+                if (items.length() > 0) items.append(",");
+                items.append("{\"name\":\"").append(name).append("\",\"description\":\"").append(describe(name)).append("\"}");
+            }
+            out.println("{\"schema\":\"agentassert4j.rules/1\",\"behaviors\":[" + items + "]}");
+            return 0;
+        }
         out.println("内置约束行为（agentassert4j-rules.json 的 behaviors 字段可用的全部名称）:");
         for (String name : builtins) {
             out.println("  " + name + " — " + describe(name));

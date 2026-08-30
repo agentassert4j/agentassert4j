@@ -42,7 +42,7 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--prompt"}, description = "新 System Prompt 文件路径（--task 下可选：缺省=真实对比模式，同名链最新 vs 次新纯比较零调用）")
     String promptPath;
 
-    @Option(names = {"--old-prompt"}, description = "变更前 System Prompt 文件路径（提供后按依赖图裁剪影响集；--task 下受影响记录真重放、其余继承 PASS）")
+    @Option(names = {"--old-prompt"}, description = "变更前 System Prompt 文件路径（提供后仅模板与旧提示词一致的记录以新提示词真重放，--task 下其余记录继承 PASS）")
     String oldPromptPath;
 
     @Option(names = {"--invocation"}, description = "仅重放该调用点：业务 invocationId 或 invocationKey 唯一前缀（完整列表见 status 命令）")
@@ -51,7 +51,7 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--task"}, description = "任务域回放：请求文本前缀选链（整链回归）；提供 --prompt 为冻结重放，缺省为真实对比")
     String task;
 
-    @Option(names = {"--affected"}, description = "任务选择器：图查受影响调用点 → 含它的任务链逐链冻结重放（要求 --prompt 与 --old-prompt）")
+    @Option(names = {"--affected"}, description = "任务选择器：含旧提示词调用点的任务链逐链冻结重放（要求 --prompt 与 --old-prompt）")
     boolean affected;
 
     @Option(names = {"--full-chain"}, description = "任务域专用：取消影响裁剪与分歧即停，链内全部记录真重放")

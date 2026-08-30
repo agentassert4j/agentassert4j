@@ -6,6 +6,7 @@ import io.github.agentassert4j.algorithm.TaskAligner;
 import io.github.agentassert4j.algorithm.TaskChainView;
 import io.github.agentassert4j.model.AcceptancePack;
 import io.github.agentassert4j.model.BaselineStep;
+import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.result.ComparisonResult;
 import io.github.agentassert4j.result.TaskAlignment;
@@ -184,7 +185,7 @@ public class VerifyRunner {
     }
 
     private void collectLocalServedModels(TaskChain chain, TreeSet<String> into) {
-        for (io.github.agentassert4j.model.InteractionRecord record : chain.getRecords()) {
+        for (InteractionRecord record : chain.getRecords()) {
             if (record.getServedModel() != null) {
                 into.add(record.getServedModel());
             }

@@ -11,6 +11,7 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 
 /**
  * rollback 命令 — 把活跃基线恢复到指定版本的归档基线。
@@ -38,6 +39,9 @@ public class RollbackCommand implements Callable<Integer> {
     @Option(names = {"--version"}, required = true, description = "目标归档版本标签（可选值见 status 的归档版本列）")
     String version;
 
+    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 报告")
+    boolean jsonOutput;
+
     @Override
     public Integer call() {
         StorageRepository repository = null;
@@ -52,6 +56,9 @@ public class RollbackCommand implements Callable<Integer> {
             new BaselineManager(repository).rollback(invocationKey, version);
             InvocationProfile reloaded = repository.findInvocationByKey(invocationKey);
             out.println("  " + invocationKey + " → " + version + "（审批人 " + reloaded.getApprovedBy() + "）");
+            if (jsonOutput) {
+                out.println("{\"schema\":\"agentassert4j.rollback/1\",\"invocationKey\":\"" + RecursiveJsonParser.escape(invocationKey) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(version) + "\",\"ok\":true}");
+            }
             return 0;
         } catch (IllegalStateException e) {
             err.println(e.getMessage());

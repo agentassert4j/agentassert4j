@@ -68,6 +68,21 @@ class TaskReplayRunnerTest {
         repository.saveInteraction(r);
     }
 
+    private void saveRecord(String recordId, String sessionId, long timestamp, String userInput, String invocationKey, String label, String templateHash, String response, String servedModel) {
+        InteractionRecord r = new InteractionRecord();
+        r.setRecordId(recordId);
+        r.setSessionId(sessionId);
+        r.setTimestamp(timestamp);
+        r.setSeq(timestamp);
+        r.setUserInput(userInput);
+        r.setInvocationKey(invocationKey);
+        r.setInvocationId(label);
+        r.setTemplateHash(templateHash);
+        r.setModelResponse(response);
+        r.setServedModel(servedModel);
+        repository.saveInteraction(r);
+    }
+
     @Test
     @DisplayName("真实对比：两条同名链按调用点对齐，缺步骤 → 退出码 1 并报告")
     void alignment_missingStep_exit1() {
@@ -207,6 +222,23 @@ class TaskReplayRunnerTest {
         assertTrue(json.startsWith("{\"schema\":\"agentassert4j.task-report/1\""), "单行报告以 schema 开头: " + json);
         assertTrue(json.contains("\"mode\":\"task-align\""), json);
         assertFalse(json.contains("\n"), "必须单行");
+    }
+
+    @Test
+    @DisplayName("冻结重放：仅模板与旧提示词一致的记录真重放，异模板步骤继承 PASS")
+    void frozenReplay_directTemplateOnly() {
+        String oldPrompt = "旧版系统提示词全文";
+        String hitKey = "invocation:verdict:" + io.github.agentassert4j.util.HashUtil.sha256(oldPrompt);
+        saveRecord("b1", "s-old", 1000L, "查订单", hitKey, "verdict", io.github.agentassert4j.util.HashUtil.sha256(oldPrompt), "答A", "dev-model");
+        saveRecord("b2", "s-old", 2000L, null, "invocation:other:h-other", "other", io.github.agentassert4j.util.HashUtil.sha256("别的模板"), "答B", "dev-model");
+        stubClient.responseText = "答A";
+
+        int exit = runner.run("查订单", false, false, "new prompt", oldPrompt, null, null);
+
+        assertEquals(0, exit);
+        assertEquals(1, stubClient.callCount, "只有旧提示词命中的记录真重放");
+        String report = output.toString();
+        assertTrue(report.contains("继承 PASS"), "异模板步骤必须标注继承: " + report);
     }
 
     @Test

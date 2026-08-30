@@ -2,10 +2,7 @@ package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.JudgmentSemantics;
 import io.github.agentassert4j.algorithm.TaskChainView;
-import io.github.agentassert4j.model.AcceptancePack;
-import io.github.agentassert4j.model.BaselineStep;
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.TaskChain;
+import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.recorder.DataSanitizer;
 import io.github.agentassert4j.recorder.RecorderConfig;
 import io.github.agentassert4j.recorder.SanitizeStrategy;
@@ -90,7 +87,7 @@ public class BaselineExportCommand implements Callable<Integer> {
                 boolean complete = true;
                 for (InteractionRecord record : chain.getRecords()) {
                     String key = CliSupport.invocationKeyOfRecord(record);
-                    io.github.agentassert4j.model.InvocationProfile profile = key == null ? null : repository.findInvocationByKey(key);
+                    InvocationProfile profile = key == null ? null : repository.findInvocationByKey(key);
                     if (profile == null || profile.getFingerprint() == null) {
                         complete = false;
                         break;

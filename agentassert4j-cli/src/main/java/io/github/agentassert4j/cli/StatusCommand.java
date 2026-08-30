@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 
 /**
  * status 命令 — 查看已录制调用点与基线状态（裁决前后的巡检入口）。
@@ -37,6 +38,9 @@ public class StatusCommand implements Callable<Integer> {
     @Option(names = {"--diff"}, description = "对存在候选指纹的 调用点 渲染候选与基线的逐维差异")
     boolean diff;
 
+    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 巡检报告（agentassert4j.status/1）")
+    boolean jsonOutput;
+
     @Override
     public Integer call() {
         StorageRepository repository = null;
@@ -56,6 +60,16 @@ public class StatusCommand implements Callable<Integer> {
             }
 
             List<String> uncovered = uncoveredBusinessTags(repository, profiles);
+            if (jsonOutput) {
+                StringBuilder invocations = new StringBuilder();
+                for (InvocationProfile profile : profiles) {
+                    if (invocations.length() > 0) invocations.append(",");
+                    String archivedTags = archivedVersionTags(repository, profile.getInvocationKey());
+                    invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(profile.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), ""))).append("\",\"status\":\"").append(profile.getBaselineStatus()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(profile.getVersionTag() != null ? profile.getVersionTag() : "")).append("\",\"hasCandidate\":").append(profile.getCandidateFingerprint() != null).append(",\"archivedVersions\":\"").append(RecursiveJsonParser.escape(archivedTags)).append("\"}");
+                }
+                out.println("{\"schema\":\"agentassert4j.status/1\",\"invocations\":[" + invocations + "],\"uncovered\":" + uncovered.size() + "}");
+                return 0;
+            }
             for (String tag : uncovered) {
                 out.println("  " + tag + ": 已录制但无基线（先执行 baseline）");
             }

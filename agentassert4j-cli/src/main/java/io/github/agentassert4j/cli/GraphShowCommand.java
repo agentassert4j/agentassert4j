@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.Callable;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 
 /**
  * graph show 命令 — 现场重建依赖图并渲染（只读，不落盘）。
@@ -34,6 +35,9 @@ public class GraphShowCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
     String db;
 
+    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 报告")
+    boolean jsonOutput;
+
     @Override
     public Integer call() {
         StorageRepository repository = null;
@@ -52,6 +56,15 @@ public class GraphShowCommand implements Callable<Integer> {
                 out.println("  " + edge.getSource() + " -> " + edge.getTarget() + "  " + edge.getConfidence() + through);
             }
 
+            if (jsonOutput) {
+                StringBuilder edgeJson = new StringBuilder();
+                for (GraphEdge edge : edges) {
+                    if (edgeJson.length() > 0) edgeJson.append(",");
+                    edgeJson.append("{\"source\":\"").append(RecursiveJsonParser.escape(edge.getSource())).append("\",\"target\":\"").append(RecursiveJsonParser.escape(edge.getTarget())).append("\",\"confidence\":\"").append(edge.getConfidence()).append("\"}");
+                }
+                out.println("{\"schema\":\"agentassert4j.graph/1\",\"nodeCount\":" + nodes.size() + ",\"edgeCount\":" + edges.size() + ",\"edges\":[" + edgeJson + "]}");
+                return 0;
+            }
             Set<String> cycles = graph.detectCycles();
             if (cycles.isEmpty()) {
                 out.println("环：无");

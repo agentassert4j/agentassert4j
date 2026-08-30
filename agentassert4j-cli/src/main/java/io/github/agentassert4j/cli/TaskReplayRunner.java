@@ -1,12 +1,9 @@
 package io.github.agentassert4j.cli;
 
-import io.github.agentassert4j.algorithm.ImpactAnalyzer;
-import io.github.agentassert4j.algorithm.InMemoryDependencyGraph;
 import io.github.agentassert4j.algorithm.RegressionTestExecutor;
 import io.github.agentassert4j.algorithm.TaskAligner;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
-import io.github.agentassert4j.model.AnalysisResult;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.model.ToolCall;
@@ -24,6 +21,10 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import io.github.agentassert4j.algorithm.BaselineManager;
+import io.github.agentassert4j.algorithm.DeterministicComparator;
+import io.github.agentassert4j.algorithm.JudgmentSemantics;
+import io.github.agentassert4j.model.RegressionTestResult;
 
 /**
  * 任务域重放执行流程 — 以任务链（一次用户请求触发的全部记录）为回放单元。
@@ -49,14 +50,14 @@ public class TaskReplayRunner {
 
     private final StorageRepository repository;
     private final LlmClient llmClient;
-    private final io.github.agentassert4j.algorithm.DeterministicComparator comparator;
+    private final DeterministicComparator comparator;
     private final InvocationRulesConfig rules;
     private final TestExecutionConfig executionConfig;
     private final PrintStream out;
     private final PrintStream err;
     private final boolean jsonMode;
 
-    public TaskReplayRunner(StorageRepository repository, LlmClient llmClient, io.github.agentassert4j.algorithm.DeterministicComparator comparator, InvocationRulesConfig rules, TestExecutionConfig executionConfig, PrintStream out, PrintStream err, boolean jsonMode) {
+    public TaskReplayRunner(StorageRepository repository, LlmClient llmClient, DeterministicComparator comparator, InvocationRulesConfig rules, TestExecutionConfig executionConfig, PrintStream out, PrintStream err, boolean jsonMode) {
         this.repository = repository;
         this.llmClient = llmClient;
         this.comparator = comparator;
@@ -105,18 +106,18 @@ public class TaskReplayRunner {
         return newPrompt != null ? runFrozenReplay(taskPrefix, affected, fullChain, newPrompt, oldPrompt, maxTotalCalls, maxTotalTokens, chains) : runAlignment(taskPrefix, chains);
     }
 
-    // ---------- Mode A：冻结重放 ----------
-
     private int runFrozenReplay(String taskPrefix, boolean affected, boolean fullChain, String newPrompt, String oldPrompt, Integer maxTotalCalls, Integer maxTotalTokens, List<TaskChain> chains) {
+        // 冻结重放的受影响口径：仅「模板与旧提示词一致」的记录以新提示词真重放。
+        // 影响集的图下游传播节点不参与——冻结重放喂的是录制原输入，其模板又未变，
+        // 重放只复现原行为、不产生验证信号（下游真实影响由真实再执行+对齐收口）。
         Set<String> affectedKeys = null;
-        if (affected) {
-            InMemoryDependencyGraph graph = CliSupport.rebuildGraph(repository);
-            AnalysisResult analysis = new ImpactAnalyzer(repository, graph).analyzeChange(HashUtil.sha256(oldPrompt), HashUtil.sha256(newPrompt));
-            if (!analysis.isHasBaseline() || analysis.isError()) {
-                diagnostic(analysis.getMessage());
+        if (oldPrompt != null) {
+            affectedKeys = repository.findInvocationKeysByTemplateHash(HashUtil.sha256(oldPrompt));
+            affectedKeys.remove("");
+            if (affectedKeys.isEmpty()) {
+                diagnostic("没有调用点使用旧提示词（template hash 无命中），无法确定影响范围。");
                 return 2;
             }
-            affectedKeys = analysis.getAllAffectedInvocations();
         }
 
         List<TaskChain> tasks = selectTasks(chains, taskPrefix, affected, affectedKeys);
@@ -128,7 +129,7 @@ public class TaskReplayRunner {
         // 自动建档（与单点重放同款语义）：候选落库以画像存在为前提
         new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), false, null, rules);
 
-        io.github.agentassert4j.algorithm.BaselineManager baselineManager = new io.github.agentassert4j.algorithm.BaselineManager(repository);
+        BaselineManager baselineManager = new BaselineManager(repository);
         RegressionTestExecutor executor = new RegressionTestExecutor(llmClient, comparator, baselineManager, rules);
 
         List<String> stepJsons = jsonMode ? new ArrayList<>() : null;
@@ -182,7 +183,7 @@ public class TaskReplayRunner {
                     continue;
                 }
 
-                io.github.agentassert4j.model.RegressionTestResult result = executor.execute(record, newPrompt, null, executionConfig);
+                RegressionTestResult result = executor.execute(record, newPrompt, null, executionConfig);
                 callsUsed++;
                 if (result.getInputTokens() != null && result.getOutputTokens() != null) {
                     tokensUsed += result.getInputTokens() + (long) result.getOutputTokens();
@@ -233,8 +234,6 @@ public class TaskReplayRunner {
         return skipped > 0 ? 2 : 0;
     }
 
-    // ---------- Mode B：真实对比 ----------
-
     private int runAlignment(String taskPrefix, List<TaskChain> chains) {
         List<TaskChain> matching = new ArrayList<>();
         for (TaskChain chain : chains) {
@@ -251,7 +250,7 @@ public class TaskReplayRunner {
             info("任务「" + newChain.getRequestText() + "」仅一条链（session " + newChain.getSessionId() + "）——首录即基线，自建基线完成（" + newChain.getRecords().size() + " 步）。");
             info("下次真实再执行后重跑本命令，将自动配对本次基线并出对齐报告。");
             if (jsonMode) {
-                out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-align\",\"selfEstablished\":true,\"task\":{\"request\":\"" + RecursiveJsonParser.escape(newChain.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(newChain.getSessionId()) + "\"},\"summary\":{\"total\":" + newChain.getRecords().size() + ",\"pass\":" + newChain.getRecords().size() + ",\"changed\":0,\"skipped\":0,\"missing\":0,\"added\":0},\"steps\":[],\"judgmentSemantics\":\"" + io.github.agentassert4j.algorithm.JudgmentSemantics.VERSION + "\"}");
+                out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-align\",\"selfEstablished\":true,\"task\":{\"request\":\"" + RecursiveJsonParser.escape(newChain.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(newChain.getSessionId()) + "\"},\"summary\":{\"total\":" + newChain.getRecords().size() + ",\"pass\":" + newChain.getRecords().size() + ",\"changed\":0,\"skipped\":0,\"missing\":0,\"added\":0},\"steps\":[],\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}");
             }
             return 0;
         }
@@ -303,8 +302,6 @@ public class TaskReplayRunner {
         return changed + missing + added > 0 ? 1 : 0;
     }
 
-    // ---------- 共用 ----------
-
     private List<TaskChain> selectTasks(List<TaskChain> chains, String taskPrefix, boolean affected, Set<String> affectedKeys) {
         List<TaskChain> selected = new ArrayList<>();
         for (TaskChain chain : chains) {
@@ -342,7 +339,7 @@ public class TaskReplayRunner {
         return key.length() <= 48 ? key : key.substring(0, 48) + "…";
     }
 
-    private String describe(io.github.agentassert4j.model.RegressionTestResult result) {
+    private String describe(RegressionTestResult result) {
         ComparisonResult comparison = result.getComparison();
         if (comparison != null) {
             return String.format("%s  score=%.2f  %s", comparison.getVerdict(), comparison.getScore(), comparison.getSummary());
@@ -415,7 +412,7 @@ public class TaskReplayRunner {
 
     private static String taskJson(String mode, String request, String sessionId, int total, int pass, int changed, int inherited, int postDivergence, int skipped, int missing, int added, List<String> steps, long baselineTime, Long newChainTime, boolean prefixDependent) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"").append(mode).append('"');
-        sb.append(",\"judgmentSemantics\":\"").append(io.github.agentassert4j.algorithm.JudgmentSemantics.VERSION).append('"');
+        sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
         sb.append(",\"task\":{\"request\":\"").append(RecursiveJsonParser.escape(request)).append("\",\"sessionId\":\"").append(RecursiveJsonParser.escape(sessionId)).append("\"}");
         sb.append(",\"summary\":{\"total\":").append(total).append(",\"pass\":").append(pass).append(",\"changed\":").append(changed).append(",\"inherited\":").append(inherited).append(",\"postDivergence\":").append(postDivergence).append(",\"skipped\":").append(skipped).append(",\"missing\":").append(missing).append(",\"added\":").append(added).append("}");
         sb.append(",\"steps\":[").append(String.join(",", steps)).append("]");
@@ -429,7 +426,7 @@ public class TaskReplayRunner {
         return sb.append('}').toString();
     }
 
-    private String stepJson(String action, InteractionRecord record, String key, Verdict verdict, ComparisonResult comparison, io.github.agentassert4j.model.RegressionTestResult result) {
+    private String stepJson(String action, InteractionRecord record, String key, Verdict verdict, ComparisonResult comparison, RegressionTestResult result) {
         StringBuilder sb = new StringBuilder("{\"recordId\":\"").append(RecursiveJsonParser.escape(record.getRecordId())).append('"');
         sb.append(",\"invocationKey\":\"").append(RecursiveJsonParser.escape(key != null ? key : "")).append('"');
         sb.append(",\"action\":\"").append(action).append('"');

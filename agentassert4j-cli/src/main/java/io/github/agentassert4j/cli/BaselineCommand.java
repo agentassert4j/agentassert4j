@@ -35,6 +35,9 @@ public class BaselineCommand implements Callable<Integer> {
     @Option(names = {"--force"}, description = "以当前判定语义重建基线：已有基线也被当前算法新指纹覆盖（判定语义升级后的恢复路径）")
     boolean force;
 
+    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 报告")
+    boolean jsonOutput;
+
     @Override
     public Integer call() {
         StorageRepository repository = null;
@@ -46,6 +49,9 @@ public class BaselineCommand implements Callable<Integer> {
             CliSupport.warnUnknownBehaviors(rules, out);
             int established = new BaselineService(repository).establishMissing(System.out, actor, force, resolvedInvocation, rules);
             out.println(established > 0 ? "完成：" + established + " 个 调用点 " + (force ? "重建" : "新建") + "基线。" : "完成：所有 调用点 均已有基线。");
+            if (jsonOutput) {
+                out.println("{\"schema\":\"agentassert4j.baseline-report/1\",\"ok\":true}");
+            }
             return 0;
         } catch (IllegalStateException e) {
             err.println(e.getMessage());
