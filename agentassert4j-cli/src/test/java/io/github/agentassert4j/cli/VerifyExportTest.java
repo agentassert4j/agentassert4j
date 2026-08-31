@@ -143,6 +143,65 @@ class VerifyExportTest {
     }
 
     @Test
+    @DisplayName("同键多记录往返：每步骤携带各自记录的指纹 → 全 PASS")
+    void roundtrip_multiRecordSameKey_pass() throws Exception {
+        // 同一调用点键的两条记录（同模板、输出结构异质——模板复用形态），
+        // 画像指纹只来自规范序首条；步骤指纹若取画像值，第二步必然假 CHANGED
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("r2", "s1", 2000L, null, "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\",\"extra\":1}", "dev-model");
+        establishBaselines();
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+        String digest = io.github.agentassert4j.util.HashUtil.sha256(json);
+
+        VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+        int exit = runner.run(json, digest, null, null);
+
+        assertEquals(0, exit, "同环境往返必 PASS（步骤指纹必须逐记录提取，画像指纹口径下第二步假 CHANGED）: " + output);
+    }
+
+    @Test
+    @DisplayName("同任务键多链：只导出链首时间最新的链")
+    void export_foldsToLatestChainPerTaskKey() throws Exception {
+        saveRecord("b1", "s-old", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("n1", "s-new", 9000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        establishBaselines();
+
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+
+        Object parsed = RecursiveJsonParser.parse(json);
+        List<?> tasks = (List<?>) ((Map<?, ?>) parsed).get("tasks");
+        assertEquals(1, tasks.size(), "同任务键只导出最新链: " + json);
+        Map<?, ?> task = (Map<?, ?>) tasks.get(0);
+        Map<?, ?> step = (Map<?, ?>) ((List<?>) task.get("steps")).get(0);
+        assertEquals("n1", step.get("recordId"), "必须是最新链的步骤");
+    }
+
+    @Test
+    @DisplayName("配对精确相等：前缀同名的本地链不得冒充包任务证据")
+    void pairing_exactMatchOnly() throws Exception {
+        saveRecord("r1", "s1", 1000L, "V1", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        establishBaselines();
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+
+        SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer.db").toString());
+        customerDb.initialize();
+        try {
+            // 客户侧只执行了 "V10"（前缀同名任务）——它不是 "V1" 的证据
+            saveRecord("c1", customerDb, 9000L, "V10", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+
+            int exit = runner.run(json, "digest", null, null);
+
+            assertEquals(2, exit, "包任务无精确匹配链 = 覆盖缺口（前缀同名链不得冒充）: " + output);
+            String report = output.toString();
+            assertTrue(report.contains("覆盖缺口 1"), "V1 必须列为覆盖缺口: " + report);
+            assertTrue(report.contains("范围外链 1"), "V10 链必须列为范围外: " + report);
+        } finally {
+            customerDb.close();
+        }
+    }
+
+    @Test
     @DisplayName("跨模型验收：结构同 servedModel 异 → PASS 且标注跨模型")
     void crossModel_structureSame_pass() throws Exception {
         saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
@@ -210,22 +269,23 @@ class VerifyExportTest {
     }
 
     @Test
-    @DisplayName("判定等价：记录路径与指纹路径对同一数据给出一致判定")
+    @DisplayName("参照等价：包内指纹与库内记录路径喂同一对齐核，各自语义下判定正确")
     void referenceEquivalence() throws Exception {
         saveRecord("b1", "s-old", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
         saveRecord("n1", "s-new", 9000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"status\":\"FAILED\"}", "dev-model");
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
 
+        // 包路径：包=最新链的行为证据（折叠+逐记录指纹），本地同链现场重提 → 自洽 PASS
         VerifyRunner packRunner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
         int packExit = packRunner.run(json, "digest", null, null);
-        assertEquals(1, packExit, "结构偏差 → 1");
-        assertTrue(output.toString().contains("CHANGED"), output.toString());
+        assertEquals(0, packExit, "包内指纹与本地重提同口径，同链必自洽 PASS: " + output);
 
+        // 库内路径：两条链喂同一对齐核 → 两轮间的结构变化 = CHANGED
         List<io.github.agentassert4j.model.TaskChain> chains = io.github.agentassert4j.algorithm.TaskChainView.resolveAll(repository);
         io.github.agentassert4j.model.TaskChain baseline = chains.get(0);
         io.github.agentassert4j.model.TaskChain newChain = chains.get(chains.size() - 1);
         io.github.agentassert4j.result.TaskAlignment alignment = io.github.agentassert4j.algorithm.TaskAligner.align(baseline, newChain, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig());
-        assertEquals(io.github.agentassert4j.result.Verdict.CHANGED, alignment.getVerdict(), "记录路径与指纹路径判定一致");
+        assertEquals(io.github.agentassert4j.result.Verdict.CHANGED, alignment.getVerdict(), "记录路径捕捉两轮间结构变化");
     }
 }

@@ -109,7 +109,7 @@ public class ReplayRunner {
             new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), false, null, rules);
         }
 
-        // --调用点 支持业务 invocationId 与 invocationKey 前缀两种写法（status/approve 展示的都是
+        // --invocation 支持业务 invocationId 与 invocationKey 前缀两种写法（status/approve 展示的都是
         // invocationKey，直接粘贴是高频操作）；歧义前缀在这里显式报错
         String resolvedInvocation = CliSupport.resolveInvocationFilter(repository, invocationFilter, jsonMode ? discardStream() : out);
 
@@ -230,7 +230,7 @@ public class ReplayRunner {
         List<String> pending = changed > 0 ? pendingInvocationKeys() : null;
         if (changed > 0 && !jsonMode) {
             info("待裁决: " + String.join(", ", pending));
-            info("用 `agentassert4j approve --调用点 <invocationKey 前缀>` 接受，或 `agentassert4j reject --调用点 <invocationKey 前缀>` 拒绝。");
+            info("用 `agentassert4j approve --invocation <invocationKey 前缀>` 接受，或 `agentassert4j reject --invocation <invocationKey 前缀>` 拒绝。");
         }
         if (jsonMode) {
             out.println(replayJson(cases.size(), pass, changed, failed, hasTokens, totalInputTokens, totalOutputTokens, caseJsons, pending == null ? new ArrayList<>() : pending));

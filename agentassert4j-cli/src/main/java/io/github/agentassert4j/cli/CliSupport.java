@@ -19,7 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
- * CLI 支撑工具 — 存储打开、调用点 枚举、依赖图加载、--调用点 目标解析的共用逻辑。
+ * CLI 支撑工具 — 存储打开、调用点 枚举、依赖图加载、--invocation 目标解析的共用逻辑。
  *
  * <p>调用点 枚举走「session 全量 → 记录提取」通道，不扩张查询域接口；
  * 图快照缺失或损坏时退化为空图（图是可从交互记录重建的派生数据）。</p>
@@ -128,7 +128,7 @@ final class CliSupport {
     }
 
     /**
-     * 解析 --调用点 过滤值（选例类命令用：replay/baseline）。与某业务 invocationId
+     * 解析 --invocation 过滤值（选例类命令用：replay/baseline）。与某业务 invocationId
      * 精确相等时按原义使用；否则尝试 invocationKey 唯一前缀匹配并换算回业务标签
      * （画像上的 invocationId 是分组器派生的内部标识，与记录上的业务标签是两套体系）。
      * 完全无命中时原样返回，由调用方的「未找到用例」路径兜底。
@@ -168,7 +168,7 @@ final class CliSupport {
             }
         }
         if (businessMatches.size() == 1) {
-            out.println("提示：--调用点 " + filter + " 按 invocationKey 前缀匹配到 " + targetInvocationKey + "（业务标签 " + businessMatches.get(0) + "）");
+            out.println("提示：--invocation " + filter + " 按 invocationKey 前缀匹配到 " + targetInvocationKey + "（业务标签 " + businessMatches.get(0) + "）");
             return businessMatches.get(0);
         }
         if (businessMatches.size() > 1) {
@@ -178,7 +178,7 @@ final class CliSupport {
     }
 
     /**
-     * 解析 --调用点 目标值（画像操作类命令用：approve/reject/rollback），返回唯一 invocationKey。
+     * 解析 --invocation 目标值（画像操作类命令用：approve/reject/rollback），返回唯一 invocationKey。
      * 解析优先级：完整 invocationKey 精确命中（即使它是其他 key 的前缀）＞ 业务标签（该标签
      * 覆盖多个分组时报错并列出）＞ invocationKey 唯一前缀。无命中或多命中均抛
      * {@link IllegalStateException}，由命令层转译为退出码 2。

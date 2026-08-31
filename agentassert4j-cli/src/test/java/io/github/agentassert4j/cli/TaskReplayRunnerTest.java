@@ -109,6 +109,66 @@ class TaskReplayRunnerTest {
     }
 
     @Test
+    @DisplayName("选链器：精确命中优先——短前缀不再静默扩选到前缀家族的其他任务")
+    void taskSelector_exactBeatsPrefix() {
+        saveRecord("v1", "s1", 1000L, "V1", "invocation:x:h1", "答1");
+        saveRecord("v10", "s2", 9000L, "V10", "invocation:x:h1", "答10");
+
+        int exit = runner.run("V1", false, false, null, null, null, null);
+
+        assertEquals(0, exit);
+        String report = output.toString();
+        assertTrue(report.contains("任务「V1」"), "必须选中精确命中的 V1: " + report);
+        assertFalse(report.contains("任务「V10」"), "前缀家族的 V10 不得被静默选中: " + report);
+    }
+
+    @Test
+    @DisplayName("选链器：精确未命中且前缀命中多个不同任务文本 → 歧义报错列候选，退出码 2")
+    void taskSelector_prefixAmbiguous_exit2() {
+        saveRecord("v1", "s1", 1000L, "V1", "invocation:x:h1", "答1");
+        saveRecord("v10", "s2", 2000L, "V10", "invocation:x:h1", "答10");
+
+        int exit = runner.run("V", false, false, null, null, null, null);
+
+        assertEquals(2, exit, "歧义前缀必须报错");
+        String report = output.toString();
+        assertTrue(report.contains("V1") && report.contains("V10"), "必须列出全部候选: " + report);
+        assertTrue(report.contains("更长前缀"), "必须指引提供更长前缀: " + report);
+    }
+
+    @Test
+    @DisplayName("选链器：精确未命中且前缀唯一 → 采用唯一候选")
+    void taskSelector_uniquePrefix_adopted() {
+        saveRecord("v10", "s2", 1000L, "V10", "invocation:x:h1", "答10");
+
+        int exit = runner.run("V1", false, false, null, null, null, null);
+
+        assertEquals(0, exit);
+        assertTrue(output.toString().contains("任务「V10」"), "前缀唯一候选应被采用: " + output);
+    }
+
+    @Test
+    @DisplayName("选链器：冻结重放路径同款歧义守卫")
+    void taskSelector_frozenReplay_ambiguous_exit2() {
+        saveRecord("v1", "s1", 1000L, "V1", "invocation:x:h1", "答1");
+        saveRecord("v10", "s2", 2000L, "V10", "invocation:x:h1", "答10");
+
+        int exit = runner.run("V", false, false, "新提示词", null, null, null);
+
+        assertEquals(2, exit, "冻结重放与真实对比共用选链器语义");
+    }
+
+    @Test
+    @DisplayName("选链器：同文本多链是任务多轮而非歧义 → 取最新对齐")
+    void taskSelector_sameTextMultiChains_notAmbiguous() {
+        saveRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");
+        saveRecord("b2", "s-mid", 2000L, "查订单", "invocation:x:h1", "答A");
+        saveRecord("n1", "s-new", 9000L, "查订单", "invocation:x:h1", "答A");
+
+        assertEquals(0, runner.run("查订单", false, false, null, null, null, null), "同文本多链取最新 vs 次新，不触发歧义");
+    }
+
+    @Test
     @DisplayName("真实对比：仅一条链 → 自建基线，退出码 0 并标注")
     void alignment_singleChain_selfEstablish_exit0() {
         saveRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");

@@ -1,7 +1,10 @@
 package io.github.agentassert4j.cli;
 
+import io.github.agentassert4j.algorithm.FingerprintExtractor;
 import io.github.agentassert4j.algorithm.JudgmentSemantics;
 import io.github.agentassert4j.algorithm.TaskChainView;
+import io.github.agentassert4j.config.ConfigLoader;
+import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.recorder.DataSanitizer;
 import io.github.agentassert4j.recorder.RecorderConfig;
@@ -16,9 +19,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.Callable;
 
 /**
@@ -56,7 +57,7 @@ public class BaselineExportCommand implements Callable<Integer> {
         try {
             repository = CliSupport.openRepository(db, out);
 
-            List<TaskChain> chains = TaskChainView.resolveAll(repository);
+            List<TaskChain> chains = latestChainPerTaskKey(TaskChainView.resolveAll(repository));
             if (task != null) {
                 chains.removeIf(c -> !c.getRequestText().startsWith(task));
             }
@@ -65,6 +66,7 @@ public class BaselineExportCommand implements Callable<Integer> {
                 return 2;
             }
 
+            InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
             DataSanitizer sanitizer = includeSamples ? forcedMaskSanitizer() : null;
             AcceptancePack pack = new AcceptancePack();
             AcceptancePack.PackMeta meta = new AcceptancePack.PackMeta();
@@ -95,7 +97,9 @@ public class BaselineExportCommand implements Callable<Integer> {
                     BaselineStep step = new BaselineStep();
                     step.setInvocationKey(key);
                     step.setRecordId(record.getRecordId());
-                    step.setFingerprint(profile.getFingerprint());
+                    // 步骤指纹逐记录现场提取（与 verify 重提侧、库内任务对齐同口径）——
+                    // 画像指纹是建档种子记录的单份快照，同键多记录时冒充其他步骤必然假 CHANGED
+                    step.setFingerprint(FingerprintExtractor.extract(record, rules, record.getInvocationId()));
                     if (sanitizer != null) {
                         InteractionRecord sanitized = sanitizer.sanitize(record);
                         step.setSampleInput(sanitized.getUserInput());
@@ -141,6 +145,18 @@ public class BaselineExportCommand implements Callable<Integer> {
                 repository.close();
             }
         }
+    }
+
+    /**
+     * 同任务键只保留链首时间最新的链（resolveAll 升序遍历、后写者覆盖即最新）——
+     * 与 verify 侧「取最新为对照」对称；旧链任务对到本地最新链只会制造假差异。
+     */
+    private static List<TaskChain> latestChainPerTaskKey(List<TaskChain> chains) {
+        Map<String, TaskChain> latest = new LinkedHashMap<>();
+        for (TaskChain chain : chains) {
+            latest.put(chain.getRequestText(), chain);
+        }
+        return new ArrayList<>(latest.values());
     }
 
     /**

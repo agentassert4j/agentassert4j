@@ -138,11 +138,12 @@ public class VerifyRunner {
             }
         }
 
-        // 范围外本地链：不匹配任何包任务键的链（仅列出不判定）
+        // 范围外本地链：不匹配任何包任务键的链（仅列出不判定）。
+        // 配对语义=请求文本精确相等（防误配对）：前缀同名的链不是证据，与覆盖缺口对称列出
         for (TaskChain chain : localChains) {
             boolean matched = false;
             for (AcceptancePack.PackTask task : tasks) {
-                if (chain.getRequestText().startsWith(task.getTaskKey())) {
+                if (chain.getRequestText().equals(task.getTaskKey())) {
                     matched = true;
                     break;
                 }
@@ -174,10 +175,14 @@ public class VerifyRunner {
         return uncovered.isEmpty() ? 0 : 2;
     }
 
+    /**
+     * 包任务在本地链中的精确匹配（请求文本相等，多链取链首时间最新）。
+     * 交付配对是键对键语义：前缀同名文本不是同一任务，宁作覆盖缺口不作误配。
+     */
     private TaskChain latestLocalChain(List<TaskChain> chains, String taskKey) {
         TaskChain latest = null;
         for (TaskChain chain : chains) {
-            if (chain.getRequestText().startsWith(taskKey)) {
+            if (chain.getRequestText().equals(taskKey)) {
                 latest = chain;
             }
         }

@@ -41,11 +41,11 @@ abstract class AdjudicateCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         if (invocation != null && all) {
-            err.println("--调用点 与 --all 不能同时使用。");
+            err.println("--invocation 与 --all 不能同时使用。");
             return 2;
         }
         if (invocation == null && !all) {
-            err.println("需要 --调用点 <业务标签 / invocationKey / 唯一前缀> 或 --all。");
+            err.println("需要 --invocation <业务标签 / invocationKey / 唯一前缀> 或 --all。");
             return 2;
         }
         StorageRepository repository = null;
@@ -86,7 +86,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
         List<InvocationProfile> targets = new ArrayList<>();
         if (invocation != null) {
             // 统一解析：完整 invocationKey / 业务标签 / invocationKey 唯一前缀三种写法等价，
-            // 与 replay/baseline 的 --调用点 值域一致
+            // 与 replay/baseline 的 --invocation 值域一致
             String invocationKey = CliSupport.resolveInvocationKeyTarget(repository, invocation);
             InvocationProfile profile = repository.findInvocationByKey(invocationKey);
             if (profile == null) {

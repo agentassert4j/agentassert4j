@@ -19,7 +19,7 @@ import io.github.agentassert4j.util.RecursiveJsonParser;
  * status 命令 — 查看已录制调用点与基线状态（裁决前后的巡检入口）。
  *
  * <p>invocationKey 是 调用点 的稳定标识（分组器确定性产出），approve/reject 的
- * --调用点 以它（或其唯一前缀）为目标。</p>
+ * --invocation 以它（或其唯一前缀）为目标。</p>
  *
  * @author axy-yxa
  * @since 2026-08-27

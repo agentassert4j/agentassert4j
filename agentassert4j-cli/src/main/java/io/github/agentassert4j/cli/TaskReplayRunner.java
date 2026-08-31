@@ -1,10 +1,10 @@
 package io.github.agentassert4j.cli;
 
-import io.github.agentassert4j.algorithm.RegressionTestExecutor;
-import io.github.agentassert4j.algorithm.TaskAligner;
+import io.github.agentassert4j.algorithm.*;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.RegressionTestResult;
 import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.result.ComparisonResult;
@@ -19,12 +19,9 @@ import io.github.agentassert4j.util.TextDiffUtils;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import io.github.agentassert4j.algorithm.BaselineManager;
-import io.github.agentassert4j.algorithm.DeterministicComparator;
-import io.github.agentassert4j.algorithm.JudgmentSemantics;
-import io.github.agentassert4j.model.RegressionTestResult;
 
 /**
  * 任务域重放执行流程 — 以任务链（一次用户请求触发的全部记录）为回放单元。
@@ -121,6 +118,9 @@ public class TaskReplayRunner {
         }
 
         List<TaskChain> tasks = selectTasks(chains, taskPrefix, affected, affectedKeys);
+        if (tasks == null) {
+            return 2;
+        }
         if (tasks.isEmpty()) {
             diagnostic(affected ? "受影响调用点未出现在任何任务链中（无任务可重放）。" : "未找到请求文本匹配「" + taskPrefix + "」的任务链（先录制交互或核对前缀）。");
             return 2;
@@ -235,11 +235,9 @@ public class TaskReplayRunner {
     }
 
     private int runAlignment(String taskPrefix, List<TaskChain> chains) {
-        List<TaskChain> matching = new ArrayList<>();
-        for (TaskChain chain : chains) {
-            if (chain.getRequestText().startsWith(taskPrefix)) {
-                matching.add(chain);
-            }
+        List<TaskChain> matching = selectByRequestText(chains, taskPrefix);
+        if (matching == null) {
+            return 2;
         }
         if (matching.isEmpty()) {
             diagnostic("未找到请求文本匹配「" + taskPrefix + "」的任务链。");
@@ -303,9 +301,9 @@ public class TaskReplayRunner {
     }
 
     private List<TaskChain> selectTasks(List<TaskChain> chains, String taskPrefix, boolean affected, Set<String> affectedKeys) {
-        List<TaskChain> selected = new ArrayList<>();
-        for (TaskChain chain : chains) {
-            if (affected) {
+        if (affected) {
+            List<TaskChain> selected = new ArrayList<>();
+            for (TaskChain chain : chains) {
                 for (InteractionRecord record : chain.getRecords()) {
                     String key = CliSupport.invocationKeyOfRecord(record);
                     if (key != null && affectedKeys.contains(key)) {
@@ -313,15 +311,40 @@ public class TaskReplayRunner {
                         break;
                     }
                 }
-            } else if (chain.getRequestText().startsWith(taskPrefix)) {
-                selected.add(chain);
             }
-        }
-        if (affected) {
             return selected;
         }
-        // 文本前缀命中多条链时取最新一条为回放对象（最新录制代表当前行为）
-        return selected.isEmpty() ? selected : new ArrayList<>(java.util.Collections.singletonList(selected.get(selected.size() - 1)));
+        return selectByRequestText(chains, taskPrefix);
+    }
+
+    /**
+     * 任务链选择：请求文本精确相等优先（同文本多链是同一任务的多轮执行，升序全保留，
+     * 由调用方取最新为对照）；精确未命中时按前缀匹配——唯一候选文本直接采用，
+     * 多个候选文本属歧义，报错列出全部候选并返回 null（调用方以用法错误退出）。
+     * 与 --invocation 的「唯一前缀 + 歧义报错」目标选择器标准同款。
+     */
+    private List<TaskChain> selectByRequestText(List<TaskChain> chains, String taskPrefix) {
+        List<TaskChain> exact = new ArrayList<>();
+        List<TaskChain> prefixed = new ArrayList<>();
+        Set<String> prefixTexts = new java.util.LinkedHashSet<>();
+        for (TaskChain chain : chains) {
+            if (chain.getRequestText().equals(taskPrefix)) {
+                exact.add(chain);
+            } else if (chain.getRequestText().startsWith(taskPrefix)) {
+                prefixed.add(chain);
+                prefixTexts.add(chain.getRequestText());
+            }
+        }
+        if (!exact.isEmpty()) {
+            return exact;
+        }
+        if (prefixTexts.size() > 1) {
+            List<String> sorted = new ArrayList<>(prefixTexts);
+            Collections.sort(sorted);
+            diagnostic("--task " + taskPrefix + " 前缀匹配到多个任务：" + String.join("、", sorted) + "，请提供更长前缀。");
+            return null;
+        }
+        return prefixed;
     }
 
     private static boolean budgetExhausted(Integer maxCalls, Integer maxTokens, int callsUsed, long tokensUsed) {
