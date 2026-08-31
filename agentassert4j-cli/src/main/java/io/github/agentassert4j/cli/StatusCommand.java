@@ -4,6 +4,7 @@ import io.github.agentassert4j.algorithm.InMemoryDependencyGraph;
 import io.github.agentassert4j.model.ArchivedTemplateVersion;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.StorageRepository;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -13,7 +14,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
-import io.github.agentassert4j.util.RecursiveJsonParser;
 
 /**
  * status 命令 — 查看已录制调用点与基线状态（裁决前后的巡检入口）。
@@ -45,9 +45,26 @@ public class StatusCommand implements Callable<Integer> {
     public Integer call() {
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db, out);
+            // --json 模式 stdout 只产出报告本体：配置披露改走 stderr，人类巡检表不输出
+            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
             List<InvocationProfile> profiles = repository.findAllInvocations();
             Map<String, String> labelsByInvocationKey = businessLabelsByInvocationKey(repository);
+
+            if (jsonOutput) {
+                StringBuilder invocations = new StringBuilder();
+                for (InvocationProfile profile : profiles) {
+                    if (invocations.length() > 0) invocations.append(",");
+                    String archivedTags = archivedVersionTags(repository, profile.getInvocationKey());
+                    invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(profile.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), ""))).append("\",\"status\":\"").append(profile.getBaselineStatus()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(profile.getVersionTag() != null ? profile.getVersionTag() : "")).append("\",\"hasCandidate\":").append(profile.getCandidateFingerprint() != null).append(",\"archivedVersions\":\"").append(RecursiveJsonParser.escape(archivedTags)).append("\"}");
+                }
+                StringBuilder uncoveredJson = new StringBuilder();
+                for (String tag : uncoveredBusinessTags(repository, profiles)) {
+                    if (uncoveredJson.length() > 0) uncoveredJson.append(",");
+                    uncoveredJson.append("\"").append(RecursiveJsonParser.escape(tag)).append("\"");
+                }
+                out.println("{\"schema\":\"agentassert4j.status/1\",\"invocations\":[" + invocations + "],\"uncovered\":[" + uncoveredJson + "]}");
+                return 0;
+            }
 
             out.println("invocationKey                                              状态       版本   候选  归档版本      业务标签");
             for (InvocationProfile profile : profiles) {
@@ -60,16 +77,6 @@ public class StatusCommand implements Callable<Integer> {
             }
 
             List<String> uncovered = uncoveredBusinessTags(repository, profiles);
-            if (jsonOutput) {
-                StringBuilder invocations = new StringBuilder();
-                for (InvocationProfile profile : profiles) {
-                    if (invocations.length() > 0) invocations.append(",");
-                    String archivedTags = archivedVersionTags(repository, profile.getInvocationKey());
-                    invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(profile.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), ""))).append("\",\"status\":\"").append(profile.getBaselineStatus()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(profile.getVersionTag() != null ? profile.getVersionTag() : "")).append("\",\"hasCandidate\":").append(profile.getCandidateFingerprint() != null).append(",\"archivedVersions\":\"").append(RecursiveJsonParser.escape(archivedTags)).append("\"}");
-                }
-                out.println("{\"schema\":\"agentassert4j.status/1\",\"invocations\":[" + invocations + "],\"uncovered\":" + uncovered.size() + "}");
-                return 0;
-            }
             for (String tag : uncovered) {
                 out.println("  " + tag + ": 已录制但无基线（先执行 baseline）");
             }

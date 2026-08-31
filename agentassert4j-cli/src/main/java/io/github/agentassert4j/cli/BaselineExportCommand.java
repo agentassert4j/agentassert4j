@@ -12,9 +12,11 @@ import io.github.agentassert4j.recorder.SanitizeStrategy;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.HashUtil;
 import io.github.agentassert4j.util.PackCodec;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
+import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -51,11 +53,15 @@ public class BaselineExportCommand implements Callable<Integer> {
     @Option(names = {"--out"}, defaultValue = "acceptance-pack.json", description = "输出文件路径（默认 ./acceptance-pack.json）")
     String outPath;
 
+    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 报告（agentassert4j.export-report/1）")
+    boolean jsonOutput;
+
     @Override
     public Integer call() {
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db, out);
+            // --json 模式 stdout 只产出报告本体：配置披露改走 stderr
+            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
 
             List<TaskChain> chains = latestChainPerTaskKey(TaskChainView.resolveAll(repository));
             if (task != null) {
@@ -126,12 +132,22 @@ public class BaselineExportCommand implements Callable<Integer> {
             String json = PackCodec.toJson(pack);
             try {
                 Files.write(Paths.get(outPath), json.getBytes(StandardCharsets.UTF_8));
-            } catch (java.io.IOException e) {
+            } catch (IOException e) {
                 err.println("验收包写入失败：" + e.getMessage());
                 return 2;
             }
+            int stepCount = pack.getTasks().stream().mapToInt(t -> t.getSteps().size()).sum();
+            if (jsonOutput) {
+                StringBuilder excludedJson = new StringBuilder();
+                for (String excludedChain : excluded) {
+                    if (excludedJson.length() > 0) excludedJson.append(",");
+                    excludedJson.append("\"").append(RecursiveJsonParser.escape(excludedChain)).append("\"");
+                }
+                out.println("{\"schema\":\"agentassert4j.export-report/1\",\"out\":\"" + RecursiveJsonParser.escape(outPath) + "\",\"taskCount\":" + pack.getTasks().size() + ",\"stepCount\":" + stepCount + ",\"sha256\":\"" + HashUtil.sha256(json) + "\",\"excluded\":[" + excludedJson + "]}");
+                return 0;
+            }
             out.println("验收包已导出：" + outPath);
-            out.println("  任务链 " + pack.getTasks().size() + " 条 / 步骤 " + pack.getTasks().stream().mapToInt(t -> t.getSteps().size()).sum() + " 个" + (includeSamples ? "（含脱敏样本）" : "（无样本）"));
+            out.println("  任务链 " + pack.getTasks().size() + " 条 / 步骤 " + stepCount + " 个" + (includeSamples ? "（含脱敏样本）" : "（无样本）"));
             out.println("  SHA-256：" + HashUtil.sha256(json) + "（请与验收方对账）");
             if (!excluded.isEmpty()) {
                 out.println("  警告：以下任务链存在未建档步骤，已排除：" + String.join("；", excluded));

@@ -3,10 +3,13 @@ package io.github.agentassert4j.cli;
 import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.spi.StorageRepository;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Callable;
 
 /**
@@ -42,15 +45,26 @@ public class BaselineCommand implements Callable<Integer> {
     public Integer call() {
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db, out);
+            // --json 模式 stdout 只产出报告本体：配置披露与告警改走 stderr，建档过程行丢弃
+            PrintStream notice = jsonOutput ? err : out;
+            repository = CliSupport.openRepository(db, notice);
             String actor = approver != null && !approver.trim().isEmpty() ? approver.trim() : CliSupport.currentActor();
-            String resolvedInvocation = CliSupport.resolveInvocationFilter(repository, invocation, out);
+            String resolvedInvocation = CliSupport.resolveInvocationFilter(repository, invocation, notice);
             InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
-            CliSupport.warnUnknownBehaviors(rules, out);
-            int established = new BaselineService(repository).establishMissing(System.out, actor, force, resolvedInvocation, rules);
-            out.println(established > 0 ? "完成：" + established + " 个 调用点 " + (force ? "重建" : "新建") + "基线。" : "完成：所有 调用点 均已有基线。");
+            CliSupport.warnUnknownBehaviors(rules, notice);
+            List<BaselineService.BaselineOutcome> outcomes = new ArrayList<>();
+            int established = new BaselineService(repository).establishMissing(jsonOutput ? CliSupport.discardStream() : out, actor, force, resolvedInvocation, rules, outcomes);
             if (jsonOutput) {
-                out.println("{\"schema\":\"agentassert4j.baseline-report/1\",\"ok\":true}");
+                StringBuilder invocations = new StringBuilder();
+                for (BaselineService.BaselineOutcome outcome : outcomes) {
+                    if (invocations.length() > 0) {
+                        invocations.append(",");
+                    }
+                    invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(outcome.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(outcome.getLabel())).append("\",\"action\":\"").append(outcome.getAction()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(outcome.getVersionTag() != null ? outcome.getVersionTag() : "")).append("\"}");
+                }
+                out.println("{\"schema\":\"agentassert4j.baseline-report/1\",\"force\":" + force + ",\"established\":" + established + ",\"invocations\":[" + invocations + "]}");
+            } else {
+                out.println(established > 0 ? "完成：" + established + " 个 调用点 " + (force ? "重建" : "新建") + "基线。" : "完成：所有 调用点 均已有基线。");
             }
             return 0;
         } catch (IllegalStateException e) {

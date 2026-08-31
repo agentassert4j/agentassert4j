@@ -23,6 +23,11 @@ public class ApproveCommand extends AdjudicateCommand {
     }
 
     @Override
+    String action() {
+        return "approve";
+    }
+
+    @Override
     String describeResult(InvocationProfile profile) {
         return "已批准（审批人 " + resolvedApprover() + "），基线 " + profile.getVersionTag() + "（旧基线已归档）";
     }

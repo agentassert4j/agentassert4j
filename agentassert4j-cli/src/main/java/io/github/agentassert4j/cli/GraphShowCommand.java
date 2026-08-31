@@ -3,6 +3,7 @@ package io.github.agentassert4j.cli;
 import io.github.agentassert4j.algorithm.InMemoryDependencyGraph;
 import io.github.agentassert4j.model.GraphEdge;
 import io.github.agentassert4j.spi.StorageRepository;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -12,7 +13,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.Callable;
-import io.github.agentassert4j.util.RecursiveJsonParser;
 
 /**
  * graph show 命令 — 现场重建依赖图并渲染（只读，不落盘）。
@@ -42,28 +42,41 @@ public class GraphShowCommand implements Callable<Integer> {
     public Integer call() {
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db, out);
+            // --json 模式 stdout 只产出报告本体：配置披露改走 stderr，人类渲染不输出
+            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
             InMemoryDependencyGraph graph = CliSupport.rebuildGraph(repository);
 
             Set<String> nodes = new TreeSet<>(graph.getAllNodes());
-            out.println("节点（" + nodes.size() + "）：" + String.join(", ", nodes));
-
             List<GraphEdge> edges = new ArrayList<>(graph.getAllEdges());
             edges.sort((a, b) -> (a.getSource() + ">" + a.getTarget()).compareTo(b.getSource() + ">" + b.getTarget()));
-            out.println("边（" + edges.size() + "）：");
-            for (GraphEdge edge : edges) {
-                String through = edge.getThroughNodes() != null && !edge.getThroughNodes().isEmpty() ? "（穿透：" + String.join(",", edge.getThroughNodes()) + "）" : "";
-                out.println("  " + edge.getSource() + " -> " + edge.getTarget() + "  " + edge.getConfidence() + through);
-            }
 
             if (jsonOutput) {
                 StringBuilder edgeJson = new StringBuilder();
                 for (GraphEdge edge : edges) {
                     if (edgeJson.length() > 0) edgeJson.append(",");
-                    edgeJson.append("{\"source\":\"").append(RecursiveJsonParser.escape(edge.getSource())).append("\",\"target\":\"").append(RecursiveJsonParser.escape(edge.getTarget())).append("\",\"confidence\":\"").append(edge.getConfidence()).append("\"}");
+                    StringBuilder through = new StringBuilder();
+                    if (edge.getThroughNodes() != null) {
+                        for (String node : edge.getThroughNodes()) {
+                            if (through.length() > 0) through.append(",");
+                            through.append("\"").append(RecursiveJsonParser.escape(node)).append("\"");
+                        }
+                    }
+                    edgeJson.append("{\"source\":\"").append(RecursiveJsonParser.escape(edge.getSource())).append("\",\"target\":\"").append(RecursiveJsonParser.escape(edge.getTarget())).append("\",\"confidence\":\"").append(edge.getConfidence()).append("\",\"throughNodes\":[").append(through).append("]}");
                 }
-                out.println("{\"schema\":\"agentassert4j.graph/1\",\"nodeCount\":" + nodes.size() + ",\"edgeCount\":" + edges.size() + ",\"edges\":[" + edgeJson + "]}");
+                StringBuilder cyclesJson = new StringBuilder();
+                for (String node : new TreeSet<>(graph.detectCycles())) {
+                    if (cyclesJson.length() > 0) cyclesJson.append(",");
+                    cyclesJson.append("\"").append(RecursiveJsonParser.escape(node)).append("\"");
+                }
+                out.println("{\"schema\":\"agentassert4j.graph/1\",\"nodeCount\":" + nodes.size() + ",\"edgeCount\":" + edges.size() + ",\"edges\":[" + edgeJson + "],\"cycles\":[" + cyclesJson + "]}");
                 return 0;
+            }
+
+            out.println("节点（" + nodes.size() + "）：" + String.join(", ", nodes));
+            out.println("边（" + edges.size() + "）：");
+            for (GraphEdge edge : edges) {
+                String through = edge.getThroughNodes() != null && !edge.getThroughNodes().isEmpty() ? "（穿透：" + String.join(",", edge.getThroughNodes()) + "）" : "";
+                out.println("  " + edge.getSource() + " -> " + edge.getTarget() + "  " + edge.getConfidence() + through);
             }
             Set<String> cycles = graph.detectCycles();
             if (cycles.isEmpty()) {

@@ -44,6 +44,14 @@ public class BaselineService {
      * @return 本次新建/重建基线的分组数
      */
     public int establishMissing(PrintStream out, String actor, boolean force, String invocationFilter, InvocationRulesConfig rules) {
+        return establishMissing(out, actor, force, invocationFilter, rules, null);
+    }
+
+    /**
+     * 同上，另把逐调用点结果收集进 outcomes（null = 不收集）——
+     * 人类结果行已就地打印，明细供 --json 报告组装。
+     */
+    public int establishMissing(PrintStream out, String actor, boolean force, String invocationFilter, InvocationRulesConfig rules, List<BaselineOutcome> outcomes) {
         BaselineManager manager = new BaselineManager(repository);
         int established = 0;
 
@@ -58,6 +66,9 @@ public class BaselineService {
             boolean hadBaseline = existing != null && existing.getFingerprint() != null;
             if (hadBaseline && !force) {
                 out.println("  " + displayLabel(records) + invocationKey + ": 基线已存在（" + existing.getVersionTag() + "）");
+                if (outcomes != null) {
+                    outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "exists", existing.getVersionTag()));
+                }
                 continue;
             }
 
@@ -88,6 +99,9 @@ public class BaselineService {
                 repository.saveInvocationProfile(created);
             }
             out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "已按当前判定语义重建基线（" + created.getVersionTag() + "）" : "新建基线"));
+            if (outcomes != null) {
+                outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), hadBaseline ? "reestablished" : "created", created != null ? created.getVersionTag() : null));
+            }
             warnSeedRuleViolations(out, records.get(0), rules);
         }
         return established;
@@ -147,12 +161,51 @@ public class BaselineService {
      * 桶内首个非空业务标签（声明组显示人读名，形状组显示为空）。
      */
     private static String displayLabel(List<InteractionRecord> records) {
+        String label = firstBusinessLabel(records);
+        return label.isEmpty() ? "" : label + " → ";
+    }
+
+    private static String firstBusinessLabel(List<InteractionRecord> records) {
         for (InteractionRecord record : records) {
             if (record.getInvocationId() != null && !record.getInvocationId().isEmpty()) {
-                return record.getInvocationId() + " → ";
+                return record.getInvocationId();
             }
         }
         return "";
+    }
+
+    /**
+     * 单个调用点的建档结果 — 逐调用点 JSON 报告字段（人类结果行已就地打印）。
+     */
+    public static final class BaselineOutcome {
+
+        private final String invocationKey;
+        private final String label;
+        private final String action;
+        private final String versionTag;
+
+        public BaselineOutcome(String invocationKey, String label, String action, String versionTag) {
+            this.invocationKey = invocationKey;
+            this.label = label;
+            this.action = action;
+            this.versionTag = versionTag;
+        }
+
+        public String getInvocationKey() {
+            return invocationKey;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+
+        public String getAction() {
+            return action;
+        }
+
+        public String getVersionTag() {
+            return versionTag;
+        }
     }
 
     /**

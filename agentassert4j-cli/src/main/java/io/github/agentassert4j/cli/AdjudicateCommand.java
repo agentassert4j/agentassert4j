@@ -3,6 +3,7 @@ package io.github.agentassert4j.cli;
 import io.github.agentassert4j.algorithm.BaselineManager;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.StorageRepository;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 import picocli.CommandLine.Option;
 
 import java.io.PrintStream;
@@ -50,7 +51,8 @@ abstract class AdjudicateCommand implements Callable<Integer> {
         }
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db, out);
+            // --json 模式 stdout 只产出报告本体：配置披露改走 stderr，候选差异证据行不输出
+            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
             List<InvocationProfile> targets = resolveTargets(repository);
             if (targets.isEmpty()) {
                 printNoTargets(repository);
@@ -58,15 +60,23 @@ abstract class AdjudicateCommand implements Callable<Integer> {
             }
 
             BaselineManager manager = new BaselineManager(repository);
+            List<String> results = jsonOutput ? new ArrayList<>() : null;
             for (InvocationProfile target : targets) {
-                printCandidateDiff(target);
+                if (!jsonOutput) {
+                    printCandidateDiff(target);
+                }
                 apply(manager, target.getInvocationKey());
                 // approve/reject 在管理器内部改写画像，回读展示结果状态
                 InvocationProfile reloaded = repository.findInvocationByKey(target.getInvocationKey());
-                out.println("  " + target.getInvocationKey() + ": " + describeResult(reloaded != null ? reloaded : target));
+                InvocationProfile shown = reloaded != null ? reloaded : target;
+                if (jsonOutput) {
+                    results.add("{\"invocationKey\":\"" + RecursiveJsonParser.escape(target.getInvocationKey()) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(shown.getVersionTag() != null ? shown.getVersionTag() : "") + "\",\"status\":\"" + shown.getBaselineStatus() + "\",\"hasCandidate\":" + (shown.getCandidateFingerprint() != null) + "}");
+                } else {
+                    out.println("  " + target.getInvocationKey() + ": " + describeResult(shown));
+                }
             }
             if (jsonOutput) {
-                out.println("{\"schema\":\"agentassert4j.adjudication/1\",\"ok\":true}");
+                out.println("{\"schema\":\"agentassert4j.adjudication/1\",\"action\":\"" + action() + "\",\"invocations\":[" + String.join(",", results) + "]}");
             }
             return 0;
         } catch (IllegalStateException e) {
@@ -135,6 +145,11 @@ abstract class AdjudicateCommand implements Callable<Integer> {
      * 执行裁决操作（approve/reject）。
      */
     abstract void apply(BaselineManager manager, String invocationKey);
+
+    /**
+     * 裁决动作名——--json 报告的 action 字段，区分共用报告契约的两个命令。
+     */
+    abstract String action();
 
     /**
      * 裁决成功后的结果描述行。

@@ -4,6 +4,7 @@ import io.github.agentassert4j.algorithm.BaselineManager;
 import io.github.agentassert4j.model.ArchivedTemplateVersion;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.StorageRepository;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -11,7 +12,6 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
-import io.github.agentassert4j.util.RecursiveJsonParser;
 
 /**
  * rollback 命令 — 把活跃基线恢复到指定版本的归档基线。
@@ -46,7 +46,8 @@ public class RollbackCommand implements Callable<Integer> {
     public Integer call() {
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db, out);
+            // --json 模式 stdout 只产出报告本体：配置披露改走 stderr
+            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
             String invocationKey = CliSupport.resolveInvocationKeyTarget(repository, invocation);
             InvocationProfile target = repository.findInvocationByKey(invocationKey);
             if (target == null) {
@@ -55,9 +56,10 @@ public class RollbackCommand implements Callable<Integer> {
             ensureVersionExists(repository, invocationKey, version);
             new BaselineManager(repository).rollback(invocationKey, version);
             InvocationProfile reloaded = repository.findInvocationByKey(invocationKey);
-            out.println("  " + invocationKey + " → " + version + "（审批人 " + reloaded.getApprovedBy() + "）");
             if (jsonOutput) {
-                out.println("{\"schema\":\"agentassert4j.rollback/1\",\"invocationKey\":\"" + RecursiveJsonParser.escape(invocationKey) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(version) + "\",\"ok\":true}");
+                out.println("{\"schema\":\"agentassert4j.rollback/1\",\"invocationKey\":\"" + RecursiveJsonParser.escape(invocationKey) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(version) + "\",\"status\":\"" + reloaded.getBaselineStatus() + "\",\"approvedBy\":\"" + RecursiveJsonParser.escape(reloaded.getApprovedBy() != null ? reloaded.getApprovedBy() : "") + "\",\"ok\":true}");
+            } else {
+                out.println("  " + invocationKey + " → " + version + "（审批人 " + reloaded.getApprovedBy() + "）");
             }
             return 0;
         } catch (IllegalStateException e) {

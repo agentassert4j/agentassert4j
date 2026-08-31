@@ -75,6 +75,14 @@ final class CliSupport {
     }
 
     /**
+     * 吞掉输出的流——建档等下游组件只认 PrintStream 通道，
+     * --json 模式下用一次性丢弃流保住 stdout 的单行报告契约。
+     */
+    static PrintStream discardStream() {
+        return new PrintStream(new ByteArrayOutputStream(), true);
+    }
+
+    /**
      * 展开 "~" 前缀为用户主目录（配置默认值使用 ~/.agentassert4j/ 约定）。
      */
     static String expandHome(String path) {

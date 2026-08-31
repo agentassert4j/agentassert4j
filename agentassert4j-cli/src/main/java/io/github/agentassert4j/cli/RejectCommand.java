@@ -19,6 +19,11 @@ public class RejectCommand extends AdjudicateCommand {
     }
 
     @Override
+    String action() {
+        return "reject";
+    }
+
+    @Override
     String describeResult(InvocationProfile profile) {
         return "已拒绝，保留基线 " + profile.getVersionTag();
     }
