@@ -155,6 +155,8 @@ class DeterministicComparatorTest {
         assertEquals(Verdict.CHANGED, r.getVerdict());
         assertTrue(r.getAddedFields().contains("field2"));
         assertTrue(r.getRemovedFields().isEmpty());
+        // 展示分与判定同口径：纯新增字段也须扣结构分（新增与删除同罚），不再出现满分 CHANGED
+        assertTrue(r.getScore() < 1.0, "score=" + r.getScore());
     }
 
     @Test

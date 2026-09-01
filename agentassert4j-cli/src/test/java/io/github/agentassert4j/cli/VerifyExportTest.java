@@ -202,6 +202,38 @@ class VerifyExportTest {
     }
 
     @Test
+    @DisplayName("范围外链给因果提示：新录制未建档/未入包的常见成因就地指路")
+    void verifyHint_unmatchedLocal() throws Exception {
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        establishBaselines();
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+
+        SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer.db").toString());
+        customerDb.initialize();
+        try {
+            saveRecord("c1", customerDb, 9000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            // 包导出之后又录了新任务：范围外链的典型成因
+            saveRecord("c2", customerDb, 9500L, "查物流", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null);
+            VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+
+            int exit = runner.run(json, "digest", null, null);
+
+            assertEquals(0, exit);
+            String report = output.toString();
+            assertTrue(report.contains("范围外链 1"), report);
+            assertTrue(report.contains("提示：范围外本地链通常来自验收包导出之后的新录制"), "范围外必须带因果提示: " + report);
+
+            ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+            VerifyRunner jsonRunner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
+            assertEquals(0, jsonRunner.run(json, "digest", null, null));
+            assertTrue(jsonOut.toString().contains("\"hints\":[\"范围外本地链"), "JSON 报告必须携带 hints 供机器消费: " + jsonOut);
+        } finally {
+            customerDb.close();
+        }
+    }
+
+    @Test
     @DisplayName("跨模型验收：结构同 servedModel 异 → PASS 且标注跨模型")
     void crossModel_structureSame_pass() throws Exception {
         saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");

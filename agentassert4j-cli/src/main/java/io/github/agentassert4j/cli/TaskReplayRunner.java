@@ -18,10 +18,7 @@ import io.github.agentassert4j.util.TextDiffUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * 任务域重放执行流程 — 以任务链（一次用户请求触发的全部记录）为回放单元。
@@ -112,7 +109,7 @@ public class TaskReplayRunner {
             affectedKeys = repository.findInvocationKeysByTemplateHash(HashUtil.sha256(oldPrompt));
             affectedKeys.remove("");
             if (affectedKeys.isEmpty()) {
-                diagnostic("没有调用点使用旧提示词（template hash 无命中），无法确定影响范围。");
+                diagnostic(describeOldPromptMiss(oldPrompt, chains, affected ? null : taskPrefix));
                 return 2;
             }
         }
@@ -122,7 +119,7 @@ public class TaskReplayRunner {
             return 2;
         }
         if (tasks.isEmpty()) {
-            diagnostic(affected ? "受影响调用点未出现在任何任务链中（无任务可重放）。" : "未找到请求文本匹配「" + taskPrefix + "」的任务链（先录制交互或核对前缀）。");
+            diagnostic(affected ? "受影响调用点未出现在任何任务链中（无任务可重放）。" : "未找到请求文本匹配「" + CliSupport.visibleText(taskPrefix) + "」的任务链（先录制交互或核对前缀）。");
             return 2;
         }
 
@@ -240,7 +237,7 @@ public class TaskReplayRunner {
             return 2;
         }
         if (matching.isEmpty()) {
-            diagnostic("未找到请求文本匹配「" + taskPrefix + "」的任务链。");
+            diagnostic("未找到请求文本匹配「" + CliSupport.visibleText(taskPrefix) + "」的任务链。");
             return 2;
         }
         TaskChain newChain = matching.get(matching.size() - 1);
@@ -326,7 +323,7 @@ public class TaskReplayRunner {
     private List<TaskChain> selectByRequestText(List<TaskChain> chains, String taskPrefix) {
         List<TaskChain> exact = new ArrayList<>();
         List<TaskChain> prefixed = new ArrayList<>();
-        Set<String> prefixTexts = new java.util.LinkedHashSet<>();
+        Set<String> prefixTexts = new LinkedHashSet<>();
         for (TaskChain chain : chains) {
             if (chain.getRequestText().equals(taskPrefix)) {
                 exact.add(chain);
@@ -341,10 +338,46 @@ public class TaskReplayRunner {
         if (prefixTexts.size() > 1) {
             List<String> sorted = new ArrayList<>(prefixTexts);
             Collections.sort(sorted);
-            diagnostic("--task " + taskPrefix + " 前缀匹配到多个任务：" + String.join("、", sorted) + "，请提供更长前缀。");
+            List<String> shown = new ArrayList<>();
+            for (String text : sorted) {
+                shown.add(CliSupport.visibleText(text));
+            }
+            diagnostic("--task " + CliSupport.visibleText(taskPrefix) + " 前缀匹配到多个任务：" + String.join("、", shown) + "，请提供更长前缀。");
             return null;
         }
         return prefixed;
+    }
+
+    /**
+     * 旧提示词哈希无命中的诊断——只回一句「无命中」用户无从下手：最常见的根因是拿单段转储
+     * 或重新组装的文本当旧提示词，而录制归档的是完整拼装后的 system 全文（差一个全局段/
+     * 技能列表段哈希必然不等）。回显提供文本的哈希与靶链现存模板变体，供对照定位。
+     */
+    private String describeOldPromptMiss(String oldPrompt, List<TaskChain> chains, String taskPrefix) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("--old-prompt 与任何录制模板都不相等（提供文本 sha256=").append(HashUtil.sha256(oldPrompt), 0, 16).append("…）。");
+        List<TaskChain> scope = chains;
+        if (taskPrefix != null) {
+            List<TaskChain> selected = selectByRequestText(chains, taskPrefix);
+            if (selected != null && !selected.isEmpty()) {
+                scope = selected;
+            }
+        }
+        Set<String> variants = new LinkedHashSet<>();
+        for (TaskChain chain : scope) {
+            for (InteractionRecord record : chain.getRecords()) {
+                String label = record.getInvocationId() != null && !record.getInvocationId().isEmpty() ? record.getInvocationId() : CliSupport.invocationKeyOfRecord(record);
+                String hash = record.getTemplateHash();
+                if (hash != null && !hash.isEmpty()) {
+                    variants.add(label + "@" + hash.substring(0, Math.min(8, hash.length())));
+                }
+            }
+        }
+        if (!variants.isEmpty()) {
+            sb.append("靶链现存模板变体：").append(String.join("、", variants)).append("。");
+        }
+        sb.append("旧提示词必须是录制时归档的完整 system 模板全文（含全局拼接段）——单段转储或重新组装的文本哈希不等，归档原文见库内模板巡检（status）。");
+        return sb.toString();
     }
 
     private static boolean budgetExhausted(Integer maxCalls, Integer maxTokens, int callsUsed, long tokensUsed) {

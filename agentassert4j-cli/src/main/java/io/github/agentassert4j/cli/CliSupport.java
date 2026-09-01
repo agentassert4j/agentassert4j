@@ -83,6 +83,31 @@ final class CliSupport {
     }
 
     /**
+     * 控制字符可见化——用户可控文本回显进报错与报告时，\r 这类不可见字符会静默改变
+     * 匹配结果又不显示（终端里 \r 甚至把光标移回行首吞掉前面的文字），转义后差异一眼可辨。
+     */
+    static String visibleText(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        StringBuilder sb = new StringBuilder(text.length() + 16);
+        for (char c : text.toCharArray()) {
+            if (c == '\r') {
+                sb.append("<CR>");
+            } else if (c == '\n') {
+                sb.append("<LF>");
+            } else if (c == '\t') {
+                sb.append("<TAB>");
+            } else if (c < 0x20) {
+                sb.append("<U+").append(String.format("%04X", (int) c)).append(">");
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
      * 展开 "~" 前缀为用户主目录（配置默认值使用 ~/.agentassert4j/ 约定）。
      */
     static String expandHome(String path) {

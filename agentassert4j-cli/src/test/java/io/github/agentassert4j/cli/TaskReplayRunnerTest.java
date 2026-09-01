@@ -100,6 +100,33 @@ class TaskReplayRunnerTest {
     }
 
     @Test
+    @DisplayName("任务选择器：请求文本含控制字符时可见化回显（CR 不再静默吞字）")
+    void taskSelector_controlCharsVisible() {
+        saveRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");
+
+        int exit = runner.run("查订单\r", false, false, null, null, null, null);
+
+        assertEquals(2, exit);
+        String report = output.toString();
+        assertTrue(report.contains("<CR>"), "控制字符必须转义回显，否则用户看不见差异来源: " + report);
+        assertTrue(report.contains("未找到请求文本匹配"), report);
+    }
+
+    @Test
+    @DisplayName("冻结重放：--old-prompt 无命中时诊断提供文本哈希与靶链现存模板变体")
+    void oldPromptMiss_diagnosticListsVariants() {
+        saveRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");
+
+        int exit = runner.run("查订单", false, false, "新提示词内容", "不相关的旧提示词文本", null, null);
+
+        assertEquals(2, exit);
+        String report = output.toString();
+        assertTrue(report.contains("sha256="), "必须回显提供文本的哈希供与归档对照: " + report);
+        assertTrue(report.contains("invocation:x:h1@"), "必须列出靶链现存模板变体: " + report);
+        assertTrue(report.contains("完整 system 模板全文"), "必须指明旧提示词的真相源要求: " + report);
+    }
+
+    @Test
     @DisplayName("真实对比：同构链 → 退出码 0")
     void alignment_identicalChains_exit0() {
         saveRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");

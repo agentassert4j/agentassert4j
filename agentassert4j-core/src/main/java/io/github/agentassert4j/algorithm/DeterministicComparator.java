@@ -75,7 +75,7 @@ public class DeterministicComparator {
         boolean magnitudeOk = textMagnitudeOk(baseline, current);
         boolean structureOk = contentTypeOk && magnitudeOk && added.isEmpty() && removed.isEmpty() && typeOk;
         r.setStructureMatch(structureOk);
-        double d2 = computeDimension2(baseline, current, removed, typeOk);
+        double d2 = computeDimension2(baseline, current, removed, added, typeOk);
 
         // === 维度 3：内容规则（基线声明、当前答卷）===
         boolean hasDeclaredRules = !isEmpty(baseline.getRequiredKeywords()) || !isEmpty(baseline.getForbiddenKeywords()) || (baseline.getRegexPatterns() != null && !baseline.getRegexPatterns().isEmpty());
@@ -150,7 +150,7 @@ public class DeterministicComparator {
         return a == null ? b == null : a.equals(b);
     }
 
-    private double computeDimension2(DeterministicFingerprint baseline, DeterministicFingerprint current, Set<String> removed, boolean typeOk) {
+    private double computeDimension2(DeterministicFingerprint baseline, DeterministicFingerprint current, Set<String> removed, Set<String> added, boolean typeOk) {
         String bType = baseline.getOutputContentType();
         String cType = current.getOutputContentType();
 
@@ -164,7 +164,9 @@ public class DeterministicComparator {
         } else if (bType != null && bType.equals(cType)) {
             double d2 = 0;
             d2 += 0.2; // contentType 匹配
-            if (removed.isEmpty()) d2 += 0.5;
+            // 字段集一致才给分：新增与删除同罚——只罚删除时「纯新增字段」会拿到满分展示分，
+            // 而 verdict 仍 CHANGED（结构维判定含新增），score 与判定自相矛盾误导排查
+            if (removed.isEmpty() && added.isEmpty()) d2 += 0.5;
             if (typeOk) d2 += 0.3;
             return d2;
         } else {

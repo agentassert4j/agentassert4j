@@ -16,6 +16,7 @@ import io.github.agentassert4j.util.PackCodec;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import io.github.agentassert4j.util.TextDiffUtils;
 
+import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -154,7 +155,16 @@ public class VerifyRunner {
         }
 
         int totalSteps = 0;
+        // 因果提示：范围外链最常见的成因是包导出后才录制（未建档或未入包）——不指路时
+        // 用户第一反应是配对故障，实际是数据卫生问题
+        List<String> hints = new ArrayList<>();
+        if (!unmatchedLocal.isEmpty()) {
+            hints.add("范围外本地链通常来自验收包导出之后的新录制（新任务未建档或未入包）——先执行 baseline 补建档并重新导出验收包，或确认这些链本就属交付范围外。");
+        }
         info("验收汇总: PASS " + pass + " | CHANGED " + changed + " | 缺步骤 " + missing + " | 新增步骤 " + added + " | 覆盖缺口 " + uncovered.size() + " | 范围外链 " + unmatchedLocal.size());
+        for (String hint : hints) {
+            info("提示：" + hint);
+        }
         info("包 digest(SHA-256): " + packDigest);
         boolean crossModel = !localServedModels.isEmpty() && pack.getMeta().getServedModel() != null && !String.join(",", localServedModels).equals(pack.getMeta().getServedModel());
         if (crossModel) {
@@ -162,7 +172,7 @@ public class VerifyRunner {
         }
 
         if (jsonMode) {
-            out.println(verifyJson(pack, packDigest, pass, changed, missing, added, uncovered.size(), unmatchedLocal.size(), crossModel, taskJsons, uncovered));
+            out.println(verifyJson(pack, packDigest, pass, changed, missing, added, uncovered.size(), unmatchedLocal.size(), crossModel, taskJsons, uncovered, hints));
         }
         if (reportPath != null) {
             writeMarkdownReport(reportPath, pack, packDigest, crossModel, localServedModels, reportSections, uncovered, unmatchedLocal, pass, changed, missing, added);
@@ -263,6 +273,7 @@ public class VerifyRunner {
         }
         if (!unmatchedLocal.isEmpty()) {
             sb.append("\n> 范围外本地链（未判定）：").append(String.join("；", unmatchedLocal)).append('\n');
+            sb.append("> 提示：范围外链通常来自包导出后的新录制——先 baseline 补建档并重新导出验收包，或确认其属交付范围外。\n");
         }
         sb.append('\n');
         for (String section : sections) {
@@ -270,7 +281,7 @@ public class VerifyRunner {
         }
         try {
             Files.write(Paths.get(reportPath), sb.toString().getBytes(StandardCharsets.UTF_8));
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             diagnostic("验收报告写入失败：" + e.getMessage());
         }
     }
@@ -306,7 +317,7 @@ public class VerifyRunner {
 
     // ---------- JSON（agentassert4j.verify-report/1，单行） ----------
 
-    private String verifyJson(AcceptancePack pack, String digest, int pass, int changed, int missing, int added, int uncovered, int unmatchedLocal, boolean crossModel, List<String> taskJsons, List<String> uncoveredKeys) {
+    private String verifyJson(AcceptancePack pack, String digest, int pass, int changed, int missing, int added, int uncovered, int unmatchedLocal, boolean crossModel, List<String> taskJsons, List<String> uncoveredKeys, List<String> hints) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.verify-report/1\",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
         sb.append(",\"pack\":{\"digest\":\"").append(RecursiveJsonParser.escape(digest)).append("\",\"servedModel\":\"").append(RecursiveJsonParser.escape(pack.getMeta().getServedModel() != null ? pack.getMeta().getServedModel() : "")).append("\"}");
         sb.append(",\"summary\":{\"tasks\":").append(taskJsons.size()).append(",\"pass\":").append(pass).append(",\"changed\":").append(changed).append(",\"missing\":").append(missing).append(",\"added\":").append(added).append(",\"uncovered\":").append(uncovered).append(",\"unmatchedLocal\":").append(unmatchedLocal).append(",\"crossModel\":").append(crossModel).append("}");
@@ -315,7 +326,12 @@ public class VerifyRunner {
         for (String key : uncoveredKeys) {
             quoted.add("\"" + RecursiveJsonParser.escape(key) + "\"");
         }
-        sb.append(",\"uncoveredTaskKeys\":[").append(String.join(",", quoted)).append("]}");
+        sb.append(",\"uncoveredTaskKeys\":[").append(String.join(",", quoted)).append("]");
+        List<String> hintJsons = new ArrayList<>();
+        for (String hint : hints) {
+            hintJsons.add("\"" + RecursiveJsonParser.escape(hint) + "\"");
+        }
+        sb.append(",\"hints\":[").append(String.join(",", hintJsons)).append("]}");
         return sb.toString();
     }
 
