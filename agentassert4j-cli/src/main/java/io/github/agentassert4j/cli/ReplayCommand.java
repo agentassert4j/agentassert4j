@@ -155,6 +155,7 @@ public class ReplayCommand implements Callable<Integer> {
             TestExecutionConfig executionConfig = new TestExecutionConfig().timeoutMs(config.getLlm().getTimeoutMs()).temperature(config.getLlm().getTemperature());
             InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
             CliSupport.warnUnknownBehaviors(rules, jsonOutput ? System.err : System.out);
+            CliSupport.warnMalformedTaskRules(rules, jsonOutput ? System.err : System.out);
 
             if (taskScope) {
                 return new TaskReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(task, affected, fullChain, newPrompt, oldPrompt, maxTotalCalls, maxTotalTokens, dryRun);

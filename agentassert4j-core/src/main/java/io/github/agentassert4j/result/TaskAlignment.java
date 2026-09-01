@@ -40,6 +40,10 @@ public class TaskAlignment {
      */
     private boolean prefixDependent;
     private final List<StepAlignment> steps = new ArrayList<>();
+    /**
+     * 任务规则违规明细（rules.tasks 只对声明任务评，呈现序 = 规则声明序）
+     */
+    private final List<TaskRuleViolation> ruleViolations = new ArrayList<>();
 
     public Verdict getVerdict() {
         return verdict;
@@ -75,6 +79,10 @@ public class TaskAlignment {
 
     public List<StepAlignment> getSteps() {
         return steps;
+    }
+
+    public List<TaskRuleViolation> getRuleViolations() {
+        return ruleViolations;
     }
 
     /**

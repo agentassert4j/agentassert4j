@@ -168,7 +168,9 @@ No rules file = pure structure diffing (dimensions ①②): the default path has
 zero noise. Compliance-style assertions can be declared per invocation in `agentassert4j-rules.json`;
 dimensions ③④ then operate as "baseline declares, current output answers" (`rules` lists all built-in
 behaviors). No second assertion language. Text differences never enter the verdict — they are shown to
-humans as low-confidence references only.
+humans as low-confidence references only. The same file's `tasks` section adds chain-level discipline
+for declared tasks (required steps / step counts / ordering); violations fold into the same binary
+verdict — see [OPERATIONS §2.3](OPERATIONS.md).
 
 ## CLI surface
 

@@ -154,7 +154,9 @@ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 
 不给 rules 文件 = 纯结构差分（维度 ①②），默认路径零配置零噪声；需要合规类断言时按调用点声明
 `agentassert4j-rules.json`，维度 ③④ 以「基线声明、当前答卷」自动生效（`rules` 命令列出全部内置
-行为名）。不引入第二套断言语言。文本差异永不进判定，只作低置信参考。
+行为名）。不引入第二套断言语言。文本差异永不进判定，只作低置信参考。同一文件的 `tasks` 段可给
+声明任务加链级纪律（必备步骤 / 步骤次数 / 顺序），违规同样折叠进二值判定——写法见
+[OPERATIONS §2.3](OPERATIONS.md)。
 
 ## CLI 命令面
 

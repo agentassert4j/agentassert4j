@@ -41,6 +41,11 @@ public class InvocationRulesConfig {
      */
     private final Map<String, InvocationRule> rules = new HashMap<>();
 
+    /**
+     * 声明 taskKey → TaskRule 映射（声明序，键必须来自任务声明而非请求原文）
+     */
+    private final Map<String, TaskRule> taskRules = new LinkedHashMap<>();
+
     public InvocationRulesConfig() {
     }
 
@@ -60,13 +65,23 @@ public class InvocationRulesConfig {
 
         Map<String, Object> root = (Map<String, Object>) parsed;
         Object invocationsObj = root.get("invocations");
-        if (!(invocationsObj instanceof Map)) return config;
-
-        Map<String, Object> invocationsMap = (Map<String, Object>) invocationsObj;
-        for (Map.Entry<String, Object> entry : invocationsMap.entrySet()) {
-            String invocationId = entry.getKey();
-            if (entry.getValue() instanceof Map) {
-                config.rules.put(invocationId, InvocationRule.fromJson((Map<String, Object>) entry.getValue()));
+        if (invocationsObj instanceof Map) {
+            Map<String, Object> invocationsMap = (Map<String, Object>) invocationsObj;
+            for (Map.Entry<String, Object> entry : invocationsMap.entrySet()) {
+                String invocationId = entry.getKey();
+                if (entry.getValue() instanceof Map) {
+                    config.rules.put(invocationId, InvocationRule.fromJson((Map<String, Object>) entry.getValue()));
+                }
+            }
+        }
+        Object tasksObj = root.get("tasks");
+        if (tasksObj instanceof Map) {
+            Map<String, Object> tasksMap = (Map<String, Object>) tasksObj;
+            for (Map.Entry<String, Object> entry : tasksMap.entrySet()) {
+                String taskKey = entry.getKey();
+                if (entry.getValue() instanceof Map) {
+                    config.taskRules.put(taskKey, TaskRule.fromJson((Map<String, Object>) entry.getValue()));
+                }
             }
         }
         return config;
@@ -97,9 +112,33 @@ public class InvocationRulesConfig {
     }
 
     /**
-     * 派生一个合并了单条技能规则的新配置：同键既有声明与新增声明逐集合取并集，
-     * 无同键则新增；本配置自身不变。场景断言据此叠加在站内规则之上——
-     * 多条场景共享同一基础配置各自合并，互不串味。
+     * 获取指定声明任务键的任务规则。无匹配时返回空规则（而非 null）。
+     *
+     * @param declaredTaskKey 任务声明 taskKey（派生请求文本不作键）
+     * @return 任务规则（永不为 null）
+     */
+    public TaskRule getTaskRule(String declaredTaskKey) {
+        TaskRule rule = taskRules.get(declaredTaskKey);
+        return rule != null ? rule : TaskRule.EMPTY;
+    }
+
+    /**
+     * 获取所有已配置任务规则的任务键（声明序）
+     */
+    public Set<String> getDeclaredTaskKeys() {
+        return Collections.unmodifiableSet(taskRules.keySet());
+    }
+
+    /**
+     * 是否存在任何任务规则声明
+     */
+    public boolean hasTaskRules() {
+        return !taskRules.isEmpty();
+    }
+
+    /**
+     * 派生一个合并了单条调用点规则的新配置：同键既有声明与新增声明逐集合取并集，
+     * 无同键则新增；本配置自身不变，多份合并互不串味。
      */
     public InvocationRulesConfig merging(String invocationId, InvocationRule rule) {
         InvocationRulesConfig copy = new InvocationRulesConfig();
@@ -240,6 +279,136 @@ public class InvocationRulesConfig {
 
         public Set<String> getBehaviors() {
             return behaviors;
+        }
+    }
+
+    /**
+     * 单个任务链的纪律声明 — 必备步骤、有序子序列、步骤次数范围。
+     *
+     * <p>键是任务声明 taskKey（只对声明任务生效，派生请求文本不作键）；
+     * 步骤指称是调用点声明标签（invocationId），匹配按精确相等。
+     * 不可变对象：集合字段构造后只读，共享的 {@link #EMPTY} 安全复用。</p>
+     */
+    public static class TaskRule {
+
+        /**
+         * 空任务规则（无任何声明），全库共享
+         */
+        static final TaskRule EMPTY = new TaskRule(Collections.<String>emptyList(), Collections.<String>emptyList(), Collections.<String, StepCount>emptyMap());
+
+        private final List<String> requiredSteps;
+        private final List<String> requiredOrder;
+        private final Map<String, StepCount> steps;
+
+        public TaskRule(List<String> requiredSteps, List<String> requiredOrder, Map<String, StepCount> steps) {
+            this.requiredSteps = immutableList(requiredSteps);
+            this.requiredOrder = immutableList(requiredOrder);
+            this.steps = immutableSteps(steps);
+        }
+
+        /**
+         * 是否无任何声明（必备步/顺序/次数全空）
+         */
+        public boolean isEmpty() {
+            return requiredSteps.isEmpty() && requiredOrder.isEmpty() && steps.isEmpty();
+        }
+
+        /**
+         * 必备步骤标签：链内至少出现一次，顺序不约束
+         */
+        public List<String> getRequiredSteps() {
+            return requiredSteps;
+        }
+
+        /**
+         * 有序子序列声明（含存在性）：该标签序列须按此相对顺序出现在链中
+         */
+        public List<String> getRequiredOrder() {
+            return requiredOrder;
+        }
+
+        /**
+         * 步骤次数范围：标签 → 绝对次数声明（对链内出现计数直接判定）
+         */
+        public Map<String, StepCount> getSteps() {
+            return steps;
+        }
+
+        @SuppressWarnings("unchecked")
+        static TaskRule fromJson(Map<String, Object> map) {
+            if (map == null) return EMPTY;
+
+            List<String> requiredSteps = toStringList(map.get("requiredSteps"));
+            List<String> requiredOrder = toStringList(map.get("requiredOrder"));
+            Map<String, StepCount> steps = new LinkedHashMap<>();
+            Object stepsObj = map.get("steps");
+            if (stepsObj instanceof Map) {
+                for (Map.Entry<String, Object> entry : ((Map<String, Object>) stepsObj).entrySet()) {
+                    if (entry.getValue() instanceof Map) {
+                        Map<String, Object> m = (Map<String, Object>) entry.getValue();
+                        steps.put(entry.getKey(), new StepCount(asInteger(m.get("min")), asInteger(m.get("max"))));
+                    }
+                }
+            }
+            return new TaskRule(requiredSteps, requiredOrder, steps);
+        }
+
+        private static List<String> toStringList(Object value) {
+            if (!(value instanceof List)) return Collections.emptyList();
+            List<String> result = new ArrayList<>();
+            for (Object item : (List<?>) value) {
+                if (item != null) result.add(String.valueOf(item));
+            }
+            return result;
+        }
+
+        private static Integer asInteger(Object value) {
+            return value instanceof Number ? Integer.valueOf(((Number) value).intValue()) : null;
+        }
+
+        private static List<String> immutableList(List<String> source) {
+            return Collections.unmodifiableList(new ArrayList<>(source));
+        }
+
+        private static Map<String, StepCount> immutableSteps(Map<String, StepCount> source) {
+            LinkedHashMap<String, StepCount> copy = new LinkedHashMap<>();
+            for (Map.Entry<String, StepCount> entry : source.entrySet()) {
+                copy.put(entry.getKey(), entry.getValue());
+            }
+            return Collections.unmodifiableMap(copy);
+        }
+    }
+
+    /**
+     * 单个步骤标签的绝对次数声明 — min/max 均可省略（缺 min=0、缺 max=不设上限）。
+     */
+    public static class StepCount {
+
+        private final Integer min;
+        private final Integer max;
+
+        public StepCount(Integer min, Integer max) {
+            this.min = min;
+            this.max = max;
+        }
+
+        public Integer getMin() {
+            return min;
+        }
+
+        public Integer getMax() {
+            return max;
+        }
+
+        /**
+         * 是否声明了任何边界（min/max 双缺 = 无约束力，加载侧据此告警）
+         */
+        public boolean isUnbounded() {
+            return min == null && max == null;
+        }
+
+        public boolean outOfRange(int count) {
+            return (min != null && count < min) || (max != null && count > max);
         }
     }
 }

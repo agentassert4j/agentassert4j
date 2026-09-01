@@ -9,6 +9,7 @@ import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.result.ComparisonResult;
 import io.github.agentassert4j.result.TaskAlignment;
+import io.github.agentassert4j.result.TaskRuleViolation;
 import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
@@ -240,7 +241,7 @@ public class TaskReplayRunner {
         info("用 `agentassert4j approve --invocation <调用点键前缀>` 接受差异，或 `reject` 拒绝。");
 
         if (jsonMode) {
-            out.println(taskJson("task-frozen-replay", taskRequest, taskSession, total, pass, changed, inherited, postDivergence, skipped, 0, 0, stepJsons, baselineTime, null, false));
+            out.println(taskJson("task-frozen-replay", taskRequest, taskSession, total, pass, changed, inherited, postDivergence, skipped, 0, 0, stepJsons, baselineTime, null, false, null, null, null));
         }
         if (changed > 0) {
             return 1;
@@ -321,8 +322,12 @@ public class TaskReplayRunner {
         }
         TaskChain baseline = matching.get(matching.size() - 2);
         TaskAlignment alignment = TaskAligner.align(baseline, newChain, comparator, rules);
+        List<TaskRuleViolation> violations = alignment.getRuleViolations();
 
         info("任务「" + newChain.getRequestText() + "」对齐：基线链（session " + baseline.getSessionId() + "）→ 新链（session " + newChain.getSessionId() + "）");
+        if (rules != null && rules.hasTaskRules() && !newChain.isDeclared()) {
+            info("注意：本任务未声明 taskKey，任务规则不适用。");
+        }
         int missing = 0;
         int added = 0;
         int changed = 0;
@@ -354,7 +359,13 @@ public class TaskReplayRunner {
                 }
             }
         }
-        info("对齐汇总: PASS " + pass + " | CHANGED " + changed + " | 缺步骤 " + missing + " | 新增步骤 " + added);
+        for (TaskRuleViolation violation : violations) {
+            info("违反任务规则: " + violation.getDetail());
+        }
+        info("对齐汇总: PASS " + pass + " | CHANGED " + changed + " | 缺步骤 " + missing + " | 新增步骤 " + added + (violations.isEmpty() ? "" : " | 违规 " + violations.size()));
+        ChainCost baselineCost = new ChainCost(baseline);
+        ChainCost currentCost = new ChainCost(newChain);
+        info("成本对照: 基线 " + formatTokens(baselineCost.tokens) + formatCost(baselineCost.costUsd) + " → 当前 " + formatTokens(currentCost.tokens) + formatCost(currentCost.costUsd));
         if (alignment.isPrefixDependent()) {
             info("注意：任务链携带会话前缀——真实再执行对照必须重演到该问为止的整个会话前缀，否则差异源于上下文缺失而非回归。");
         }
@@ -365,9 +376,13 @@ public class TaskReplayRunner {
                 String action = step.getKind() == TaskAlignment.StepKind.MISSING ? "missing" : step.getKind() == TaskAlignment.StepKind.ADDED ? "added" : "aligned";
                 stepJsons.add(alignedStepJson(action, step));
             }
-            out.println(taskJson("task-align", newChain.getRequestText(), newChain.getSessionId(), alignment.getSteps().size(), pass, changed, 0, 0, 0, missing, added, stepJsons, alignment.getBaselineTime(), alignment.getNewChainTime(), alignment.isPrefixDependent()));
+            List<String> violationJsons = new ArrayList<>();
+            for (TaskRuleViolation violation : violations) {
+                violationJsons.add("{\"type\":\"" + violation.getType() + "\",\"label\":\"" + RecursiveJsonParser.escape(violation.getLabel()) + "\",\"detail\":\"" + RecursiveJsonParser.escape(violation.getDetail()) + "\"}");
+            }
+            out.println(taskJson("task-align", newChain.getRequestText(), newChain.getSessionId(), alignment.getSteps().size(), pass, changed, 0, 0, 0, missing, added, stepJsons, alignment.getBaselineTime(), alignment.getNewChainTime(), alignment.isPrefixDependent(), violations.size(), violationJsons, costJson(baselineCost, currentCost)));
         }
-        return changed + missing + added > 0 ? 1 : 0;
+        return changed + missing + added + violations.size() > 0 ? 1 : 0;
     }
 
     private List<TaskChain> selectTasks(List<TaskChain> chains, String taskPrefix, boolean affected, Set<String> affectedKeys) {
@@ -539,20 +554,77 @@ public class TaskReplayRunner {
 
     // ---------- JSON（agentassert4j.task-report/1，单行，null 缺省即契约） ----------
 
-    private static String taskJson(String mode, String request, String sessionId, int total, int pass, int changed, int inherited, int postDivergence, int skipped, int missing, int added, List<String> steps, long baselineTime, Long newChainTime, boolean prefixDependent) {
+    private static String taskJson(String mode, String request, String sessionId, int total, int pass, int changed, int inherited, int postDivergence, int skipped, int missing, int added, List<String> steps, long baselineTime, Long newChainTime, boolean prefixDependent, Integer ruleViolationCount, List<String> ruleViolationJsons, String costJson) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"").append(mode).append('"');
         sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
         sb.append(",\"task\":{\"request\":\"").append(RecursiveJsonParser.escape(request)).append("\",\"sessionId\":\"").append(RecursiveJsonParser.escape(sessionId)).append("\"}");
-        sb.append(",\"summary\":{\"total\":").append(total).append(",\"pass\":").append(pass).append(",\"changed\":").append(changed).append(",\"inherited\":").append(inherited).append(",\"postDivergence\":").append(postDivergence).append(",\"skipped\":").append(skipped).append(",\"missing\":").append(missing).append(",\"added\":").append(added).append("}");
+        sb.append(",\"summary\":{\"total\":").append(total).append(",\"pass\":").append(pass).append(",\"changed\":").append(changed).append(",\"inherited\":").append(inherited).append(",\"postDivergence\":").append(postDivergence).append(",\"skipped\":").append(skipped).append(",\"missing\":").append(missing).append(",\"added\":").append(added);
+        if (ruleViolationCount != null) {
+            sb.append(",\"ruleViolations\":").append(ruleViolationCount);
+        }
+        sb.append("}");
         sb.append(",\"steps\":[").append(String.join(",", steps)).append("]");
+        if (ruleViolationJsons != null && !ruleViolationJsons.isEmpty()) {
+            sb.append(",\"ruleViolations\":[").append(String.join(",", ruleViolationJsons)).append("]");
+        }
         sb.append(",\"baselineTime\":").append(baselineTime);
         if (newChainTime != null) {
             sb.append(",\"newChainTime\":").append(newChainTime);
+        }
+        if (costJson != null) {
+            sb.append(costJson);
         }
         if (prefixDependent) {
             sb.append(",\"prefixDependent\":true");
         }
         return sb.append('}').toString();
+    }
+
+    /**
+     * 单链的成本聚合 — token 合计恒有值（原始 int 无缺失语义）；
+     * 费用按报告时本地价格表逐记录计价（servedModel 回退请求模型），
+     * 任一记录模型无价即 costUsd=null（无价格不出货币数）。
+     */
+    private static final class ChainCost {
+        private final long tokens;
+        private final Double costUsd;
+
+        ChainCost(TaskChain chain) {
+            long tokenSum = 0;
+            Double costSum = 0.0;
+            for (InteractionRecord record : chain.getRecords()) {
+                tokenSum += record.getInputTokens() + record.getOutputTokens();
+                String model = record.getServedModel() != null ? record.getServedModel() : record.getModel();
+                Double cost = CostEstimator.estimateCallCostUsd(model, record.getInputTokens(), record.getOutputTokens());
+                if (cost == null) {
+                    costSum = null;
+                } else if (costSum != null) {
+                    costSum += cost;
+                }
+            }
+            this.tokens = tokenSum;
+            this.costUsd = costSum;
+        }
+    }
+
+    private static String formatTokens(long tokens) {
+        return tokens >= 10000 ? String.format("%.1fk", tokens / 1000.0) : Long.toString(tokens);
+    }
+
+    private static String formatCost(Double costUsd) {
+        return costUsd == null ? "" : "/$" + String.format("%.4f", costUsd);
+    }
+
+    private static String costJson(ChainCost baseline, ChainCost current) {
+        StringBuilder sb = new StringBuilder(",\"baseline\":{\"tokens\":").append(baseline.tokens);
+        if (baseline.costUsd != null) {
+            sb.append(",\"costUsd\":").append(baseline.costUsd);
+        }
+        sb.append("},\"current\":{\"tokens\":").append(current.tokens);
+        if (current.costUsd != null) {
+            sb.append(",\"costUsd\":").append(current.costUsd);
+        }
+        return sb.append("}").toString();
     }
 
     private String stepJson(String action, InteractionRecord record, String key, Verdict verdict, ComparisonResult comparison, RegressionTestResult result) {

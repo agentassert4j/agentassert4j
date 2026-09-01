@@ -404,6 +404,104 @@ class TaskReplayRunnerTest {
         assertTrue(output.toString().contains("真实对比模式本身零 LLM 调用"), output.toString());
     }
 
+    private void saveDeclaredRecord(String recordId, String sessionId, long timestamp, String taskKey, String invocationKey, String label, String response, String servedModel, int inputTokens, int outputTokens) {
+        InteractionRecord r = new InteractionRecord();
+        r.setRecordId(recordId);
+        r.setSessionId(sessionId);
+        r.setTimestamp(timestamp);
+        r.setSeq(timestamp);
+        r.setInvocationKey(invocationKey);
+        r.setInvocationId(label);
+        r.setModelResponse(response);
+        r.setServedModel(servedModel);
+        r.setInputTokens(inputTokens);
+        r.setOutputTokens(outputTokens);
+        r.setMetadata("{\"taskKey\":\"" + taskKey + "\"}");
+        repository.saveInteraction(r);
+    }
+
+    private TaskReplayRunner runnerWithRules(InvocationRulesConfig rules, boolean jsonMode, ByteArrayOutputStream target) {
+        return new TaskReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), rules, TestExecutionConfig.defaults(), new PrintStream(target, true), new PrintStream(target, true), jsonMode);
+    }
+
+    @Test
+    @DisplayName("任务规则：缺必备步骤 → exit 1 + 违规行 + 汇总违规计数")
+    void taskRule_violation_exit1() {
+        saveDeclaredRecord("b1", "s-old", 1000L, "refund-flow", "invocation:a:h1", "A", "答A", "dev-model", 0, 0);
+        saveDeclaredRecord("n1", "s-new", 9000L, "refund-flow", "invocation:a:h1", "A", "答A", "dev-model", 0, 0);
+        ByteArrayOutputStream target = new ByteArrayOutputStream();
+        TaskReplayRunner ruleRunner = runnerWithRules(InvocationRulesConfig.fromJson("{\"tasks\":{\"refund-flow\":{\"requiredSteps\":[\"A\",\"B\"]}}}"), false, target);
+
+        int exit = ruleRunner.run("refund-flow", false, false, null, null, null, null);
+
+        assertEquals(1, exit, "任务规则违规折叠进链级 CHANGED → exit 1");
+        String reportLine = target.toString();
+        assertTrue(reportLine.contains("违反任务规则: 缺少必备步骤「B」"), reportLine);
+        assertTrue(reportLine.contains("| 违规 1"), reportLine);
+    }
+
+    @Test
+    @DisplayName("任务规则：未声明 taskKey 的链不评，出诊断行防「配了没生效」")
+    void taskRule_undeclaredChain_diagnostic() {
+        saveRecord("b1", "s-old", 1000L, "查订单", "invocation:a:h1", "答A");
+        saveRecord("n1", "s-new", 9000L, "查订单", "invocation:a:h1", "答A");
+        ByteArrayOutputStream target = new ByteArrayOutputStream();
+        TaskReplayRunner ruleRunner = runnerWithRules(InvocationRulesConfig.fromJson("{\"tasks\":{\"refund-flow\":{\"requiredSteps\":[\"A\"]}}}"), false, target);
+
+        int exit = ruleRunner.run("查订单", false, false, null, null, null, null);
+
+        assertEquals(0, exit);
+        assertTrue(target.toString().contains("本任务未声明 taskKey，任务规则不适用"), target.toString());
+    }
+
+    @Test
+    @DisplayName("任务规则 JSON：summary 违规计数 + ruleViolations 数组，仍单行")
+    void taskRule_json_violations() {
+        saveDeclaredRecord("b1", "s-old", 1000L, "refund-flow", "invocation:a:h1", "A", "答A", "dev-model", 0, 0);
+        saveDeclaredRecord("n1", "s-new", 9000L, "refund-flow", "invocation:a:h1", "A", "答A", "dev-model", 0, 0);
+        ByteArrayOutputStream target = new ByteArrayOutputStream();
+        TaskReplayRunner ruleRunner = runnerWithRules(InvocationRulesConfig.fromJson("{\"tasks\":{\"refund-flow\":{\"requiredSteps\":[\"A\",\"B\"]}}}"), true, target);
+
+        int exit = ruleRunner.run("refund-flow", false, false, null, null, null, null);
+
+        assertEquals(1, exit);
+        String json = target.toString().trim();
+        assertTrue(json.startsWith("{\"schema\":\"agentassert4j.task-report/1\""), json);
+        assertTrue(json.contains("\"ruleViolations\":1"), "summary 违规计数（CI 免于数数组）: " + json);
+        assertTrue(json.contains("\"ruleViolations\":[{\"type\":\"REQUIRED_STEP_MISSING\",\"label\":\"B\""), "违规数组含类型与标签: " + json);
+        assertFalse(json.contains("\n"), "必须单行");
+    }
+
+    @Test
+    @DisplayName("成本对照：token 合计恒显示；有价模型附货币数，无价模型整项省略")
+    void costComparison_tokensAlways_costWhenPriced() {
+        saveDeclaredRecord("b1", "s-old", 1000L, "t1", "invocation:a:h1", "A", "答A", "unknown-model-x", 1000, 500);
+        saveDeclaredRecord("n1", "s-new", 9000L, "t1", "invocation:a:h1", "A", "答A", "gpt-4o", 1000, 500);
+        ByteArrayOutputStream target = new ByteArrayOutputStream();
+        TaskReplayRunner ruleRunner = runnerWithRules(new InvocationRulesConfig(), false, target);
+
+        int exit = ruleRunner.run("t1", false, false, null, null, null, null);
+
+        assertEquals(0, exit);
+        assertTrue(target.toString().contains("成本对照: 基线 1500 → 当前 1500/$0.0075"), target.toString());
+    }
+
+    @Test
+    @DisplayName("成本对照 JSON：tokens 恒在；任一记录无价即整项省略 costUsd")
+    void costJson_unknownModel_costOmitted() {
+        saveDeclaredRecord("b1", "s-old", 1000L, "t1", "invocation:a:h1", "A", "答A", "unknown-model-x", 1000, 500);
+        saveDeclaredRecord("n1", "s-new", 9000L, "t1", "invocation:a:h1", "A", "答A", "unknown-model-x", 1000, 500);
+        ByteArrayOutputStream target = new ByteArrayOutputStream();
+        TaskReplayRunner ruleRunner = runnerWithRules(new InvocationRulesConfig(), true, target);
+
+        int exit = ruleRunner.run("t1", false, false, null, null, null, null);
+
+        assertEquals(0, exit);
+        String json = target.toString().trim();
+        assertTrue(json.contains("\"baseline\":{\"tokens\":1500},\"current\":{\"tokens\":1500}"), json);
+        assertFalse(json.contains("costUsd"), "无价格不出货币数: " + json);
+    }
+
     private static String report(ByteArrayOutputStream output) {
         return output.toString();
     }

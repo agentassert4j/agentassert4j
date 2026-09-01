@@ -356,4 +356,32 @@ final class CliSupport {
         }
         return unknown;
     }
+
+    /**
+     * rules.tasks 段的畸形声明告警——畸形约束要么无约束力要么永不满足，
+     * 静默存在会让团队纪律形同虚设或全部误报，必须在加载时点破。
+     */
+    static void warnMalformedTaskRules(InvocationRulesConfig rules, PrintStream out) {
+        for (String taskKey : rules.getDeclaredTaskKeys()) {
+            if (taskKey == null || taskKey.trim().isEmpty()) {
+                out.println("警告：rules.tasks 存在空任务键声明（该规则永不匹配，请改用录制时声明的 taskKey）。");
+                continue;
+            }
+            InvocationRulesConfig.TaskRule rule = rules.getTaskRule(taskKey);
+            if (rule.getRequiredSteps().isEmpty() && rule.getRequiredOrder().isEmpty() && rule.getSteps().isEmpty()) {
+                out.println("警告：任务 " + taskKey + " 未声明任何约束（requiredSteps/requiredOrder/steps 全空），该规则无约束力。");
+            }
+            if (!rule.getRequiredOrder().isEmpty() && rule.getRequiredOrder().stream().anyMatch(step -> step == null || step.trim().isEmpty())) {
+                out.println("警告：任务 " + taskKey + " 的 requiredOrder 含空标签。");
+            }
+            for (Map.Entry<String, InvocationRulesConfig.StepCount> entry : rule.getSteps().entrySet()) {
+                InvocationRulesConfig.StepCount bounds = entry.getValue();
+                if (bounds.isUnbounded()) {
+                    out.println("警告：任务 " + taskKey + " 的步骤 " + entry.getKey() + " 声明了 min/max 双缺（无约束力）。");
+                } else if (bounds.getMin() != null && bounds.getMax() != null && bounds.getMin() > bounds.getMax()) {
+                    out.println("警告：任务 " + taskKey + " 的步骤 " + entry.getKey() + " 声明 min(" + bounds.getMin() + ") > max(" + bounds.getMax() + ")（永不满足，判为全违规）。");
+                }
+            }
+        }
+    }
 }

@@ -454,7 +454,7 @@ Layer 1   core（纯 java.base，零外部依赖——发布卖点）         �
               → 差异落为候选 → approve/reject → 基线转正/作废，旧基线归档
 ```
 
-**测试怎么钉住它**：全量回归当前 797 条（core / recorder / storage / cli 含 6 条私有 e2e 门控跳过 / 两代 SDK / 两 starter，随演进浮动），仓库根 `mvn -B test` 必须全绿。测试文化三条：测契约不测实现（跨组件边界逐字段对齐）、确定性契约必测（排序稳定、转义往返、计数闭合）、错误路径必测（专用异常精确断言）。
+**测试怎么钉住它**：全量回归当前 815 条（core / recorder / storage / cli 含 6 条私有 e2e 门控跳过 / 两代 SDK / 两 starter，随演进浮动），仓库根 `mvn -B test` 必须全绿。测试文化三条：测契约不测实现（跨组件边界逐字段对齐）、确定性契约必测（排序稳定、转义往返、计数闭合）、错误路径必测（专用异常精确断言）。
 
 **设计原则速查**（各章现场展开）：R1 core 零依赖 / R2 面向 SPI / R3 插件平等 / R4 配置驱动 / R5 单向依赖 / R6 每接口 ≤5 方法 / R7 图纯内存 / R8 零侵入 / R9 确定性优先 / R10 退化不中断。
 
@@ -637,7 +637,7 @@ recorded（到达即计数） = written（批量写成功）
   - **维度 2 输出结构**：响应为空 → `text/plain` + 空集 + 数量级 0；能解析为 JSON（Map/List）→ `application/json` + 字段路径集 + 字段类型映射（`RecursiveJsonParser.extractFieldPaths/extractFieldTypeMap`）；纯文本 → 退化为长度数量级 `log10(len)+1`（1–9 字→1、10–99→2、100–999→3）——纯文本的逐字对比必然假红，数量级只抓「量级跳变」。
   - **维度 3/4**：从 `InvocationRulesConfig` 按调用点标签加载（`requiredKeywords`/`forbiddenKeywords`/`regexPatterns`/`behaviors`），外加 `hasError`（工具调用存在 `success=false` 时为真）。
 - `ArgTypeUtil.derive(arguments)`：参数类型六词表 `string / number / boolean / object / array / null`（键小写），按**值的运行时形态**派生。捕获侧（SDK 填充）与重放侧（执行器从响应派生）共用此唯一实现——两侧词表一旦漂移，参数类型维就是无休止的假阳性。
-- `InvocationRulesConfig`（`agentassert4j-rules.json`）：`invocations.<invocationId>.{requiredKeywords, forbiddenKeywords, regexPatterns[{pattern,description}], behaviors}`；解析失败安全退化为空配置；`InvocationRule` 不可变，未声明调用点返回共享 `EMPTY`。优先级：rules.json > 主配置内联 > 默认空。
+- `InvocationRulesConfig`（`agentassert4j-rules.json`）：`invocations.<invocationId>.{requiredKeywords, forbiddenKeywords, regexPatterns[{pattern,description}], behaviors}` 与 `tasks.<声明taskKey>.{requiredSteps, requiredOrder, steps{min,max}}`；解析失败安全退化为空配置；`InvocationRule` / `TaskRule` 不可变，未声明的调用点/任务返回共享 `EMPTY`。优先级：rules.json > 主配置内联 > 默认空。
 - `RegexPattern.matches`：`Pattern.compile(pattern).find()`；**非法正则按不匹配处理**（fail-closed）——坏规则在每条重放里都表现为可见的不匹配信号，而不是静默放行或崩溃。
 - `BehaviorChecker`：内置 8 个行为校验（`mustUseChinese`/`mustUseEnglish`/`returnsEmptyOnError`/`returnsErrorCode`/`noError`/`jsonOutput`/`nonEmptyOutput`/`containsCjk`），语言类判定用码点扫描而非正则（`.` 默认不匹配换行，多行中文输出会被正则误判）。**未知 behavior 默认通过**（不误报比漏报好），但 CLI 加载规则时对未知行为名显式告警并列出合法名单——笔误不再静默放行。
 
@@ -818,13 +818,14 @@ recorded（到达即计数） = written（批量写成功）
   - `resolveAll(repository)`：所有会话的链合并，按链首时间升序——跨会话配对与「取最新链」共用本口径。
 - `TaskAligner`（core `algorithm/`，纯比较，零 LLM 调用）：
   - `align(baseline, newChain, comparator, rules)`：两侧各按 invocation_key 分组（组内规范序），三方分类——matched（两侧都有）/ missing（基线有新链无 = 缺步骤）/ added（新链有基线无 = 新增步骤）。matched 组内 1:1 规范序配对（按较少侧配对，**富余计数进报告不判差异**）；每对**两侧指纹现场重提**（同 rules 口径）→ 既有 `DeterministicComparator` 判定；步骤 verdict 取首个 CHANGED 配对（差异明细随之，停止后续配对）。缺步骤/新增步骤与配对 CHANGED 同归入链级 CHANGED。
+  - **对齐收尾评任务规则**（rules.tasks，只对声明 taskKey 的任务、按新链侧）：规则键 = 声明值精确相等；对新链的声明标签序列（规范序、无标签步骤不参与）评三类约束——`requiredSteps`（必备步骤）/ `requiredOrder`（有序子序列，含存在性）/ `steps.min/max`（绝对次数，直接判定富余环节不判差异补不上纪律）——违规挂入结果的 `ruleViolations`（呈现序 = 规则声明序）并折叠为链级 CHANGED，不新增 verdict 值。verify 传入 rules=null 天然不评；自建基线（单链）不进对齐核。
   - `align(baselineSteps, newChain, comparator, rules)`：基线侧改由调用方给定 `Map<invocationKey, List<BaselineStep>>`（指纹步骤）——交付验收（第 12 章）用同一对齐核消费包内指纹，不做第二台差分引擎。
   - `prefixDependent` 标注：链内任一记录 `turnIndex>0` 或 `previousTurns` 非空 = 该链携带会话前缀 → 报告提示「真实再执行对照必须重演到该问为止的整个会话前缀，否则差异源于上下文缺失而非回归」（防误报，不阻断）。
 - `TaskReplayRunner`（cli）——任务域两个互斥模式的编排：
   - **冻结重放**（提供 `--prompt`）：`--task` 精确命中的全部链**逐链回放**（同文本多链 = 同一任务的多轮执行实例，每轮都验证；`--dry-run` 先出执行计划与成本预估，零调用零建档）——选链器语义：请求文本精确相等优先，精确未命中时前缀匹配、命中多个不同任务文本属歧义即报错列候选（与 `--invocation` 目标选择器同款标准）。按规范序逐记录复用 `RegressionTestExecutor`（历史输入原样）。提供 `--old-prompt` 时影响裁剪：`findInvocationKeysByTemplateHash(sha256(oldPrompt))` 直查受影响调用点（**不做图下游传播**——第 10 章的边界理由），非受影响记录**继承 PASS**（标注「未受影响」）；受影响无命中 → exit 2。真重放按序推进，**遇 CHANGED 即停止后续真重放**，后续标注「分歧后下游（条件态：基线行为在此之后是否仍成立需真实重跑收口）」；`--full-chain` 取消裁剪与分歧即停，全部真重放。开头自动建档（与单点重放同款语义——候选落库以画像存在为前提；干跑不建档）。
-  - **真实对比**（无 `--prompt`）：前缀命中同名链，最新 vs 次新走 `TaskAligner`，零 LLM 调用；仅一条链 = 首录即基线，报告标注自建基线，exit 0。
+  - **真实对比**（无 `--prompt`）：前缀命中同名链，最新 vs 次新走 `TaskAligner`，零 LLM 调用；仅一条链 = 首录即基线，报告标注自建基线，exit 0。对齐报告附**成本对照行**：token 合计恒显示（原始 int 无缺失语义），费用按报告时本地价格表两侧同基准重算（逐记录 servedModel 回退请求模型；任一记录无价即货币项整项省略）。
   - **预算池**：`--max-total-calls/--max-total-tokens` 对本次运行全部真重放**合计**封顶；耗尽 → 剩余待重放记录 skipped（原因 budget_exhausted）；继承 PASS 不计 skipped。超时/API 错误同样落 skipped 口径（证据缺口不允许冒充绿）。
-  - **报告**：人类可读逐步行（序号、调用点短键、判定、摘要；CHANGED 步附工具/参数/结果摘要与费用——首次验收的链视图要素；文本差异注记低置信呈现，与单点重放同口径）+ `agentassert4j.task-report/1` 单行 JSON（mode=`task-frozen-replay|task-align|task-dry-run`、task{request,sessionId}、summary{total,pass,changed,inherited,postDivergence,skipped,missing,added；dry-run 模式为 chains/total/plannedReplay/inherited}、steps[]{recordId,invocationKey,action:replayed|inherited|post-divergence|skipped|aligned|missing|added|planned-replay,verdict,dims 五维,summary,replayOutput 仅 CHANGED 64KB 截断}、baselineTime/newChainTime、prefixDependent）。
+  - **报告**：人类可读逐步行（序号、调用点短键、判定、摘要；CHANGED 步附工具/参数/结果摘要与费用——首次验收的链视图要素；文本差异注记低置信呈现，与单点重放同口径；任务规则违规逐条出「违反任务规则」行，配置了 tasks 而链未声明 taskKey 时出诊断行）+ `agentassert4j.task-report/1` 单行 JSON（mode=`task-frozen-replay|task-align|task-dry-run`、task{request,sessionId}、summary{total,pass,changed,inherited,postDivergence,skipped,missing,added；对齐模式另有 ruleViolations 计数；dry-run 模式为 chains/total/plannedReplay/inherited}、对齐模式另带 ruleViolations[] 数组与 baseline/current{tokens,costUsd 可空}、steps[]{recordId,invocationKey,action:replayed|inherited|post-divergence|skipped|aligned|missing|added|planned-replay,verdict,dims 五维,summary,replayOutput 仅 CHANGED 64KB 截断}、baselineTime/newChainTime、prefixDependent）。
 - `replay` 命令的旗标校验（`ReplayCommand.call()`）：`--task`/`--invocation`/`--affected` 三范围互斥；`--full-chain` 与预算池旗标仅任务域有效；`--affected` 要求同时给 `--prompt` 与 `--old-prompt`；调用点范围要求 `--prompt`（任务域对比模式可省）；预算值必须 ≥1。
 
 **表结构**：无新表、无新列——任务键声明住在 `interactions.metadata` JSON（吸收层），链是读侧派生。
@@ -833,11 +834,11 @@ recorded（到达即计数） = written（批量写成功）
 
 | 退出码 | 触发条件 |
 |--------|---------|
-| 1 | 任一配对 CHANGED / 缺步骤 / 新增步骤（缺与新增是行为差异，属回归信号） |
+| 1 | 任一配对 CHANGED / 缺步骤 / 新增步骤 / 任务规则违规（缺与新增、纪律违规是行为差异，属回归信号） |
 | 2 | 仅 skipped>0（预算耗尽或调用失败——证据不完整不允许冒充绿）或无匹配链等用法问题 |
 | 0 | 全部 PASS / 继承；真实对比自建基线 |
 
-**测试怎么钉住它**：`TaskChainViewTest`（7 条：派生/前推/声明优先/同文本并链/会话开头无请求排除/损坏 metadata 退化）、`TaskAlignerTest`（8 条：matched/missing/added/富余不判差异/前缀标注/指纹基线重载）、`TaskReplayRunnerTest`（23 条：冻结重放全链、影响裁剪继承 PASS、异模板步骤继承 PASS、分歧即停恰发 1 次、预算恰发 N 次、CHANGED 压过 skipped、真实对比配对、自建基线 exit 0、链式编排分歧即停、选择器歧义与控制字符可见化、未命中诊断、干跑零调用零建档/裁剪计划/JSON 契约/对齐模式拒绝）。
+**测试怎么钉住它**：`TaskChainViewTest`（7 条：派生/前推/声明优先/同文本并链/会话开头无请求排除/损坏 metadata 退化）、`TaskAlignerTest`（15 条：matched/missing/added/富余不判差异/前缀标注/指纹基线重载 + 任务规则七钉——缺必备步/次数越界/乱序/违规呈现顺序/未声明不评/键不匹配不评/无标签不参与）、`TaskReplayRunnerTest`（28 条：冻结重放全链、影响裁剪继承 PASS、异模板步骤继承 PASS、分歧即停恰发 1 次、预算恰发 N 次、CHANGED 压过 skipped、真实对比配对、自建基线 exit 0、链式编排分歧即停、选择器歧义与控制字符可见化、未命中诊断、干跑零调用零建档/裁剪计划/JSON 契约/对齐模式拒绝 + 任务规则端到端/未声明诊断/JSON 违规计数与数组/成本对照 token 恒显/无价省略）。
 
 ---
 
@@ -1063,7 +1064,7 @@ acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
 
 **提交前硬门槛**（全部可机械验证）：
 
-- 仓库根 `mvn -B test` 全绿（当前 11 个 reactor 构建、797 条，随演进浮动）；
+- 仓库根 `mvn -B test` 全绿（当前 11 个 reactor 构建、815 条，随演进浮动）；
 - core 零依赖自检：`grep -rn "^import \(com\|org\)\." agentassert4j-core/src/main/java/` 输出必须为空；
 - 注释自检：不写过程叙事与编号锚点、注释与代码同步、顶层类型带 `@author` + `@since`（首次入库日期，写定不改）；
 - 临时代码必须带三要素 TODO（临时方案 / 详细说明 / 由谁完善）；
@@ -1093,6 +1094,8 @@ acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
 | 声明任务键 | metadata 的 `taskKey` 字段，声明优先于派生——改问法仍可配对 | 第 11 章 |
 | 冻结重放 / 真实对比 | replay --task 带 --prompt（重演历史输入）/ 不带（最新链 vs 次新链按调用点对齐，零调用） | 第 11 章 |
 | 缺步骤 / 新增步骤 | 对齐键 invocationKey 三方分类中的 missing/added，与 CHANGED 同属行为差异 | 第 11 章 |
+| 任务纪律（tasks 段） | 声明任务键上的链级约束：必备步骤 / 有序子序列 / 步骤次数范围，违规折叠进二值判定（只对声明任务、真实对比模式评） | 第 11 章 |
+| 成本对照 | 真实对比报告附两侧 token/费用合计；token 恒显，费用同基准重算、无价省略 | 第 11 章 |
 | 分歧即停 | 真重放遇 CHANGED 停止后续（轮级与任务级同则），下游标条件态 | 第 9/11 章 |
 | 预算池 | --max-total-calls/--max-total-tokens 对本次运行全部真重放合计封顶 | 第 11 章 |
 | 验收包 | `agentassert4j.acceptance-pack/1`：结构指纹+调用点键的单 JSON 交付载体，SHA-256 对账 | 第 12 章 |

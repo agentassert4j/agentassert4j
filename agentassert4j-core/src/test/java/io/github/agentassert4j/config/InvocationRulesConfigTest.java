@@ -4,6 +4,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -234,6 +235,83 @@ class InvocationRulesConfigTest {
             InvocationRulesConfig merged = base.merging("s", InvocationRulesConfig.InvocationRule.EMPTY);
 
             assertEquals(Collections.singleton("订单号"), merged.getRulesForInvocation("s").getRequiredKeywords());
+        }
+    }
+
+    @Nested
+    @DisplayName("任务规则（tasks 段）")
+    class TaskRules {
+
+        @Test
+        @DisplayName("tasks 段解析往返：三类约束逐字段对齐")
+        void tasksSection_roundTrip() {
+            String json = "{\"tasks\":{\"refund-flow\":{" + "\"requiredSteps\":[\"视觉检查\", \"终检\"]," + "\"requiredOrder\":[\"意图识别\", \"查询订单\", \"提交退款\"]," + "\"steps\":{\"视觉检查\":{\"min\":1,\"max\":3}}}}}";
+
+            InvocationRulesConfig config = InvocationRulesConfig.fromJson(json);
+
+            assertTrue(config.hasTaskRules());
+            assertEquals(Collections.singleton("refund-flow"), config.getDeclaredTaskKeys());
+            InvocationRulesConfig.TaskRule rule = config.getTaskRule("refund-flow");
+            assertEquals(Arrays.asList("视觉检查", "终检"), rule.getRequiredSteps());
+            assertEquals(Arrays.asList("意图识别", "查询订单", "提交退款"), rule.getRequiredOrder());
+            assertEquals(1, rule.getSteps().size());
+            assertEquals(Integer.valueOf(1), rule.getSteps().get("视觉检查").getMin());
+            assertEquals(Integer.valueOf(3), rule.getSteps().get("视觉检查").getMax());
+            assertFalse(rule.isEmpty());
+        }
+
+        @Test
+        @DisplayName("仅 tasks 段无 invocations 键也解析成功")
+        void tasksOnly_noInvocationsKey() {
+            InvocationRulesConfig config = InvocationRulesConfig.fromJson("{\"tasks\":{\"t1\":{\"requiredSteps\":[\"A\"]}}}");
+
+            assertTrue(config.hasTaskRules(), "tasks 段必须独立于 invocations 段被解析");
+            assertFalse(config.hasRules());
+            assertEquals(Arrays.asList("A"), config.getTaskRule("t1").getRequiredSteps());
+        }
+
+        @Test
+        @DisplayName("min/max 缺省为 null（缺 min=0、缺 max=不设上限）")
+        void steps_missingBounds_null() {
+            String json = "{\"tasks\":{\"t1\":{\"steps\":{\"A\":{\"min\":2},\"B\":{\"max\":1},\"C\":{}}}}}";
+
+            InvocationRulesConfig config = InvocationRulesConfig.fromJson(json);
+            InvocationRulesConfig.TaskRule rule = config.getTaskRule("t1");
+
+            assertNull(rule.getSteps().get("A").getMax());
+            assertNull(rule.getSteps().get("B").getMin());
+            assertTrue(rule.getSteps().get("C").isUnbounded(), "min/max 双缺 = 无约束力，供加载侧告警");
+            assertFalse(rule.getSteps().get("A").isUnbounded());
+        }
+
+        @Test
+        @DisplayName("getTaskRule 未命中返回空规则（非 null），且空规则无约束")
+        void getTaskRule_miss_emptyRule() {
+            InvocationRulesConfig config = InvocationRulesConfig.fromJson("{\"tasks\":{\"t1\":{\"requiredSteps\":[\"A\"]}}}");
+
+            InvocationRulesConfig.TaskRule rule = config.getTaskRule("不存在的任务");
+            assertNotNull(rule);
+            assertTrue(rule.isEmpty());
+        }
+
+        @Test
+        @DisplayName("任务键保持声明序，集合不可修改")
+        void taskKeys_orderedAndImmutable() {
+            String json = "{\"tasks\":{\"b-task\":{\"requiredSteps\":[\"A\"]},\"a-task\":{\"requiredSteps\":[\"B\"]}}}";
+
+            InvocationRulesConfig config = InvocationRulesConfig.fromJson(json);
+
+            assertEquals(Arrays.asList("b-task", "a-task"), new ArrayList<>(config.getDeclaredTaskKeys()), "键序 = 文件声明序（violation 呈现顺序的确定性基础）");
+            assertThrows(UnsupportedOperationException.class, () -> config.getDeclaredTaskKeys().add("hacked"));
+            assertThrows(UnsupportedOperationException.class, () -> config.getTaskRule("b-task").getRequiredSteps().add("x"));
+        }
+
+        @Test
+        @DisplayName("畸形 tasks 条目（值非对象）安全跳过")
+        void malformedTaskEntry_skipped() {
+            InvocationRulesConfig config = InvocationRulesConfig.fromJson("{\"tasks\":{\"good\":{\"requiredSteps\":[\"A\"]},\"bad\":\"not-a-map\"}}");
+
+            assertEquals(Collections.singleton("good"), config.getDeclaredTaskKeys());
         }
     }
 }
