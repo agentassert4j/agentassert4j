@@ -14,3 +14,6 @@ Thumbs.db
 
 # 真实 LLM 端到端验证套件
 /agentassert4j-cli/src/test/java/io/github/agentassert4j/e2e/
+
+# 文档配图工作台
+/doc-tools/

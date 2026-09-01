@@ -89,6 +89,10 @@ public class TaskReplayRunner {
      * @return 进程退出码（0/1/2）
      */
     public int run(String taskPrefix, boolean affected, boolean fullChain, String newPrompt, String oldPrompt, Integer maxTotalCalls, Integer maxTotalTokens) {
+        return run(taskPrefix, affected, fullChain, newPrompt, oldPrompt, maxTotalCalls, maxTotalTokens, false);
+    }
+
+    public int run(String taskPrefix, boolean affected, boolean fullChain, String newPrompt, String oldPrompt, Integer maxTotalCalls, Integer maxTotalTokens, boolean dryRun) {
         executionConfig.validate();
 
         List<TaskChain> chains = CliSupport.taskChains(repository);
@@ -96,11 +100,15 @@ public class TaskReplayRunner {
             diagnostic("未录制到任何交互数据（先运行 Agent 积累录制）。");
             return 2;
         }
+        if (dryRun && newPrompt == null) {
+            diagnostic("任务域 --dry-run 仅冻结重放（--prompt）适用；真实对比模式本身零 LLM 调用，直接执行即可。");
+            return 2;
+        }
 
-        return newPrompt != null ? runFrozenReplay(taskPrefix, affected, fullChain, newPrompt, oldPrompt, maxTotalCalls, maxTotalTokens, chains) : runAlignment(taskPrefix, chains);
+        return newPrompt != null ? runFrozenReplay(taskPrefix, affected, fullChain, newPrompt, oldPrompt, maxTotalCalls, maxTotalTokens, chains, dryRun) : runAlignment(taskPrefix, chains);
     }
 
-    private int runFrozenReplay(String taskPrefix, boolean affected, boolean fullChain, String newPrompt, String oldPrompt, Integer maxTotalCalls, Integer maxTotalTokens, List<TaskChain> chains) {
+    private int runFrozenReplay(String taskPrefix, boolean affected, boolean fullChain, String newPrompt, String oldPrompt, Integer maxTotalCalls, Integer maxTotalTokens, List<TaskChain> chains, boolean dryRun) {
         // 冻结重放的受影响口径：仅「模板与旧提示词一致」的记录以新提示词真重放。
         // 影响集的图下游传播节点不参与——冻结重放喂的是录制原输入，其模板又未变，
         // 重放只复现原行为、不产生验证信号（下游真实影响由真实再执行+对齐收口）。
@@ -121,6 +129,15 @@ public class TaskReplayRunner {
         if (tasks.isEmpty()) {
             diagnostic(affected ? "受影响调用点未出现在任何任务链中（无任务可重放）。" : "未找到请求文本匹配「" + CliSupport.visibleText(taskPrefix) + "」的任务链（先录制交互或核对前缀）。");
             return 2;
+        }
+        if (dryRun) {
+            if (jsonMode) {
+                for (TaskChain task : tasks) {
+                    printDryRunJson(task, affectedKeys, fullChain);
+                }
+                return 0;
+            }
+            return dryRunPlan(tasks, affectedKeys, fullChain);
         }
 
         // 自动建档（与单点重放同款语义）：候选落库以画像存在为前提
@@ -231,6 +248,59 @@ public class TaskReplayRunner {
         return skipped > 0 ? 2 : 0;
     }
 
+    /**
+     * 干跑计划：列出选中任务链的逐步执行计划（真重放 / 继承）与成本预估，
+     * 不建档、不发起任何真实调用。分歧后下游无法在计划期预知（取决于运行时是否 CHANGED）。
+     */
+    private int dryRunPlan(List<TaskChain> tasks, Set<String> affectedKeys, boolean fullChain) {
+        List<InteractionRecord> plannedRecords = new ArrayList<>();
+        int plannedTotal = 0;
+        int inheritedTotal = 0;
+        for (TaskChain task : tasks) {
+            info("任务「" + task.getRequestText() + "」（session " + task.getSessionId() + "，" + task.getRecords().size() + " 步）：");
+            int index = 0;
+            for (InteractionRecord record : task.getRecords()) {
+                index++;
+                String key = CliSupport.invocationKeyOfRecord(record);
+                boolean replay = fullChain || affectedKeys == null || affectedKeys.contains(record.getInvocationKey());
+                if (replay) {
+                    plannedTotal++;
+                    plannedRecords.add(record);
+                    info(stepLine(index, key, "真重放（受影响）"));
+                } else {
+                    inheritedTotal++;
+                    info(stepLine(index, key, "继承 PASS（未受影响）"));
+                }
+            }
+        }
+        info("dry-run：共 " + tasks.size() + " 条任务链，真重放 " + plannedTotal + " 步 / 继承 " + inheritedTotal + " 步，未调用 LLM、未建档。");
+        if (!plannedRecords.isEmpty()) {
+            info(CostEstimator.estimate(plannedRecords, llmClient.name()));
+        }
+        return 0;
+    }
+
+    private void printDryRunJson(TaskChain task, Set<String> affectedKeys, boolean fullChain) {
+        StringBuilder steps = new StringBuilder();
+        int total = 0;
+        int planned = 0;
+        int inherited = 0;
+        for (InteractionRecord record : task.getRecords()) {
+            total++;
+            boolean replay = fullChain || affectedKeys == null || affectedKeys.contains(record.getInvocationKey());
+            if (replay) {
+                planned++;
+            } else {
+                inherited++;
+            }
+            if (steps.length() > 0) {
+                steps.append(",");
+            }
+            steps.append("{\"recordId\":\"").append(RecursiveJsonParser.escape(record.getRecordId())).append("\",\"invocationKey\":\"").append(RecursiveJsonParser.escape(record.getInvocationKey())).append("\",\"action\":\"").append(replay ? "planned-replay" : "inherited").append("\"}");
+        }
+        out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-dry-run\",\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\",\"task\":{\"request\":\"" + RecursiveJsonParser.escape(task.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(task.getSessionId()) + "\"},\"summary\":{\"chains\":1,\"total\":" + total + ",\"plannedReplay\":" + planned + ",\"inherited\":" + inherited + "},\"steps\":[" + steps + "]}");
+    }
+
     private int runAlignment(String taskPrefix, List<TaskChain> chains) {
         List<TaskChain> matching = selectByRequestText(chains, taskPrefix);
         if (matching == null) {
@@ -270,8 +340,11 @@ public class TaskReplayRunner {
             } else {
                 if (step.getVerdict() == Verdict.CHANGED) {
                     changed++;
-                    info(stepLine(index, step.getInvocationKey(), "CHANGED  score=" + String.format("%.2f", step.getComparison().getScore()) + "  " + step.getComparison().getSummary()));
-                    info("    " + textDiffNote(step.getBaselineModelResponse(), step.getNewModelResponse()));
+                    info(stepLine(index, step.getInvocationKey(), step.getComparison().getSummary()));
+                    String note = textDiffNote(step.getBaselineModelResponse(), step.getNewModelResponse());
+                    if (!note.isEmpty()) {
+                        info("    " + note);
+                    }
                 } else {
                     pass++;
                     info(stepLine(index, step.getInvocationKey(), "PASS"));
@@ -398,7 +471,7 @@ public class TaskReplayRunner {
     private String describe(RegressionTestResult result) {
         ComparisonResult comparison = result.getComparison();
         if (comparison != null) {
-            return String.format("%s  score=%.2f  %s", comparison.getVerdict(), comparison.getScore(), comparison.getSummary());
+            return comparison.getSummary();
         }
         return result.getStatus() + "  " + (result.getErrorMessage() != null ? result.getErrorMessage() : "");
     }

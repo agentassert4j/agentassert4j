@@ -157,7 +157,7 @@ public class ReplayCommand implements Callable<Integer> {
             CliSupport.warnUnknownBehaviors(rules, jsonOutput ? System.err : System.out);
 
             if (taskScope) {
-                return new TaskReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(task, affected, fullChain, newPrompt, oldPrompt, maxTotalCalls, maxTotalTokens);
+                return new TaskReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(task, affected, fullChain, newPrompt, oldPrompt, maxTotalCalls, maxTotalTokens, dryRun);
             }
 
             boolean newestFirst = "newest".equals(selection);

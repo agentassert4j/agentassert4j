@@ -339,6 +339,71 @@ class TaskReplayRunnerTest {
         assertEquals(2, exit);
     }
 
+    @Test
+    @DisplayName("任务域干跑：只出执行计划与成本预估，零调用零建档")
+    void taskDryRun_planOnly_noCallsNoProfiles() {
+        saveRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");
+        saveRecord("b2", "s-old", 2000L, null, "invocation:y:h2", "答B");
+
+        int exit = runner.run("查订单", false, false, "new prompt", null, null, null, true);
+
+        assertEquals(0, exit);
+        assertEquals(0, stubClient.callCount, "干跑不得发起任何真实调用");
+        assertTrue(repository.findAllInvocations().isEmpty(), "干跑不得自动建档");
+        String plan = output.toString();
+        assertTrue(plan.contains("真重放（受影响）"), plan);
+        assertTrue(plan.contains("dry-run：共 1 条任务链，真重放 2 步 / 继承 0 步"), plan);
+        assertTrue(plan.contains("预估 2 次 API 调用"), plan);
+    }
+
+    @Test
+    @DisplayName("任务域干跑：--old-prompt 命中才计划真重放，其余标继承")
+    void taskDryRun_oldPromptAffectedOnly() {
+        String oldPrompt = "旧版系统提示词全文";
+        String hitKey = "invocation:verdict:" + io.github.agentassert4j.util.HashUtil.sha256(oldPrompt);
+        saveRecord("b1", "s-old", 1000L, "查订单", hitKey, "verdict", io.github.agentassert4j.util.HashUtil.sha256(oldPrompt), "答A", "dev-model");
+        saveRecord("b2", "s-old", 2000L, null, "invocation:other:h-other", "other", io.github.agentassert4j.util.HashUtil.sha256("别的模板"), "答B", "dev-model");
+
+        int exit = runner.run("查订单", false, false, "new prompt", oldPrompt, null, null, true);
+
+        assertEquals(0, exit);
+        assertEquals(0, stubClient.callCount, "干跑不得发起任何真实调用");
+        String plan = output.toString();
+        assertTrue(plan.contains("真重放（受影响）"), plan);
+        assertTrue(plan.contains("继承 PASS（未受影响）"), plan);
+        assertTrue(plan.contains("真重放 1 步 / 继承 1 步"), plan);
+    }
+
+    @Test
+    @DisplayName("任务域干跑 JSON：单行 task-report/1，mode=task-dry-run")
+    void taskDryRun_jsonSingleLine() {
+        saveRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");
+        saveRecord("b2", "s-old", 2000L, null, "invocation:y:h2", "答B");
+        ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+        TaskReplayRunner jsonRunner = new TaskReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
+
+        int exit = jsonRunner.run("查订单", false, false, "new prompt", null, null, null, true);
+
+        assertEquals(0, exit);
+        assertEquals(0, stubClient.callCount);
+        String json = jsonOut.toString().trim();
+        assertTrue(json.startsWith("{\"schema\":\"agentassert4j.task-report/1\""), json);
+        assertTrue(json.contains("\"mode\":\"task-dry-run\""), json);
+        assertTrue(json.contains("\"plannedReplay\":2"), json);
+        assertFalse(json.contains("\n"), "必须单行");
+    }
+
+    @Test
+    @DisplayName("任务域干跑：真实对比模式（无 --prompt）不适用 → 2")
+    void taskDryRun_alignModeRejected() {
+        saveRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");
+
+        int exit = runner.run("查订单", false, false, null, null, null, null, true);
+
+        assertEquals(2, exit);
+        assertTrue(output.toString().contains("真实对比模式本身零 LLM 调用"), output.toString());
+    }
+
     private static String report(ByteArrayOutputStream output) {
         return output.toString();
     }
