@@ -454,7 +454,7 @@ Layer 1   core（纯 java.base，零外部依赖——发布卖点）         �
               → 差异落为候选 → approve/reject → 基线转正/作废，旧基线归档
 ```
 
-**测试怎么钉住它**：全量回归当前 832 条（core / recorder / storage / cli 含 6 条私有 e2e 门控跳过 / 两代 SDK / 两 starter，随演进浮动），仓库根 `mvn -B test` 必须全绿。测试文化三条：测契约不测实现（跨组件边界逐字段对齐）、确定性契约必测（排序稳定、转义往返、计数闭合）、错误路径必测（专用异常精确断言）。
+**测试怎么钉住它**：全量回归覆盖 core / recorder / storage / cli（含私有 e2e 门控用例）/ 两代 SDK / 两 starter，仓库根 `mvn -B test` 必须全绿。测试文化三条：测契约不测实现（跨组件边界逐字段对齐）、确定性契约必测（排序稳定、转义往返、计数闭合）、错误路径必测（专用异常精确断言）。
 
 **设计原则速查**（各章现场展开）：R1 core 零依赖 / R2 面向 SPI / R3 插件平等 / R4 配置驱动 / R5 单向依赖 / R6 每接口 ≤5 方法 / R7 图纯内存 / R8 零侵入 / R9 确定性优先 / R10 退化不中断。
 
@@ -486,7 +486,7 @@ Layer 1   core（纯 java.base，零外部依赖——发布卖点）         �
 
 **生命周期与并发契约**：Bean 关停顺序由 Spring destroy 方法保证（close 存储在 stop 录制器之后——录制器 stop 会先 flush 剩余数据再关 Disruptor，超时 10 秒强制关闭）。用户自备录制器注册 Bean 时必须显式设 destroy 方法名为 `stop`（Spring 的 destroy 推断只认 close/shutdown，否则关停后 flush 线程在 Windows 上锁住库文件）。
 
-**测试怎么钉住它**：每个 starter 7 条 `ApplicationContextRunner` 装配测试（包装生效、真管道落库、enabled=false 退出、无 spring-ai 静默退出、不双重包装、自定义路径建库、用户 Bean 优先）；SDK 层有异步上下文传播测试（`publishOn` 切线程后仍能取到闭包捕获的上下文）。
+**测试怎么钉住它**：每个 starter 的 `ApplicationContextRunner` 装配测试（包装生效、真管道落库、enabled=false 退出、无 spring-ai 静默退出、不双重包装、自定义路径建库、用户 Bean 优先）；SDK 层有异步上下文传播测试（`publishOn` 切线程后仍能取到闭包捕获的上下文）。
 
 > **编排观察（已落地）**：录制装饰器在请求的 options 副本上为每个工具回调换装纯观察装饰器——
 > 内部回路每次真实执行工具的同一时刻，名称/参数原文/结果原文按序记入缓冲并合并进该条记录的 toolCalls
@@ -840,7 +840,7 @@ recorded（到达即计数） = written（批量写成功）
 | 2 | 仅 skipped>0（预算耗尽或调用失败——证据不完整不允许冒充绿）或无匹配链等用法问题 |
 | 0 | 全部 PASS / 继承；真实对比自建基线 |
 
-**测试怎么钉住它**：`TaskChainViewTest`（7 条：派生/前推/声明优先/同文本并链/会话开头无请求排除/损坏 metadata 退化）、`TaskAlignerTest`（15 条：matched/missing/added/富余不判差异/前缀标注/指纹基线重载 + 任务规则七钉——缺必备步/次数越界/乱序/违规呈现顺序/未声明不评/键不匹配不评/无标签不参与）、`TaskReplayRunnerTest`（32 条：冻结重放全链、影响裁剪继承 PASS、异模板步骤继承 PASS、分歧即停恰发 1 次、预算恰发 N 次、CHANGED 压过 skipped、真实对比配对、自建基线 exit 0、链式编排分歧即停、选择器歧义与控制字符可见化、未命中诊断、干跑零调用零建档/裁剪计划/JSON 契约/对齐模式拒绝 + 任务规则端到端/未声明诊断/JSON 违规计数与数组/成本对照 token 恒显/无价省略、定点十进制、干跑预算截断模拟/多链 chainIndex/不可见 Unicode 可见化）。
+**测试怎么钉住它**：`TaskChainViewTest`（派生/前推/声明优先/同文本并链/会话开头无请求排除/损坏 metadata 退化）、`TaskAlignerTest`（matched/missing/added/富余不判差异/前缀标注/指纹基线重载 + 任务规则——缺必备步/次数越界/乱序/违规呈现顺序/未声明不评/键不匹配不评/无标签不参与）、`TaskReplayRunnerTest`（冻结重放全链、影响裁剪继承 PASS、异模板步骤继承 PASS、分歧即停恰发 1 次、预算恰发 N 次、CHANGED 压过 skipped、真实对比配对、自建基线 exit 0、链式编排分歧即停、选择器歧义与控制字符可见化、未命中诊断、干跑零调用零建档/裁剪计划/JSON 契约/对齐模式拒绝 + 任务规则端到端/未声明诊断/JSON 违规计数与数组/成本对照 token 恒显/无价省略、定点十进制、干跑预算截断模拟/多链 chainIndex/不可见 Unicode 可见化）。
 
 ---
 
@@ -876,7 +876,7 @@ recorded（到达即计数） = written（批量写成功）
 
 **生命周期与并发契约**：包的一生 = 导出（开发侧，快照当前基线）→ 搬运（对账 SHA-256）→ verify（验收侧，只读消费）。包内 judgmentSemantics/storageSchemaVersion 双版本字段让「旧包配新引擎」在入口就被拒绝，而不是比出不可信的结论。
 
-**测试怎么钉住它**：`VerifyExportTest`（11 条：包格式 golden、export→verify 同环境往返 PASS、跨模型标注与结构判定、版本守卫拒绝、覆盖缺口 exit 2、样本强制掩码、参照等价——包指纹与库内派生基线喂同一对齐核结果一致、范围外链因果提示）。
+**测试怎么钉住它**：`VerifyExportTest`（包格式 golden、export→verify 同环境往返 PASS、跨模型标注与结构判定、版本守卫拒绝、覆盖缺口 exit 2、样本强制掩码、参照等价——包指纹与库内派生基线喂同一对齐核结果一致、范围外链因果提示）。
 
 ---
 
@@ -923,7 +923,7 @@ recorded（到达即计数） = written（批量写成功）
 
 **生命周期与并发契约**：单进程命令生命周期 = 打开库（含迁移）→ 业务 → `finally` 关库。JSON 模式的输出通道约定与 replay 一致（0/1 → stdout 单行，2 → stderr）。
 
-**测试怎么钉住它**：`CommandSmokeTest`（picocli 全链冒烟与退出码）、`JsonContractTest`（12 条全命令 JSON 契约）、`ReplayFlowTest`、解析器多态测试（三写法各态与全部报错分支）、`--help` 输出、未知 behavior 告警、UTF-8 直写助手。
+**测试怎么钉住它**：`CommandSmokeTest`（picocli 全链冒烟与退出码）、`JsonContractTest`（全命令 JSON 契约）、`ReplayFlowTest`、解析器多态测试（三写法各态与全部报错分支）、`--help` 输出、未知 behavior 告警、UTF-8 直写助手。
 
 ---
 
@@ -1066,7 +1066,7 @@ acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
 
 **提交前硬门槛**（全部可机械验证）：
 
-- 仓库根 `mvn -B test` 全绿（当前 11 个 reactor 构建、832 条，随演进浮动）；
+- 仓库根 `mvn -B test` 全绿（全部 reactor 模块 BUILD SUCCESS）；
 - core 零依赖自检：`grep -rn "^import \(com\|org\)\." agentassert4j-core/src/main/java/` 输出必须为空；
 - 注释自检：不写过程叙事与编号锚点、注释与代码同步、顶层类型带 `@author` + `@since`（首次入库日期，写定不改）；
 - 临时代码必须带三要素 TODO（临时方案 / 详细说明 / 由谁完善）；
