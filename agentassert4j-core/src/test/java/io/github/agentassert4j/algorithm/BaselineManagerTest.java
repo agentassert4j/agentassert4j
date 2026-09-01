@@ -283,6 +283,29 @@ class BaselineManagerTest {
     class AutoEstablish {
 
         @Test
+        @DisplayName("骨架调用点：落库形态记录（仅投影）建立基线命中存储键——键不分叉")
+        void establish_skeletonProjectionRecord_keyConsistent() {
+            // 落库形态：骨架文本不落列，读侧记录只带投影（与 storage 读侧映射一致）——
+            // establish/recordCandidate 对这类记录重算键必须落回同一骨架键
+            String projection = io.github.agentassert4j.util.HashUtil.sha256("客服助手。当前日期：{{date}}");
+            String storedKey = "skeleton:" + projection;
+            InteractionRecord dbForm = new InteractionRecord();
+            dbForm.setRecordId("rec-skl");
+            dbForm.setSessionId("s1");
+            dbForm.setTimestamp(1000L);
+            dbForm.setInvocationKey(storedKey);
+            dbForm.setSkeletonHash(projection);
+            dbForm.setModelResponse("答A");
+
+            manager.autoEstablishBaseline(dbForm, "tester", null);
+
+            InvocationProfile profile = repo.findInvocationByKey(storedKey);
+            assertNotNull(profile, "仅投影的落库记录必须 establish 到同一骨架键（recordCandidate/重建同路）");
+            assertEquals(storedKey, profile.getInvocationKey());
+            assertEquals(BaselineStatus.BASELINE, profile.getBaselineStatus());
+        }
+
+        @Test
         @DisplayName("新 Skill → 自动建立基线")
         void newSkill_autoEstablishes() {
             InteractionRecord record = makeToolRecord("skill-new", "toolA");

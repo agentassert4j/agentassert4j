@@ -502,6 +502,68 @@ class TaskReplayRunnerTest {
         assertFalse(json.contains("costUsd"), "无价格不出货币数: " + json);
     }
 
+    @Test
+    @DisplayName("成本对照 JSON：费用为定点十进制，无科学计数法")
+    void costJson_plainDecimal() {
+        saveDeclaredRecord("b1", "s-old", 1000L, "t1", "invocation:a:h1", "A", "答A", "gpt-4o", 1000, 500);
+        saveDeclaredRecord("n1", "s-new", 9000L, "t1", "invocation:a:h1", "A", "答A", "gpt-4o", 1000, 500);
+        ByteArrayOutputStream target = new ByteArrayOutputStream();
+        TaskReplayRunner ruleRunner = runnerWithRules(new InvocationRulesConfig(), true, target);
+
+        int exit = ruleRunner.run("t1", false, false, null, null, null, null);
+
+        assertEquals(0, exit);
+        String json = target.toString().trim();
+        assertTrue(json.contains("\"costUsd\":0.0075"), "定点形态，不得出现 E 计数: " + json);
+        assertFalse(json.contains("E-") || json.contains("E+"), json);
+    }
+
+    @Test
+    @DisplayName("干跑预算：调用数预算的截断点在计划中如实模拟（skipped，零调用）")
+    void taskDryRun_budgetCutSimulated() {
+        saveRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");
+        saveRecord("b2", "s-old", 2000L, null, "invocation:y:h2", "答B");
+
+        int exit = runner.run("查订单", false, false, "new prompt", null, 1, null, true);
+
+        assertEquals(0, exit);
+        assertEquals(0, stubClient.callCount, "干跑零真实调用");
+        String plan = output.toString();
+        assertTrue(plan.contains("skipped（预算耗尽 budget_exhausted）"), plan);
+        assertTrue(plan.contains("真重放 1 步 / 继承 0 步 / 预算截断 1 步"), plan);
+        assertTrue(plan.contains("预估 1 次 API 调用"), "成本预估只算截断后仍真重放的步: " + plan);
+    }
+
+    @Test
+    @DisplayName("干跑 JSON：多链各一行携带 chainIndex/chainCount；token 截断点不冒充可模拟")
+    void taskDryRun_jsonMultiChain_indexed() {
+        saveRecord("a1", "s1", 1000L, "查订单", "invocation:x:h1", "答A");
+        saveRecord("b1", "s2", 9000L, "查订单", "invocation:x:h1", "答A");
+        saveRecord("b2", "s2", 9500L, null, "invocation:y:h2", "答B");
+        ByteArrayOutputStream target = new ByteArrayOutputStream();
+        TaskReplayRunner jsonRunner = runnerWithRules(new InvocationRulesConfig(), true, target);
+
+        int exit = jsonRunner.run("查订单", false, false, "new prompt", null, null, 5000, true);
+
+        assertEquals(0, exit);
+        String[] lines = target.toString().trim().split("\n");
+        assertEquals(2, lines.length, "每链一行: " + target);
+        assertTrue(lines[0].contains("\"chainIndex\":0") && lines[0].contains("\"chainCount\":2"), lines[0]);
+        assertTrue(lines[1].contains("\"chainIndex\":1") && lines[1].contains("\"chainCount\":2"), lines[1]);
+        assertTrue(lines[0].contains("\"skipped\":0"), lines[0]);
+    }
+
+    @Test
+    @DisplayName("任务选择器：零宽等不可见 Unicode 字符可见化回显")
+    void taskSelector_zeroWidthVisible() {
+        saveRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");
+
+        int exit = runner.run("查\u200B订单", false, false, null, null, null, null);
+
+        assertEquals(2, exit);
+        assertTrue(output.toString().contains("<U+200B>"), "零宽空格必须可见化，否则匹配失败无从解释: " + output);
+    }
+
     private static String report(ByteArrayOutputStream output) {
         return output.toString();
     }

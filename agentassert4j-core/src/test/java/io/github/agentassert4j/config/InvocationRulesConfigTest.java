@@ -313,5 +313,43 @@ class InvocationRulesConfigTest {
 
             assertEquals(Collections.singleton("good"), config.getDeclaredTaskKeys());
         }
+
+        @Test
+        @DisplayName("类型错值留解析注记并按缺省处理——静默弱化约束不可接受")
+        void typedWrongBounds_noteAndDegrade() {
+            InvocationRulesConfig config = InvocationRulesConfig.fromJson("{\"tasks\":{\"t1\":{\"steps\":{" + "\"A\":{\"min\":\"3\"}," + "\"B\":{\"min\":1.5}," + "\"C\":\"not-a-map\"}}}}");
+
+            InvocationRulesConfig.TaskRule rule = config.getTaskRule("t1");
+            assertNull(rule.getSteps().get("A").getMin(), "字符串数值不静默转数");
+            assertNull(rule.getSteps().get("B").getMin(), "非整数不静默截断");
+            assertTrue(rule.getSteps().containsKey("A") && rule.getSteps().containsKey("B"), "类型错值只弃边界、不弃整个步骤声明");
+
+            boolean stringNoted = false;
+            boolean nonIntegerNoted = false;
+            boolean nonMapNoted = false;
+            for (String note : config.getParseNotes()) {
+                if (note.contains("t1") && note.contains("A") && note.contains("min") && note.contains("不是数字")) {
+                    stringNoted = true;
+                }
+                if (note.contains("B") && note.contains("不是整数")) {
+                    nonIntegerNoted = true;
+                }
+                if (note.contains("C") && note.contains("已整体忽略")) {
+                    nonMapNoted = true;
+                }
+            }
+            assertTrue(stringNoted, "字符串边界必须留注记供加载侧告警: " + config.getParseNotes());
+            assertTrue(nonIntegerNoted, "非整数边界必须留注记: " + config.getParseNotes());
+            assertTrue(nonMapNoted, "非对象步骤声明必须留注记: " + config.getParseNotes());
+        }
+
+        @Test
+        @DisplayName("解析注记不可修改")
+        void parseNotes_immutable() {
+            InvocationRulesConfig config = InvocationRulesConfig.fromJson("{\"tasks\":{\"t1\":{\"steps\":{\"A\":{\"min\":\"x\"}}}}}");
+
+            assertFalse(config.getParseNotes().isEmpty());
+            assertThrows(UnsupportedOperationException.class, () -> config.getParseNotes().add("hack"));
+        }
     }
 }

@@ -83,8 +83,10 @@ final class CliSupport {
     }
 
     /**
-     * 控制字符可见化——用户可控文本回显进报错与报告时，\r 这类不可见字符会静默改变
+     * 不可见字符可见化——用户可控文本回显进报错与报告时，\r 这类不可见字符会静默改变
      * 匹配结果又不显示（终端里 \r 甚至把光标移回行首吞掉前面的文字），转义后差异一眼可辨。
+     * 覆盖 ASCII 控制符、DEL 与 Unicode 格式字符（零宽空格/双向标记/软连字符等
+     * FORMAT 类——同样静默改变 equals/startsWith 却在终端不可见）。
      */
     static String visibleText(String text) {
         if (text == null || text.isEmpty()) {
@@ -98,7 +100,7 @@ final class CliSupport {
                 sb.append("<LF>");
             } else if (c == '\t') {
                 sb.append("<TAB>");
-            } else if (c < 0x20) {
+            } else if (c < 0x20 || c == 0x7F || Character.getType(c) == Character.FORMAT) {
                 sb.append("<U+").append(String.format("%04X", (int) c)).append(">");
             } else {
                 sb.append(c);
@@ -264,7 +266,7 @@ final class CliSupport {
     /**
      * 全库任务链（跨会话，按链首时间升序）——任务域命令的统一派生入口。
      */
-    static java.util.List<TaskChain> taskChains(StorageRepository repository) {
+    static List<TaskChain> taskChains(StorageRepository repository) {
         return TaskChainView.resolveAll(repository);
     }
 
@@ -362,6 +364,9 @@ final class CliSupport {
      * 静默存在会让团队纪律形同虚设或全部误报，必须在加载时点破。
      */
     static void warnMalformedTaskRules(InvocationRulesConfig rules, PrintStream out) {
+        for (String note : rules.getParseNotes()) {
+            out.println("警告：rules.tasks " + note + "。");
+        }
         for (String taskKey : rules.getDeclaredTaskKeys()) {
             if (taskKey == null || taskKey.trim().isEmpty()) {
                 out.println("警告：rules.tasks 存在空任务键声明（该规则永不匹配，请改用录制时声明的 taskKey）。");

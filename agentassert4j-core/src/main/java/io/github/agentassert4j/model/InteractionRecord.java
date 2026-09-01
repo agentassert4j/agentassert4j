@@ -34,9 +34,10 @@ public class InteractionRecord {
      */
     private String templateHash;
     /**
-     * 模板原文（瞬态字段）：捕获侧随记录携带到存储侧，以 templateHash 为键
+     * 模板文本（瞬态字段）：捕获侧随记录携带到存储侧，以 templateHash 为键
      * 归档进 prompt_texts 表（模板文本库），不对应 interactions 列——
-     * 是本类字段集与 interactions 列一一对应规则的唯一例外
+     * 瞬态字段共两个（templateText 与 templateSkeleton），是本类字段集与
+     * interactions 列一一对应规则仅有的例外
      */
     private String templateText;
     /**

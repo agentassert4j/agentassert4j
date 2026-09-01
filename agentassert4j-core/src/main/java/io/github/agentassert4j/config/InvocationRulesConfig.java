@@ -46,6 +46,12 @@ public class InvocationRulesConfig {
      */
     private final Map<String, TaskRule> taskRules = new LinkedHashMap<>();
 
+    /**
+     * 解析注记：畸形声明（类型错值等）被安全忽略时在此留痕，加载侧据此告警——
+     * 静默弱化约束会让团队纪律形同虚设（退化不中断，但必须可见）
+     */
+    private final List<String> parseNotes = new ArrayList<>();
+
     public InvocationRulesConfig() {
     }
 
@@ -80,11 +86,20 @@ public class InvocationRulesConfig {
             for (Map.Entry<String, Object> entry : tasksMap.entrySet()) {
                 String taskKey = entry.getKey();
                 if (entry.getValue() instanceof Map) {
-                    config.taskRules.put(taskKey, TaskRule.fromJson((Map<String, Object>) entry.getValue()));
+                    config.taskRules.put(taskKey, TaskRule.fromJson((Map<String, Object>) entry.getValue(), taskKey, config.parseNotes));
+                } else {
+                    config.parseNotes.add("任务 " + taskKey + " 的声明不是对象，已整体忽略");
                 }
             }
         }
         return config;
+    }
+
+    /**
+     * 解析注记（不可变视图）：畸形声明被安全忽略处的留痕，供加载侧告警
+     */
+    public List<String> getParseNotes() {
+        return Collections.unmodifiableList(parseNotes);
     }
 
     /**
@@ -335,7 +350,7 @@ public class InvocationRulesConfig {
         }
 
         @SuppressWarnings("unchecked")
-        static TaskRule fromJson(Map<String, Object> map) {
+        static TaskRule fromJson(Map<String, Object> map, String taskKey, List<String> notes) {
             if (map == null) return EMPTY;
 
             List<String> requiredSteps = toStringList(map.get("requiredSteps"));
@@ -346,7 +361,9 @@ public class InvocationRulesConfig {
                 for (Map.Entry<String, Object> entry : ((Map<String, Object>) stepsObj).entrySet()) {
                     if (entry.getValue() instanceof Map) {
                         Map<String, Object> m = (Map<String, Object>) entry.getValue();
-                        steps.put(entry.getKey(), new StepCount(asInteger(m.get("min")), asInteger(m.get("max"))));
+                        steps.put(entry.getKey(), new StepCount(asInteger(m.get("min"), taskKey, entry.getKey(), "min", notes), asInteger(m.get("max"), taskKey, entry.getKey(), "max", notes)));
+                    } else {
+                        notes.add("任务 " + taskKey + " 的步骤 " + entry.getKey() + " 声明不是对象，已整体忽略");
                     }
                 }
             }
@@ -362,8 +379,25 @@ public class InvocationRulesConfig {
             return result;
         }
 
-        private static Integer asInteger(Object value) {
-            return value instanceof Number ? Integer.valueOf(((Number) value).intValue()) : null;
+        /**
+         * 边界值严格解析：仅接受整数值；缺省/类型错值返回 null（= 未声明），
+         * 类型错值留解析注记供加载侧告警——静默弱化约束等于纪律失效
+         */
+        private static Integer asInteger(Object value, String taskKey, String step, String bound, List<String> notes) {
+            if (value == null) {
+                return null;
+            }
+            if (value instanceof Number) {
+                Number number = (Number) value;
+                double d = number.doubleValue();
+                if (d == Math.floor(d) && !Double.isInfinite(d)) {
+                    return number.intValue();
+                }
+                notes.add("任务 " + taskKey + " 的步骤 " + step + " 的 " + bound + " 不是整数（" + value + "），已忽略");
+                return null;
+            }
+            notes.add("任务 " + taskKey + " 的步骤 " + step + " 的 " + bound + " 不是数字（" + value + "），已忽略");
+            return null;
         }
 
         private static List<String> immutableList(List<String> source) {

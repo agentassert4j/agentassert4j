@@ -134,7 +134,7 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
   （绝对次数范围，对新链出现计数直接判定）——违规折叠进链级 CHANGED → exit 1。
 - `tasks` 只在 `replay --task` **真实对比模式**评估：自建基线（仅一条链）不评——首录先立档，
   约束从有对照的第二轮起生效；冻结重放与 `verify` 验收不评。配置了 tasks 但被评链未声明
-  taskKey 时报告出诊断行（不涉判定），防「配了规则没生效」。
+  taskKey 时报告出诊断行（不涉判定），防「配了规则没生效」；畸形声明（类型错值、非对象条目、min/max 双缺、min>max）解析时安全忽略或标注无约束力，CLI 加载时逐条告警。
 
 ## 3. 库文件运维
 
@@ -167,7 +167,7 @@ agentassert4j replay --prompt prompt-latest.txt --old-prompt prompt-main.txt --a
 - **预算池**（任务域 `--task/--affected` 生效）：`--max-total-calls/--max-total-tokens` 对本次运行全部
   真实调用合计封顶；耗尽后剩余步骤标 skipped，整体 exit 2（证据不完整不允许冒充绿）。
 - **干跑**：任何重放加 `--dry-run` 只列执行计划与成本预估——零调用、零落库、零建档（调用点域列选例
-  清单；任务域列逐步计划：真重放 / 继承）。真实对比模式（`--task` 无 `--prompt`）本身零调用，无需干跑。
+  清单；任务域列逐步计划：真重放 / 继承；任务域配置 `--max-total-calls` 时计划内如实模拟调用数截断（超出部分标 skipped），token 预算的截断点取决于重放响应长度、计划期不可预知）。真实对比模式（`--task` 无 `--prompt`）本身零调用，无需干跑。
 
 <img src="assets/cli-dry-run.png" alt="replay --task --dry-run：逐步执行计划与成本预估，未调用 LLM、未建档" width="720"/>
 

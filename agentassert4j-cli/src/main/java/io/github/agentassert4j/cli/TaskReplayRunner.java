@@ -133,12 +133,12 @@ public class TaskReplayRunner {
         }
         if (dryRun) {
             if (jsonMode) {
-                for (TaskChain task : tasks) {
-                    printDryRunJson(task, affectedKeys, fullChain);
+                for (int i = 0; i < tasks.size(); i++) {
+                    printDryRunJson(tasks.get(i), i, tasks.size(), affectedKeys, fullChain, maxTotalCalls, maxTotalTokens);
                 }
                 return 0;
             }
-            return dryRunPlan(tasks, affectedKeys, fullChain);
+            return dryRunPlan(tasks, affectedKeys, fullChain, maxTotalCalls, maxTotalTokens);
         }
 
         // 自动建档（与单点重放同款语义）：候选落库以画像存在为前提
@@ -250,13 +250,15 @@ public class TaskReplayRunner {
     }
 
     /**
-     * 干跑计划：列出选中任务链的逐步执行计划（真重放 / 继承）与成本预估，
-     * 不建档、不发起任何真实调用。分歧后下游无法在计划期预知（取决于运行时是否 CHANGED）。
+     * 干跑计划：列出选中任务链的逐步执行计划（真重放 / 继承 / 预算截断）与成本预估，
+     * 不建档、不发起任何真实调用。分歧后下游无法在计划期预知（取决于运行时是否 CHANGED）；
+     * 调用数预算的截断点确定可模拟，token 预算取决于重放响应长度、计划期不可预知（如实注明）。
      */
-    private int dryRunPlan(List<TaskChain> tasks, Set<String> affectedKeys, boolean fullChain) {
+    private int dryRunPlan(List<TaskChain> tasks, Set<String> affectedKeys, boolean fullChain, Integer maxCalls, Integer maxTokens) {
         List<InteractionRecord> plannedRecords = new ArrayList<>();
         int plannedTotal = 0;
         int inheritedTotal = 0;
+        int budgetSkipped = 0;
         for (TaskChain task : tasks) {
             info("任务「" + task.getRequestText() + "」（session " + task.getSessionId() + "，" + task.getRecords().size() + " 步）：");
             int index = 0;
@@ -264,42 +266,60 @@ public class TaskReplayRunner {
                 index++;
                 String key = CliSupport.invocationKeyOfRecord(record);
                 boolean replay = fullChain || affectedKeys == null || affectedKeys.contains(record.getInvocationKey());
-                if (replay) {
+                if (!replay) {
+                    inheritedTotal++;
+                    info(stepLine(index, key, "继承 PASS（未受影响）"));
+                } else if (maxCalls != null && plannedTotal >= maxCalls) {
+                    budgetSkipped++;
+                    info(stepLine(index, key, "skipped（预算耗尽 budget_exhausted）"));
+                } else {
                     plannedTotal++;
                     plannedRecords.add(record);
                     info(stepLine(index, key, "真重放（受影响）"));
-                } else {
-                    inheritedTotal++;
-                    info(stepLine(index, key, "继承 PASS（未受影响）"));
                 }
             }
         }
-        info("dry-run：共 " + tasks.size() + " 条任务链，真重放 " + plannedTotal + " 步 / 继承 " + inheritedTotal + " 步，未调用 LLM、未建档。");
+        StringBuilder summary = new StringBuilder("dry-run：共 " + tasks.size() + " 条任务链，真重放 " + plannedTotal + " 步 / 继承 " + inheritedTotal + " 步");
+        if (budgetSkipped > 0) {
+            summary.append(" / 预算截断 ").append(budgetSkipped).append(" 步");
+        }
+        summary.append("，未调用 LLM、未建档。");
+        if (maxTokens != null) {
+            summary.append(" token 预算（--max-total-tokens=").append(maxTokens).append("）的实际截断点取决于重放响应长度，计划期不可预知。");
+        }
+        info(summary.toString());
         if (!plannedRecords.isEmpty()) {
             info(CostEstimator.estimate(plannedRecords, llmClient.name()));
         }
         return 0;
     }
 
-    private void printDryRunJson(TaskChain task, Set<String> affectedKeys, boolean fullChain) {
+    private void printDryRunJson(TaskChain task, int chainIndex, int chainCount, Set<String> affectedKeys, boolean fullChain, Integer maxCalls, Integer maxTokens) {
         StringBuilder steps = new StringBuilder();
         int total = 0;
         int planned = 0;
         int inherited = 0;
+        int skipped = 0;
         for (InteractionRecord record : task.getRecords()) {
             total++;
             boolean replay = fullChain || affectedKeys == null || affectedKeys.contains(record.getInvocationKey());
-            if (replay) {
-                planned++;
-            } else {
+            String action;
+            if (!replay) {
                 inherited++;
+                action = "inherited";
+            } else if (maxCalls != null && planned >= maxCalls) {
+                skipped++;
+                action = "skipped";
+            } else {
+                planned++;
+                action = "planned-replay";
             }
             if (steps.length() > 0) {
                 steps.append(",");
             }
-            steps.append("{\"recordId\":\"").append(RecursiveJsonParser.escape(record.getRecordId())).append("\",\"invocationKey\":\"").append(RecursiveJsonParser.escape(record.getInvocationKey())).append("\",\"action\":\"").append(replay ? "planned-replay" : "inherited").append("\"}");
+            steps.append("{\"recordId\":\"").append(RecursiveJsonParser.escape(record.getRecordId())).append("\",\"invocationKey\":\"").append(RecursiveJsonParser.escape(record.getInvocationKey())).append("\",\"action\":\"").append(action).append("\"}");
         }
-        out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-dry-run\",\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\",\"task\":{\"request\":\"" + RecursiveJsonParser.escape(task.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(task.getSessionId()) + "\"},\"summary\":{\"chains\":1,\"total\":" + total + ",\"plannedReplay\":" + planned + ",\"inherited\":" + inherited + "},\"steps\":[" + steps + "]}");
+        out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-dry-run\",\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\",\"task\":{\"request\":\"" + RecursiveJsonParser.escape(task.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(task.getSessionId()) + "\"},\"summary\":{\"chains\":1,\"chainIndex\":" + chainIndex + ",\"chainCount\":" + chainCount + ",\"total\":" + total + ",\"plannedReplay\":" + planned + ",\"inherited\":" + inherited + ",\"skipped\":" + skipped + "},\"steps\":[" + steps + "]}");
     }
 
     private int runAlignment(String taskPrefix, List<TaskChain> chains) {
@@ -616,14 +636,30 @@ public class TaskReplayRunner {
         return costUsd == null ? "" : "/$" + String.format("%.4f", costUsd);
     }
 
+    /**
+     * JSON 数字的定点十进制形态——Double.toString 对极小/极大值产生科学计数法，
+     * 合法但人读不友好；六位小数内定点化并去掉尾随零
+     */
+    private static String plainDecimal(double value) {
+        String s = String.format(Locale.ROOT, "%.6f", value);
+        int end = s.length();
+        while (end > 0 && s.charAt(end - 1) == '0') {
+            end--;
+        }
+        if (end > 0 && s.charAt(end - 1) == '.') {
+            end--;
+        }
+        return s.substring(0, end);
+    }
+
     private static String costJson(ChainCost baseline, ChainCost current) {
         StringBuilder sb = new StringBuilder(",\"baseline\":{\"tokens\":").append(baseline.tokens);
         if (baseline.costUsd != null) {
-            sb.append(",\"costUsd\":").append(baseline.costUsd);
+            sb.append(",\"costUsd\":").append(plainDecimal(baseline.costUsd));
         }
         sb.append("},\"current\":{\"tokens\":").append(current.tokens);
         if (current.costUsd != null) {
-            sb.append(",\"costUsd\":").append(current.costUsd);
+            sb.append(",\"costUsd\":").append(plainDecimal(current.costUsd));
         }
         return sb.append("}").toString();
     }
