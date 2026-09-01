@@ -82,6 +82,7 @@ final class SpringAiRecordMapper {
             record.setSessionId(context.sessionId());
             record.setInvocationId(context.invocationId());
             record.setTemplateId(context.templateId());
+            record.setTemplateSkeleton(context.templateSkeleton());
             if (!context.metadata().isEmpty()) {
                 record.setMetadata(RecursiveJsonParser.serialize(new TreeMap<String, Object>(context.metadata())));
             }

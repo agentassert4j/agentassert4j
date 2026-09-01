@@ -465,6 +465,7 @@ public class TaskReplayRunner {
             sb.append("靶链现存模板变体：").append(String.join("、", variants)).append("。");
         }
         sb.append("旧提示词必须是录制时归档的完整 system 模板全文（含全局拼接段）——单段转储或重新组装的文本哈希不等，归档原文见库内模板巡检（status）。");
+        sb.append("声明了模板骨架的调用点同样按全文哈希门控——骨架只定身份，门控与重放取回仍以全文为准。");
         return sb.toString();
     }
 

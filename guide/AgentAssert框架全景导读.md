@@ -454,7 +454,7 @@ Layer 1   core（纯 java.base，零外部依赖——发布卖点）         �
               → 差异落为候选 → approve/reject → 基线转正/作废，旧基线归档
 ```
 
-**测试怎么钉住它**：全量回归当前 815 条（core / recorder / storage / cli 含 6 条私有 e2e 门控跳过 / 两代 SDK / 两 starter，随演进浮动），仓库根 `mvn -B test` 必须全绿。测试文化三条：测契约不测实现（跨组件边界逐字段对齐）、确定性契约必测（排序稳定、转义往返、计数闭合）、错误路径必测（专用异常精确断言）。
+**测试怎么钉住它**：全量回归当前 825 条（core / recorder / storage / cli 含 6 条私有 e2e 门控跳过 / 两代 SDK / 两 starter，随演进浮动），仓库根 `mvn -B test` 必须全绿。测试文化三条：测契约不测实现（跨组件边界逐字段对齐）、确定性契约必测（排序稳定、转义往返、计数闭合）、错误路径必测（专用异常精确断言）。
 
 **设计原则速查**（各章现场展开）：R1 core 零依赖 / R2 面向 SPI / R3 插件平等 / R4 配置驱动 / R5 单向依赖 / R6 每接口 ≤5 方法 / R7 图纯内存 / R8 零侵入 / R9 确定性优先 / R10 退化不中断。
 
@@ -576,7 +576,7 @@ recorded（到达即计数） = written（批量写成功）
 
 - `interactions`（38 列，只追加）——按组读：
   - **身份**：`record_id`(PK)、`session_id`、`timestamp`、`seq`（进程内单调，与 timestamp 组成确定性排序键）、`invocation_id`（声明标签位，可空串）/`invocation_key`（调用点键，NOT NULL，enrich 兜底）；
-  - **提示词三元组**：`template_id`/`template_hash`（可空——无 system prompt 的调用点由解析器回退到请求锚点）/`variables_fingerprint`（预留未接线）；
+  - **提示词双哈希**：`template_id`/`template_hash`（可空——无 system prompt 的调用点由解析器回退到请求锚点）/`skeleton_hash`（骨架哈希投影，可空——骨架声明后调用点身份按骨架定格，落库记录重算键的凭据）；
   - **模型与部署**：`api_protocol`/`provider`/`model`/`served_model`/`endpoint`（预留未接线）——基线跨模型/部署不可比，必须落列；
   - **请求保真**：`user_input`、`turn_index`、`tools_definition`、`sampling_params`、`model_request_raw`（预留：ChatModel 抽象层不可得，HTTP 层方向无排期）、`multimodal_input`/`multimodal_content`；
   - **响应保真**：`finish_reason`、`model_response`（可空——纯工具调用响应无文本）、`model_response_raw`（同上预留）、`tool_calls`/`has_tool_calls`；
@@ -606,11 +606,13 @@ recorded（到达即计数） = written（批量写成功）
 
 - `InteractionRecord`（`model/` 包 POJO，30 余个字段与 `interactions` 表 38 列一一对应，见第 4 章列组）——全框架的数据交换货币：SDK 捕获产出它、录制管道搬运它、CLI 分析消费它。`previousTurns` 是 `TurnContext` 列表（role/content/toolCallId/toolName/toolArguments，多轮历史与工具结果帧）；`ToolCall` 持有 toolName/toolCallId/arguments(Map)/argTypes(Map)/result/success。
 - `InvocationResolver`（纯静态函数，无状态）——调用点身份的唯一真源，`resolve(record)` 派生逻辑（优先级从高到低，任一命中即停）：
-  - **锚点 1 声明锚点**：记录声明了 invocationId → invocationKey = `invocation:<标签>`，有模板时以 `:<templateHash>` 细分同一标签内的多模板调用位置。形状不参与身份——同一声明下多形状分支的差异交给指纹暴露（这正是回归要抓的对象）。
-  - **锚点 2 模板锚点**：未声明但 templateHash 非空 → invocationKey = `template:<templateHash>`。**工具调用与纯对话同分支**——形状（工具名/参数签名）已退出身份、降级为视图维度（`TOOL`/`PURE_CHAT` 分类与 paramSignature 列仅作展示与选例）。
-  - **锚点 3 请求锚点兜底**：无声明无模板（无 system prompt 的应用）→ `adhoc:<sha256(modelRequestRaw)>`，退而 `adhoc:<sha256(userInput)>`，双缺失 `adhoc:no-anchor`（程序化构造防御）。键是溯源身份不是判定输入，因此输入派生键合法。
-  - **键文法单射**：标签/模板 hash/请求哈希全部经百分号编码（`% : + [ ] ,` 转义）后入键，前缀命名空间（`invocation:`/`template:`/`adhoc:`）互相隔离——用户可控字符串永不与文法结构字符混淆，任何团队的命名规范零约束零碰撞（黄金键测试钉住字面值，含冒号注入对抗用例）。
+  - **锚点 1 声明锚点**：记录声明了 invocationId → invocationKey = `invocation:<标签>`，有模板时以 `:<细分哈希>` 细分同一标签内的多模板调用位置——细分哈希**骨架优先**（声明了模板骨架的调用点不随动态段组装漂移裂键），无骨架退全文哈希。形状不参与身份——同一声明下多形状分支的差异交给指纹暴露（这正是回归要抓的对象）。
+  - **锚点 2 骨架锚点**：未声明但有骨架 → `skeleton:<skeletonHash>`。骨架 = 动态段（日期/环境/文件清单）替换为稳定占位符后的模板形态，出口声明式提供——**同骨架异全文同键**，agent harness 的组装后 system prompt 不再把每次运行变成新调用点。
+  - **锚点 3 模板锚点**：未声明无骨架但 templateHash 非空 → invocationKey = `template:<templateHash>`。**工具调用与纯对话同分支**——形状（工具名/参数签名）已退出身份、降级为视图维度（`TOOL`/`PURE_CHAT` 分类与 paramSignature 列仅作展示与选例）。
+  - **锚点 4 请求锚点兜底**：无声明无骨架无模板（无 system prompt 的应用）→ `adhoc:<sha256(modelRequestRaw)>`，退而 `adhoc:<sha256(userInput)>`，双缺失 `adhoc:no-anchor`（程序化构造防御）。键是溯源身份不是判定输入，因此输入派生键合法。
+  - **键文法单射**：标签/骨架哈希/模板 hash/请求哈希全部经百分号编码（`% : + [ ] ,` 转义）后入键，前缀命名空间（`invocation:`/`skeleton:`/`template:`/`adhoc:`）互相隔离——用户可控字符串永不与文法结构字符混淆，任何团队的命名规范零约束零碰撞（黄金键测试钉住字面值，含冒号注入对抗用例）。
   - **invocationKey 永不进指纹**：指纹维度保持输出侧，输入侧（键、变量、历史）不参与判定——判定正确性与声明质量解耦，零声明应用（agent loop 主形态）是一等公民路径。
+  - **双哈希各司其职**：全文哈希（`template_hash` 列）答「这条记录是用哪份完整文本组装的」——`--old-prompt` 门控与重放取回的依据；骨架哈希（文本现算优先、`skeleton_hash` 投影列兜底）答「这条记录属于哪个调用点」。骨架不参与门控与重放取回，`--old-prompt` 仍须归档全文。
 - `InvocationProfile`（调用点画像，对应 `invocations` 行）：身份列（invocationKey 主键、label、templateHash）+ 视图列（invocationName、invocationType、paramSignature）+ 治理列（fingerprint 现役基线、candidateFingerprint 候选、baselineStatus、versionTag、algoVersion、approvedBy/approvedAt、totalRecords）。
 - **统一身份空间**：声明与否共用同一派生文法、同一存储列（`invocation_key`）、同一图节点空间——影响分析、依赖图、治理三命令不再区分「声明/派生」双轨。标签只是视图：一个标签可覆盖多个调用点键（同标签多模板步骤），CLI 的 `--invocation` 三写法（业务标签 / 完整调用点键 / 唯一前缀）等价解析。画像属于可从 interactions 全量重建的派生数据（BaselineService 重复执行安全）。
 
@@ -618,7 +620,7 @@ recorded（到达即计数） = written（批量写成功）
 
 **生命周期与并发契约**：解析是纯函数（无状态、无 IO），可在任何线程调用；同一记录永远得到同一 invocationKey——这是「派生规则冻结为身份契约」的前置性质。派生规则一经发布即冻结：任何变更 = 身份纪元事件（历史基线全部失配），必须走显式设计。
 
-**测试怎么钉住它**：黄金键测试（`InvocationResolverTest`）钉住派生规则的字面键值（声明/模板/adhoc 三锚点、命名空间隔离、冒号注入对抗、全缺失 no-anchor 兜底）、视图列归一化（大小写）、双工具接力会话产 HIGH 边（图测试复用同一派生）。
+**测试怎么钉住它**：黄金键测试（`InvocationResolverTest`）钉住派生规则的字面键值（声明/骨架/模板/adhoc 四锚点、骨架细分与同骨架异全文同键、落库投影重派生同键、命名空间隔离、冒号注入对抗、全缺失 no-anchor 兜底）、视图列归一化（大小写）、双工具接力会话产 HIGH 边（图测试复用同一派生）。
 
 ---
 
@@ -739,7 +741,7 @@ recorded（到达即计数） = written（批量写成功）
 - `LlmClient`（SPI，3 方法）：`chat(request, timeoutMs)` / `name()` / `isAvailable()`。Javadoc 钉死的超时契约：`timeoutMs` 是**单次尝试**的预算（连接与读取各自的上限）；任一次尝试超时立即抛 `LlmTimeoutException`，**不得重试**（预算已耗尽，重试只翻倍证据成本）；可重试失败仅限 HTTP 429/5xx 与连接被拒。core 只定义契约，实现在上层（cli 的 `OpenAiCompatibleClient`）。
 - `RegressionTestExecutor`（core，4 构造参数：llmClient/comparator/baselineManager/rules）——`execute(baselineRecord, newSystemPrompt, userInput, config)` 单条流程：
   1. dryRun → 直接返回 SKIP 结果，不调 LLM；
-  2. `buildReplayRequest`：新 prompt 设为 systemPrompt；历史用户输入、多轮上下文（**完整复制**——tool 轮的 toolCallId/toolName 是与原对话对齐的关联键，丢弃会被服务端拒绝；system 帧不注入，模板域由 systemPrompt 承载）、工具定义（从录制 JSON 数组原样拆装——**重放不带工具，模型无法发起工具调用，工具维指纹必然假阳性**；损坏定义跳过宁可不带）；
+  2. `buildReplayRequest`：新 prompt 设为 systemPrompt；历史用户输入、多轮上下文（**完整复制**——tool 轮的 toolCallId/toolName 是与原对话对齐的关联键，丢弃会被服务端拒绝；system 帧不注入，模板域由 systemPrompt 承载；骨架声明不影响重放——请求重建与 --old-prompt 门控都以归档全文（template_hash）为准，骨架只定调用点身份）、工具定义（从录制 JSON 数组原样拆装——**重放不带工具，模型无法发起工具调用，工具维指纹必然假阳性**；损坏定义跳过宁可不带）；
   3. **链式半重放（编排记录的专用路径）**：观察装饰产出的记录带完整编排与每轮结果，`execute` 在入口路由——结果道具齐备即走链式：拿基线录制的旧结果当道具，逐轮重建「当时输入」并比对响应的 tool_calls 与基线编排的下一片段（工具名 + 参数解析后严格相等；tool_call id 是关联键不参与），全部轮次匹配后末轮四维比对收口；分歧即停并输出「第 k 轮工具决策分歧」定位。合成帧（assistant 发起调用 + tool 结果）以合成 tool_call_id 关联、参数与结果内容无损——`TurnContext.toolArguments` 承载真实参数，历史录制帧仍以 "{}" 占位（协议校验只看结构）。结果道具缺失（录制时工具失败）退回单发重放；
   4. `llmClient.chat` 异常三分类：`LlmTimeoutException` → TIMEOUT 结果、`LlmApiException` → API_ERROR、其余 RuntimeException → ERROR（客户端编程错误也转为单条结果，批量不中断）；
   5. 成功后 `buildCurrentRecord` 构造当前记录（不持久化）：重放路径的 `ToolCall.argTypes` 由 `ArgTypeUtil.derive` 按同一词表补齐（与捕获侧对称，否则参数类型维必失配）；调用时刻遥测（served/finishReason/usage/latency）就地落位；
@@ -1064,7 +1066,7 @@ acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
 
 **提交前硬门槛**（全部可机械验证）：
 
-- 仓库根 `mvn -B test` 全绿（当前 11 个 reactor 构建、815 条，随演进浮动）；
+- 仓库根 `mvn -B test` 全绿（当前 11 个 reactor 构建、825 条，随演进浮动）；
 - core 零依赖自检：`grep -rn "^import \(com\|org\)\." agentassert4j-core/src/main/java/` 输出必须为空；
 - 注释自检：不写过程叙事与编号锚点、注释与代码同步、顶层类型带 `@author` + `@since`（首次入库日期，写定不改）；
 - 临时代码必须带三要素 TODO（临时方案 / 详细说明 / 由谁完善）；
@@ -1094,6 +1096,7 @@ acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
 | 声明任务键 | metadata 的 `taskKey` 字段，声明优先于派生——改问法仍可配对 | 第 11 章 |
 | 冻结重放 / 真实对比 | replay --task 带 --prompt（重演历史输入）/ 不带（最新链 vs 次新链按调用点对齐，零调用） | 第 11 章 |
 | 缺步骤 / 新增步骤 | 对齐键 invocationKey 三方分类中的 missing/added，与 CHANGED 同属行为差异 | 第 11 章 |
+| 模板骨架 / 骨架哈希 | 动态段替换为稳定占位符的模板形态（出口声明）/ 其 SHA-256——同骨架异全文同键，动态模板下身份不再漂移裂键 | 第 5/9 章 |
 | 任务纪律（tasks 段） | 声明任务键上的链级约束：必备步骤 / 有序子序列 / 步骤次数范围，违规折叠进二值判定（只对声明任务、真实对比模式评） | 第 11 章 |
 | 成本对照 | 真实对比报告附两侧 token/费用合计；token 恒显，费用同基准重算、无价省略 | 第 11 章 |
 | 分歧即停 | 真重放遇 CHANGED 停止后续（轮级与任务级同则），下游标条件态 | 第 9/11 章 |

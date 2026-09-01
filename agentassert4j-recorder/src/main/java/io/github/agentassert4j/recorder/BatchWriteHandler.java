@@ -5,6 +5,7 @@ import io.github.agentassert4j.algorithm.InvocationResolver;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.InteractionWriteStore;
+import io.github.agentassert4j.util.HashUtil;
 import io.github.agentassert4j.util.TextUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -162,8 +163,9 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
      * 在消费线程执行——指纹提取含响应体 JSON 解析，不允许回到业务线程。
      * group_key 列有 NOT NULL 约束，上游缺失时回充分组器派生值，否则整批 INSERT 失败；
      * 已有值不覆盖（上游显式设置的优先）。
-     * 只回填 invocationKey：record.invocationId 是业务声明位，写入派生 hash 会让后续重派生
+     * 只回填 invocationKey 与 skeletonHash：record.invocationId 是业务声明位，写入派生 hash 会让后续重派生
      * 把它误当声明锚，造成存储键与现算键分叉；invocation_id 列的 NOT NULL 由存储层空串兜底承接。
+     * 骨架哈希是骨架文本的派生投影（落库记录重算键的凭据），同样只在缺失时回填。
      * 单条补全失败不拦截落库——原始交互数据是真源，派生字段缺失可事后重建。
      */
     private void enrich(List<InteractionRecord> records) {
@@ -172,6 +174,9 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
                 if (TextUtil.isBlank(record.getInvocationKey())) {
                     InvocationProfile grouping = InvocationResolver.resolve(record);
                     record.setInvocationKey(grouping.getInvocationKey());
+                }
+                if (TextUtil.isBlank(record.getSkeletonHash()) && !TextUtil.isBlank(record.getTemplateSkeleton())) {
+                    record.setSkeletonHash(HashUtil.sha256(record.getTemplateSkeleton()));
                 }
             } catch (RuntimeException e) {
                 log.warn("Enrichment incomplete, record saved without derived fields: {} ({})", record.getRecordId(), e.getMessage());

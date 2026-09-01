@@ -125,6 +125,35 @@ class BatchWriteHandlerTest {
             assertEquals(InvocationResolver.resolve(saved).getInvocationKey(), saved.getInvocationKey(), "重派生与落库值一致——存储键与现算键不分叉");
             assertNull(saved.getInvocationId(), "invocationId 是业务声明位，enrich 不得写入派生 hash（否则重派生把它误当声明锚）");
         }
+
+        @Test
+        @DisplayName("骨架文本回填投影 skeletonHash；无骨架不填；已有投影不覆盖")
+        void flush_skeletonHashBackfilled() {
+            InMemoryStorageRepository repo = new InMemoryStorageRepository();
+            RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
+            BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
+
+            InteractionRecord withSkeleton = createRecord("r-skl");
+            withSkeleton.setTemplateSkeleton("客服助手。当前日期：{{date}}");
+            InteractionRecord withProjection = createRecord("r-proj");
+            withProjection.setSkeletonHash("pre-set-projection");
+            InteractionRecord withoutSkeleton = createRecord("r-plain");
+
+            InteractionEvent e1 = new InteractionEvent();
+            e1.setRecord(withSkeleton);
+            InteractionEvent e2 = new InteractionEvent();
+            e2.setRecord(withProjection);
+            InteractionEvent e3 = new InteractionEvent();
+            e3.setRecord(withoutSkeleton);
+            handler.onEvent(e1, 0, false);
+            handler.onEvent(e2, 1, false);
+            handler.onEvent(e3, 2, true);
+
+            InteractionRecord savedSkeleton = repo.getStore().get(0);
+            assertEquals(io.github.agentassert4j.util.HashUtil.sha256("客服助手。当前日期：{{date}}"), savedSkeleton.getSkeletonHash(), "骨架文本必须回填投影（落库记录重算键的凭据）");
+            assertEquals("pre-set-projection", repo.getStore().get(1).getSkeletonHash(), "已有投影不覆盖（上游显式设置的优先）");
+            assertNull(repo.getStore().get(2).getSkeletonHash(), "无骨架声明不填投影");
+        }
     }
 
     @Test

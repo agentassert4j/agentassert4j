@@ -458,7 +458,8 @@ public class DataSanitizer {
         copy.setTemplateId(original.getTemplateId());
         copy.setTemplateHash(original.getTemplateHash());
         copy.setTemplateText(original.getTemplateText());
-        copy.setVariablesFingerprint(original.getVariablesFingerprint());
+        copy.setTemplateSkeleton(original.getTemplateSkeleton());
+        copy.setSkeletonHash(original.getSkeletonHash());
         copy.setApiProtocol(original.getApiProtocol());
         copy.setProvider(original.getProvider());
         copy.setModel(original.getModel());

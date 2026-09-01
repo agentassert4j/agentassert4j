@@ -94,6 +94,72 @@ class InvocationResolverTest {
             assertEquals("adhoc:no-anchor", InvocationResolver.resolve(r).getInvocationKey());
             assertFalse(InvocationResolver.resolve(r).getInvocationKey().contains("null"), "键不得出现字面 null 坍缩");
         }
+
+        private static final String SKELETON = "客服助手系统提示词。当前日期：{{date}}；环境：{{env}}";
+        private static final String SKELETON_SHA256 = "01a6620a2e2419bc01d23b63d658872d0d100544d3e073a3aab5bcf059665a27";
+
+        @Test
+        void goldenKey_undeclaredSkeletonAnchor() {
+            // 未声明、无全文但有骨架：skeleton:<sha256(骨架)> 字面键值冻结
+            InteractionRecord r = record(null, null, false);
+            r.setTemplateSkeleton(SKELETON);
+
+            assertEquals("skeleton:" + SKELETON_SHA256, InvocationResolver.resolve(r).getInvocationKey());
+        }
+
+        @Test
+        void goldenKey_sameSkeletonDifferentFullText_sameKey() {
+            // 同骨架异全文同键——动态段漂移不再裂键（本批要消灭的病）
+            InteractionRecord v1 = record("full-text-hash-v1", null, false);
+            v1.setTemplateSkeleton(SKELETON);
+            InteractionRecord v2 = record("full-text-hash-v2", null, false);
+            v2.setTemplateSkeleton(SKELETON);
+
+            assertEquals(InvocationResolver.resolve(v1).getInvocationKey(), InvocationResolver.resolve(v2).getInvocationKey());
+            assertEquals("skeleton:" + SKELETON_SHA256, InvocationResolver.resolve(v2).getInvocationKey());
+        }
+
+        @Test
+        void goldenKey_declaredSkeletonSubdivision() {
+            // 声明标签的细分改用骨架哈希：同一声明标签不随组装漂移裂成多键
+            InteractionRecord r = record("full-text-hash-v1", null, false);
+            r.setInvocationId("order-flow");
+            r.setTemplateSkeleton(SKELETON);
+
+            assertEquals("invocation:order-flow:" + SKELETON_SHA256, InvocationResolver.resolve(r).getInvocationKey());
+        }
+
+        @Test
+        void goldenKey_persistedProjection_rehashSameKey() {
+            // 落库形态（骨架文本不落列，投影列是读侧唯一骨架信息源）：
+            // 仅带 skeletonHash 的记录重算出同一骨架键——recordCandidate/建档键不分叉
+            InteractionRecord inMemory = record(null, null, false);
+            inMemory.setTemplateSkeleton(SKELETON);
+            InteractionRecord fromDb = record(null, null, false);
+            fromDb.setSkeletonHash(SKELETON_SHA256);
+
+            assertEquals(InvocationResolver.resolve(inMemory).getInvocationKey(), InvocationResolver.resolve(fromDb).getInvocationKey());
+        }
+
+        @Test
+        void skeletonText_beatsProjection_singleSource() {
+            // 文本与投影并存时文本现算优先——真源唯一，即使投影被错误手工设置
+            InteractionRecord r = record(null, null, false);
+            r.setTemplateSkeleton(SKELETON);
+            r.setSkeletonHash("stale-projection-hash");
+
+            assertEquals("skeleton:" + SKELETON_SHA256, InvocationResolver.resolve(r).getInvocationKey());
+        }
+
+        @Test
+        void skeletonAnchor_outranksTemplateAnchor() {
+            // 未声明且骨架/全文并存：身份按骨架定格（模板锚点只在无骨架时生效）
+            InteractionRecord r = record("full-text-hash-v1", null, false);
+            r.setTemplateSkeleton(SKELETON);
+
+            assertEquals("skeleton:" + SKELETON_SHA256, InvocationResolver.resolve(r).getInvocationKey());
+            assertFalse(InvocationResolver.resolve(r).getInvocationKey().startsWith("template:"));
+        }
     }
 
     @Nested

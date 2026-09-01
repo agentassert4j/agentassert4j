@@ -100,6 +100,28 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
+    void skeletonHash_roundTrip() {
+        // 骨架哈希投影落列并映射回——落库记录重算调用点键的骨架凭据
+        InteractionRecord r = createSampleRecord("rec-skl", "s1", "sk-1", "hash-skl");
+        r.setTemplateSkeleton("客服助手。当前日期：{{date}}");
+        r.setSkeletonHash("01a6620a2e2419bc01d23b63d658872d0d100544d3e073a3aab5bcf059665a27");
+        repo.saveInteraction(r);
+
+        InteractionRecord loaded = repo.findByInvocationId("sk-1").get(0);
+        assertEquals("01a6620a2e2419bc01d23b63d658872d0d100544d3e073a3aab5bcf059665a27", loaded.getSkeletonHash());
+    }
+
+    @Test
+    void skeletonHash_nullStaysNull() {
+        // 无骨架声明：列空、投影空——重算键退化到既有锚点，行为不变
+        InteractionRecord r = createSampleRecord("rec-noskl", "s1", "sk-2", "hash-noskl");
+        repo.saveInteraction(r);
+
+        InteractionRecord loaded = repo.findByInvocationId("sk-2").get(0);
+        assertNull(loaded.getSkeletonHash());
+    }
+
+    @Test
     void findBySessionId() {
         repo.saveInteraction(createSampleRecord("r1", "sess-A", "sk1", "h1"));
         repo.saveInteraction(createSampleRecord("r2", "sess-B", "sk2", "h2"));
@@ -497,7 +519,7 @@ class SqliteStorageRepositoryTest {
         InteractionRecord r = createSampleRecord("rec-v1", "sess-v1", "sk-v1", "hash-v1");
         r.setSeq(42L);
         r.setTemplateId("order-extract");
-        r.setVariablesFingerprint("var-fp-1");
+        r.setSkeletonHash("01a6620a2e2419bc01d23b63d658872d0d100544d3e073a3aab5bcf059665a27");
         r.setApiProtocol("openai-chat");
         r.setProvider("deepseek");
         r.setModel("deepseek-chat");
@@ -522,7 +544,7 @@ class SqliteStorageRepositoryTest {
         InteractionRecord loaded = repo.findByInvocationId("sk-v1").get(0);
         assertEquals(42L, loaded.getSeq());
         assertEquals("order-extract", loaded.getTemplateId());
-        assertEquals("var-fp-1", loaded.getVariablesFingerprint());
+        assertEquals("01a6620a2e2419bc01d23b63d658872d0d100544d3e073a3aab5bcf059665a27", loaded.getSkeletonHash());
         assertEquals("openai-chat", loaded.getApiProtocol());
         assertEquals("deepseek", loaded.getProvider());
         assertEquals("deepseek-chat", loaded.getModel());

@@ -122,7 +122,7 @@ public class SqliteStorageRepository implements StorageRepository {
     @Override
     public synchronized void saveInteraction(InteractionRecord r) {
         // INSERT OR IGNORE：interactions 是只追加历史，record_id 冲突（崩溃重放双写）静默跳过
-        String sql = "INSERT OR IGNORE INTO interactions" + " (record_id, session_id, timestamp, seq," + "  template_id, template_hash, variables_fingerprint," + "  api_protocol, provider, model, served_model, endpoint," + "  invocation_id, invocation_key, user_input, turn_index," + "  tools_definition, sampling_params, model_request_raw," + "  finish_reason, model_response, model_response_raw," + "  tool_calls, has_tool_calls," + "  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens," + "  reasoning_tokens, usage_raw, latency_ms, ttft_ms, cost_usd," + "  multimodal_input, multimodal_content, previous_turns," + "  metadata, recorder_version)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        String sql = "INSERT OR IGNORE INTO interactions" + " (record_id, session_id, timestamp, seq," + "  template_id, template_hash, skeleton_hash," + "  api_protocol, provider, model, served_model, endpoint," + "  invocation_id, invocation_key, user_input, turn_index," + "  tools_definition, sampling_params, model_request_raw," + "  finish_reason, model_response, model_response_raw," + "  tool_calls, has_tool_calls," + "  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens," + "  reasoning_tokens, usage_raw, latency_ms, ttft_ms, cost_usd," + "  multimodal_input, multimodal_content, previous_turns," + "  metadata, recorder_version)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             int i = 1;
             ps.setString(i++, r.getRecordId());
@@ -131,7 +131,7 @@ public class SqliteStorageRepository implements StorageRepository {
             setNullableLong(ps, i++, r.getSeq());
             ps.setString(i++, r.getTemplateId());
             ps.setString(i++, r.getTemplateHash());
-            ps.setString(i++, r.getVariablesFingerprint());
+            ps.setString(i++, r.getSkeletonHash());
             ps.setString(i++, r.getApiProtocol());
             ps.setString(i++, r.getProvider());
             ps.setString(i++, r.getModel());
@@ -470,7 +470,7 @@ public class SqliteStorageRepository implements StorageRepository {
         r.setSeq(rs.getLong("seq"));
         r.setTemplateId(rs.getString("template_id"));
         r.setTemplateHash(rs.getString("template_hash"));
-        r.setVariablesFingerprint(rs.getString("variables_fingerprint"));
+        r.setSkeletonHash(rs.getString("skeleton_hash"));
         r.setApiProtocol(rs.getString("api_protocol"));
         r.setProvider(rs.getString("provider"));
         r.setModel(rs.getString("model"));

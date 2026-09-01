@@ -76,6 +76,20 @@ class DataSanitizerTest {
     }
 
     @Test
+    void sanitize_copyCarriesSkeletonFields() {
+        // 骨架声明与投影随拷贝携带——脱敏路径不得丢骨架身份信息
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "password"));
+        InteractionRecord record = createTestRecord();
+        record.setTemplateSkeleton("客服助手。当前日期：{{date}}");
+        record.setSkeletonHash("01a6620a2e2419bc01d23b63d658872d0d100544d3e073a3aab5bcf059665a27");
+
+        InteractionRecord result = sanitizer.sanitize(record);
+
+        assertEquals("客服助手。当前日期：{{date}}", result.getTemplateSkeleton(), "拷贝不得丢失骨架声明");
+        assertEquals("01a6620a2e2419bc01d23b63d658872d0d100544d3e073a3aab5bcf059665a27", result.getSkeletonHash(), "拷贝不得丢失骨架投影");
+    }
+
+    @Test
     void sanitizeJsonString_dropCaseMismatch_stillValidJson() {
         // 键名大小写与配置不一致时，DROP 的定位（忽略大小写）与回溯删除（曾为精确匹配）
         // 不一致会残留 "键": 产生非法 JSON

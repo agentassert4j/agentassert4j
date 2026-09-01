@@ -32,6 +32,7 @@ public final class RecordingContext implements AutoCloseable {
     private final String sessionId;
     private String invocationId;
     private String templateId;
+    private String templateSkeleton;
     private final Map<String, String> metadata = new LinkedHashMap<>();
 
     private RecordingContext(RecordingContext previous, String sessionId) {
@@ -69,6 +70,15 @@ public final class RecordingContext implements AutoCloseable {
     }
 
     /**
+     * 声明模板骨架（动态段替换为稳定占位符的模板形态）——知道自己的模板引擎的
+     * 接入方声明后，动态模板下调用点身份按骨架定格，不再随组装漂移裂键。
+     */
+    public RecordingContext withTemplateSkeleton(String templateSkeleton) {
+        this.templateSkeleton = templateSkeleton;
+        return this;
+    }
+
+    /**
      * 附加自由元数据键值（序列化进记录的 metadata 列）。
      */
     public RecordingContext withMetadata(String key, String value) {
@@ -88,6 +98,10 @@ public final class RecordingContext implements AutoCloseable {
 
     String templateId() {
         return templateId;
+    }
+
+    String templateSkeleton() {
+        return templateSkeleton;
     }
 
     Map<String, String> metadata() {

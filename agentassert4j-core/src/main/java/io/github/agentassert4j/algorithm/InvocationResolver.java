@@ -15,17 +15,22 @@ import java.util.stream.Stream;
  * <p>invocationKey 派生（优先级从高到低，任一命中即停）：
  * <ol>
  *   <li><b>声明锚点</b>：记录声明了 invocationId → {@code invocation:<label>}，
- *       有模板时以 {@code :<templateHash>} 细分同一标签内的多模板调用位置；</li>
- *   <li><b>模板锚点</b>：未声明但有模板哈希 → {@code template:<templateHash>}——
+ *       有模板时以 {@code :<细分哈希>} 细分同一标签内的多模板调用位置——细分哈希
+ *       优先骨架哈希（动态模板下同一调用点不再随组装漂移裂键），无骨架退全文哈希；</li>
+ *   <li><b>骨架锚点</b>：未声明但有骨架 → {@code skeleton:<skeletonHash>}——
+ *       骨架是动态段替换为稳定占位符的模板形态，同骨架异全文同键；</li>
+ *   <li><b>模板锚点</b>：未声明无骨架但有模板哈希 → {@code template:<templateHash>}——
  *       工具调用与纯对话同分支，形状（工具名/参数签名）不参与身份，只是视图维度；</li>
- *   <li><b>请求锚点兜底</b>：无声明无模板 → {@code adhoc:<sha256(modelRequestRaw)>}，
+ *   <li><b>请求锚点兜底</b>：无声明无骨架无模板 → {@code adhoc:<sha256(modelRequestRaw)>}，
  *       退而 {@code adhoc:<sha256(userInput)>}，双缺省 {@code adhoc:no-anchor}
  *       （防御程序化构造记录）。</li>
  * </ol>
  *
- * <p>键文法对任意输入单射：所有可控组件经 {@link #encodeComponent} 百分号编码后才
- * 参与拼装，文法结构字符（冒号、加号、方括号、逗号）不可能出自组件内部——任何团队
- * 的命名规范都零约束、零碰撞。</p>
+ * <p>骨架哈希取值：骨架文本现算（内存新鲜记录，唯一真源），退记录上的落库投影
+ * （存储读侧映射，供 recordCandidate/建档等落库记录重算键不分叉）。键文法对任意
+ * 输入单射：所有可控组件经 {@link #encodeComponent} 百分号编码后才参与拼装，文法
+ * 结构字符（冒号、加号、方括号、逗号）不可能出自组件内部——任何团队的命名规范都
+ * 零约束、零碰撞。</p>
  *
  * <p>invocationKey 是溯源/视图域身份，永不进指纹：指纹维度保持输出侧，输入侧
  * （键、变量、历史）不参与判定，因此 adhoc 分支以输入派生键是合法的。</p>
@@ -53,6 +58,8 @@ public final class InvocationResolver {
         boolean hasDeclaration = declared != null && !declared.isEmpty();
         String templateHash = record.getTemplateHash();
         boolean hasTemplate = templateHash != null && !templateHash.isEmpty();
+        String skeletonHash = skeletonHashOf(record);
+        boolean hasSkeleton = skeletonHash != null;
 
         boolean hasToolCalls = record.isHasToolCalls() && record.getToolCalls() != null && !record.getToolCalls().isEmpty();
 
@@ -60,15 +67,20 @@ public final class InvocationResolver {
         String invocationName;
 
         if (hasDeclaration) {
-            // 锚点 1：显式声明。业务身份是人的身份，不混入行为形状
-            invocationKey = "invocation:" + encodeComponent(declared) + (hasTemplate ? ":" + encodeComponent(templateHash) : "");
+            // 锚点 1：显式声明。业务身份是人的身份，不混入行为形状；细分哈希骨架优先
+            String subdivision = hasSkeleton ? skeletonHash : templateHash;
+            invocationKey = "invocation:" + encodeComponent(declared) + (subdivision != null ? ":" + encodeComponent(subdivision) : "");
             invocationName = declared;
+        } else if (hasSkeleton) {
+            // 锚点 2：骨架锚点。动态模板下身份按稳定骨架定格，同骨架异全文同键
+            invocationKey = "skeleton:" + encodeComponent(skeletonHash);
+            invocationName = "skl:" + skeletonHash.substring(0, Math.min(skeletonHash.length(), 8));
         } else if (hasTemplate) {
-            // 锚点 2：模板锚点。系统提示（模板）即调用位置；工具/纯对话同键
+            // 锚点 3：模板锚点。系统提示（模板）即调用位置；工具/纯对话同键
             invocationKey = "template:" + encodeComponent(templateHash);
             invocationName = "tpl:" + templateHash.substring(0, Math.min(templateHash.length(), 8));
         } else {
-            // 锚点 3：请求锚点兜底（无模板应用：纯手写循环、无 system prompt 的接入）
+            // 锚点 4：请求锚点兜底（无模板应用：纯手写循环、无 system prompt 的接入）
             String anchor = adhocAnchor(record);
             if (anchor.isEmpty()) {
                 invocationKey = "adhoc:no-anchor";
@@ -87,6 +99,20 @@ public final class InvocationResolver {
         profile.setTemplateHash(hasTemplate ? templateHash : null);
         profile.setParamSignature(hasToolCalls ? paramPairs(record, false).sorted().collect(Collectors.joining(",")) : "");
         return profile;
+    }
+
+    /**
+     * 骨架哈希：骨架文本现算优先（唯一真源），退落库投影（读侧映射，重算键不分叉）；
+     * 双缺返回 null = 该记录无骨架身份
+     */
+    private static String skeletonHashOf(InteractionRecord record) {
+        if (record.getTemplateSkeleton() != null && !record.getTemplateSkeleton().isEmpty()) {
+            return HashUtil.sha256(record.getTemplateSkeleton());
+        }
+        if (record.getSkeletonHash() != null && !record.getSkeletonHash().isEmpty()) {
+            return record.getSkeletonHash();
+        }
+        return null;
     }
 
     /**

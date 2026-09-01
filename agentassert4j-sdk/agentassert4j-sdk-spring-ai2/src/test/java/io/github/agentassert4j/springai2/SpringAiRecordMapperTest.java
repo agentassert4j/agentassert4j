@@ -342,11 +342,12 @@ class SpringAiRecordMapperTest {
     @Test
     @DisplayName("录音上下文声明的会话/技能/元数据落到记录")
     void recordingContextFieldsApplied() {
-        try (RecordingContext ctx = RecordingContext.start("session-42").withInvocationId("order-refund").withTemplateId("order-extract/v2").withMetadata("channel", "app")) {
+        try (RecordingContext ctx = RecordingContext.start("session-42").withInvocationId("order-refund").withTemplateId("order-extract/v2").withTemplateSkeleton("客服助手。当前日期：{{date}}").withMetadata("channel", "app")) {
             InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), null, 1, null, RecordingContext.currentOrNull());
             assertEquals("session-42", record.getSessionId());
             assertEquals("order-refund", record.getInvocationId());
             assertEquals("order-extract/v2", record.getTemplateId());
+            assertEquals("客服助手。当前日期：{{date}}", record.getTemplateSkeleton(), "骨架声明透传到记录（身份按骨架定格的声明通道）");
             assertEquals("app", ((Map<String, Object>) RecursiveJsonParser.parse(record.getMetadata())).get("channel"));
         }
     }

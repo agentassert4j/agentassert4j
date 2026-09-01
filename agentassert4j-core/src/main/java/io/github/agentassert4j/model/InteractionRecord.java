@@ -40,10 +40,16 @@ public class InteractionRecord {
      */
     private String templateText;
     /**
-     * 变量取值指纹（同模板不同变量形态的区分键）
+     * 模板骨架（瞬态字段）：动态段（日期/环境/清单）替换为稳定占位符后的模板形态。
+     * 出口声明式提供（null = 不声明）；是骨架哈希的唯一真源，不对应 interactions 列
      */
-    // TODO: 捕获侧未接线——该列暂恒为 null，待 SDK 捕获层补齐模板变量指纹的口径与写入，接线后移除本标注
-    private String variablesFingerprint;
+    private String templateSkeleton;
+    /**
+     * 骨架哈希（skeletonHash ≡ sha256(templateSkeleton)，文本的派生投影）：
+     * 录制 enrich 回填、interactions.skeleton_hash 列的内存形态；落库记录重算
+     * 调用点键时的骨架凭据（模板文本不落列，投影列是读侧唯一骨架信息源）
+     */
+    private String skeletonHash;
 
     /**
      * 协议枚举（TEXT）：openai-chat / anthropic-messages / openai-responses / gemini-native。
@@ -215,12 +221,20 @@ public class InteractionRecord {
         this.templateText = templateText;
     }
 
-    public String getVariablesFingerprint() {
-        return variablesFingerprint;
+    public String getTemplateSkeleton() {
+        return templateSkeleton;
     }
 
-    public void setVariablesFingerprint(String variablesFingerprint) {
-        this.variablesFingerprint = variablesFingerprint;
+    public void setTemplateSkeleton(String templateSkeleton) {
+        this.templateSkeleton = templateSkeleton;
+    }
+
+    public String getSkeletonHash() {
+        return skeletonHash;
+    }
+
+    public void setSkeletonHash(String skeletonHash) {
+        this.skeletonHash = skeletonHash;
     }
 
     public String getApiProtocol() {

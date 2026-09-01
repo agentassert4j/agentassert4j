@@ -221,11 +221,15 @@ the first divergent decision and pinpoints the round.
 ## Identity: declared and zero-declaration
 
 Invocation identity is derived deterministically from each record, in priority order: **declared label
-> template hash > request anchor**.
+> skeleton hash > template hash > request anchor**.
 
 - **Declarations survive prompt edits**: every prompt edit changes the template hash; a declared label
   (`withInvocationId("refund")`, or app-wide `agentassert4j.invocation-id=tavern`) is the only anchor
   that survives;
+- **Dynamic prompts freeze on the skeleton**: when the assembled prompt embeds volatile segments
+  (dates, environment), declare a template skeleton (`withTemplateSkeleton(...)`, volatile parts
+  replaced by stable placeholders) — same skeleton, different assembled text, same invocation; identity
+  no longer drifts per run. Gating and replay still use the archived full text;
 - **Zero-declaration is a first-class citizen**: undeclared records group by template hash with full
   replay/adjudication support — loop-style agents work completely with no declarations;
 - Verdict correctness is decoupled from declaration quality: declarations affect report granularity,

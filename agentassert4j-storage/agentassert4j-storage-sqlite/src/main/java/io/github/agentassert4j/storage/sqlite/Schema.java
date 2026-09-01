@@ -31,10 +31,11 @@ final class Schema {
                     "  timestamp             INTEGER NOT NULL," +
                     // seq 由录制器进程内单调分配，与 timestamp 组成确定性排序键
                     "  seq                   INTEGER," +
-                    // Prompt 身份三元组；template_hash 可空——无 system prompt 的调用点由解析器回退到请求锚点
+                    // Prompt 身份：template_hash 可空——无 system prompt 的调用点由解析器回退到请求锚点；
+                    // skeleton_hash 是模板骨架哈希的落库投影（可空），供落库记录重算调用点键
                     "  template_id           TEXT," +
                     "  template_hash         TEXT," +
-                    "  variables_fingerprint TEXT," +
+                    "  skeleton_hash         TEXT," +
                     // 模型与部署身份：基线跨模型/部署不可比，必须落列
                     "  api_protocol          TEXT," +
                     "  provider              TEXT," +
