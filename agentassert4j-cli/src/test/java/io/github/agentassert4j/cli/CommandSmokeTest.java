@@ -49,13 +49,18 @@ class CommandSmokeTest {
     }
 
     private void seedOneRecord() {
+        seedOneRecord("session-1", 1000L, "hash-old");
+    }
+
+    private void seedOneRecord(String sessionId, long timestamp, String templateHash) {
         InteractionRecord r = new InteractionRecord();
-        r.setRecordId("rec-1");
-        r.setSessionId("session-1");
-        r.setTimestamp(1000L);
-        r.setSeq(1L);
+        r.setRecordId("rec-" + timestamp);
+        r.setSessionId(sessionId);
+        r.setTimestamp(timestamp);
+        r.setSeq(timestamp);
         r.setInvocationId("queryOrder");
-        r.setTemplateHash("hash-old");
+        r.setInvocationKey("invocation:queryOrder:" + templateHash);
+        r.setTemplateHash(templateHash);
         r.setUserInput("查订单");
         r.setTurnIndex(0);
         r.setModelResponse("{\"orderId\":\"ORD-001\"}");
@@ -91,9 +96,26 @@ class CommandSmokeTest {
 
         assertEquals(0, exit);
         String text = out.toString();
-        assertTrue(text.contains("invocation:queryOrder:hash-old"), "应以 invocationKey 列出基线画像（声明锚点键）: " + text);
+        assertTrue(text.contains("queryOrder@hash-old"), "应以人读短形列出基线画像: " + text);
+        assertTrue(text.contains("未建档调用点：无。"), "全部建档后应明示无未建档调用点: " + text);
         assertTrue(text.contains("BASELINE"), "应展示基线状态: " + text);
         assertFalse(text.contains("无基线"), "已建基线后不应再提示无基线: " + text);
+    }
+
+    @Test
+    @DisplayName("status 未建档段：建档后新录制版本在 status 可见")
+    void status_unestablishedSection() {
+        seedOneRecord();
+        new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
+        seedOneRecord("s-2", 2000L, "hash-new");
+
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath);
+
+        assertEquals(0, exit);
+        String text = out.toString();
+        assertTrue(text.contains("未建档调用点（重跑 baseline 收编）"), "新版本应进未建档段: " + text);
+        assertTrue(text.contains("queryOrder@hash-new"), "未建档版本以短形列出: " + text);
     }
 
     @Test

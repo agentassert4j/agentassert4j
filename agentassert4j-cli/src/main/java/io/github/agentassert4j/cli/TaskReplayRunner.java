@@ -102,8 +102,7 @@ public class TaskReplayRunner {
             return 2;
         }
         if (dryRun && newPrompt == null) {
-            diagnostic("任务域 --dry-run 仅冻结重放（--prompt）适用；真实对比模式本身零 LLM 调用，直接执行即可。");
-            return 2;
+            return dryRunAlign(taskPrefix, chains);
         }
 
         return newPrompt != null ? runFrozenReplay(taskPrefix, affected, fullChain, newPrompt, oldPrompt, maxTotalCalls, maxTotalTokens, chains, dryRun) : runAlignment(taskPrefix, chains);
@@ -241,7 +240,7 @@ public class TaskReplayRunner {
         info("用 `agentassert4j approve --invocation <调用点键前缀>` 接受差异，或 `reject` 拒绝。");
 
         if (jsonMode) {
-            out.println(taskJson("task-frozen-replay", taskRequest, taskSession, total, pass, changed, inherited, postDivergence, skipped, 0, 0, stepJsons, baselineTime, null, false, null, null, null));
+            out.println(taskJson("task-frozen-replay", taskRequest, taskSession, total, pass, changed, inherited, postDivergence, skipped, 0, 0, 0, stepJsons, baselineTime, null, false, null, null, null));
         }
         if (changed > 0) {
             return 1;
@@ -322,6 +321,62 @@ public class TaskReplayRunner {
         out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-dry-run\",\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\",\"task\":{\"request\":\"" + RecursiveJsonParser.escape(task.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(task.getSessionId()) + "\"},\"summary\":{\"chains\":1,\"chainIndex\":" + chainIndex + ",\"chainCount\":" + chainCount + ",\"total\":" + total + ",\"plannedReplay\":" + planned + ",\"inherited\":" + inherited + ",\"skipped\":" + skipped + "},\"steps\":[" + steps + "]}");
     }
 
+    /**
+     * 真实对比模式的干跑：对齐本身零 LLM 调用，干跑的价值是预演将发生的链配对
+     * 与任务规则适用性——CI 可在执行前核对选链是否如愿，首录场景如实标注未建档。
+     */
+    private int dryRunAlign(String taskPrefix, List<TaskChain> chains) {
+        if (chains.isEmpty()) {
+            diagnostic("未录制到任何交互数据（先运行 Agent 积累录制）。");
+            return 2;
+        }
+        List<TaskChain> matching = selectByRequestText(chains, taskPrefix);
+        if (matching == null) {
+            return 2;
+        }
+        if (matching.isEmpty()) {
+            diagnostic("未找到请求文本匹配「" + CliSupport.visibleText(taskPrefix) + "」的任务链。");
+            return 2;
+        }
+        if (matching.size() == 1) {
+            TaskChain only = matching.get(0);
+            info("将自建基线（dry-run 未执行）：任务「" + only.getRequestText() + "」仅一条链（session " + only.getSessionId() + "，" + only.getRecords().size() + " 步）。");
+            info("真实执行后该链即基线，下次重跑本命令将自动配对并出对齐报告。");
+            if (jsonMode) {
+                out.println(dryRunAlignJson(only.getRequestText(), null, null, only.getSessionId(), only.getRecords().size()));
+            }
+            return 0;
+        }
+        TaskChain baseline = matching.get(matching.size() - 2);
+        TaskChain newChain = matching.get(matching.size() - 1);
+        info("对齐计划（dry-run，未执行判定、未建档）：");
+        info("将配对：基线链 session " + baseline.getSessionId() + "（" + baseline.getRecords().size() + " 步）→ 新链 session " + newChain.getSessionId() + "（" + newChain.getRecords().size() + " 步），零 LLM 调用。");
+        String applicability = ruleApplicability(newChain);
+        info("任务规则：" + applicability);
+        if (jsonMode) {
+            out.println(dryRunAlignJson(newChain.getRequestText(), baseline.getSessionId(), baseline.getRecords().size(), newChain.getSessionId(), newChain.getRecords().size()));
+        }
+        return 0;
+    }
+
+    private String ruleApplicability(TaskChain chain) {
+        if (rules == null || !rules.hasTaskRules()) {
+            return "rules 未配置任务规则。";
+        }
+        if (!chain.isDeclared()) {
+            return "本任务未声明 taskKey，规则不适用。";
+        }
+        InvocationRulesConfig.TaskRule rule = rules.getTaskRule(chain.getRequestText());
+        if (rule.isEmpty()) {
+            return "已声明 taskKey，但规则文件无该键的任务规则。";
+        }
+        return "将评估 requiredSteps " + rule.getRequiredSteps().size() + " 项 / requiredOrder " + rule.getRequiredOrder().size() + " 项 / steps " + rule.getSteps().size() + " 项。";
+    }
+
+    private String dryRunAlignJson(String request, String baselineSession, Integer baselineSteps, String newSession, int newSteps) {
+        return "{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-dry-run\",\"alignPlan\":{\"request\":\"" + RecursiveJsonParser.escape(request) + "\",\"baselineSession\":" + (baselineSession != null ? "\"" + RecursiveJsonParser.escape(baselineSession) + "\"" : "null") + ",\"baselineSteps\":" + (baselineSteps != null ? baselineSteps.toString() : "null") + ",\"newSession\":\"" + RecursiveJsonParser.escape(newSession) + "\"" + ",\"newSteps\":" + newSteps + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}";
+    }
+
     private int runAlignment(String taskPrefix, List<TaskChain> chains) {
         List<TaskChain> matching = selectByRequestText(chains, taskPrefix);
         if (matching == null) {
@@ -343,6 +398,12 @@ public class TaskReplayRunner {
         TaskChain baseline = matching.get(matching.size() - 2);
         TaskAlignment alignment = TaskAligner.align(baseline, newChain, comparator, rules);
         List<TaskRuleViolation> violations = alignment.getRuleViolations();
+        Set<String> ruleRequiredLabels = new LinkedHashSet<>();
+        for (TaskRuleViolation violation : violations) {
+            if (violation.getType() == TaskRuleViolation.Type.REQUIRED_STEP_MISSING) {
+                ruleRequiredLabels.add(violation.getLabel());
+            }
+        }
 
         info("任务「" + newChain.getRequestText() + "」对齐：基线链（session " + baseline.getSessionId() + "）→ 新链（session " + newChain.getSessionId() + "）");
         if (rules != null && rules.hasTaskRules() && !newChain.isDeclared()) {
@@ -355,24 +416,29 @@ public class TaskReplayRunner {
         int index = 0;
         for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
             index++;
-            String label = shortKey(step.getInvocationKey());
+            String label = CliSupport.displayKey(step.getInvocationKey());
             if (step.getKind() == TaskAlignment.StepKind.MISSING) {
                 missing++;
-                info(stepLine(index, step.getInvocationKey(), "缺步骤——基线执行了「" + label + "」，新链未调用"));
+                String detail = "缺步骤——基线执行了「" + label + "」，新链未调用";
+                if (step.getInvocationLabel() != null && ruleRequiredLabels.contains(step.getInvocationLabel())) {
+                    detail += "（违反任务规则：必备步骤）";
+                }
+                info(stepLine(index, step.getInvocationKey(), detail));
             } else if (step.getKind() == TaskAlignment.StepKind.ADDED) {
                 added++;
                 info(stepLine(index, step.getInvocationKey(), "新增步骤——新链调用了「" + label + "」，基线未调用"));
             } else {
+                String versionPrefix = step.isVersionSwitch() ? "跨版本配对——" : "";
                 if (step.getVerdict() == Verdict.CHANGED) {
                     changed++;
-                    info(stepLine(index, step.getInvocationKey(), step.getComparison().getSummary()));
+                    info(stepLine(index, step.getInvocationKey(), versionPrefix + step.getComparison().getSummary()));
                     String note = textDiffNote(step.getBaselineModelResponse(), step.getNewModelResponse());
                     if (!note.isEmpty()) {
                         info("    " + note);
                     }
                 } else {
                     pass++;
-                    info(stepLine(index, step.getInvocationKey(), "PASS"));
+                    info(stepLine(index, step.getInvocationKey(), versionPrefix + "PASS"));
                 }
                 if (step.getSurplusCount() > 0) {
                     info("    （该调用点两侧记录数不齐，富余 " + step.getSurplusCount() + " 条未配对，不判差异）");
@@ -382,10 +448,13 @@ public class TaskReplayRunner {
         for (TaskRuleViolation violation : violations) {
             info("违反任务规则: " + violation.getDetail());
         }
-        info("对齐汇总: PASS " + pass + " | CHANGED " + changed + " | 缺步骤 " + missing + " | 新增步骤 " + added + (violations.isEmpty() ? "" : " | 违规 " + violations.size()));
+        info("对齐汇总: PASS " + pass + " | CHANGED " + changed + " | 缺步骤 " + missing + " | 新增步骤 " + added + (violations.isEmpty() ? "" : " | 违规 " + violations.size()) + (alignment.getCrossVersionCount() > 0 ? " | 跨版本 " + alignment.getCrossVersionCount() : ""));
         ChainCost baselineCost = new ChainCost(baseline);
         ChainCost currentCost = new ChainCost(newChain);
         info("成本对照: 基线 " + formatTokens(baselineCost.tokens) + formatCost(baselineCost.costUsd) + " → 当前 " + formatTokens(currentCost.tokens) + formatCost(currentCost.costUsd));
+        if (alignment.getCrossVersionCount() > 0) {
+            info("注意：跨版本配对存在提示词混杂变量——版本切换下的行为一致/差异判定可作为信号，受控实验用 --old-prompt 冻结重放。");
+        }
         if (alignment.isPrefixDependent()) {
             info("注意：任务链携带会话前缀——真实再执行对照必须重演到该问为止的整个会话前缀，否则差异源于上下文缺失而非回归。");
         }
@@ -400,7 +469,7 @@ public class TaskReplayRunner {
             for (TaskRuleViolation violation : violations) {
                 violationJsons.add("{\"type\":\"" + violation.getType() + "\",\"label\":\"" + RecursiveJsonParser.escape(violation.getLabel()) + "\",\"detail\":\"" + RecursiveJsonParser.escape(violation.getDetail()) + "\"}");
             }
-            out.println(taskJson("task-align", newChain.getRequestText(), newChain.getSessionId(), alignment.getSteps().size(), pass, changed, 0, 0, 0, missing, added, stepJsons, alignment.getBaselineTime(), alignment.getNewChainTime(), alignment.isPrefixDependent(), violations.size(), violationJsons, costJson(baselineCost, currentCost)));
+            out.println(taskJson("task-align", newChain.getRequestText(), newChain.getSessionId(), alignment.getSteps().size(), pass, changed, 0, 0, 0, missing, added, alignment.getCrossVersionCount(), stepJsons, alignment.getBaselineTime(), alignment.getNewChainTime(), alignment.isPrefixDependent(), violations.size(), violationJsons, costJson(baselineCost, currentCost)));
         }
         return changed + missing + added + violations.size() > 0 ? 1 : 0;
     }
@@ -483,6 +552,8 @@ public class TaskReplayRunner {
         }
         if (!variants.isEmpty()) {
             sb.append("靶链现存模板变体：").append(String.join("、", variants)).append("。");
+        } else {
+            sb.append("库内所有记录都未携带 template_hash——疑似录制侧未设置模板全文或哈希（现由录制管道自动派生，重新录制即可补齐）。");
         }
         sb.append("旧提示词必须是录制时归档的完整 system 模板全文（含全局拼接段）——单段转储或重新组装的文本哈希不等，归档原文见库内模板巡检（status）。");
         sb.append("声明了模板骨架的调用点同样按全文哈希门控——骨架只定身份，门控与重放取回仍以全文为准。");
@@ -497,11 +568,7 @@ public class TaskReplayRunner {
     }
 
     private static String stepLine(int index, String key, String detail) {
-        return "  [" + index + "] " + (key != null ? shortKey(key) : "(未解析调用点)") + "  " + detail;
-    }
-
-    private static String shortKey(String key) {
-        return key.length() <= 48 ? key : key.substring(0, 48) + "…";
+        return "  [" + index + "] " + CliSupport.displayKey(key) + "  " + detail;
     }
 
     private String describe(RegressionTestResult result) {
@@ -575,11 +642,11 @@ public class TaskReplayRunner {
 
     // ---------- JSON（agentassert4j.task-report/1，单行，null 缺省即契约） ----------
 
-    private static String taskJson(String mode, String request, String sessionId, int total, int pass, int changed, int inherited, int postDivergence, int skipped, int missing, int added, List<String> steps, long baselineTime, Long newChainTime, boolean prefixDependent, Integer ruleViolationCount, List<String> ruleViolationJsons, String costJson) {
+    private static String taskJson(String mode, String request, String sessionId, int total, int pass, int changed, int inherited, int postDivergence, int skipped, int missing, int added, int crossVersion, List<String> steps, long baselineTime, Long newChainTime, boolean prefixDependent, Integer ruleViolationCount, List<String> ruleViolationJsons, String costJson) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"").append(mode).append('"');
         sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
         sb.append(",\"task\":{\"request\":\"").append(RecursiveJsonParser.escape(request)).append("\",\"sessionId\":\"").append(RecursiveJsonParser.escape(sessionId)).append("\"}");
-        sb.append(",\"summary\":{\"total\":").append(total).append(",\"pass\":").append(pass).append(",\"changed\":").append(changed).append(",\"inherited\":").append(inherited).append(",\"postDivergence\":").append(postDivergence).append(",\"skipped\":").append(skipped).append(",\"missing\":").append(missing).append(",\"added\":").append(added);
+        sb.append(",\"summary\":{\"total\":").append(total).append(",\"pass\":").append(pass).append(",\"changed\":").append(changed).append(",\"inherited\":").append(inherited).append(",\"postDivergence\":").append(postDivergence).append(",\"skipped\":").append(skipped).append(",\"missing\":").append(missing).append(",\"added\":").append(added).append(",\"crossVersion\":").append(crossVersion);
         if (ruleViolationCount != null) {
             sb.append(",\"ruleViolations\":").append(ruleViolationCount);
         }
@@ -715,6 +782,14 @@ public class TaskReplayRunner {
         }
         if (step.getSurplusCount() > 0) {
             sb.append(",\"surplusCount\":").append(step.getSurplusCount());
+        }
+        if (step.getInvocationLabel() != null) {
+            sb.append(",\"invocationLabel\":\"").append(RecursiveJsonParser.escape(step.getInvocationLabel())).append('"');
+        }
+        if (step.isVersionSwitch()) {
+            sb.append(",\"versionSwitch\":true");
+            sb.append(",\"baselineSubdivision\":\"").append(RecursiveJsonParser.escape(step.getBaselineSubdivision())).append('"');
+            sb.append(",\"newSubdivision\":\"").append(RecursiveJsonParser.escape(step.getNewSubdivision())).append('"');
         }
         return sb.append('}').toString();
     }

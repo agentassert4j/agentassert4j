@@ -148,6 +148,9 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
   否则 flush 线程锁住文件。
 - **健康检查**：应用日志中的计数闭合账本 `recorded = written + dropped + failed`（filtered 另列）；
   任何对不上账的情况都是缺陷。
+- **库体检**：`doctor` 命令一次性输出身份/覆盖/规则三段确定性事实（骨架族形态、多步零标签链、
+  重复请求文本任务族、未建档调用点、template_hash 缺失、规则期望错位）——零声明接入补声明、
+  首次建档前自查都用它；只读不判定不建档。
 
 ## 4. CI 门禁配方
 
@@ -220,6 +223,7 @@ CLI 分析侧不受影响，仍可对既有库做巡检/验收。
 |------|------|
 | 落库数与业务调用量对不上 | 读应用日志计数账本：dropped（缓冲满，调大 batch/flush 或接受丢弃）、failed（批量写失败看 ERROR）、filtered（采集门，策略性） |
 | status 看不到画像 | 建档守卫剔除了解析失败的记录——看命令告警行；`baseline` 幂等可重跑 |
+| status 报「未建档调用点」 | 已录制但无基线画像的键（提示词新版本或零声明调用点）——重跑 `baseline` 收编（幂等），或确认属待废弃版本 |
 | CLI 报「库版本高于支持值」 | 库由更新版本的框架创建——升级 CLI，或（预发布阶段）删库重建 |
 
 **7.2 判定面**
@@ -250,6 +254,8 @@ CLI 分析侧不受影响，仍可对既有库做巡检/验收。
 | 报告出现「违反任务规则」 | `rules.tasks` 纪律违规（缺必备步骤/次数越界/顺序不符）——明细点名标签与声明范围；确认是真实回归则改回，是纪律本身变了则更新 rules 文件后重跑 |
 | 报告提示「任务规则不适用」 | 配置了 tasks 但该链录制时未声明 taskKey（规则只对声明任务生效）——补声明后重录，或确认无需纪律门禁 |
 | 「违反任务规则」首录就报 | 自建基线（仅一条链）不评规则；规则从有对照的第二轮起生效——本行只在已有两条链时出现 |
+| 报告出现「跨版本配对」 | 同一声明调用点两侧提示词版本不同——判定照常但含混杂变量；受控实验用 `--old-prompt` 冻结重放 |
+| `--old-prompt` 失配且提示「未携带 template_hash」 | 库内记录缺全文哈希（旧版录制或捕获侧漏设）——重新录制即可（管道现自动派生投影） |
 
 ## 8. 最小录制契约
 
@@ -267,7 +273,7 @@ try {
     r.setSeq(seq.incrementAndGet());          // 进程内单调，会话内排序键
     r.setSessionId(sessionId);
     r.setInvocationId("refund");              // 可选：声明调用点标签
-    r.setTemplateHash(sha256Hex(systemPrompt)); // 身份锚（未声明时按此归组）
+    r.setTemplateHash(sha256Hex(systemPrompt)); // 身份锚（可省：缺省由 templateText 派生）
     r.setTemplateText(systemPrompt);          // 模板原文（重放请求重建素材）
     r.setUserInput(lastUserMessage);
     r.setModelResponse(responseText);
@@ -290,11 +296,11 @@ try {
 
 | 档 | 字段 | 说明 |
 |----|------|------|
-| 强烈建议显式填 | `recordId`（缺省兜底 UUID）、`sessionId`（缺省退 recordId 独立会话）、`timestamp`+`seq`（确定性排序键）、`userInput`、`modelResponse`、`invocationId` 或 `templateHash`（身份锚，双缺走 adhoc 请求哈希兜底）、`apiProtocol`、`model` | 决定身份、配对与重放质量 |
+| 强烈建议显式填 | `recordId`（缺省兜底 UUID）、`sessionId`（缺省退 recordId 独立会话）、`timestamp`+`seq`（确定性排序键）、`userInput`、`modelResponse`、`invocationId` 或 `templateHash`（身份锚，双缺走 adhoc 请求哈希兜底；只填 `templateText` 时 `templateHash` 由管道派生）、`apiProtocol`、`model` | 决定身份、配对与重放质量 |
 | 影响保真 | `templateText`（落 prompt_texts 原文库）、`templateSkeleton`（动态段替换为稳定占位符的模板骨架——声明后调用点身份按骨架定格，动态模板不再随组装漂移裂键；投影 `skeletonHash` 由管道回填）、`toolsDefinition`（JSON 数组原样——重放不带工具会假阳性）、`previousTurns`（多轮上下文，重放逐字复用）、`turnIndex`、`samplingParams`、`toolCalls[].arguments/result` | 决定冻结重放的保真度 |
 | 遥测 | `inputTokens/outputTokens`（输入侧=总处理 token）、`cacheRead/WriteTokens`、`reasoningTokens`、`usageRaw`（供应商原始 usage 逐字）、`latencyMs/ttftMs`、`costUsd`（无价格快照则留 null 不编造）、`servedModel` | 报告与成本可见性；`servedModel` 是跨模型验收的判定依据 |
 
-其余字段（`invocationKey` 与 `skeletonHash` 由管道 enrich 派生兜底；`endpoint`/`modelRequestRaw` 为预留位）
+其余字段（`invocationKey`、`templateHash`（缺省由 `templateText` 派生）与 `skeletonHash` 由管道 enrich 派生兜底；`endpoint`/`modelRequestRaw` 为预留位）
 可不填。`metadata` 为 JSON 字符串扩展池，任务键声明写 `{"taskKey":"<场景id>"}`。
 
 ## 9. 版本与兼容语义

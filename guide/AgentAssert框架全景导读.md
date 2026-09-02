@@ -209,7 +209,10 @@ $ agentassert4j replay --task "订单 1234 的物流太慢"
 ```
 
 这次**不带 `--prompt`**——框架不再重演，而是把库里**最新的链**和**次新的链**按调用点自动配对对齐：
-基线链执行过而新链没有的步骤，标「缺步骤」；新链多出来的，标「新增步骤」；两边都有的逐对比指纹。上
+基线链执行过而新链没有的步骤，标「缺步骤」；新链多出来的，标「新增步骤」；两边都有的逐对比指纹。
+配对主体是**调用点**（声明标签）——同一调用点两侧提示词版本不同照常配对判定，行首注记「跨版本配对」
+（版本切换的行为对照含混杂变量，受控实验走 `--old-prompt` 冻结重放）；无标签步骤按完整键配对，跨版本
+不猜配对。上
 个月小王优化了查订单的提示词后真实重跑，报告直接指出：新链第一步换了模板（模板版本更替的表达）、
 物流那步的参数结构变了——**这就是人工肉眼对比两条链这个最大痛点的直接替代**。文本措辞的差异会单独
 列出并标注「低置信」——模型两遍说话的措辞本来就会波动，结构才是可信的比对面。真实对齐报告长这样（虚构演示库——缺一步、新增一步、一个结构变化，逐条点名，exit 1）：
@@ -372,7 +375,8 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 | `agentassert4j baseline` | 给每个调用点提取指纹、盖章建立基线 | `--approver <名字>`：审批留痕 | 审批人取操作系统用户名；已建档的调用点不覆盖 |
 | `agentassert4j baseline --force` | 按当前比对算法重建基线（旧基线自动存档） | 同上 | 不加 `--force` 时绝不覆盖已有基线 |
 | `agentassert4j baseline export` | 导出验收基线包（交付证据载体） | `--task <前缀>`（缩域）；`--include-samples`（脱敏样本）；`--out <文件>`（默认 `./acceptance-pack.json`）；`--json`（export-report/1：out/taskCount/stepCount/sha256/excluded 元数据报告） | 内容天然脱敏（结构指纹+键）；打印 SHA-256 供对账；存在未建档步骤的链排除并警告 |
-| `agentassert4j status` | 查看调用点清单与基线状态 | `--diff`：展示待裁决的差异；`--json`（status/1） | 只看清单本体 |
+| `agentassert4j status` | 查看调用点清单与基线状态 | `--diff`：展示待裁决的差异；`--json`（status/1） | 只看清单本体；已录制未建档的调用点在「未建档调用点」段列出 |
+| `agentassert4j doctor` | 库体检：身份/覆盖/规则三段确定性事实（骨架族、多步零标签链、重复请求任务族、未建档、规则期望错位），给声明建议 | 无必填参数 | 只读不判定不建档，退出码恒 0 |
 | `agentassert4j replay` | 重放比对：用新提示词重跑历史用例并判定（调用点域） | `--prompt <文件>`（此范围**必填**）；`--invocation <前缀>`（限域）；`--dry-run`（只预演不调用）；`--old-prompt <文件>`（启用波及面裁剪）；`--max-cases`（默认 3）；`--selection`(newest/oldest)；`--ci`（流水线模式：不为无基线调用点自动建档）；`--json` | `--prompt` 缺失直接报错；其余缺省 = 真跑、全部调用点选例、人看输出 |
 | `agentassert4j replay --task` | 任务域：整链回归（望远镜） | `--task <文本前缀>`；`--prompt` 可选（缺省=真实对比模式，最新链 vs 次新链按调用点对齐，零 LLM 调用）；`--old-prompt`（仅受影响步骤真重放，其余继承 PASS）；`--dry-run`（只出执行计划与成本预估，零调用零建档）；`--full-chain`（取消裁剪与分歧即停）；`--max-total-calls/--max-total-tokens`（全局预算池）；`--json`（task-report/1） | 精确命中优先；短前缀命中多个不同任务时报错列候选（exit 2）；单链=自建基线（exit 0） |
 | `agentassert4j replay --affected` | 任务选择器：含受影响调用点的全部任务链逐链冻结重放 | 要求同时给 `--prompt` 与 `--old-prompt` | 与 `--task`/`--invocation` 互斥 |
@@ -820,7 +824,9 @@ recorded（到达即计数） = written（批量写成功）
   - `resolveAll(repository)`：所有会话的链合并，按链首时间升序——跨会话配对与「取最新链」共用本口径。
 - `TaskAligner`（core `algorithm/`，纯比较，零 LLM 调用）：
   - `align(baseline, newChain, comparator, rules)`：两侧各按 invocation_key 分组（组内规范序），三方分类——matched（两侧都有）/ missing（基线有新链无 = 缺步骤）/ added（新链有基线无 = 新增步骤）。matched 组内 1:1 规范序配对（按较少侧配对，**富余计数进报告不判差异**）；每对**两侧指纹现场重提**（同 rules 口径）→ 既有 `DeterministicComparator` 判定；步骤 verdict 取首个 CHANGED 配对（差异明细随之，停止后续配对）。缺步骤/新增步骤与配对 CHANGED 同归入链级 CHANGED。
-  - **对齐收尾评任务规则**（rules.tasks，只对声明 taskKey 的任务、按新链侧）：规则键 = 声明值精确相等；对新链的声明标签序列（规范序、无标签步骤不参与）评三类约束——`requiredSteps`（必备步骤）/ `requiredOrder`（有序子序列，含存在性）/ `steps.min/max`（绝对次数，直接判定富余环节不判差异补不上纪律）——违规挂入结果的 `ruleViolations`（呈现序 = 规则声明序）并折叠为链级 CHANGED，不新增 verdict 值。verify 传入 rules=null 天然不评；自建基线（单链）不进对齐核。
+  - **对齐收尾评任务规则**（rules.tasks，只对声明 taskKey 的任务、按新链侧）：规则键 = 声明值精确相等；对新链的声明标签序列（规范序、无标签步骤不参与）评三类约束——`requiredSteps`（必备步骤）/ `requiredOrder`（有序子序列，含存在性）/ `steps.min/max`（绝对次数，直接判定富余环节不判差异补不上纪律）——违规挂入结果的 `ruleViolations`（呈现序 = 规则声明序）并折叠为链级 CHANGED，不新增 verdict 值。verify 传入 rules=null 天然不评；自建基线（单链）不进对齐核。分组键本身：声明标签优先（跨模板版本
+配对，`versionSwitch` 注记 + `crossVersion` 计数，判定照常——混杂变量由报告提示披露），无标签步骤按
+完整 invocationKey（版本即身份，跨版本不配对）。
   - `align(baselineSteps, newChain, comparator, rules)`：基线侧改由调用方给定 `Map<invocationKey, List<BaselineStep>>`（指纹步骤）——交付验收（第 12 章）用同一对齐核消费包内指纹，不做第二台差分引擎。
   - `prefixDependent` 标注：链内任一记录 `turnIndex>0` 或 `previousTurns` 非空 = 该链携带会话前缀 → 报告提示「真实再执行对照必须重演到该问为止的整个会话前缀，否则差异源于上下文缺失而非回归」（防误报，不阻断）。
 - `TaskReplayRunner`（cli）——任务域两个互斥模式的编排：

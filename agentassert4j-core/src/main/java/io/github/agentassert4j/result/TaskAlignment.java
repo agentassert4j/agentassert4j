@@ -44,6 +44,10 @@ public class TaskAlignment {
      * 任务规则违规明细（rules.tasks 只对声明任务评，呈现序 = 规则声明序）
      */
     private final List<TaskRuleViolation> ruleViolations = new ArrayList<>();
+    /**
+     * 跨模板版本配对的步骤数（同一调用点两侧细分哈希不同）——注记性质，不参与判定
+     */
+    private int crossVersionCount;
 
     public Verdict getVerdict() {
         return verdict;
@@ -85,6 +89,14 @@ public class TaskAlignment {
         return ruleViolations;
     }
 
+    public int getCrossVersionCount() {
+        return crossVersionCount;
+    }
+
+    public void setCrossVersionCount(int crossVersionCount) {
+        this.crossVersionCount = crossVersionCount;
+    }
+
     /**
      * 单步骤对齐 — 一个调用点在两侧的配对判定
      */
@@ -108,6 +120,49 @@ public class TaskAlignment {
         private int surplusCount;
         private String baselineModelResponse;
         private String newModelResponse;
+        /**
+         * 标签分组的业务标签（无标签步骤为 null）——跨版本配对的人类可读主体
+         */
+        private String invocationLabel;
+        /**
+         * MATCHED 且首个配对两侧细分哈希不同 = 同一调用点跨模板版本配对
+         * （行为对照含提示词混杂变量，报告尾提示受控实验口径）
+         */
+        private boolean versionSwitch;
+        private String baselineSubdivision;
+        private String newSubdivision;
+
+        public String getInvocationLabel() {
+            return invocationLabel;
+        }
+
+        public void setInvocationLabel(String invocationLabel) {
+            this.invocationLabel = invocationLabel;
+        }
+
+        public boolean isVersionSwitch() {
+            return versionSwitch;
+        }
+
+        public void setVersionSwitch(boolean versionSwitch) {
+            this.versionSwitch = versionSwitch;
+        }
+
+        public String getBaselineSubdivision() {
+            return baselineSubdivision;
+        }
+
+        public void setBaselineSubdivision(String baselineSubdivision) {
+            this.baselineSubdivision = baselineSubdivision;
+        }
+
+        public String getNewSubdivision() {
+            return newSubdivision;
+        }
+
+        public void setNewSubdivision(String newSubdivision) {
+            this.newSubdivision = newSubdivision;
+        }
 
         public StepKind getKind() {
             return kind;

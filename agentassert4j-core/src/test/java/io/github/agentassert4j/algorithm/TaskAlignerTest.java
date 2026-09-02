@@ -49,6 +49,12 @@ class TaskAlignerTest {
         return r;
     }
 
+    private InteractionRecord labeledRecord(String id, long timestamp, String label, String subdivision, String response) {
+        InteractionRecord r = record(id, timestamp, "invocation:" + label + ":" + subdivision, response);
+        r.setInvocationId(label);
+        return r;
+    }
+
     private TaskChain chain(InteractionRecord... records) {
         TaskChain chain = new TaskChain();
         chain.setSessionId("s");
@@ -236,5 +242,77 @@ class TaskAlignerTest {
         TaskAlignment alignment = TaskAligner.align(declaredChain("t1", labeled("b1", 1000L, "invocation:a:h1", "A", "答A")), declaredChain("t1", labeled("n1", 5000L, "invocation:a:h1", "A", "答A"), record("n2", 6000L, "invocation:x:h2", "答X")), comparator, rules);
 
         assertTrue(alignment.getRuleViolations().isEmpty(), "无 invocationId 的记录不参与标签计数，requiredSteps 由声明标签满足");
+    }
+
+    @Test
+    @DisplayName("跨版本配对：同标签异细分且行为一致 → MATCHED PASS + versionSwitch 注记")
+    void crossVersion_sameLabel_sameBehavior_pass() {
+        TaskAlignment alignment = TaskAligner.align(chain(labeledRecord("b1", 1000L, "audit", "h1", "答A")), chain(labeledRecord("n1", 5000L, "audit", "h2", "答A")), comparator, null);
+
+        assertEquals(Verdict.PASS, alignment.getVerdict(), "同一调用点跨模板版本，行为一致即 PASS");
+        assertEquals(1, alignment.getSteps().size());
+        StepAlignment step = alignment.getSteps().get(0);
+        assertEquals(StepKind.MATCHED, step.getKind());
+        assertEquals(Verdict.PASS, step.getVerdict());
+        assertTrue(step.isVersionSwitch(), "两侧细分不同必须注记跨版本");
+        assertEquals("audit", step.getInvocationLabel());
+        assertEquals("h1", step.getBaselineSubdivision());
+        assertEquals("h2", step.getNewSubdivision());
+        assertEquals(1, alignment.getCrossVersionCount());
+    }
+
+    @Test
+    @DisplayName("跨版本配对行为变化（工具维）→ CHANGED，注记不掩盖判定")
+    void crossVersion_sameLabel_behaviorChanged() {
+        InteractionRecord baseline = labeledRecord("b1", 1000L, "audit", "h1", "{\"status\":\"ok\"}");
+        baseline.setToolCalls(Collections.singletonList(toolCall("getOrder")));
+        baseline.setHasToolCalls(true);
+        InteractionRecord latest = labeledRecord("n1", 5000L, "audit", "h2", "{\"status\":\"ok\"}");
+        latest.setToolCalls(Collections.singletonList(toolCall("getInvoice")));
+        latest.setHasToolCalls(true);
+        TaskAlignment alignment = TaskAligner.align(chain(baseline), chain(latest), comparator, null);
+
+        assertEquals(Verdict.CHANGED, alignment.getVerdict());
+        assertTrue(alignment.getSteps().get(0).isVersionSwitch());
+        assertEquals(Verdict.CHANGED, alignment.getSteps().get(0).getVerdict());
+    }
+
+    private ToolCall toolCall(String name) {
+        ToolCall call = new ToolCall();
+        call.setToolName(name);
+        call.setSuccess(true);
+        return call;
+    }
+
+    @Test
+    @DisplayName("零声明跨版本：无业务身份则版本即身份，缺/新增不猜配对")
+    void zeroDeclaration_crossVersion_forksMissingAdded() {
+        TaskAlignment alignment = TaskAligner.align(chain(record("b1", 1000L, "skeleton:aaa", "答A")), chain(record("n1", 5000L, "skeleton:bbb", "答A")), comparator, null);
+
+        assertEquals(Verdict.CHANGED, alignment.getVerdict());
+        assertEquals(StepKind.MISSING, alignment.getSteps().get(0).getKind());
+        assertEquals(StepKind.ADDED, alignment.getSteps().get(1).getKind());
+        assertEquals(0, alignment.getCrossVersionCount(), "零声明不产生跨版本配对");
+    }
+
+    @Test
+    @DisplayName("混合链：有标签步跨版本配对，无标签步按完整键分组，互不串扰")
+    void mixedChain_labeledAndUnlabeled() {
+        TaskAlignment alignment = TaskAligner.align(chain(labeledRecord("b1", 1000L, "audit", "h1", "答A"), record("b2", 2000L, "skeleton:aaa", "答B")), chain(labeledRecord("n1", 5000L, "audit", "h2", "答A"), record("n2", 6000L, "skeleton:bbb", "答B")), comparator, null);
+
+        assertEquals(3, alignment.getSteps().size(), "audit 配对 + skeleton 缺 + skeleton 增");
+        long matched = alignment.getSteps().stream().filter(s -> s.getKind() == StepKind.MATCHED).count();
+        assertEquals(1, matched);
+        assertTrue(alignment.getSteps().get(0).isVersionSwitch());
+    }
+
+    @Test
+    @DisplayName("declaredLabelOfKey：从键解析声明标签，无声明形态返回 null")
+    void declaredLabelOfKey_parses() {
+        assertEquals("audit", TaskAligner.declaredLabelOfKey("invocation:audit:h1"));
+        assertEquals("a:b", TaskAligner.declaredLabelOfKey("invocation:a%3Ab:h1"), "编码标签解码还原");
+        assertNull(TaskAligner.declaredLabelOfKey("skeleton:abc"));
+        assertNull(TaskAligner.declaredLabelOfKey("template:abc"));
+        assertNull(TaskAligner.declaredLabelOfKey(null));
     }
 }

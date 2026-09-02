@@ -14,6 +14,11 @@ public class BaselineStep {
 
     private String invocationKey;
     private String recordId;
+    /**
+     * 声明标签（内存装配字段，不落库不入验收包）：任务对齐按「标签分组可跨版本、
+     * 无标签按完整键」分组——验收包步骤的标签在装载时从键解析回填。
+     */
+    private String invocationId;
     private DeterministicFingerprint fingerprint;
     /**
      * 仅导出 --include-samples 时携带（写入包内前已脱敏）；判定不消费
@@ -27,6 +32,14 @@ public class BaselineStep {
 
     public void setInvocationKey(String invocationKey) {
         this.invocationKey = invocationKey;
+    }
+
+    public String getInvocationId() {
+        return invocationId;
+    }
+
+    public void setInvocationId(String invocationId) {
+        this.invocationId = invocationId;
     }
 
     public String getRecordId() {

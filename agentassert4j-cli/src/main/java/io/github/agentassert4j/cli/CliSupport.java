@@ -110,6 +110,94 @@ final class CliSupport {
     }
 
     /**
+     * 人读键形态：声明 → 标签@细分短形；骨架/模板/请求锚 → 短名@细分短形（8 位）。
+     * 完整键只在 JSON 证据与巡检明细——选择器语义不受影响，短形即合法唯一前缀，
+     * 人看到什么就能选什么。分组器的 encodeComponent 只转义六个 ASCII 字符，
+     * 中文标签原样可读。
+     */
+    static String displayKey(String invocationKey) {
+        if (invocationKey == null || invocationKey.isEmpty()) {
+            return "(未解析调用点)";
+        }
+        String[] segments = invocationKey.split(":");
+        if ("invocation".equals(segments[0]) && segments.length >= 2) {
+            return segments[1] + (segments.length >= 3 ? "@" + abbreviateHash(segments[2]) : "");
+        }
+        if ("skeleton".equals(segments[0]) && segments.length >= 2) {
+            return "skl@" + abbreviateHash(segments[1]);
+        }
+        if ("template".equals(segments[0]) && segments.length >= 2) {
+            return "tpl@" + abbreviateHash(segments[1]);
+        }
+        if ("adhoc".equals(segments[0])) {
+            return segments.length >= 2 && !"no-anchor".equals(segments[1]) ? "adhoc@" + abbreviateHash(segments[1]) : "adhoc";
+        }
+        return invocationKey;
+    }
+
+    private static String abbreviateHash(String value) {
+        return value.length() <= 8 ? value : value.substring(0, 8);
+    }
+
+    /**
+     * 调用点足迹——按完整键分组的只读巡检视图（status 未建档段与 doctor 共用）。
+     */
+    static final class InvocationFootprint {
+
+        final String invocationKey;
+        final String label;
+        final int recordCount;
+        final String lastSessionId;
+
+        InvocationFootprint(String invocationKey, String label, int recordCount, String lastSessionId) {
+            this.invocationKey = invocationKey;
+            this.label = label;
+            this.recordCount = recordCount;
+            this.lastSessionId = lastSessionId;
+        }
+    }
+
+    /**
+     * 全库按完整键分组的调用点足迹（键缺失记录不入组；最近会话取该键时间戳最大记录所在会话）。
+     */
+    static List<InvocationFootprint> recordedInvocationFootprints(StorageRepository repository) {
+        Map<String, InteractionRecord> latestByKey = new LinkedHashMap<>();
+        Map<String, String> labelByKey = new LinkedHashMap<>();
+        Map<String, Integer> countByKey = new LinkedHashMap<>();
+        for (String sessionId : repository.findAllSessionIds()) {
+            for (InteractionRecord record : repository.findBySessionId(sessionId)) {
+                String key = record.getInvocationKey();
+                if (key == null || key.isEmpty()) {
+                    continue;
+                }
+                countByKey.merge(key, 1, Integer::sum);
+                String label = record.getInvocationId();
+                if (label != null && !label.isEmpty()) {
+                    labelByKey.putIfAbsent(key, label);
+                }
+                InteractionRecord latest = latestByKey.get(key);
+                if (latest == null || isAfter(record, latest)) {
+                    latestByKey.put(key, record);
+                }
+            }
+        }
+        List<InvocationFootprint> footprints = new ArrayList<>();
+        for (Map.Entry<String, InteractionRecord> entry : latestByKey.entrySet()) {
+            String key = entry.getKey();
+            footprints.add(new InvocationFootprint(key, labelByKey.get(key), countByKey.get(key), entry.getValue().getSessionId()));
+        }
+        footprints.sort((a, b) -> a.invocationKey.compareTo(b.invocationKey));
+        return footprints;
+    }
+
+    private static boolean isAfter(InteractionRecord candidate, InteractionRecord current) {
+        if (candidate.getTimestamp() != current.getTimestamp()) {
+            return candidate.getTimestamp() > current.getTimestamp();
+        }
+        return candidate.getRecordId().compareTo(current.getRecordId()) > 0;
+    }
+
+    /**
      * 展开 "~" 前缀为用户主目录（配置默认值使用 ~/.agentassert4j/ 约定）。
      */
     static String expandHome(String path) {

@@ -9,10 +9,7 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import java.io.PrintStream;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.Callable;
 
 /**
@@ -62,14 +59,19 @@ public class StatusCommand implements Callable<Integer> {
                     if (uncoveredJson.length() > 0) uncoveredJson.append(",");
                     uncoveredJson.append("\"").append(RecursiveJsonParser.escape(tag)).append("\"");
                 }
-                out.println("{\"schema\":\"agentassert4j.status/1\",\"invocations\":[" + invocations + "],\"uncovered\":[" + uncoveredJson + "]}");
+                StringBuilder unestablishedJson = new StringBuilder();
+                for (CliSupport.InvocationFootprint footprint : unestablishedFootprints(repository, profiles)) {
+                    if (unestablishedJson.length() > 0) unestablishedJson.append(",");
+                    unestablishedJson.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(footprint.invocationKey)).append("\",\"recordCount\":").append(footprint.recordCount).append("}");
+                }
+                out.println("{\"schema\":\"agentassert4j.status/1\",\"invocations\":[" + invocations + "],\"uncovered\":[" + uncoveredJson + "],\"unestablished\":[" + unestablishedJson + "]}");
                 return 0;
             }
 
             out.println("invocationKey                                              状态       版本   候选  归档版本      业务标签");
             for (InvocationProfile profile : profiles) {
                 String archivedTags = archivedVersionTags(repository, profile.getInvocationKey());
-                out.printf("  %-50s %-9s %-6s %-4s %-12s %s%n", profile.getInvocationKey(), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "有" : "-", archivedTags.isEmpty() ? "-" : archivedTags, labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), "-"));
+                out.printf("  %-50s %-9s %-6s %-4s %-12s %s%n", CliSupport.displayKey(profile.getInvocationKey()), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "有" : "-", archivedTags.isEmpty() ? "-" : archivedTags, labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), "-"));
                 printTemplateText(repository, profile.getInvocationKey());
                 if (diff) {
                     printCandidateDiff(profile);
@@ -80,6 +82,7 @@ public class StatusCommand implements Callable<Integer> {
             for (String tag : uncovered) {
                 out.println("  " + tag + ": 已录制但无基线（先执行 baseline）");
             }
+            printUnestablished(repository, profiles);
             out.println("共 " + profiles.size() + " 个基线画像。");
             printGraphSnapshot(repository);
             return 0;
@@ -194,6 +197,36 @@ public class StatusCommand implements Callable<Integer> {
             }
         }
         return uncovered;
+    }
+
+    /**
+     * 已录制但尚无基线画像的调用点段：新版本键与零声明键在建档前在此可见，
+     * 否则它们只会在对齐报告的缺/新增步骤里被动暴露。
+     */
+    private void printUnestablished(StorageRepository repository, List<InvocationProfile> profiles) {
+        List<CliSupport.InvocationFootprint> unestablished = unestablishedFootprints(repository, profiles);
+        if (unestablished.isEmpty()) {
+            out.println("未建档调用点：无。");
+            return;
+        }
+        out.println("未建档调用点（重跑 baseline 收编）：");
+        for (CliSupport.InvocationFootprint footprint : unestablished) {
+            out.println("  " + CliSupport.displayKey(footprint.invocationKey) + "（" + (footprint.label != null ? footprint.label : "无标签") + "）记录 " + footprint.recordCount + " 条，最近会话 " + footprint.lastSessionId);
+        }
+    }
+
+    private static List<CliSupport.InvocationFootprint> unestablishedFootprints(StorageRepository repository, List<InvocationProfile> profiles) {
+        Set<String> established = new HashSet<>();
+        for (InvocationProfile profile : profiles) {
+            established.add(profile.getInvocationKey());
+        }
+        List<CliSupport.InvocationFootprint> unestablished = new ArrayList<>();
+        for (CliSupport.InvocationFootprint footprint : CliSupport.recordedInvocationFootprints(repository)) {
+            if (!established.contains(footprint.invocationKey)) {
+                unestablished.add(footprint);
+            }
+        }
+        return unestablished;
     }
 
     /**

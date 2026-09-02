@@ -394,14 +394,103 @@ class TaskReplayRunnerTest {
     }
 
     @Test
-    @DisplayName("任务域干跑：真实对比模式（无 --prompt）不适用 → 2")
-    void taskDryRun_alignModeRejected() {
+    @DisplayName("对齐干跑：输出链配对计划、规则适用性与零调用声明")
+    void taskDryRun_alignPlanPrinted() {
+        saveRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");
+        saveRecord("n1", "s-new", 5000L, "查订单", "invocation:x:h1", "答A");
+
+        int exit = runner.run("查订单", false, false, null, null, null, null, true);
+
+        assertEquals(0, exit);
+        String report = output.toString();
+        assertTrue(report.contains("对齐计划"), "干跑输出对齐计划: " + report);
+        assertTrue(report.contains("将配对：基线链 session s-old"), "计划载明基线链: " + report);
+        assertTrue(report.contains("零 LLM 调用"), "计划载明零调用: " + report);
+    }
+
+    @Test
+    @DisplayName("对齐干跑：首录链标注将自建基线且未执行")
+    void taskDryRun_alignSelfEstablishNoted() {
         saveRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");
 
         int exit = runner.run("查订单", false, false, null, null, null, null, true);
 
+        assertEquals(0, exit);
+        assertTrue(output.toString().contains("将自建基线（dry-run 未执行）"), output.toString());
+    }
+
+    @Test
+    @DisplayName("跨版本配对：同标签异版本且行为一致 → PASS exit 0 + 版本注记")
+    void align_crossVersion_sameBehavior_exit0() {
+        saveDeclaredRecord("b1", "s-old", 1000L, "refund-flow", "invocation:A:h1", "A", "答A", "dev-model", 100, 20);
+        saveDeclaredRecord("n1", "s-new", 9000L, "refund-flow", "invocation:A:h2", "A", "答A", "dev-model", 100, 20);
+
+        int exit = runner.run("refund-flow", false, false, null, null, null, null);
+
+        assertEquals(0, exit, "同调用点跨模板版本且行为一致，不再是缺/新增洪水");
+        String report = output.toString();
+        assertTrue(report.contains("跨版本配对——PASS"), "步骤行带版本注记: " + report);
+        assertTrue(report.contains("| 跨版本 1"), "汇总载明跨版本计数: " + report);
+        assertTrue(report.contains("受控实验用 --old-prompt 冻结重放"), "混杂变量提示指向冻结重放: " + report);
+    }
+
+    @Test
+    @DisplayName("跨版本配对 JSON：versionSwitch/invocationLabel/crossVersion additive 字段")
+    void align_crossVersion_jsonFields() {
+        saveDeclaredRecord("b1", "s-old", 1000L, "refund-flow", "invocation:A:h1", "A", "答A", "dev-model", 100, 20);
+        saveDeclaredRecord("n1", "s-new", 9000L, "refund-flow", "invocation:A:h2", "A", "答A", "dev-model", 100, 20);
+        ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+        TaskReplayRunner jsonRunner = runnerWithRules(new InvocationRulesConfig(), true, jsonOut);
+
+        int exit = jsonRunner.run("refund-flow", false, false, null, null, null, null);
+
+        assertEquals(0, exit);
+        String json = jsonOut.toString().trim();
+        assertTrue(json.contains("\"versionSwitch\":true"), json);
+        assertTrue(json.contains("\"invocationLabel\":\"A\""), json);
+        assertTrue(json.contains("\"baselineSubdivision\":\"h1\""), json);
+        assertTrue(json.contains("\"newSubdivision\":\"h2\""), json);
+        assertTrue(json.contains("\"crossVersion\":1"), json);
+    }
+
+    @Test
+    @DisplayName("P6 注记：规则必备步骤缺失时，缺步骤行交叉引用任务规则")
+    void taskRule_missingStep_annotation() {
+        saveDeclaredRecord("b1", "s-old", 1000L, "refund-flow", "invocation:A:h1", "A", "答A", "dev-model", 0, 0);
+        saveDeclaredRecord("b2", "s-old", 2000L, "refund-flow", "invocation:B:h1", "B", "答B", "dev-model", 0, 0);
+        saveDeclaredRecord("n1", "s-new", 9000L, "refund-flow", "invocation:A:h1", "A", "答A", "dev-model", 0, 0);
+        ByteArrayOutputStream target = new ByteArrayOutputStream();
+        TaskReplayRunner ruleRunner = runnerWithRules(InvocationRulesConfig.fromJson("{\"tasks\":{\"refund-flow\":{\"requiredSteps\":[\"A\",\"B\"]}}}"), false, target);
+
+        int exit = ruleRunner.run("refund-flow", false, false, null, null, null, null);
+
+        assertEquals(1, exit);
+        String report = target.toString();
+        assertTrue(report.contains("缺步骤——基线执行了「B@h1」，新链未调用（违反任务规则：必备步骤）"), "缺步骤行交叉引用规则: " + report);
+    }
+
+    @Test
+    @DisplayName("门控失配根因分支：库内无任何 template_hash 时如实指出录制侧缺口")
+    void oldPromptMiss_rootCauseHint() {
+        saveRawRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");
+        saveRawRecord("n1", "s-new", 5000L, "查订单", "invocation:x:h1", "答A");
+
+        int exit = runner.run("查订单", false, false, "新提示词全文", "旧提示词全文", null, null, false);
+
         assertEquals(2, exit);
-        assertTrue(output.toString().contains("真实对比模式本身零 LLM 调用"), output.toString());
+        assertTrue(output.toString().contains("未携带 template_hash"), "诊断指出真实根因而非只怀疑文本不等: " + output);
+    }
+
+    private void saveRawRecord(String recordId, String sessionId, long timestamp, String userInput, String invocationKey, String response) {
+        InteractionRecord r = new InteractionRecord();
+        r.setRecordId(recordId);
+        r.setSessionId(sessionId);
+        r.setTimestamp(timestamp);
+        r.setSeq(timestamp);
+        r.setUserInput(userInput);
+        r.setInvocationKey(invocationKey);
+        r.setModelResponse(response);
+        repository.saveInteraction(r);
     }
 
     private void saveDeclaredRecord(String recordId, String sessionId, long timestamp, String taskKey, String invocationKey, String label, String response, String servedModel, int inputTokens, int outputTokens) {

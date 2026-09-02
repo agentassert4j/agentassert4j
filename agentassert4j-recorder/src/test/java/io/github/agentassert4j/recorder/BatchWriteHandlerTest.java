@@ -2,6 +2,7 @@ package io.github.agentassert4j.recorder;
 
 import io.github.agentassert4j.algorithm.InvocationResolver;
 import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.util.HashUtil;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -53,6 +54,47 @@ class BatchWriteHandlerTest {
 
             InteractionRecord saved = repo.getStore().get(0);
             assertEquals(InvocationResolver.resolve(saved).getInvocationKey(), saved.getInvocationKey(), "invocationKey 必须由分组器补全，存储与画像才可关联");
+        }
+
+        @Test
+        @DisplayName("templateHash 缺失时由全文派生投影，落库记录可作键与归档凭据")
+        void flush_derivesTemplateHashFromText() {
+            InMemoryStorageRepository repo = new InMemoryStorageRepository();
+            RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
+            BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
+
+            InteractionRecord record = new InteractionRecord();
+            record.setRecordId("r-tpl");
+            record.setTimestamp(System.currentTimeMillis());
+            record.setSessionId("session-1");
+            record.setTemplateText("系统提示词全文");
+            InteractionEvent event = new InteractionEvent();
+            event.setRecord(record);
+            handler.onEvent(event, 0, true);
+
+            InteractionRecord saved = repo.getStore().get(0);
+            assertEquals(HashUtil.sha256("系统提示词全文"), saved.getTemplateHash(), "投影恒等于 sha256(全文)");
+            assertTrue(saved.getInvocationKey().startsWith("template:"), "派生哈希参与键派生：有模板文本的记录不再落到 adhoc 锚，实测键为 " + saved.getInvocationKey());
+        }
+
+        @Test
+        @DisplayName("捕获侧显式设置的 templateHash 不被覆盖")
+        void flush_keepsExplicitTemplateHash() {
+            InMemoryStorageRepository repo = new InMemoryStorageRepository();
+            RecorderConfig config = RecorderConfig.builder().batchSize(100).build();
+            BatchWriteHandler handler = new BatchWriteHandler(repo, config, new AtomicLong(), new AtomicLong(), new AtomicLong());
+
+            InteractionRecord record = new InteractionRecord();
+            record.setRecordId("r-explicit");
+            record.setTimestamp(System.currentTimeMillis());
+            record.setSessionId("session-1");
+            record.setTemplateText("系统提示词全文");
+            record.setTemplateHash("explicit-hash");
+            InteractionEvent event = new InteractionEvent();
+            event.setRecord(record);
+            handler.onEvent(event, 0, true);
+
+            assertEquals("explicit-hash", repo.getStore().get(0).getTemplateHash(), "已有值不覆盖");
         }
 
         @Test

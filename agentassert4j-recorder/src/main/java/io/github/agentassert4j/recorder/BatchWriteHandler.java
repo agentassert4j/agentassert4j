@@ -163,20 +163,27 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
      * 在消费线程执行——指纹提取含响应体 JSON 解析，不允许回到业务线程。
      * group_key 列有 NOT NULL 约束，上游缺失时回充分组器派生值，否则整批 INSERT 失败；
      * 已有值不覆盖（上游显式设置的优先）。
-     * 只回填 invocationKey 与 skeletonHash：record.invocationId 是业务声明位，写入派生 hash 会让后续重派生
-     * 把它误当声明锚，造成存储键与现算键分叉；invocation_id 列的 NOT NULL 由存储层空串兜底承接。
-     * 骨架哈希是骨架文本的派生投影（落库记录重算键的凭据），同样只在缺失时回填。
+     * 只回填 invocationKey 与 templateHash/skeletonHash 两个哈希投影：record.invocationId 是业务声明位，
+     * 写入派生 hash 会让后续重派生把它误当声明锚，造成存储键与现算键分叉；invocation_id 列的 NOT NULL
+     * 由存储层空串兜底承接。
+     * 两个哈希都是文本的派生投影（全模板哈希=sha256(templateText)，骨架哈希=sha256(templateSkeleton)），
+     * 落库记录重算键与模板全文归档都以此为凭据，同样只在缺失时回填——捕获侧显式设置的优先。
      * 单条补全失败不拦截落库——原始交互数据是真源，派生字段缺失可事后重建。
      */
     private void enrich(List<InteractionRecord> records) {
         for (InteractionRecord record : records) {
             try {
-                if (TextUtil.isBlank(record.getInvocationKey())) {
-                    InvocationProfile grouping = InvocationResolver.resolve(record);
-                    record.setInvocationKey(grouping.getInvocationKey());
+                // 哈希投影先于键派生：键锚点消费 templateHash/skeletonHash，
+                // 顺序颠倒会让首条记录以不完整信息落锚（模板记录键成 adhoc）
+                if (TextUtil.isBlank(record.getTemplateHash()) && !TextUtil.isBlank(record.getTemplateText())) {
+                    record.setTemplateHash(HashUtil.sha256(record.getTemplateText()));
                 }
                 if (TextUtil.isBlank(record.getSkeletonHash()) && !TextUtil.isBlank(record.getTemplateSkeleton())) {
                     record.setSkeletonHash(HashUtil.sha256(record.getTemplateSkeleton()));
+                }
+                if (TextUtil.isBlank(record.getInvocationKey())) {
+                    InvocationProfile grouping = InvocationResolver.resolve(record);
+                    record.setInvocationKey(grouping.getInvocationKey());
                 }
             } catch (RuntimeException e) {
                 log.warn("Enrichment incomplete, record saved without derived fields: {} ({})", record.getRecordId(), e.getMessage());
