@@ -4,6 +4,7 @@ import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.model.ToolCall;
+import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.result.TaskAlignment;
 import io.github.agentassert4j.result.TaskAlignment.StepAlignment;
 import io.github.agentassert4j.result.TaskAlignment.StepKind;
@@ -135,7 +136,7 @@ class TaskAlignerTest {
     @DisplayName("前缀依赖标注：链内任一记录携带会话前缀 → prefixDependent")
     void prefixDependent_annotated() {
         InteractionRecord withHistory = record("b1", 1000L, "invocation:x:h1", "答A");
-        withHistory.setPreviousTurns(Arrays.asList(new io.github.agentassert4j.model.TurnContext("user", "上一问")));
+        withHistory.setPreviousTurns(Arrays.asList(new TurnContext("user", "上一问")));
 
         TaskAlignment alignment = TaskAligner.align(chain(withHistory), chain(record("n1", 5000L, "invocation:x:h1", "答A")), comparator, null);
 

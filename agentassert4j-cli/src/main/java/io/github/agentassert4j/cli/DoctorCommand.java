@@ -104,12 +104,17 @@ public class DoctorCommand implements Callable<Integer> {
         } else {
             out.println("  多步零标签链 " + unlabeledMultiStep.size() + " 条——逐步可见性与任务规则都依赖调用点标签（invocationId），建议为关键调用点建立标签词汇表：");
             for (TaskChain chain : samples(unlabeledMultiStep)) {
-                out.println("    「" + CliSupport.visibleText(chain.getRequestText()) + "」（session " + chain.getSessionId() + "，" + chain.getRecords().size() + " 步）");
+                out.println("    「" + CliSupport.visibleText(CliSupport.abbreviateText(chain.getRequestText(), 60)) + "」（session " + chain.getSessionId() + "，" + chain.getRecords().size() + " 步）");
             }
         }
 
         Map<String, Set<String>> sessionsByRequest = new LinkedHashMap<>();
         for (TaskChain chain : chains) {
+            // 已声明 taskKey 的链其请求文本即声明值——跨会话重复正是声明在起作用，
+            // 不进「建议声明」清单；此处只收集未声明链的重复事实
+            if (chain.isDeclared()) {
+                continue;
+            }
             sessionsByRequest.computeIfAbsent(chain.getRequestText(), k -> new LinkedHashSet<>()).add(chain.getSessionId());
         }
         List<String> repeatedFamilies = new ArrayList<>();
@@ -119,11 +124,11 @@ public class DoctorCommand implements Callable<Integer> {
             }
         }
         if (repeatedFamilies.isEmpty()) {
-            out.println("  重复请求文本任务族：无（同请求多会话重复出现的任务适合声明 taskKey，规则精修只对声明任务生效）。");
+            out.println("  重复请求文本任务族：无（同请求多会话重复出现的未声明任务适合声明 taskKey，规则精修只对声明任务生效）。");
         } else {
             out.println("  重复请求文本任务族 " + repeatedFamilies.size() + " 个——建议声明 taskKey（规则精修与跨会话配对的前置）：");
             for (String request : samples(repeatedFamilies)) {
-                out.println("    「" + CliSupport.visibleText(request) + "」出现于 " + sessionsByRequest.get(request).size() + " 个会话");
+                out.println("    「" + CliSupport.visibleText(CliSupport.abbreviateText(request, 60)) + "」出现于 " + sessionsByRequest.get(request).size() + " 个会话");
             }
         }
     }

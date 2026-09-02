@@ -88,7 +88,25 @@ class DoctorCommandTest {
         assertTrue(report.contains("tpl@aaa"), "零声明未建档键短形列出: " + report);
     }
 
+    @Test
+    @DisplayName("已声明 taskKey 的链跨会话重复不再进「建议声明」清单")
+    void declaredFamily_notSuggested() {
+        save("r1", "s1", 1000L, "查订单", "invocation:q:h1", "q", "h1");
+        saveDeclared("r2", "s2", 2000L, "退款", "invocation:q:h1", "q", "h1", "refund-flow");
+        saveDeclared("r3", "s3", 3000L, "退款", "invocation:q:h1", "q", "h1", "refund-flow");
+
+        int exit = command.call();
+
+        assertEquals(0, exit);
+        String report = output.toString();
+        assertTrue(report.contains("重复请求文本任务族：无"), "已声明族的重复是声明在起作用，不建议重复声明: " + report);
+    }
+
     private void save(String recordId, String sessionId, long timestamp, String userInput, String invocationKey, String label, String templateHash) {
+        saveDeclared(recordId, sessionId, timestamp, userInput, invocationKey, label, templateHash, null);
+    }
+
+    private void saveDeclared(String recordId, String sessionId, long timestamp, String userInput, String invocationKey, String label, String templateHash, String taskKey) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(recordId);
         r.setSessionId(sessionId);
@@ -101,6 +119,9 @@ class DoctorCommandTest {
         r.setModelResponse("{\"ok\":true}");
         r.setToolCalls(new ArrayList<>());
         r.setHasToolCalls(false);
+        if (taskKey != null) {
+            r.setMetadata("{\"taskKey\":\"" + taskKey + "\"}");
+        }
         repository.saveInteraction(r);
     }
 }

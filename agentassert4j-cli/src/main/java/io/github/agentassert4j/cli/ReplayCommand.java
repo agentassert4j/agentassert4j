@@ -115,7 +115,8 @@ public class ReplayCommand implements Callable<Integer> {
         if (promptPath != null) {
             newPrompt = readTextFile(promptPath);
             if (newPrompt == null) {
-                err.println("无法读取 Prompt 文件：" + promptPath);
+                // 传入值原样回显会把误当路径传入的提示词全文倒成一堵墙——缩略到一行并点明路径语义
+                err.println("无法读取 Prompt 文件（--prompt 须为可读文件路径，不是提示词文本本身）：" + CliSupport.visibleText(CliSupport.abbreviateText(promptPath, 80)));
                 return 2;
             }
         }
@@ -124,7 +125,7 @@ public class ReplayCommand implements Callable<Integer> {
         if (oldPromptPath != null) {
             oldPrompt = readTextFile(oldPromptPath);
             if (oldPrompt == null) {
-                err.println("无法读取旧 Prompt 文件：" + oldPromptPath);
+                err.println("无法读取旧 Prompt 文件（--old-prompt 须为可读文件路径）：" + CliSupport.visibleText(CliSupport.abbreviateText(oldPromptPath, 80)));
                 return 2;
             }
             oldPromptHash = HashUtil.sha256(oldPrompt);

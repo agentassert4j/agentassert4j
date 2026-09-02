@@ -244,6 +244,9 @@ public class VerifyRunner {
                         sb.append("  ").append(comparison.getSummary());
                     }
                 }
+                if (step.isVersionSwitch()) {
+                    sb.append("（跨版本配对 ").append(shortHash(step.getBaselineSubdivision())).append("→").append(shortHash(step.getNewSubdivision())).append("）");
+                }
                 sb.append('\n');
                 String diff = textDiffNote(step.getBaselineModelResponse(), step.getNewModelResponse());
                 if (!diff.isEmpty()) {
@@ -316,6 +319,10 @@ public class VerifyRunner {
         return key.length() <= 48 ? key : key.substring(0, 48) + "…";
     }
 
+    private static String shortHash(String hash) {
+        return hash == null || hash.length() <= 8 ? hash : hash.substring(0, 8);
+    }
+
     // ---------- JSON（agentassert4j.verify-report/1，单行） ----------
 
     private String verifyJson(AcceptancePack pack, String digest, int pass, int changed, int missing, int added, int uncovered, int unmatchedLocal, boolean crossModel, List<String> taskJsons, List<String> uncoveredKeys, List<String> hints) {
@@ -361,6 +368,14 @@ public class VerifyRunner {
             }
             if (step.getSurplusCount() > 0) {
                 ss.append(",\"surplusCount\":").append(step.getSurplusCount());
+            }
+            if (step.getInvocationLabel() != null) {
+                ss.append(",\"invocationLabel\":\"").append(RecursiveJsonParser.escape(step.getInvocationLabel())).append('"');
+            }
+            if (step.isVersionSwitch()) {
+                ss.append(",\"versionSwitch\":true");
+                ss.append(",\"baselineSubdivision\":\"").append(RecursiveJsonParser.escape(step.getBaselineSubdivision())).append('"');
+                ss.append(",\"newSubdivision\":\"").append(RecursiveJsonParser.escape(step.getNewSubdivision())).append('"');
             }
             steps.add(ss.append('}').toString());
         }

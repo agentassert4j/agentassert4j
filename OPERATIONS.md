@@ -149,8 +149,8 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 - **健康检查**：应用日志中的计数闭合账本 `recorded = written + dropped + failed`（filtered 另列）；
   任何对不上账的情况都是缺陷。
 - **库体检**：`doctor` 命令一次性输出身份/覆盖/规则三段确定性事实（骨架族形态、多步零标签链、
-  重复请求文本任务族、未建档调用点、template_hash 缺失、规则期望错位）——零声明接入补声明、
-  首次建档前自查都用它；只读不判定不建档。
+  未声明任务的重复请求文本任务族、未建档调用点、template_hash 缺失、规则期望错位）——零声明接入
+  补声明、首次建档前自查都用它；只读不判定不建档。
 
 ## 4. CI 门禁配方
 

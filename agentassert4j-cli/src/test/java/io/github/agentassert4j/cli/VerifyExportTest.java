@@ -2,10 +2,16 @@ package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.ComparatorConfig;
 import io.github.agentassert4j.algorithm.DeterministicComparator;
+import io.github.agentassert4j.algorithm.TaskAligner;
+import io.github.agentassert4j.algorithm.TaskChainView;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.TaskChain;
+import io.github.agentassert4j.result.TaskAlignment;
+import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
+import io.github.agentassert4j.util.HashUtil;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +25,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -74,15 +82,19 @@ class VerifyExportTest {
     }
 
     private void saveRecord(String recordId, StorageRepository repo, long timestamp, String userInput, String invocationKey, String label, String response, String servedModel) {
+        saveRecord(recordId, repo, timestamp, userInput, invocationKey, label, "h-" + label, response, servedModel);
+    }
+
+    private void saveRecord(String recordId, StorageRepository repo, long timestamp, String userInput, String invocationKey, String label, String templateHash, String response, String servedModel) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(recordId);
         r.setSessionId("s1");
         r.setTimestamp(timestamp);
         r.setSeq(timestamp);
         r.setUserInput(userInput);
-        r.setInvocationKey("invocation:" + label + ":h-" + label);
+        r.setInvocationKey(invocationKey);
         r.setInvocationId(label);
-        r.setTemplateHash("h-" + label);
+        r.setTemplateHash(templateHash);
         r.setModelResponse(response);
         r.setServedModel(servedModel);
         repo.saveInteraction(r);
@@ -123,7 +135,7 @@ class VerifyExportTest {
         Map<?, ?> task = ((List<Map<?, ?>>) root.get("tasks")).get(0);
         Map<?, ?> step = ((List<Map<?, ?>>) task.get("steps")).get(0);
         Map<?, ?> fp = (Map<?, ?>) step.get("fingerprint");
-        assertEquals(new java.util.HashSet<>(java.util.Arrays.asList("toolCallSet", "toolParamTypes", "outputContentType", "outputFieldPaths", "outputFieldTypeMap", "textLengthMagnitude", "requiredKeywords", "forbiddenKeywords", "regexPatterns", "declaredBehaviors", "hasError")), fp.keySet(), "指纹键集固定");
+        assertEquals(new HashSet<>(Arrays.asList("toolCallSet", "toolParamTypes", "outputContentType", "outputFieldPaths", "outputFieldTypeMap", "textLengthMagnitude", "requiredKeywords", "forbiddenKeywords", "regexPatterns", "declaredBehaviors", "hasError")), fp.keySet(), "指纹键集固定");
         assertTrue(json.contains("\"servedModel\":\"dev-model\""), json);
     }
 
@@ -133,7 +145,7 @@ class VerifyExportTest {
         saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
-        String digest = io.github.agentassert4j.util.HashUtil.sha256(json);
+        String digest = HashUtil.sha256(json);
 
         VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
         int exit = runner.run(json, digest, null, null);
@@ -151,7 +163,7 @@ class VerifyExportTest {
         saveRecord("r2", "s1", 2000L, null, "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\",\"extra\":1}", "dev-model");
         establishBaselines();
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
-        String digest = io.github.agentassert4j.util.HashUtil.sha256(json);
+        String digest = HashUtil.sha256(json);
 
         VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
         int exit = runner.run(json, digest, null, null);
@@ -314,10 +326,73 @@ class VerifyExportTest {
         assertEquals(0, packExit, "包内指纹与本地重提同口径，同链必自洽 PASS: " + output);
 
         // 库内路径：两条链喂同一对齐核 → 两轮间的结构变化 = CHANGED
-        List<io.github.agentassert4j.model.TaskChain> chains = io.github.agentassert4j.algorithm.TaskChainView.resolveAll(repository);
-        io.github.agentassert4j.model.TaskChain baseline = chains.get(0);
-        io.github.agentassert4j.model.TaskChain newChain = chains.get(chains.size() - 1);
-        io.github.agentassert4j.result.TaskAlignment alignment = io.github.agentassert4j.algorithm.TaskAligner.align(baseline, newChain, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig());
-        assertEquals(io.github.agentassert4j.result.Verdict.CHANGED, alignment.getVerdict(), "记录路径捕捉两轮间结构变化");
+        List<TaskChain> chains = TaskChainView.resolveAll(repository);
+        TaskChain baseline = chains.get(0);
+        TaskChain newChain = chains.get(chains.size() - 1);
+        TaskAlignment alignment = TaskAligner.align(baseline, newChain, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig());
+        assertEquals(Verdict.CHANGED, alignment.getVerdict(), "记录路径捕捉两轮间结构变化");
+    }
+
+    @Test
+    @DisplayName("verify 跨版本：同标签异模板版本 → 按标签配对 PASS + 版本注记，pack schema 不变")
+    void verify_crossVersion_sameBehavior_pass() throws Exception {
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-old", "verdict", "h-old", "{\"verdict\":\"DONE\"}", "dev-model");
+        establishBaselines();
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+        assertFalse(json.contains("\"invocationId\""), "acceptance-pack/1 不携带标签字段（装载时从键解析）");
+
+        SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer.db").toString());
+        customerDb.initialize();
+        try {
+            // 客户侧同调用点换了模板版本（细分哈希不同）、行为一致——配对按标签而非版本
+            saveRecord("c1", customerDb, 9000L, "查订单", "invocation:verdict:h-new", "verdict", "h-new", "{\"verdict\":\"DONE\"}", "cust-model");
+            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null);
+
+            VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+            Path reportPath = tempDir.resolve("verify-report.md");
+            int exit = runner.run(json, "digest", null, reportPath.toString());
+
+            assertEquals(0, exit, "同标签跨版本且行为一致 → PASS（版本差异不作缺/新增）: " + output);
+            assertTrue(output.toString().contains("PASS 1"), output.toString());
+            // 逐步明细（含版本注记）在验收报告文件；stdout 只有汇总行
+            String markdown = new String(Files.readAllBytes(reportPath), StandardCharsets.UTF_8);
+            assertTrue(markdown.contains("跨版本配对 h-old→h-new"), "报告必须带版本注记: " + markdown);
+
+            ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+            VerifyRunner jsonRunner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
+            assertEquals(0, jsonRunner.run(json, "digest", null, null));
+            String verifyJson = jsonOut.toString().trim();
+            assertTrue(verifyJson.contains("\"invocationLabel\":\"verdict\""), verifyJson);
+            assertTrue(verifyJson.contains("\"versionSwitch\":true"), verifyJson);
+            assertTrue(verifyJson.contains("\"baselineSubdivision\":\"h-old\""), verifyJson);
+            assertTrue(verifyJson.contains("\"newSubdivision\":\"h-new\""), verifyJson);
+        } finally {
+            customerDb.close();
+        }
+    }
+
+    @Test
+    @DisplayName("verify 跨版本行为变化：配对判定照常 CHANGED，注记不掩盖判定")
+    void verify_crossVersion_behaviorChanged() throws Exception {
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-old", "verdict", "h-old", "{\"verdict\":\"DONE\"}", "dev-model");
+        establishBaselines();
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+
+        SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer.db").toString());
+        customerDb.initialize();
+        try {
+            saveRecord("c1", customerDb, 9000L, "查订单", "invocation:verdict:h-new", "verdict", "h-new", "{\"status\":\"FAILED\"}", "cust-model");
+            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null);
+            VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+            Path reportPath = tempDir.resolve("verify-report-changed.md");
+            int exit = runner.run(json, "digest", null, reportPath.toString());
+
+            assertEquals(1, exit, "跨版本配对不豁免行为判定: " + output);
+            assertTrue(output.toString().contains("CHANGED 1"), output.toString());
+            String markdown = new String(Files.readAllBytes(reportPath), StandardCharsets.UTF_8);
+            assertTrue(markdown.contains("跨版本配对 h-old→h-new"), "注记与判定并存: " + markdown);
+        } finally {
+            customerDb.close();
+        }
     }
 }

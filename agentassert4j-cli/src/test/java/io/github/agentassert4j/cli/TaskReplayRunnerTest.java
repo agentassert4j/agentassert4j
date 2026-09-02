@@ -9,6 +9,7 @@ import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.LlmTimeoutException;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
+import io.github.agentassert4j.util.HashUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -315,9 +316,9 @@ class TaskReplayRunnerTest {
     @DisplayName("冻结重放：仅模板与旧提示词一致的记录真重放，异模板步骤继承 PASS")
     void frozenReplay_directTemplateOnly() {
         String oldPrompt = "旧版系统提示词全文";
-        String hitKey = "invocation:verdict:" + io.github.agentassert4j.util.HashUtil.sha256(oldPrompt);
-        saveRecord("b1", "s-old", 1000L, "查订单", hitKey, "verdict", io.github.agentassert4j.util.HashUtil.sha256(oldPrompt), "答A", "dev-model");
-        saveRecord("b2", "s-old", 2000L, null, "invocation:other:h-other", "other", io.github.agentassert4j.util.HashUtil.sha256("别的模板"), "答B", "dev-model");
+        String hitKey = "invocation:verdict:" + HashUtil.sha256(oldPrompt);
+        saveRecord("b1", "s-old", 1000L, "查订单", hitKey, "verdict", HashUtil.sha256(oldPrompt), "答A", "dev-model");
+        saveRecord("b2", "s-old", 2000L, null, "invocation:other:h-other", "other", HashUtil.sha256("别的模板"), "答B", "dev-model");
         stubClient.responseText = "答A";
 
         int exit = runner.run("查订单", false, false, "new prompt", oldPrompt, null, null);
@@ -360,9 +361,9 @@ class TaskReplayRunnerTest {
     @DisplayName("任务域干跑：--old-prompt 命中才计划真重放，其余标继承")
     void taskDryRun_oldPromptAffectedOnly() {
         String oldPrompt = "旧版系统提示词全文";
-        String hitKey = "invocation:verdict:" + io.github.agentassert4j.util.HashUtil.sha256(oldPrompt);
-        saveRecord("b1", "s-old", 1000L, "查订单", hitKey, "verdict", io.github.agentassert4j.util.HashUtil.sha256(oldPrompt), "答A", "dev-model");
-        saveRecord("b2", "s-old", 2000L, null, "invocation:other:h-other", "other", io.github.agentassert4j.util.HashUtil.sha256("别的模板"), "答B", "dev-model");
+        String hitKey = "invocation:verdict:" + HashUtil.sha256(oldPrompt);
+        saveRecord("b1", "s-old", 1000L, "查订单", hitKey, "verdict", HashUtil.sha256(oldPrompt), "答A", "dev-model");
+        saveRecord("b2", "s-old", 2000L, null, "invocation:other:h-other", "other", HashUtil.sha256("别的模板"), "答B", "dev-model");
 
         int exit = runner.run("查订单", false, false, "new prompt", oldPrompt, null, null, true);
 

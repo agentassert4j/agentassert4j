@@ -1,6 +1,7 @@
 package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.model.*;
+import io.github.agentassert4j.util.HashUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -287,7 +288,7 @@ class BaselineManagerTest {
         void establish_skeletonProjectionRecord_keyConsistent() {
             // 落库形态：骨架文本不落列，读侧记录只带投影（与 storage 读侧映射一致）——
             // establish/recordCandidate 对这类记录重算键必须落回同一骨架键
-            String projection = io.github.agentassert4j.util.HashUtil.sha256("客服助手。当前日期：{{date}}");
+            String projection = HashUtil.sha256("客服助手。当前日期：{{date}}");
             String storedKey = "skeleton:" + projection;
             InteractionRecord dbForm = new InteractionRecord();
             dbForm.setRecordId("rec-skl");

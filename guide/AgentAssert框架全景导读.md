@@ -376,7 +376,7 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 | `agentassert4j baseline --force` | 按当前比对算法重建基线（旧基线自动存档） | 同上 | 不加 `--force` 时绝不覆盖已有基线 |
 | `agentassert4j baseline export` | 导出验收基线包（交付证据载体） | `--task <前缀>`（缩域）；`--include-samples`（脱敏样本）；`--out <文件>`（默认 `./acceptance-pack.json`）；`--json`（export-report/1：out/taskCount/stepCount/sha256/excluded 元数据报告） | 内容天然脱敏（结构指纹+键）；打印 SHA-256 供对账；存在未建档步骤的链排除并警告 |
 | `agentassert4j status` | 查看调用点清单与基线状态 | `--diff`：展示待裁决的差异；`--json`（status/1） | 只看清单本体；已录制未建档的调用点在「未建档调用点」段列出 |
-| `agentassert4j doctor` | 库体检：身份/覆盖/规则三段确定性事实（骨架族、多步零标签链、重复请求任务族、未建档、规则期望错位），给声明建议 | 无必填参数 | 只读不判定不建档，退出码恒 0 |
+| `agentassert4j doctor` | 库体检：身份/覆盖/规则三段确定性事实（骨架族、多步零标签链、未声明任务的重复请求族、未建档、规则期望错位），给声明建议 | 无必填参数 | 只读不判定不建档，退出码恒 0 |
 | `agentassert4j replay` | 重放比对：用新提示词重跑历史用例并判定（调用点域） | `--prompt <文件>`（此范围**必填**）；`--invocation <前缀>`（限域）；`--dry-run`（只预演不调用）；`--old-prompt <文件>`（启用波及面裁剪）；`--max-cases`（默认 3）；`--selection`(newest/oldest)；`--ci`（流水线模式：不为无基线调用点自动建档）；`--json` | `--prompt` 缺失直接报错；其余缺省 = 真跑、全部调用点选例、人看输出 |
 | `agentassert4j replay --task` | 任务域：整链回归（望远镜） | `--task <文本前缀>`；`--prompt` 可选（缺省=真实对比模式，最新链 vs 次新链按调用点对齐，零 LLM 调用）；`--old-prompt`（仅受影响步骤真重放，其余继承 PASS）；`--dry-run`（只出执行计划与成本预估，零调用零建档）；`--full-chain`（取消裁剪与分歧即停）；`--max-total-calls/--max-total-tokens`（全局预算池）；`--json`（task-report/1） | 精确命中优先；短前缀命中多个不同任务时报错列候选（exit 2）；单链=自建基线（exit 0） |
 | `agentassert4j replay --affected` | 任务选择器：含受影响调用点的全部任务链逐链冻结重放 | 要求同时给 `--prompt` 与 `--old-prompt` | 与 `--task`/`--invocation` 互斥 |

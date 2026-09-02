@@ -2,6 +2,7 @@ package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.TaskChain;
+import io.github.agentassert4j.spi.InteractionQueryStore;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -119,7 +120,7 @@ class TaskChainViewTest {
     /**
      * 最小查询桩：仅供 resolveAll 走通会话枚举（测试内联，避免共享桩膨胀）
      */
-    private static class InteractionQueryStoreAdapter implements io.github.agentassert4j.spi.InteractionQueryStore {
+    private static class InteractionQueryStoreAdapter implements InteractionQueryStore {
         private final List<InteractionRecord> records;
 
         InteractionQueryStoreAdapter(List<InteractionRecord> records) {

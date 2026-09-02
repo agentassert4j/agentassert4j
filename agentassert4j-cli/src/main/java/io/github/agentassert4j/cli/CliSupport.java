@@ -110,10 +110,23 @@ final class CliSupport {
     }
 
     /**
+     * 单行缩略——超长文本（请求原文、用户误当路径传入的提示词全文）回显进报错与
+     * 采样行时压到预算内：连续空白折叠为单空格，超预算截断加省略号。
+     * 只影响呈现，完整原文仍在数据与 JSON 证据里。
+     */
+    static String abbreviateText(String text, int budget) {
+        if (text == null) {
+            return "";
+        }
+        String flat = text.replaceAll("\\s+", " ").trim();
+        return flat.length() <= budget ? flat : flat.substring(0, budget) + "…";
+    }
+
+    /**
      * 人读键形态：声明 → 标签@细分短形；骨架/模板/请求锚 → 短名@细分短形（8 位）。
-     * 完整键只在 JSON 证据与巡检明细——选择器语义不受影响，短形即合法唯一前缀，
-     * 人看到什么就能选什么。分组器的 encodeComponent 只转义六个 ASCII 字符，
-     * 中文标签原样可读。
+     * 完整键只在 JSON 证据与巡检明细——选择器语义不受影响。标签以解码形展示
+     * （键存储的是编码形），团队词汇表原样可读；分组器的 encodeComponent 只
+     * 转义六个 ASCII 字符，绝大多数标签编码前后同形。
      */
     static String displayKey(String invocationKey) {
         if (invocationKey == null || invocationKey.isEmpty()) {
@@ -121,7 +134,8 @@ final class CliSupport {
         }
         String[] segments = invocationKey.split(":");
         if ("invocation".equals(segments[0]) && segments.length >= 2) {
-            return segments[1] + (segments.length >= 3 ? "@" + abbreviateHash(segments[2]) : "");
+            String label = TaskAligner.declaredLabelOfKey(invocationKey);
+            return (label != null ? label : segments[1]) + (segments.length >= 3 ? "@" + abbreviateHash(segments[2]) : "");
         }
         if ("skeleton".equals(segments[0]) && segments.length >= 2) {
             return "skl@" + abbreviateHash(segments[1]);

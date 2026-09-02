@@ -47,4 +47,10 @@ class CliSupportKeyDisplayTest {
     void chineseLabelReadable() {
         assertEquals("代码审查@abcd1234", CliSupport.displayKey("invocation:代码审查:abcd1234e5"));
     }
+
+    @Test
+    @DisplayName("含文法字符的标签以解码形展示（键存编码形，人读词汇表原样）")
+    void encodedLabelDecoded() {
+        assertEquals("plan:v2@abcd1234", CliSupport.displayKey("invocation:plan%3Av2:abcd1234e5"));
+    }
 }

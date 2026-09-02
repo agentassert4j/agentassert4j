@@ -139,9 +139,9 @@ class OpenAiCompatibleClientTest {
         request.setTemperature(0.0);
         request.setUserInput("你好");
 
-        com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress(0), 0);
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/", exchange -> {
-            byte[] resp = ("{\"choices\":[{\"message\":{\"content\":\"\u5317\u4eac\"}}]}").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            byte[] resp = ("{\"choices\":[{\"message\":{\"content\":\"\u5317\u4eac\"}}]}").getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, resp.length);
             exchange.getResponseBody().write(resp);

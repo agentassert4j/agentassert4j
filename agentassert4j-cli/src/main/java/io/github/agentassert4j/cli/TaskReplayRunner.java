@@ -166,7 +166,7 @@ public class TaskReplayRunner {
             taskRequest = task.getRequestText();
             taskSession = task.getSessionId();
             baselineTime = task.firstTimestamp();
-            info("任务「" + taskRequest + "」（session " + taskSession + "，" + task.getRecords().size() + " 步）：");
+            info("任务「" + CliSupport.abbreviateText(taskRequest, 80) + "」（session " + taskSession + "，" + task.getRecords().size() + " 步）：");
 
             int stepIndex = 0;
             for (InteractionRecord record : task.getRecords()) {
@@ -264,7 +264,7 @@ public class TaskReplayRunner {
             for (InteractionRecord record : task.getRecords()) {
                 index++;
                 String key = CliSupport.invocationKeyOfRecord(record);
-                boolean replay = fullChain || affectedKeys == null || affectedKeys.contains(record.getInvocationKey());
+                boolean replay = fullChain || affectedKeys == null || (key != null && affectedKeys.contains(key));
                 if (!replay) {
                     inheritedTotal++;
                     info(stepLine(index, key, "继承 PASS（未受影响）"));
@@ -301,7 +301,8 @@ public class TaskReplayRunner {
         int skipped = 0;
         for (InteractionRecord record : task.getRecords()) {
             total++;
-            boolean replay = fullChain || affectedKeys == null || affectedKeys.contains(record.getInvocationKey());
+            String key = CliSupport.invocationKeyOfRecord(record);
+            boolean replay = fullChain || affectedKeys == null || (key != null && affectedKeys.contains(key));
             String action;
             if (!replay) {
                 inherited++;
@@ -316,7 +317,7 @@ public class TaskReplayRunner {
             if (steps.length() > 0) {
                 steps.append(",");
             }
-            steps.append("{\"recordId\":\"").append(RecursiveJsonParser.escape(record.getRecordId())).append("\",\"invocationKey\":\"").append(RecursiveJsonParser.escape(record.getInvocationKey())).append("\",\"action\":\"").append(action).append("\"}");
+            steps.append("{\"recordId\":\"").append(RecursiveJsonParser.escape(record.getRecordId())).append("\",\"invocationKey\":\"").append(RecursiveJsonParser.escape(key != null ? key : "")).append("\",\"action\":\"").append(action).append("\"}");
         }
         out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-dry-run\",\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\",\"task\":{\"request\":\"" + RecursiveJsonParser.escape(task.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(task.getSessionId()) + "\"},\"summary\":{\"chains\":1,\"chainIndex\":" + chainIndex + ",\"chainCount\":" + chainCount + ",\"total\":" + total + ",\"plannedReplay\":" + planned + ",\"inherited\":" + inherited + ",\"skipped\":" + skipped + "},\"steps\":[" + steps + "]}");
     }
@@ -326,10 +327,6 @@ public class TaskReplayRunner {
      * 与任务规则适用性——CI 可在执行前核对选链是否如愿，首录场景如实标注未建档。
      */
     private int dryRunAlign(String taskPrefix, List<TaskChain> chains) {
-        if (chains.isEmpty()) {
-            diagnostic("未录制到任何交互数据（先运行 Agent 积累录制）。");
-            return 2;
-        }
         List<TaskChain> matching = selectByRequestText(chains, taskPrefix);
         if (matching == null) {
             return 2;
@@ -340,7 +337,7 @@ public class TaskReplayRunner {
         }
         if (matching.size() == 1) {
             TaskChain only = matching.get(0);
-            info("将自建基线（dry-run 未执行）：任务「" + only.getRequestText() + "」仅一条链（session " + only.getSessionId() + "，" + only.getRecords().size() + " 步）。");
+            info("将自建基线（dry-run 未执行）：任务「" + CliSupport.abbreviateText(only.getRequestText(), 80) + "」仅一条链（session " + only.getSessionId() + "，" + only.getRecords().size() + " 步）。");
             info("真实执行后该链即基线，下次重跑本命令将自动配对并出对齐报告。");
             if (jsonMode) {
                 out.println(dryRunAlignJson(only.getRequestText(), null, null, only.getSessionId(), only.getRecords().size()));
@@ -388,7 +385,7 @@ public class TaskReplayRunner {
         }
         TaskChain newChain = matching.get(matching.size() - 1);
         if (matching.size() == 1) {
-            info("任务「" + newChain.getRequestText() + "」仅一条链（session " + newChain.getSessionId() + "）——首录即基线，自建基线完成（" + newChain.getRecords().size() + " 步）。");
+            info("任务「" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "」仅一条链（session " + newChain.getSessionId() + "）——首录即基线，自建基线完成（" + newChain.getRecords().size() + " 步）。");
             info("下次真实再执行后重跑本命令，将自动配对本次基线并出对齐报告。");
             if (jsonMode) {
                 out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-align\",\"selfEstablished\":true,\"task\":{\"request\":\"" + RecursiveJsonParser.escape(newChain.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(newChain.getSessionId()) + "\"},\"summary\":{\"total\":" + newChain.getRecords().size() + ",\"pass\":" + newChain.getRecords().size() + ",\"changed\":0,\"skipped\":0,\"missing\":0,\"added\":0},\"steps\":[],\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}");
@@ -405,7 +402,7 @@ public class TaskReplayRunner {
             }
         }
 
-        info("任务「" + newChain.getRequestText() + "」对齐：基线链（session " + baseline.getSessionId() + "）→ 新链（session " + newChain.getSessionId() + "）");
+        info("任务「" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "」对齐：基线链（session " + baseline.getSessionId() + "）→ 新链（session " + newChain.getSessionId() + "）");
         if (rules != null && rules.hasTaskRules() && !newChain.isDeclared()) {
             info("注意：本任务未声明 taskKey，任务规则不适用。");
         }
@@ -517,7 +514,7 @@ public class TaskReplayRunner {
             Collections.sort(sorted);
             List<String> shown = new ArrayList<>();
             for (String text : sorted) {
-                shown.add(CliSupport.visibleText(text));
+                shown.add(CliSupport.visibleText(CliSupport.abbreviateText(text, 60)));
             }
             diagnostic("--task " + CliSupport.visibleText(taskPrefix) + " 前缀匹配到多个任务：" + String.join("、", shown) + "，请提供更长前缀。");
             return null;
@@ -553,7 +550,7 @@ public class TaskReplayRunner {
         if (!variants.isEmpty()) {
             sb.append("靶链现存模板变体：").append(String.join("、", variants)).append("。");
         } else {
-            sb.append("库内所有记录都未携带 template_hash——疑似录制侧未设置模板全文或哈希（现由录制管道自动派生，重新录制即可补齐）。");
+            sb.append("靶任务链的记录均未携带 template_hash——疑似录制侧未设置模板全文或哈希（现由录制管道自动派生，重新录制即可补齐）。");
         }
         sb.append("旧提示词必须是录制时归档的完整 system 模板全文（含全局拼接段）——单段转储或重新组装的文本哈希不等，归档原文见库内模板巡检（status）。");
         sb.append("声明了模板骨架的调用点同样按全文哈希门控——骨架只定身份，门控与重放取回仍以全文为准。");
@@ -604,8 +601,7 @@ public class TaskReplayRunner {
     }
 
     private static String abbreviate(String text, int budget) {
-        String flat = text.replaceAll("\\s+", " ");
-        return flat.length() <= budget ? flat : flat.substring(0, budget) + "…";
+        return CliSupport.abbreviateText(text, budget);
     }
 
     /**

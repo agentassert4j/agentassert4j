@@ -192,7 +192,7 @@ class BatchWriteHandlerTest {
             handler.onEvent(e3, 2, true);
 
             InteractionRecord savedSkeleton = repo.getStore().get(0);
-            assertEquals(io.github.agentassert4j.util.HashUtil.sha256("客服助手。当前日期：{{date}}"), savedSkeleton.getSkeletonHash(), "骨架文本必须回填投影（落库记录重算键的凭据）");
+            assertEquals(HashUtil.sha256("客服助手。当前日期：{{date}}"), savedSkeleton.getSkeletonHash(), "骨架文本必须回填投影（落库记录重算键的凭据）");
             assertEquals("pre-set-projection", repo.getStore().get(1).getSkeletonHash(), "已有投影不覆盖（上游显式设置的优先）");
             assertNull(repo.getStore().get(2).getSkeletonHash(), "无骨架声明不填投影");
         }
