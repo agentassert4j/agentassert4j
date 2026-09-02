@@ -1,6 +1,7 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 import io.github.agentassert4j.util.HashUtil;
 import org.junit.jupiter.api.AfterEach;
@@ -356,6 +357,60 @@ class CommandSmokeTest {
 
         assertEquals(2, exit);
         assertTrue(errOut.toString().contains("仅在调用点范围有效"), errOut.toString());
+    }
+
+    @Test
+    @DisplayName("replay --old-key 未命中任何调用点 → exit 2 带诊断")
+    void replayOldKey_unknownSelector_exit2() throws Exception {
+        redirectStdout();
+        ByteArrayOutputStream errOut = redirectStderr();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--prompt", writePromptFile("n.txt", "新").toString(), "--old-key", "no-such-label-xyz");
+
+        assertEquals(2, exit);
+        assertTrue(errOut.toString().contains("replay 失败"), errOut.toString());
+        assertTrue(errOut.toString().contains("没有匹配 no-such-label-xyz"), errOut.toString());
+    }
+
+    @Test
+    @DisplayName("replay --old-key 指向无模板哈希的画像（adhoc 锚）→ exit 2 带指引")
+    void replayOldKey_profileWithoutTemplateHash_exit2() throws Exception {
+        InvocationProfile adhoc = new InvocationProfile();
+        adhoc.setInvocationKey("adhoc:no-anchor");
+        adhoc.setInvocationName("adhoc:no-anchor");
+        repository.saveInvocationProfile(adhoc);
+
+        redirectStdout();
+        ByteArrayOutputStream errOut = redirectStderr();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--prompt", writePromptFile("n.txt", "新").toString(), "--old-key", "adhoc:no-anchor");
+
+        assertEquals(2, exit);
+        assertTrue(errOut.toString().contains("画像没有模板哈希"), errOut.toString());
+    }
+
+    @Test
+    @DisplayName("replay --full-chain 用于真实对比 → exit 2（静默忽略清零）")
+    void replayFullChain_rejectedInRealComparison() throws Exception {
+        redirectStdout();
+        ByteArrayOutputStream errOut = redirectStderr();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--full-chain");
+
+        assertEquals(2, exit);
+        assertTrue(errOut.toString().contains("仅在冻结重放"), errOut.toString());
+    }
+
+    @Test
+    @DisplayName("replay --json 模式：同内容提示走 stderr，stdout 保持单行 JSON")
+    void replaySamePromptHint_jsonMode_routesToStderr() throws Exception {
+        seedOneRecord("session-1", 1000L, HashUtil.sha256("同内容提示词"));
+        ByteArrayOutputStream out = redirectStdout();
+        ByteArrayOutputStream errOut = redirectStderr();
+        Path same = writePromptFile("same.txt", "同内容提示词");
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--prompt", same.toString(), "--old-prompt", same.toString(), "--dry-run", "--json");
+
+        assertEquals(0, exit);
+        assertTrue(out.toString().trim().startsWith("{"), "stdout 必须是纯 JSON: " + out);
+        assertFalse(out.toString().contains("噪声探针"), "提示不得污染 stdout JSON: " + out);
+        assertTrue(errOut.toString().contains("同模板噪声探针口径"), errOut.toString());
     }
 
     @Test
