@@ -118,7 +118,7 @@ class TaskReplayRunnerTest {
     void oldPromptMiss_diagnosticListsVariants() {
         saveRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");
 
-        int exit = runner.run("查订单", false, false, "新提示词内容", "不相关的旧提示词文本", null, null);
+        int exit = runner.run("查订单", false, false, "新提示词内容", HashUtil.sha256("不相关的旧提示词文本"), null, null);
 
         assertEquals(2, exit);
         String report = output.toString();
@@ -321,12 +321,48 @@ class TaskReplayRunnerTest {
         saveRecord("b2", "s-old", 2000L, null, "invocation:other:h-other", "other", HashUtil.sha256("别的模板"), "答B", "dev-model");
         stubClient.responseText = "答A";
 
-        int exit = runner.run("查订单", false, false, "new prompt", oldPrompt, null, null);
+        int exit = runner.run("查订单", false, false, "new prompt", HashUtil.sha256(oldPrompt), null, null);
 
         assertEquals(0, exit);
         assertEquals(1, stubClient.callCount, "只有旧提示词命中的记录真重放");
         String report = output.toString();
         assertTrue(report.contains("继承 PASS"), "异模板步骤必须标注继承: " + report);
+        assertFalse(report.contains("最新链"), "单链输出不得带链角色噪声: " + report);
+    }
+
+    @Test
+    @DisplayName("多链冻结重放：链块带历史链/最新链定性，汇总带链数口径")
+    void frozenReplay_multiChain_annotatesRoles() {
+        String oldPrompt = "旧版系统提示词全文";
+        String hitKey = "invocation:verdict:" + HashUtil.sha256(oldPrompt);
+        saveRecord("b1", "s-old", 1000L, "查订单", hitKey, "verdict", HashUtil.sha256(oldPrompt), "答A", "dev-model");
+        saveRecord("n1", "s-new", 9000L, "查订单", hitKey, "verdict", HashUtil.sha256(oldPrompt), "答A", "dev-model");
+        stubClient.responseText = "答A";
+
+        int exit = runner.run("查订单", false, false, "new prompt", HashUtil.sha256(oldPrompt), null, null);
+
+        assertEquals(0, exit);
+        String report = output.toString();
+        assertTrue(report.contains("，历史链）："), "早链必须标历史链: " + report);
+        assertTrue(report.contains("，最新链）："), "晚链必须标最新链: " + report);
+        assertTrue(report.contains("2 条链共"), "多链汇总必须带链数口径: " + report);
+    }
+
+    @Test
+    @DisplayName("多链干跑计划：链块同款定性标注")
+    void taskDryRun_multiChain_annotatesRoles() {
+        String oldPrompt = "旧版系统提示词全文";
+        String hitKey = "invocation:verdict:" + HashUtil.sha256(oldPrompt);
+        saveRecord("b1", "s-old", 1000L, "查订单", hitKey, "verdict", HashUtil.sha256(oldPrompt), "答A", "dev-model");
+        saveRecord("n1", "s-new", 9000L, "查订单", hitKey, "verdict", HashUtil.sha256(oldPrompt), "答A", "dev-model");
+
+        int exit = runner.run("查订单", false, false, "new prompt", HashUtil.sha256(oldPrompt), null, null, true);
+
+        assertEquals(0, exit);
+        assertEquals(0, stubClient.callCount);
+        String plan = output.toString();
+        assertTrue(plan.contains("，历史链）："), plan);
+        assertTrue(plan.contains("，最新链）："), plan);
     }
 
     @Test
@@ -365,7 +401,7 @@ class TaskReplayRunnerTest {
         saveRecord("b1", "s-old", 1000L, "查订单", hitKey, "verdict", HashUtil.sha256(oldPrompt), "答A", "dev-model");
         saveRecord("b2", "s-old", 2000L, null, "invocation:other:h-other", "other", HashUtil.sha256("别的模板"), "答B", "dev-model");
 
-        int exit = runner.run("查订单", false, false, "new prompt", oldPrompt, null, null, true);
+        int exit = runner.run("查订单", false, false, "new prompt", HashUtil.sha256(oldPrompt), null, null, true);
 
         assertEquals(0, exit);
         assertEquals(0, stubClient.callCount, "干跑不得发起任何真实调用");
@@ -476,7 +512,7 @@ class TaskReplayRunnerTest {
         saveRawRecord("b1", "s-old", 1000L, "查订单", "invocation:x:h1", "答A");
         saveRawRecord("n1", "s-new", 5000L, "查订单", "invocation:x:h1", "答A");
 
-        int exit = runner.run("查订单", false, false, "新提示词全文", "旧提示词全文", null, null, false);
+        int exit = runner.run("查订单", false, false, "新提示词全文", HashUtil.sha256("旧提示词全文"), null, null, false);
 
         assertEquals(2, exit);
         assertTrue(output.toString().contains("未携带 template_hash"), "诊断指出真实根因而非只怀疑文本不等: " + output);

@@ -13,7 +13,6 @@ import io.github.agentassert4j.result.TaskRuleViolation;
 import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
-import io.github.agentassert4j.util.HashUtil;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import io.github.agentassert4j.util.TextDiffUtils;
 
@@ -84,16 +83,17 @@ public class TaskReplayRunner {
      * @param affected       影响集选择器（--affected：含受影响调用点的全部任务链）
      * @param fullChain      取消影响裁剪与分歧即停，全部记录真重放
      * @param newPrompt      新 System Prompt 全文（null = 真实对比模式）
-     * @param oldPrompt      旧 System Prompt 全文（影响裁剪根；null = 全链真重放）
+     * @param oldPromptHash  旧版门控哈希（影响裁剪根，sha256 投影——全文或库内画像真源列皆可；
+     *                       null = 全链真重放）。哈希来源归命令层，runner 只消费投影
      * @param maxTotalCalls  预算池：本次运行真重放调用次数上限（null = 不限）
      * @param maxTotalTokens 预算池：本次运行真重放 token 合计上限（null = 不限）
      * @return 进程退出码（0/1/2）
      */
-    public int run(String taskPrefix, boolean affected, boolean fullChain, String newPrompt, String oldPrompt, Integer maxTotalCalls, Integer maxTotalTokens) {
-        return run(taskPrefix, affected, fullChain, newPrompt, oldPrompt, maxTotalCalls, maxTotalTokens, false);
+    public int run(String taskPrefix, boolean affected, boolean fullChain, String newPrompt, String oldPromptHash, Integer maxTotalCalls, Integer maxTotalTokens) {
+        return run(taskPrefix, affected, fullChain, newPrompt, oldPromptHash, maxTotalCalls, maxTotalTokens, false);
     }
 
-    public int run(String taskPrefix, boolean affected, boolean fullChain, String newPrompt, String oldPrompt, Integer maxTotalCalls, Integer maxTotalTokens, boolean dryRun) {
+    public int run(String taskPrefix, boolean affected, boolean fullChain, String newPrompt, String oldPromptHash, Integer maxTotalCalls, Integer maxTotalTokens, boolean dryRun) {
         executionConfig.validate();
 
         List<TaskChain> chains = CliSupport.taskChains(repository);
@@ -105,19 +105,19 @@ public class TaskReplayRunner {
             return dryRunAlign(taskPrefix, chains);
         }
 
-        return newPrompt != null ? runFrozenReplay(taskPrefix, affected, fullChain, newPrompt, oldPrompt, maxTotalCalls, maxTotalTokens, chains, dryRun) : runAlignment(taskPrefix, chains);
+        return newPrompt != null ? runFrozenReplay(taskPrefix, affected, fullChain, newPrompt, oldPromptHash, maxTotalCalls, maxTotalTokens, chains, dryRun) : runAlignment(taskPrefix, chains);
     }
 
-    private int runFrozenReplay(String taskPrefix, boolean affected, boolean fullChain, String newPrompt, String oldPrompt, Integer maxTotalCalls, Integer maxTotalTokens, List<TaskChain> chains, boolean dryRun) {
-        // 冻结重放的受影响口径：仅「模板与旧提示词一致」的记录以新提示词真重放。
+    private int runFrozenReplay(String taskPrefix, boolean affected, boolean fullChain, String newPrompt, String oldPromptHash, Integer maxTotalCalls, Integer maxTotalTokens, List<TaskChain> chains, boolean dryRun) {
+        // 冻结重放的受影响口径：仅「模板与旧版门控哈希一致」的记录以新提示词真重放。
         // 影响集的图下游传播节点不参与——冻结重放喂的是录制原输入，其模板又未变，
         // 重放只复现原行为、不产生验证信号（下游真实影响由真实再执行+对齐收口）。
         Set<String> affectedKeys = null;
-        if (oldPrompt != null) {
-            affectedKeys = repository.findInvocationKeysByTemplateHash(HashUtil.sha256(oldPrompt));
+        if (oldPromptHash != null) {
+            affectedKeys = repository.findInvocationKeysByTemplateHash(oldPromptHash);
             affectedKeys.remove("");
             if (affectedKeys.isEmpty()) {
-                diagnostic(describeOldPromptMiss(oldPrompt, chains, affected ? null : taskPrefix));
+                diagnostic(describeOldPromptMiss(oldPromptHash, chains, affected ? null : taskPrefix));
                 return 2;
             }
         }
@@ -159,14 +159,15 @@ public class TaskReplayRunner {
         boolean diverged = false;
         long baselineTime = 0;
 
-        for (TaskChain task : tasks) {
+        for (int chainIndex = 0; chainIndex < tasks.size(); chainIndex++) {
+            TaskChain task = tasks.get(chainIndex);
             if (taskRequest != null) {
                 info("");
             }
             taskRequest = task.getRequestText();
             taskSession = task.getSessionId();
             baselineTime = task.firstTimestamp();
-            info("任务「" + CliSupport.abbreviateText(taskRequest, 80) + "」（session " + taskSession + "，" + task.getRecords().size() + " 步）：");
+            info("任务「" + CliSupport.abbreviateText(taskRequest, 80) + "」（session " + taskSession + "，" + task.getRecords().size() + " 步" + chainRole(tasks, chainIndex) + "）：");
 
             int stepIndex = 0;
             for (InteractionRecord record : task.getRecords()) {
@@ -231,7 +232,8 @@ public class TaskReplayRunner {
         }
 
         int total = pass + changed + inherited + postDivergence + skipped;
-        info("任务汇总: PASS " + pass + " | CHANGED " + changed + " | 继承 " + inherited + " | 分歧后 " + postDivergence + " | 跳过 " + skipped + "（共 " + total + " 步，真重放 " + callsUsed + " 次");
+        String chainScope = tasks.size() > 1 ? tasks.size() + " 条链共 " : "";
+        info("任务汇总: PASS " + pass + " | CHANGED " + changed + " | 继承 " + inherited + " | 分歧后 " + postDivergence + " | 跳过 " + skipped + "（" + chainScope + "共 " + total + " 步，真重放 " + callsUsed + " 次");
         if (tokensUsed > 0) {
             info("，tokens " + tokensUsed + "）");
         } else {
@@ -258,8 +260,9 @@ public class TaskReplayRunner {
         int plannedTotal = 0;
         int inheritedTotal = 0;
         int budgetSkipped = 0;
-        for (TaskChain task : tasks) {
-            info("任务「" + task.getRequestText() + "」（session " + task.getSessionId() + "，" + task.getRecords().size() + " 步）：");
+        for (int chainIndex = 0; chainIndex < tasks.size(); chainIndex++) {
+            TaskChain task = tasks.get(chainIndex);
+            info("任务「" + task.getRequestText() + "」（session " + task.getSessionId() + "，" + task.getRecords().size() + " 步" + chainRole(tasks, chainIndex) + "）：");
             int index = 0;
             for (InteractionRecord record : task.getRecords()) {
                 index++;
@@ -523,13 +526,13 @@ public class TaskReplayRunner {
     }
 
     /**
-     * 旧提示词哈希无命中的诊断——只回一句「无命中」用户无从下手：最常见的根因是拿单段转储
+     * 旧版门控哈希无命中的诊断——只回一句「无命中」用户无从下手：最常见的根因是拿单段转储
      * 或重新组装的文本当旧提示词，而录制归档的是完整拼装后的 system 全文（差一个全局段/
-     * 技能列表段哈希必然不等）。回显提供文本的哈希与靶链现存模板变体，供对照定位。
+     * 技能列表段哈希必然不等）。回显门控哈希与靶链现存模板变体，供对照定位。
      */
-    private String describeOldPromptMiss(String oldPrompt, List<TaskChain> chains, String taskPrefix) {
+    private String describeOldPromptMiss(String oldPromptHash, List<TaskChain> chains, String taskPrefix) {
         StringBuilder sb = new StringBuilder();
-        sb.append("--old-prompt 与任何录制模板都不相等（提供文本 sha256=").append(HashUtil.sha256(oldPrompt), 0, 16).append("…）。");
+        sb.append("旧版门控哈希 sha256=").append(oldPromptHash, 0, 16).append("… 与任何录制模板都不相等。");
         List<TaskChain> scope = chains;
         if (taskPrefix != null) {
             List<TaskChain> selected = selectByRequestText(chains, taskPrefix);
@@ -566,6 +569,17 @@ public class TaskReplayRunner {
 
     private static String stepLine(int index, String key, String detail) {
         return "  [" + index + "] " + CliSupport.displayKey(key) + "  " + detail;
+    }
+
+    /**
+     * 多链输出定性：时间序最后一条为最新链、其余为历史链——多链报告里裸 session id
+     * 无法一眼对应新旧（单链不加，避免噪声）。链序 = resolveAll 的链首时间升序。
+     */
+    private static String chainRole(List<TaskChain> tasks, int chainIndex) {
+        if (tasks.size() <= 1) {
+            return "";
+        }
+        return chainIndex == tasks.size() - 1 ? "，最新链" : "，历史链";
     }
 
     private String describe(RegressionTestResult result) {

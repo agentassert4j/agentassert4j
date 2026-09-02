@@ -192,7 +192,7 @@ $ agentassert4j replay --task "订单 1234 的物流太慢" --prompt prompt-v2.t
 不如诚实地标一个**条件态**：这一步没验证，它的真实表现要等真实再执行后看。想让所有步骤都真跑一遍
 （比如预算充足的深夜全量验证），加 `--full-chain`。
 
-真实调用心疼钱的话，还有两个旋钮：`--old-prompt prompt-v1.txt` 告诉框架改动前的提示词是哪个文件，
+真实调用心疼钱的话，还有两个旋钮：`--old-prompt prompt-v1.txt` 告诉框架改动前的提示词是哪个文件（不想导出旧模板全文就用 `--old-key <调用点锚>`，门控哈希直接取库内画像），
 链上**模板没变的步骤就不用真调模型**——它们不受这次改动影响，直接继承 PASS；`--max-total-calls` /
 `--max-total-tokens` 给整次运行设一个全局预算池，花到线就收手，没跑的步骤如实标「跳过」。还有
 一个降低试错成本的开关：`--dry-run` 只出执行计划与成本预估——哪些步骤会真重放、哪些继承，零调用、
@@ -377,9 +377,9 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 | `agentassert4j baseline export` | 导出验收基线包（交付证据载体） | `--task <前缀>`（缩域）；`--include-samples`（脱敏样本）；`--out <文件>`（默认 `./acceptance-pack.json`）；`--json`（export-report/1：out/taskCount/stepCount/sha256/excluded 元数据报告） | 内容天然脱敏（结构指纹+键）；打印 SHA-256 供对账；存在未建档步骤的链排除并警告 |
 | `agentassert4j status` | 查看调用点清单与基线状态 | `--diff`：展示待裁决的差异；`--json`（status/1） | 只看清单本体；已录制未建档的调用点在「未建档调用点」段列出 |
 | `agentassert4j doctor` | 库体检：身份/覆盖/规则三段确定性事实（骨架族、多步零标签链、未声明任务的重复请求族、未建档、规则期望错位），给声明建议 | 无必填参数 | 只读不判定不建档，退出码恒 0 |
-| `agentassert4j replay` | 重放比对：用新提示词重跑历史用例并判定（调用点域） | `--prompt <文件>`（此范围**必填**）；`--invocation <前缀>`（限域）；`--dry-run`（只预演不调用）；`--old-prompt <文件>`（启用波及面裁剪）；`--max-cases`（默认 3）；`--selection`(newest/oldest)；`--ci`（流水线模式：不为无基线调用点自动建档）；`--json` | `--prompt` 缺失直接报错；其余缺省 = 真跑、全部调用点选例、人看输出 |
-| `agentassert4j replay --task` | 任务域：整链回归（望远镜） | `--task <文本前缀>`；`--prompt` 可选（缺省=真实对比模式，最新链 vs 次新链按调用点对齐，零 LLM 调用）；`--old-prompt`（仅受影响步骤真重放，其余继承 PASS）；`--dry-run`（只出执行计划与成本预估，零调用零建档）；`--full-chain`（取消裁剪与分歧即停）；`--max-total-calls/--max-total-tokens`（全局预算池）；`--json`（task-report/1） | 精确命中优先；短前缀命中多个不同任务时报错列候选（exit 2）；单链=自建基线（exit 0） |
-| `agentassert4j replay --affected` | 任务选择器：含受影响调用点的全部任务链逐链冻结重放 | 要求同时给 `--prompt` 与 `--old-prompt` | 与 `--task`/`--invocation` 互斥 |
+| `agentassert4j replay` | 重放比对：用新提示词重跑历史用例并判定（调用点域） | `--prompt <文件>`（此范围**必填**）；`--invocation <前缀>`（限域）；`--dry-run`（只预演不调用）；`--old-prompt <文件>` 或 `--old-key <调用点锚>`（启用波及面裁剪，二选一互斥）；`--max-cases`（默认 3）；`--selection`(newest/oldest)；`--ci`（流水线模式：不为无基线调用点自动建档）；`--json` | `--prompt` 缺失直接报错；`--old-prompt/--old-key`/`--selection`/`--max-cases` 用错域直接报错；其余缺省 = 真跑、全部调用点选例、人看输出 |
+| `agentassert4j replay --task` | 任务域：整链回归（望远镜） | `--task <文本前缀>`；`--prompt` 可选（缺省=真实对比模式，最新链 vs 次新链按调用点对齐，零 LLM 调用）；`--old-prompt`/`--old-key`（仅受影响步骤真重放，其余继承 PASS；二选一互斥）；`--dry-run`（只出执行计划与成本预估，零调用零建档）；`--full-chain`（取消裁剪与分歧即停，仅冻结重放有效）；`--max-total-calls/--max-total-tokens`（全局预算池）；`--json`（task-report/1）；多链输出链块带「历史链/最新链」定性 | 精确命中优先；短前缀命中多个不同任务时报错列候选（exit 2）；单链=自建基线（exit 0） |
+| `agentassert4j replay --affected` | 任务选择器：含受影响调用点的全部任务链逐链冻结重放 | 要求同时给 `--prompt` 与 `--old-prompt`/`--old-key` | 与 `--task`/`--invocation` 互斥 |
 | `agentassert4j approve` | 裁决：把有差异的新指纹转正为新基线 | `--invocation <目标>`；`--approver <名字>`；`--all` | `--invocation` 与 `--all` 二选一；审批人缺省取系统用户名 |
 | `agentassert4j reject` | 裁决：丢弃新指纹，保留旧基线 | 同 approve | 同上 |
 | `agentassert4j rollback` | 把基线回滚到指定历史版本 | `--invocation <目标>` 与 `--version <版本号>`（**均必填**） | 缺任一参数直接报错 |

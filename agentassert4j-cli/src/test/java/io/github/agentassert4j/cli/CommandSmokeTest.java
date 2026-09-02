@@ -2,6 +2,7 @@ package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
+import io.github.agentassert4j.util.HashUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -291,5 +292,82 @@ class CommandSmokeTest {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         System.setOut(new PrintStream(buffer, true));
         return buffer;
+    }
+
+    private ByteArrayOutputStream redirectStderr() {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(buffer, true));
+        return buffer;
+    }
+
+    private Path writePromptFile(String name, String content) throws Exception {
+        Path file = tempDir.resolve(name);
+        Files.write(file, content.getBytes(StandardCharsets.UTF_8));
+        return file;
+    }
+
+    @Test
+    @DisplayName("replay --old-key 以画像模板哈希门控，干跑计划与 --old-prompt 同哈希口径一致")
+    void replayOldKey_resolvesProfileHash_gatesLikeOldPrompt() throws Exception {
+        String oldPromptText = "旧版系统提示词全文";
+        String oldHash = HashUtil.sha256(oldPromptText);
+        seedOneRecord("session-1", 1000L, oldHash);
+        seedOneRecord("session-2", 9000L, oldHash);
+        redirectStdout();
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath));
+        ByteArrayOutputStream replayOut = redirectStdout();
+        Path newPromptFile = writePromptFile("new-prompt.txt", "新提示词全文");
+
+        int byKey = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--prompt", newPromptFile.toString(), "--old-key", "queryOrder@" + oldHash.substring(0, 8), "--dry-run");
+
+        assertEquals(0, byKey, replayOut.toString());
+        assertTrue(replayOut.toString().contains("真重放（受影响）"), replayOut.toString());
+        assertTrue(replayOut.toString().contains("，历史链）：") && replayOut.toString().contains("，最新链）："), "两链干跑计划必须带定性标注: " + replayOut);
+    }
+
+    @Test
+    @DisplayName("replay --old-key 与 --old-prompt 互斥")
+    void replayOldKey_conflictsWithOldPrompt() throws Exception {
+        redirectStdout();
+        ByteArrayOutputStream errOut = redirectStderr();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--prompt", writePromptFile("n.txt", "新").toString(), "--old-key", "queryOrder@abcd1234", "--old-prompt", writePromptFile("o.txt", "旧").toString());
+
+        assertEquals(2, exit);
+        assertTrue(errOut.toString().contains("互斥"), errOut.toString());
+    }
+
+    @Test
+    @DisplayName("replay 真实对比不接受 --old-key/--old-prompt（无裁剪可做）")
+    void replayOldRoot_rejectedInRealComparison() throws Exception {
+        redirectStdout();
+        ByteArrayOutputStream errOut = redirectStderr();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--old-key", "queryOrder@abcd1234");
+
+        assertEquals(2, exit);
+        assertTrue(errOut.toString().contains("仅在冻结重放"), errOut.toString());
+    }
+
+    @Test
+    @DisplayName("replay 任务域拒绝 --selection/--max-cases（静默忽略清零）")
+    void replayTaskScope_rejectsInvocationScopeSelectionKnobs() throws Exception {
+        redirectStdout();
+        ByteArrayOutputStream errOut = redirectStderr();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--prompt", writePromptFile("n.txt", "新").toString(), "--old-prompt", writePromptFile("o.txt", "旧").toString(), "--max-cases", "2");
+
+        assertEquals(2, exit);
+        assertTrue(errOut.toString().contains("仅在调用点范围有效"), errOut.toString());
+    }
+
+    @Test
+    @DisplayName("replay --prompt 与 --old-prompt 同内容：提示噪声探针口径")
+    void replaySamePromptContent_hintsNoiseProbeSemantics() throws Exception {
+        seedOneRecord("session-1", 1000L, HashUtil.sha256("同内容提示词"));
+        ByteArrayOutputStream out = redirectStdout();
+        redirectStderr();
+        Path same = writePromptFile("same.txt", "同内容提示词");
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--prompt", same.toString(), "--old-prompt", same.toString(), "--dry-run");
+
+        assertEquals(0, exit);
+        assertTrue(out.toString().contains("同模板噪声探针口径"), out.toString());
     }
 }

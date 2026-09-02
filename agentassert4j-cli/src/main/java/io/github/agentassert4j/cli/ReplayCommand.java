@@ -5,6 +5,7 @@ import io.github.agentassert4j.config.AgentAssert4jConfig;
 import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
+import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.HashUtil;
@@ -42,8 +43,11 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--prompt"}, description = "新 System Prompt 文件路径（--task 下可选：缺省=真实对比模式，同名链最新 vs 次新纯比较零调用）")
     String promptPath;
 
-    @Option(names = {"--old-prompt"}, description = "变更前 System Prompt 文件路径（提供后仅模板与旧提示词一致的记录以新提示词真重放，--task 下其余记录继承 PASS）")
+    @Option(names = {"--old-prompt"}, description = "变更前 System Prompt 文件路径（提供后仅模板与旧版门控哈希一致的记录以新提示词真重放，--task 下其余记录继承 PASS）；与 --old-key 互斥")
     String oldPromptPath;
+
+    @Option(names = {"--old-key"}, description = "变更前调用点锚（业务标签/键前缀/status 显示短形）：以其画像模板哈希为影响裁剪根，免导出旧模板全文；与 --old-prompt 互斥")
+    String oldKey;
 
     @Option(names = {"--invocation"}, description = "仅重放该调用点：业务 invocationId 或 invocationKey 唯一前缀（完整列表见 status 命令）")
     String invocation;
@@ -63,10 +67,10 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--max-total-tokens"}, description = "任务域预算池：本次运行真重放 token 合计上限")
     Integer maxTotalTokens;
 
-    @Option(names = {"--max-cases"}, defaultValue = "3", description = "默认选例模式下每 调用点 的用例上限（默认 3）")
-    int maxCases;
+    @Option(names = {"--max-cases"}, description = "默认选例模式下每 调用点 的用例上限（默认 3；仅调用点范围有效）")
+    Integer maxCases;
 
-    @Option(names = {"--selection"}, defaultValue = "newest", description = "选例策略：newest=每 调用点 最新录制（默认），oldest=最旧录制")
+    @Option(names = {"--selection"}, description = "选例策略：newest=每 调用点 最新录制（缺省），oldest=最旧录制；仅调用点范围有效")
     String selection;
 
     @Option(names = {"--ci", "--no-establish"}, description = "CI 模式：不为无基线的 调用点 自动建档，存在未建档 调用点 时拒绝判定（退出码 2）——防止无人审的自动基线产出绿灯")
@@ -94,8 +98,24 @@ public class ReplayCommand implements Callable<Integer> {
             err.println("--max-total-calls/--max-total-tokens 预算池仅在任务域（--task/--affected）有效。");
             return 2;
         }
-        if (affected && (promptPath == null || oldPromptPath == null)) {
-            err.println("--affected 要求同时提供 --prompt 与 --old-prompt（影响集以此二 hash 为根）。");
+        if (oldKey != null && oldPromptPath != null) {
+            err.println("--old-key 与 --old-prompt 互斥：同一次重放只取一个旧版根。");
+            return 2;
+        }
+        if (affected && (promptPath == null || (oldPromptPath == null && oldKey == null))) {
+            err.println("--affected 要求同时提供 --prompt 与 --old-prompt/--old-key（影响集以此二哈希为根）。");
+            return 2;
+        }
+        if (taskScope && promptPath == null && (oldPromptPath != null || oldKey != null)) {
+            err.println("--old-prompt/--old-key 仅在冻结重放（提供 --prompt）时生效；真实对比按调用点对齐，不做影响裁剪。");
+            return 2;
+        }
+        if (fullChain && promptPath == null) {
+            err.println("--full-chain 仅在冻结重放（提供 --prompt）时生效；真实对比无裁剪可取消。");
+            return 2;
+        }
+        if (taskScope && (selection != null || maxCases != null)) {
+            err.println("--selection/--max-cases 仅在调用点范围有效（任务域为整链回归，无逐调用点选例）。");
             return 2;
         }
         if (!taskScope && promptPath == null) {
@@ -110,6 +130,10 @@ public class ReplayCommand implements Callable<Integer> {
             err.println("--max-total-tokens 必须 ≥ 1。");
             return 2;
         }
+        if (maxCases != null && maxCases < 1) {
+            err.println("--max-cases 必须 ≥ 1，当前值：" + maxCases);
+            return 2;
+        }
 
         String newPrompt = null;
         if (promptPath != null) {
@@ -120,23 +144,22 @@ public class ReplayCommand implements Callable<Integer> {
                 return 2;
             }
         }
-        String oldPrompt = null;
         String oldPromptHash = null;
         if (oldPromptPath != null) {
-            oldPrompt = readTextFile(oldPromptPath);
+            String oldPrompt = readTextFile(oldPromptPath);
             if (oldPrompt == null) {
                 err.println("无法读取旧 Prompt 文件（--old-prompt 须为可读文件路径）：" + CliSupport.visibleText(CliSupport.abbreviateText(oldPromptPath, 80)));
                 return 2;
             }
             oldPromptHash = HashUtil.sha256(oldPrompt);
+            if (oldPrompt.equals(newPrompt)) {
+                // 同内容两旗标是合法的噪声探针口径，但要点破，防止被误当成跨版本实验
+                (jsonOutput ? err : out).println("提示：--prompt 与 --old-prompt 内容相同——本次为同模板噪声探针口径（同模板回归零假阳性验证）；跨版本实验请提供内容不同的 --old-prompt。");
+            }
         }
         if (!taskScope) {
-            if (!"newest".equals(selection) && !"oldest".equals(selection)) {
+            if (selection != null && !"newest".equals(selection) && !"oldest".equals(selection)) {
                 err.println("--selection 只接受 newest 或 oldest，当前值：" + selection);
-                return 2;
-            }
-            if (maxCases < 1) {
-                err.println("--max-cases 必须 ≥ 1，当前值：" + maxCases);
                 return 2;
             }
         }
@@ -145,6 +168,22 @@ public class ReplayCommand implements Callable<Integer> {
         StorageRepository repository = null;
         try {
             repository = CliSupport.openRepository(db, jsonOutput ? System.err : System.out);
+
+            // --old-key 的哈希取画像真源列而非键内哈希段：声明骨架细分场景下键内哈希是骨架哈希
+            String oldKeyHash = null;
+            if (oldKey != null) {
+                String resolvedKey = CliSupport.resolveInvocationKeyTarget(repository, oldKey);
+                InvocationProfile profile = repository.findInvocationByKey(resolvedKey);
+                oldKeyHash = profile == null ? null : profile.getTemplateHash();
+                if (oldKeyHash == null || oldKeyHash.isEmpty()) {
+                    err.println("调用点 " + resolvedKey + " 的画像没有模板哈希（该锚不可作 --old-key 门控根；用 status 核对）。");
+                    return 2;
+                }
+                if (newPrompt != null && oldKeyHash.equals(HashUtil.sha256(newPrompt))) {
+                    (jsonOutput ? err : out).println("提示：--old-key 指向的模板哈希与 --prompt 内容哈希相同——门控将命中该模板的全部记录（同模板口径）。");
+                }
+            }
+            String oldRootHash = oldPromptHash != null ? oldPromptHash : oldKeyHash;
 
             DeterministicComparator comparator = CliSupport.createComparator(config);
 
@@ -159,11 +198,11 @@ public class ReplayCommand implements Callable<Integer> {
             CliSupport.warnMalformedTaskRules(rules, jsonOutput ? System.err : System.out);
 
             if (taskScope) {
-                return new TaskReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(task, affected, fullChain, newPrompt, oldPrompt, maxTotalCalls, maxTotalTokens, dryRun);
+                return new TaskReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(task, affected, fullChain, newPrompt, oldRootHash, maxTotalCalls, maxTotalTokens, dryRun);
             }
 
-            boolean newestFirst = "newest".equals(selection);
-            return new ReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(newPrompt, invocation, maxCases, oldPromptHash, dryRun, ciMode, newestFirst);
+            boolean newestFirst = !"oldest".equals(selection);
+            return new ReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(newPrompt, invocation, maxCases == null ? 3 : maxCases, oldRootHash, dryRun, ciMode, newestFirst);
         } catch (RuntimeException e) {
             err.println("replay 失败：" + e.getMessage());
             return 2;
