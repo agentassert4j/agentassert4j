@@ -266,9 +266,9 @@ final class CliSupport {
 
     /**
      * 解析 --invocation 过滤值（选例类命令用：replay/baseline）。与某业务 invocationId
-     * 精确相等时按原义使用；否则尝试 invocationKey 唯一前缀匹配并换算回业务标签
-     * （画像上的 invocationId 是分组器派生的内部标识，与记录上的业务标签是两套体系）。
-     * 完全无命中时原样返回，由调用方的「未找到用例」路径兜底。
+     * 精确相等时按原义使用；否则按显示短形或 invocationKey 唯一前缀定位调用点并换算回
+     * 业务标签（画像上的 invocationId 是分组器派生的内部标识，与记录上的业务标签是两套
+     * 体系）。完全无命中时原样返回，由调用方的「未找到用例」路径兜底。
      *
      * @return 业务 invocationId 过滤值（null 语义由调用方维持）
      */
@@ -279,6 +279,17 @@ final class CliSupport {
         Set<String> businessIds = recordedInvocationIds(repository);
         if (businessIds.contains(filter)) {
             return filter;
+        }
+        String displayMatch = resolveByDisplayForm(repository, filter);
+        if (displayMatch != null) {
+            List<String> labelMatches = businessLabelsForKey(repository, displayMatch);
+            if (labelMatches.size() == 1) {
+                out.println("提示：--invocation " + filter + " 按显示短形匹配到 " + displayMatch + "（业务标签 " + labelMatches.get(0) + "）");
+                return labelMatches.get(0);
+            }
+            if (labelMatches.size() > 1) {
+                throw new IllegalStateException("--invocation " + filter + " 对应调用点键覆盖多个业务标签：" + String.join(", ", labelMatches) + "，请使用确切的业务标签。");
+            }
         }
         List<InvocationProfile> prefixMatches = new ArrayList<>();
         for (InvocationProfile profile : repository.findAllInvocations()) {
@@ -297,13 +308,7 @@ final class CliSupport {
             return filter;
         }
         String targetInvocationKey = prefixMatches.get(0).getInvocationKey();
-        List<String> businessMatches = new ArrayList<>();
-        for (String invocationId : businessIds) {
-            List<InteractionRecord> records = repository.findByInvocationId(invocationId);
-            if (!records.isEmpty() && targetInvocationKey.equals(invocationKeyOfRecord(records.get(0)))) {
-                businessMatches.add(invocationId);
-            }
-        }
+        List<String> businessMatches = businessLabelsForKey(repository, targetInvocationKey);
         if (businessMatches.size() == 1) {
             out.println("提示：--invocation " + filter + " 按 invocationKey 前缀匹配到 " + targetInvocationKey + "（业务标签 " + businessMatches.get(0) + "）");
             return businessMatches.get(0);
@@ -317,8 +322,9 @@ final class CliSupport {
     /**
      * 解析 --invocation 目标值（画像操作类命令用：approve/reject/rollback），返回唯一 invocationKey。
      * 解析优先级：完整 invocationKey 精确命中（即使它是其他 key 的前缀）＞ 业务标签（该标签
-     * 覆盖多个分组时报错并列出）＞ invocationKey 唯一前缀。无命中或多命中均抛
-     * {@link IllegalStateException}，由命令层转译为退出码 2。
+     * 覆盖多个分组时报错并列出）＞ 显示短形（status 展示的 标签@8位/skl@8位 等，看得到的写法
+     * 选得到）＞ invocationKey 唯一前缀。无命中或多命中均抛 {@link IllegalStateException}，
+     * 由命令层转译为退出码 2。
      */
     static String resolveInvocationKeyTarget(StorageRepository repository, String filter) {
         if (filter == null || filter.isEmpty()) {
@@ -342,9 +348,13 @@ final class CliSupport {
                 throw new IllegalStateException("业务标签 " + filter + " 下没有可分组的录制记录，无法定位 调用点。");
             }
             if (invocationKeys.size() > 1) {
-                throw new IllegalStateException("业务标签 " + filter + " 覆盖多个调用点：" + String.join(", ", invocationKeys) + "，请用 invocationKey（或其唯一前缀）指定。");
+                throw new IllegalStateException("业务标签 " + filter + " 覆盖多个调用点：" + String.join(", ", invocationKeys) + "，请用 invocationKey（或其唯一前缀、或 status 显示短形）指定。");
             }
             return invocationKeys.iterator().next();
+        }
+        String displayMatch = resolveByDisplayForm(repository, filter);
+        if (displayMatch != null) {
+            return displayMatch;
         }
         List<InvocationProfile> prefixMatches = new ArrayList<>();
         for (InvocationProfile profile : repository.findAllInvocations()) {
@@ -353,7 +363,7 @@ final class CliSupport {
             }
         }
         if (prefixMatches.isEmpty()) {
-            throw new IllegalStateException("没有匹配 " + filter + " 的调用点（业务标签或 invocationKey 前缀，完整列表见 status 命令）。");
+            throw new IllegalStateException("没有匹配 " + filter + " 的调用点（可用：业务标签、invocationKey 前缀、status 显示短形如 标签@8位；完整列表见 status 命令）。");
         }
         if (prefixMatches.size() > 1) {
             List<String> keys = new ArrayList<>();
@@ -363,6 +373,63 @@ final class CliSupport {
             throw new IllegalStateException("前缀匹配到多个调用点：" + String.join(", ", keys) + "，请提供更长的前缀。");
         }
         return prefixMatches.get(0).getInvocationKey();
+    }
+
+    /**
+     * 显示短形反解——status/对齐报告展示的「标签@8位哈希」「skl@8位」等短形可直接
+     * 粘贴为 --invocation 值，消除「看得到的写法选不了」的文法分叉。匹配方式：对画像键
+     * 现算显示形后全等比对（哈希段大小写不敏感）；末段不是 8 位十六进制的值不视为显示
+     * 短形，返回 null 由调用方走原解析路径。多命中（细分哈希前 8 位撞车）抛
+     * {@link IllegalStateException} 由命令层转译为退出码 2。
+     */
+    static String resolveByDisplayForm(StorageRepository repository, String filter) {
+        int at = filter == null ? -1 : filter.lastIndexOf('@');
+        if (at < 0 || filter.length() - at - 1 != 8) {
+            return null;
+        }
+        String hash = filter.substring(at + 1);
+        for (int i = 0; i < hash.length(); i++) {
+            char c = hash.charAt(i);
+            boolean hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+            if (!hex) {
+                return null;
+            }
+        }
+        String prefix = filter.substring(0, at + 1);
+        List<InvocationProfile> matches = new ArrayList<>();
+        for (InvocationProfile profile : repository.findAllInvocations()) {
+            String shown = displayKey(profile.getInvocationKey());
+            if (shown != null && shown.length() == filter.length() && shown.startsWith(prefix) && shown.regionMatches(true, at + 1, hash, 0, 8)) {
+                matches.add(profile);
+            }
+        }
+        if (matches.isEmpty()) {
+            return null;
+        }
+        if (matches.size() > 1) {
+            List<String> keys = new ArrayList<>();
+            for (InvocationProfile profile : matches) {
+                keys.add(profile.getInvocationKey());
+            }
+            throw new IllegalStateException("显示短形 " + filter + " 对应多个调用点（细分哈希前 8 位撞车）：" + String.join(", ", keys) + "，请提供完整 invocationKey。");
+        }
+        return matches.get(0).getInvocationKey();
+    }
+
+    /**
+     * 调用点键 → 业务标签反查：恰一个业务标签的首记录落在此键上时返回单元素列表，
+     * 零个或多个返回原样由调用方处置。键前缀与显示短形两条解析路径共用同一实现，
+     * 两侧语义不得分叉。
+     */
+    private static List<String> businessLabelsForKey(StorageRepository repository, String invocationKey) {
+        List<String> matches = new ArrayList<>();
+        for (String invocationId : recordedInvocationIds(repository)) {
+            List<InteractionRecord> records = repository.findByInvocationId(invocationId);
+            if (!records.isEmpty() && invocationKey.equals(invocationKeyOfRecord(records.get(0)))) {
+                matches.add(invocationId);
+            }
+        }
+        return matches;
     }
 
     /**

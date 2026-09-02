@@ -115,7 +115,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
 
     private void printNoTargets(StorageRepository repository) {
         if (invocation != null) {
-            err.println("没有匹配 " + invocation + " 的调用点（业务标签或 invocationKey 前缀，完整列表见 status 命令）。");
+            err.println("没有匹配 " + invocation + " 的调用点（可用：业务标签、invocationKey 前缀、status 显示短形如 标签@8位；完整列表见 status 命令）。");
             return;
         }
         List<String> pending = new ArrayList<>();

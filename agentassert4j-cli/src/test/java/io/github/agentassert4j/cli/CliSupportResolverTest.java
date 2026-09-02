@@ -2,6 +2,7 @@ package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -135,6 +136,81 @@ class CliSupportResolverTest {
         saveRecord("r1", "queryOrder", "hash-a");
 
         assertEquals("queryOrder", CliSupport.resolveInvocationFilter(repository, "queryOrder", new PrintStream(output)));
+    }
+
+    @Test
+    @DisplayName("显示短形直接可选（目标解析）：标签@8位反解到完整键")
+    void displayForm_resolvesToFullKey() {
+        saveRecord("r1", "queryOrder", "abcdef1234567890");
+        establishAll();
+
+        assertEquals("invocation:queryOrder:abcdef1234567890", CliSupport.resolveInvocationKeyTarget(repository, "queryOrder@abcdef12"));
+    }
+
+    @Test
+    @DisplayName("显示短形哈希段大小写不敏感")
+    void displayForm_hashCaseInsensitive() {
+        saveRecord("r1", "queryOrder", "ABCDEF1234567890");
+        establishAll();
+
+        String resolved = CliSupport.resolveInvocationKeyTarget(repository, "queryOrder@abcdef12");
+        assertTrue(resolved.equalsIgnoreCase("invocation:queryOrder:ABCDEF1234567890"), resolved);
+    }
+
+    @Test
+    @DisplayName("显示短形撞车（前 8 位相同）报错并列出完整键")
+    void displayForm_collision_errors() {
+        saveRecord("r1", "queryOrder", "abcdef1200000001");
+        saveRecord("r2", "queryOrder", "abcdef1200000002");
+        establishAll();
+
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "queryOrder@abcdef12"));
+        assertTrue(e.getMessage().contains("撞车"));
+        assertTrue(e.getMessage().contains("invocation:queryOrder:abcdef1200000001") && e.getMessage().contains("invocation:queryOrder:abcdef1200000002"));
+    }
+
+    @Test
+    @DisplayName("末段非 8 位十六进制不视为显示短形，走原解析路径")
+    void displayForm_nonHexSuffix_fallsThrough() {
+        saveRecord("r1", "sk1", "abcdef1234567890");
+        establishAll();
+
+        // 「@toolong」不是 8 位 → 不按显示短形处理，走前缀/标签路径后无命中报错
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "sk1@toolong"));
+        assertTrue(e.getMessage().contains("没有匹配"));
+    }
+
+    @Test
+    @DisplayName("骨架/模板短形（skl@/tpl@）同样可选")
+    void displayForm_skeletonAndTemplateForms() {
+        // 零声明键不会经 baseline 入画像（按业务标签桶遍历），直落画像验证短形匹配契约本身
+        InvocationProfile profile = new InvocationProfile();
+        profile.setInvocationKey("skeleton:0123456789abcdef");
+        profile.setInvocationName("skeleton:0123456789abcdef");
+        repository.saveInvocationProfile(profile);
+
+        assertEquals("skeleton:0123456789abcdef", CliSupport.resolveInvocationKeyTarget(repository, "skl@01234567"));
+    }
+
+    @Test
+    @DisplayName("选例过滤器：显示短形换算回业务标签并提示")
+    void businessFilter_displayFormMapsToLabel() {
+        saveRecord("r1", "queryOrder", "abcdef1234567890");
+        establishAll();
+
+        String resolved = CliSupport.resolveInvocationFilter(repository, "queryOrder@abcdef12", new PrintStream(output));
+
+        assertEquals("queryOrder", resolved);
+        assertTrue(output.toString().contains("显示短形"), output.toString());
+        assertTrue(output.toString().contains("业务标签 queryOrder"));
+    }
+
+    @Test
+    @DisplayName("选例过滤器：显示短形未命中画像时按原样返回由调用方兜底")
+    void businessFilter_displayFormMissPassthrough() {
+        saveRecord("r1", "queryOrder", "abcdef1234567890");
+
+        assertEquals("queryOrder@zzzzzz", CliSupport.resolveInvocationFilter(repository, "queryOrder@zzzzzz", new PrintStream(output)));
     }
 
     @Test

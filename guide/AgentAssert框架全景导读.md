@@ -164,7 +164,7 @@ $ agentassert4j approve --invocation <调用点键前缀>
 ```
 
 `approve` 是裁决命令：把有差异的新指纹转正为新基线（v1 自动进存档，随时可以回滚）。`--invocation` 指定
-裁决哪个调用点，填调用点键（或业务标签）的任意唯一前缀即可。不认可就用 `reject`——新指纹作废，老基线原地不动。
+裁决哪个调用点，填调用点键（或业务标签）的任意唯一前缀即可，status 里看到的短形（`标签@8位`）也能直接粘贴。不认可就用 `reject`——新指纹作废，老基线原地不动。
 
 整条链路没有出现一句「这段回答更好/更差」。框架只陈述事实：哪里一样，哪里不一样，差异在第几维、哪个
 字段。方向判断是小王做的。
@@ -618,7 +618,7 @@ recorded（到达即计数） = written（批量写成功）
   - **invocationKey 永不进指纹**：指纹维度保持输出侧，输入侧（键、变量、历史）不参与判定——判定正确性与声明质量解耦，零声明应用（agent loop 主形态）是一等公民路径。
   - **双哈希各司其职**：全文哈希（`template_hash` 列）答「这条记录是用哪份完整文本组装的」——`--old-prompt` 门控与重放取回的依据；骨架哈希（文本现算优先、`skeleton_hash` 投影列兜底）答「这条记录属于哪个调用点」。骨架不参与门控与重放取回，`--old-prompt` 仍须归档全文。
 - `InvocationProfile`（调用点画像，对应 `invocations` 行）：身份列（invocationKey 主键、label、templateHash）+ 视图列（invocationName、invocationType、paramSignature）+ 治理列（fingerprint 现役基线、candidateFingerprint 候选、baselineStatus、versionTag、algoVersion、approvedBy/approvedAt、totalRecords）。
-- **统一身份空间**：声明与否共用同一派生文法、同一存储列（`invocation_key`）、同一图节点空间——影响分析、依赖图、治理三命令不再区分「声明/派生」双轨。标签只是视图：一个标签可覆盖多个调用点键（同标签多模板步骤），CLI 的 `--invocation` 三写法（业务标签 / 完整调用点键 / 唯一前缀）等价解析。画像属于可从 interactions 全量重建的派生数据（BaselineService 重复执行安全）。
+- **统一身份空间**：声明与否共用同一派生文法、同一存储列（`invocation_key`）、同一图节点空间——影响分析、依赖图、治理三命令不再区分「声明/派生」双轨。标签只是视图：一个标签可覆盖多个调用点键（同标签多模板步骤），CLI 的 `--invocation` 四写法（业务标签 / 完整调用点键 / 唯一前缀 / status 显示短形如 `标签@8位`）等价解析。画像属于可从 interactions 全量重建的派生数据（BaselineService 重复执行安全）。
 
 **表结构**：`invocations` 16 列见第 4 章；`interactions` 的 `invocation_id`（声明位）与 `invocation_key`（派生键，NOT NULL，enrich 兜底）两列是身份落库点。
 
@@ -760,7 +760,7 @@ recorded（到达即计数） = written（批量写成功）
   1. `executionConfig.validate()` 钳位（timeoutMs 下限 1000——0 在 HttpURLConnection 语义里是无限等待；温度钳 0–2、非 finite 置 null）；
   2. `warnIfModelDiffers`：重放模型与录制模型不一致时告警（配置未指定模型时以 `llmClient.name()` 实际生效值比对，堵住「默认模型 ≠ 录制模型」的盲区）；
   3. 非 CI 且非 dry-run：`BaselineService.establishMissing` 自动建档（JSON 模式下用丢弃流吞输出）；
-  4. `--invocation` 过滤解析（业务标签 / 完整调用点键 / 唯一前缀三写法，见第 13 章）；
+  4. `--invocation` 过滤解析（业务标签 / 完整调用点键 / 唯一前缀 / 显示短形四写法，见第 13 章）；
   5. **图现场重建** + 快照留档（dry-run 只读不落盘），打印节点/边统计；
   6. 选例两模式：提供 `--old-prompt` 时走影响裁剪（`ImpactAnalyzer`，第 10 章；分析错误或冷启动 → exit 2 并打印分析消息），否则默认选例（全库按调用点分桶，每调用点取规范序尾部 N 条——最新，`--selection oldest` 取头部，`--max-cases` 定 N，默认 3）；
   7. 空用例 → exit 2；**CI 守卫**：用例集中有无基线的调用点 → 点名拒绝，exit 2；**判定语义守卫**：基线 `algoVersion` ≠ 当前 `JudgmentSemantics.VERSION`（含未标记历史行）→ 拒绝并指引 `baseline --force`，exit 2；不可归组记录剔除出判定集并告警（证据不完整不允许出结论）；
@@ -892,7 +892,7 @@ recorded（到达即计数） = written（批量写成功）
 
 **设计问题**：CLI 是框架的**组合根**（把 core+recorder+storage 装配成可独立运行的工具）和**裁决工作台**（status 巡检、approve/reject 裁决、rollback 兜底）。命令输出的本质是产品界面而非日志（git/mvn 同款定位），可注入的 PrintStream 是它的测试通道。
 
-**概念与术语**：三写法等价（业务标签 / 完整 invocationKey / invocationKey 唯一前缀）、配置查找链与来源披露、输出通道契约。
+**概念与术语**：四写法等价（业务标签 / 完整 invocationKey / invocationKey 唯一前缀 / 显示短形 标签@8位）、配置查找链与来源披露、输出通道契约。
 
 **代码地图**：
 
@@ -916,7 +916,7 @@ recorded（到达即计数） = written（批量写成功）
   - `openRepository`：加载配置后**先打印配置来源一行**（命中路径或「未找到用默认」——错误目录下的旧配置静默生效是最难查的排障黑洞），`~` 前缀展开后建库初始化。
   - `recordedInvocationIds`：走「session 全量 → 逐记录提取」通道收集业务标签（TreeSet 字典序稳定）。
   - `resolveInvocationFilter`（选例类命令 replay/baseline 用）：与业务 invocationId 精确相等按原义；否则 invocationKey **唯一**前缀匹配并换算回业务标签（歧义前缀显式报错；对应调用点覆盖多个业务标签也报错并列出）。
-  - `resolveInvocationKeyTarget`（画像操作类 approve/reject/rollback 用，返回唯一 invocationKey）：完整调用点键精确命中（即使它是别的 key 的前缀）> 业务标签（覆盖多调用点时点名报错）> 唯一前缀；无命中/多命中抛 `IllegalStateException`，命令层转译为退出码 2。
+  - `resolveInvocationKeyTarget`（画像操作类 approve/reject/rollback 用，返回唯一 invocationKey）：完整调用点键精确命中（即使它是别的 key 的前缀）> 业务标签（覆盖多调用点时点名报错）> 显示短形（对画像键现算显示形全等比对，哈希段大小写不敏感，`resolveByDisplayForm`）> 唯一前缀；无命中/多命中抛 `IllegalStateException`，命令层转译为退出码 2。
   - `taskChains` / `invocationKeyOfRecord`：任务链派生与记录键解析的共用入口。
   - `currentActor`：`user.name` → 缺失记 `unknown`（不留无主审批记录）。
 - `ConfigLoader`（core）——查找链五级（主配置与规则配置各一套，键分别为 `agentassert4j.config.path`/`agentassert4j.rules.path`，文件名 `agentassert4j.json`/`agentassert4j-rules.json`）：
@@ -1112,7 +1112,7 @@ acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
 | 跨模型验收 | 开发侧与本地 servedModel 不一致——结构判定有效，文本差异属措辞预期内 | 第 12 章 |
 | 退出码契约 | 0 无差异 / 1 有差异或证据不完整 / 2 用法或基础设施故障 | 第 9/11 章 |
 | 证据报告 | `--json` 的单行机器可读输出（replay-report/1、task-report/1、verify-report/1） | 第 9/11/12 章 |
-| 三写法等价 | 业务标签 = 完整 invocationKey = 唯一前缀，CLI 统一解析 | 第 13 章 |
+| 四写法等价 | 业务标签 = 完整 invocationKey = 唯一前缀 = 显示短形 标签@8位，CLI 统一解析 | 第 13 章 |
 | 计数闭合 | recorded = written + dropped + failed，filtered 另列（总到达 = recorded + filtered） | 第 3 章 |
 | 采集门 | 默认全量录制；recordUndeclaredChat=false 时未声明且无可见工具调用的交互被过滤（filtered 与 dropped 分列，首条与每满 100 条告警） | 第 3 章 |
 | 判定二值化 | 判定只有 PASS/CHANGED 两值，权重与直判规则退役出判定链路 | 第 8 章 |
