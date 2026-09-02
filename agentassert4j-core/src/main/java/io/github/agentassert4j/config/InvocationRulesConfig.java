@@ -152,24 +152,6 @@ public class InvocationRulesConfig {
     }
 
     /**
-     * 派生一个合并了单条调用点规则的新配置：同键既有声明与新增声明逐集合取并集，
-     * 无同键则新增；本配置自身不变，多份合并互不串味。
-     */
-    public InvocationRulesConfig merging(String invocationId, InvocationRule rule) {
-        InvocationRulesConfig copy = new InvocationRulesConfig();
-        copy.rules.putAll(rules);
-        if (invocationId != null && rule != null) {
-            InvocationRule existing = copy.rules.get(invocationId);
-            copy.rules.put(invocationId, existing != null ? existing.mergedWith(rule) : rule);
-        }
-        return copy;
-    }
-
-    void addRule(String invocationId, InvocationRule rule) {
-        rules.put(invocationId, rule);
-    }
-
-    /**
      * 单个调用点的规则声明 — 维度 3（内容规则）+ 维度 4（约束行为）。
      *
      * <p>不可变对象：集合字段构造后只读（空集合与解析产物均不可变），
@@ -196,29 +178,6 @@ public class InvocationRulesConfig {
             this.forbiddenKeywords = forbiddenKeywords;
             this.regexPatterns = regexPatterns;
             this.behaviors = behaviors;
-        }
-
-        /**
-         * 与另一声明逐集合取并集（关键词/行为并集、regex 追加）——
-         * 场景断言叠加在站内规则上时的合并语义，产物仍不可变。
-         */
-        InvocationRule mergedWith(InvocationRule other) {
-            if (other == null) {
-                return this;
-            }
-            return new InvocationRule(union(requiredKeywords, other.requiredKeywords), union(forbiddenKeywords, other.forbiddenKeywords), concat(regexPatterns, other.regexPatterns), union(behaviors, other.behaviors));
-        }
-
-        private static Set<String> union(Set<String> first, Set<String> second) {
-            Set<String> result = new LinkedHashSet<>(first);
-            result.addAll(second);
-            return Collections.unmodifiableSet(result);
-        }
-
-        private static List<RegexPattern> concat(List<RegexPattern> first, List<RegexPattern> second) {
-            List<RegexPattern> result = new ArrayList<>(first);
-            result.addAll(second);
-            return Collections.unmodifiableList(result);
         }
 
         @SuppressWarnings("unchecked")

@@ -20,21 +20,9 @@ import static org.junit.jupiter.api.Assertions.*;
 class InvocationRulesConfigTest {
 
     @Test
-    @DisplayName("addRule 可手动添加规则")
-    void addRule() {
-        InvocationRulesConfig config = new InvocationRulesConfig();
-        config.addRule("mySkill", InvocationRulesConfig.fromJson("{\"invocations\":{\"tmp\":{\"behaviors\":[\"testBehavior\"]}}}").getRulesForInvocation("tmp"));
-
-        assertTrue(config.hasRules());
-        assertEquals(1, config.getDeclaredInvocationIds().size());
-        assertEquals(Collections.singleton("testBehavior"), config.getRulesForInvocation("mySkill").getBehaviors());
-    }
-
-    @Test
     @DisplayName("getDeclaredInvocationIds 不可修改")
     void declaredInvocationIds_immutable() {
-        InvocationRulesConfig config = new InvocationRulesConfig();
-        config.addRule("skill1", new InvocationRulesConfig.InvocationRule());
+        InvocationRulesConfig config = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill1\":{\"behaviors\":[\"mustUseChinese\"]}}}");
         assertThrows(UnsupportedOperationException.class, () -> config.getDeclaredInvocationIds().add("hacked"));
     }
 
@@ -181,60 +169,6 @@ class InvocationRulesConfigTest {
             assertTrue(rule.getRegexPatterns().isEmpty());
             assertTrue(rule.getBehaviors().isEmpty());
             assertThrows(UnsupportedOperationException.class, () -> rule.getRequiredKeywords().add("x"));
-        }
-    }
-
-    @Nested
-    @DisplayName("规则合并（场景断言叠加站内规则）")
-    class Merging {
-
-        @Test
-        @DisplayName("同键合并逐集合取并集")
-        void merging_sameKey_unionsSets() {
-            InvocationRulesConfig base = InvocationRulesConfig.fromJson("{\"invocations\":{\"s\":{" + "\"requiredKeywords\":[\"订单号\"],\"forbiddenKeywords\":[\"密码\"]," + "\"behaviors\":[\"mustUseChinese\"]}}}");
-            InvocationRulesConfig.InvocationRule extra = InvocationRulesConfig.fromJson("{\"invocations\":{\"tmp\":{" + "\"requiredKeywords\":[\"金额\"],\"forbiddenKeywords\":[\"身份证\"]," + "\"regexPatterns\":[{\"pattern\":\"ORD-\\\\d{4}\"}]," + "\"behaviors\":[\"nonEmptyOutput\"]}}}").getRulesForInvocation("tmp");
-
-            InvocationRulesConfig merged = base.merging("s", extra);
-            InvocationRulesConfig.InvocationRule rule = merged.getRulesForInvocation("s");
-
-            assertEquals(new HashSet<>(Arrays.asList("订单号", "金额")), rule.getRequiredKeywords());
-            assertEquals(new HashSet<>(Arrays.asList("密码", "身份证")), rule.getForbiddenKeywords());
-            assertEquals(new HashSet<>(Arrays.asList("mustUseChinese", "nonEmptyOutput")), rule.getBehaviors());
-            assertEquals(1, rule.getRegexPatterns().size());
-            assertEquals("ORD-\\d{4}", rule.getRegexPatterns().get(0).getPattern());
-        }
-
-        @Test
-        @DisplayName("无同键则新增条目")
-        void merging_newKey_added() {
-            InvocationRulesConfig base = InvocationRulesConfig.fromJson("{\"invocations\":{\"s\":{\"requiredKeywords\":[\"订单号\"]}}}");
-            InvocationRulesConfig.InvocationRule extra = InvocationRulesConfig.fromJson("{\"invocations\":{\"other\":{\"behaviors\":[\"mustUseChinese\"]}}}").getRulesForInvocation("other");
-
-            InvocationRulesConfig merged = base.merging("other", extra);
-
-            assertEquals(new HashSet<>(Arrays.asList("s", "other")), merged.getDeclaredInvocationIds());
-            assertEquals(Collections.singleton("mustUseChinese"), merged.getRulesForInvocation("other").getBehaviors());
-        }
-
-        @Test
-        @DisplayName("基础配置在合并后保持不变")
-        void merging_baseUntouched() {
-            InvocationRulesConfig base = InvocationRulesConfig.fromJson("{\"invocations\":{\"s\":{\"requiredKeywords\":[\"订单号\"]}}}");
-            InvocationRulesConfig.InvocationRule extra = InvocationRulesConfig.fromJson("{\"invocations\":{\"tmp\":{\"requiredKeywords\":[\"金额\"]}}}").getRulesForInvocation("tmp");
-
-            base.merging("s", extra);
-
-            assertEquals(Collections.singleton("订单号"), base.getRulesForInvocation("s").getRequiredKeywords(), "多条场景共享基础配置各自合并，不得互相串味");
-        }
-
-        @Test
-        @DisplayName("合并空规则等于原样复制")
-        void merging_emptyRule_noOp() {
-            InvocationRulesConfig base = InvocationRulesConfig.fromJson("{\"invocations\":{\"s\":{\"requiredKeywords\":[\"订单号\"]}}}");
-
-            InvocationRulesConfig merged = base.merging("s", InvocationRulesConfig.InvocationRule.EMPTY);
-
-            assertEquals(Collections.singleton("订单号"), merged.getRulesForInvocation("s").getRequiredKeywords());
         }
     }
 
