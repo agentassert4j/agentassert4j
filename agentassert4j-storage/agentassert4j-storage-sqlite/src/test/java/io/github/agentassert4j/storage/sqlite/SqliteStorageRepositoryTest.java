@@ -579,7 +579,7 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
-    void skillProfileGovernanceColumnsRoundTrip() {
+    void invocationProfileGovernanceColumnsRoundTrip() {
         InvocationProfile p = new InvocationProfile();
         p.setLabel("gov-flow");
         p.setInvocationKey("gov-key");

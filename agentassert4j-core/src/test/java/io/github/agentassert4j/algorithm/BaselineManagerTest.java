@@ -658,4 +658,172 @@ class BaselineManagerTest {
             assertNotNull(latest.getApprovedBy());
         }
     }
+
+    /**
+     * 骨架锚点记录：身份按骨架定格，全文哈希变化不裂键——身份前移测试的载体形态
+     */
+    private InteractionRecord skeletonRecord(String recordId, String label, String skeletonHash, String templateHash, long timestamp) {
+        InteractionRecord r = new InteractionRecord();
+        r.setRecordId(recordId);
+        r.setSessionId("s-1");
+        r.setTimestamp(timestamp);
+        r.setInvocationId(label);
+        r.setSkeletonHash(skeletonHash);
+        r.setTemplateHash(templateHash);
+        r.setInvocationKey("invocation:" + label + ":" + skeletonHash);
+        return r;
+    }
+
+    private InvocationProfile candidateProfileWithIdentity(String invocationKey, String label, String templateHash) {
+        InvocationProfile p = new InvocationProfile();
+        p.setInvocationKey(invocationKey);
+        p.setLabel(label);
+        p.setTemplateHash(templateHash);
+        p.setFingerprint(new DeterministicFingerprint());
+        p.setCandidateFingerprint(new DeterministicFingerprint());
+        p.setBaselineStatus(BaselineStatus.CANDIDATE);
+        p.setVersionTag("v1");
+        return p;
+    }
+
+    @Nested
+    @DisplayName("模板身份前移 - approve 前移、rollback 恢复、显式收编")
+    class TemplateIdentity {
+
+        private static final String KEY = "invocation:order-flow:skl-1";
+
+        @Test
+        @DisplayName("approve 把画像哈希前移到最新记录哈希，旧哈希随归档留痕")
+        void approveAdvancesIdentity_oldHashArchived() {
+            repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
+            repo.saveInteraction(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
+            repo.saveInteraction(skeletonRecord("r-new", "order-flow", "skl-1", "h2", 2000L));
+
+            manager.approve(KEY, "tester");
+
+            InvocationProfile updated = repo.findInvocationByKey(KEY);
+            assertEquals("h2", updated.getTemplateHash(), "画像身份必须前移到最新记录哈希");
+            assertEquals("h1", repo.archivedBaselines.get(0).getTemplateHash(), "归档行必须先于前移快照旧哈希，回滚才有恢复源");
+            // 收敛闭环：approve 后检测不再命中
+            assertFalse(DriftDetector.detect(repo, new InMemoryDependencyGraph()).hasDrift());
+        }
+
+        @Test
+        @DisplayName("哈希一致时 approve 身份不变（幂等）")
+        void approveWithSameHash_isIdentityNeutral() {
+            repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h2"));
+            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
+
+            manager.approve(KEY, "tester");
+
+            assertEquals("h2", repo.findInvocationByKey(KEY).getTemplateHash());
+            assertFalse(DriftDetector.detect(repo, new InMemoryDependencyGraph()).hasDrift());
+        }
+
+        @Test
+        @DisplayName("reject 不前移身份，检测仍命中")
+        void rejectKeepsStaleIdentity_driftStillFires() {
+            repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
+            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
+
+            manager.reject(KEY);
+
+            assertEquals("h1", repo.findInvocationByKey(KEY).getTemplateHash());
+            assertTrue(DriftDetector.detect(repo, new InMemoryDependencyGraph()).hasDrift());
+        }
+
+        @Test
+        @DisplayName("rollback 把身份退回归档快照的模板哈希")
+        void rollbackRestoresArchivedIdentity() {
+            repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
+            repo.saveInteraction(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
+            repo.saveInteraction(skeletonRecord("r-new", "order-flow", "skl-1", "h2", 2000L));
+            manager.approve(KEY, "tester");
+            assertEquals("h2", repo.findInvocationByKey(KEY).getTemplateHash());
+
+            manager.rollback(KEY, "v1");
+
+            assertEquals("h1", repo.findInvocationByKey(KEY).getTemplateHash(), "回滚必须把身份一并退回旧模板");
+            // 身份回拨后与新模板记录重新构成漂移——状态机下轮再收编，属预期可见行为
+            assertTrue(DriftDetector.detect(repo, new InMemoryDependencyGraph()).hasDrift());
+        }
+
+        @Test
+        @DisplayName("显式收编前移一次后幂等，再次调用返回 false")
+        void advanceTemplateIdentity_isIdempotent() {
+            repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
+            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
+
+            assertTrue(manager.advanceTemplateIdentity(KEY));
+            assertEquals("h2", repo.findInvocationByKey(KEY).getTemplateHash());
+            assertFalse(manager.advanceTemplateIdentity(KEY));
+        }
+
+        @Test
+        @DisplayName("最新记录损坏时回退次新可分组记录")
+        void advanceFallsBackPastCorruptRecord() {
+            repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
+            InteractionRecord corrupt = new InteractionRecord() {
+                @Override
+                public String getInvocationId() {
+                    throw new IllegalStateException("corrupt record");
+                }
+            };
+            corrupt.setRecordId("r-corrupt");
+            corrupt.setTimestamp(2000L);
+            corrupt.setTemplateHash("h-corrupt");
+            corrupt.setInvocationKey(KEY);
+            repo.saveInteraction(corrupt);
+            repo.saveInteraction(skeletonRecord("r-older", "order-flow", "skl-1", "h2", 1000L));
+
+            assertTrue(manager.advanceTemplateIdentity(KEY));
+            assertEquals("h2", repo.findInvocationByKey(KEY).getTemplateHash());
+        }
+
+        @Test
+        @DisplayName("全部记录不可分组时保守保留原值")
+        void advanceWithAllCorruptRecords_keepsOriginal() {
+            repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
+            InteractionRecord corrupt = new InteractionRecord() {
+                @Override
+                public String getInvocationId() {
+                    throw new IllegalStateException("corrupt record");
+                }
+            };
+            corrupt.setRecordId("r-corrupt");
+            corrupt.setTimestamp(1000L);
+            corrupt.setInvocationKey(KEY);
+            repo.saveInteraction(corrupt);
+
+            assertFalse(manager.advanceTemplateIdentity(KEY));
+            assertEquals("h1", repo.findInvocationByKey(KEY).getTemplateHash());
+        }
+
+        @Test
+        @DisplayName("最新可分组记录无模板哈希时保守保留原值")
+        void advanceWithZeroTemplateLatest_keepsOriginal() {
+            repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
+            repo.saveInteraction(skeletonRecord("r-new", "order-flow", "skl-1", null, 2000L));
+            repo.saveInteraction(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
+
+            assertFalse(manager.advanceTemplateIdentity(KEY));
+            assertEquals("h1", repo.findInvocationByKey(KEY).getTemplateHash());
+        }
+
+        @Test
+        @DisplayName("画像未携带模板哈希时收编补齐（null → 最新记录哈希）")
+        void advanceFillsMissingProfileIdentity() {
+            repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", null));
+            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
+
+            assertTrue(manager.advanceTemplateIdentity(KEY));
+            assertEquals("h2", repo.findInvocationByKey(KEY).getTemplateHash());
+        }
+
+        @Test
+        @DisplayName("画像不存在时返回 false")
+        void advanceUnknownProfile_returnsFalse() {
+            assertFalse(manager.advanceTemplateIdentity("invocation:missing:skl-1"));
+        }
+    }
 }

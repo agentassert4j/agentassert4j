@@ -4,6 +4,8 @@ import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.spi.StorageRepository;
 
+import java.util.List;
+
 /**
  * 基线生命周期管理 — 框架只报告差异（侦探），接受与否由开发者裁决（法官）。
  *
@@ -51,6 +53,10 @@ public class BaselineManager {
         // 归档行携带的是旧基线自身获批时的审批人与语义版本，必须先于新审批信息写入前快照
         archiveIfAbsent(invocationKey, profile);
 
+        // 模板身份前移必须晚于归档：归档行的旧模板哈希是回滚的恢复源，
+        // 顺序颠倒会把前移后的新身份归档进旧基线行
+        recomputeTemplateHash(invocationKey, profile);
+
         // 候选提升为基线
         profile.setFingerprint(candidate);
         profile.setCandidateFingerprint(null);
@@ -83,6 +89,28 @@ public class BaselineManager {
     }
 
     /**
+     * 将调用点的模板身份前移到最新可分组记录的模板哈希（漂移自动收编的写入口，
+     * 与 approve 的前移同一重算口径）。
+     *
+     * <p>画像不存在、无可用记录凭据或最新模板哈希为空时保守保留原值并返回 false——
+     * 不产出错误身份；哈希一致时幂等返回 false。指纹、候选、版本标签与审批链均不动。</p>
+     *
+     * @param invocationKey 调用点键
+     * @return 是否实际前移（true = 画像模板哈希已更新）
+     */
+    public synchronized boolean advanceTemplateIdentity(String invocationKey) {
+        InvocationProfile profile = repository.findInvocationByKey(invocationKey);
+        if (profile == null) {
+            return false;
+        }
+        boolean advanced = recomputeTemplateHash(invocationKey, profile);
+        if (advanced) {
+            repository.saveInvocationProfile(profile);
+        }
+        return advanced;
+    }
+
+    /**
      * 回滚到指定版本的归档基线。
      *
      * @param invocationKey 调用点键
@@ -109,6 +137,9 @@ public class BaselineManager {
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);
         profile.setVersionTag(versionTag);
+        // 模板哈希随归档快照恢复：回滚把调用点身份一并退回该版本获批时的模板，
+        // 否则基线描述旧模板行为、身份却挂着新模板，下轮检测即误报漂移
+        profile.setTemplateHash(archived.getTemplateHash());
         profile.setAlgoVersion(archived.getAlgoVersion());
         profile.setApprovedBy(archived.getApprovedBy());
         profile.setApprovedAt(archived.getApprovedAt());
@@ -234,6 +265,25 @@ public class BaselineManager {
             }
         }
         return currentTag + "-next";
+    }
+
+    /**
+     * 按最新可分组记录重算画像模板哈希（approve 前移与漂移收编共用的口径）。
+     * 身份凭据 = 存储键与现算键一致且可解析的最新记录；凭据缺失（记录损坏或全部
+     * 不可用）或其模板哈希为空时保守保留原值。只改内存画像不落库，由调用方随
+     * 其余字段一并写入。
+     *
+     * @return 是否发生前移
+     */
+    private boolean recomputeTemplateHash(String invocationKey, InvocationProfile profile) {
+        List<InteractionRecord> records = repository.findByInvocationKey(invocationKey);
+        InteractionRecord anchor = DriftDetector.latestIdentityRecord(records, invocationKey);
+        String latestHash = anchor != null ? anchor.getTemplateHash() : null;
+        if (latestHash == null || latestHash.isEmpty() || latestHash.equals(profile.getTemplateHash())) {
+            return false;
+        }
+        profile.setTemplateHash(latestHash);
+        return true;
     }
 
     /**

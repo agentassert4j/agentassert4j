@@ -9,7 +9,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * ImpactAnalyzer 和 BaselineManager 测试共用的内存 StorageRepository 模拟。
+ * 核心算法单元测试共用的内存 StorageRepository 模拟。
  * 所有数据存于内存 Map，不做 SQL 操作。
  *
  * @author axy-yxa
@@ -119,7 +119,7 @@ class SimpleTestRepo implements StorageRepository {
 
     @Override
     public ArchivedTemplateVersion findArchivedVersion(String invocationKey, String versionTag) {
-        // 与 SQLite 实现的 tiebreaker 语义一致：同 skill 同版本多行归档时最近归档者胜，
+        // 与 SQLite 实现的 tiebreaker 语义一致：同调用点同版本多行归档时最近归档者胜，
         // 避免 Core 单测结论与生产实现方向相反
         ArchivedTemplateVersion latest = null;
         for (ArchivedTemplateVersion ab : archivedBaselines) {

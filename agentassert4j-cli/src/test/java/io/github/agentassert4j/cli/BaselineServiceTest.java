@@ -1,5 +1,6 @@
 package io.github.agentassert4j.cli;
 
+import io.github.agentassert4j.algorithm.FingerprintExtractor;
 import io.github.agentassert4j.algorithm.InvocationResolver;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.InteractionRecord;
@@ -89,6 +90,23 @@ class BaselineServiceTest {
         String report = output.toString();
         assertTrue(report.contains("出现禁用关键词「抱歉」"), "禁用关键词违例可见: " + report);
         assertTrue(report.contains("正则不命中"), "正则违例可见: " + report);
+    }
+
+    @Test
+    @DisplayName("建档种子取桶内规范序最早记录，与录制插入顺序无关")
+    void seedIsCanonicalEarliest_regardlessOfInsertionOrder() {
+        InteractionRecord late = makeRecord("rec-late", "skill-1", 2000L, "{\"late\":true}");
+        InteractionRecord early = makeRecord("rec-early", "skill-1", 1000L, "{\"early\":true}");
+        repository.saveInteraction(late);
+        repository.saveInteraction(early);
+        PrintStream out = new PrintStream(output, true);
+
+        new BaselineService(repository).establishMissing(out, "tester", false, null, null);
+
+        InvocationProfile profile = repository.findInvocationByKey(invocationKeyOf("skill-1"));
+        assertNotNull(profile, "基线已建立");
+        assertEquals(FingerprintExtractor.extract(early), profile.getFingerprint(), "种子指纹必须来自规范序最早记录");
+        assertNotEquals(FingerprintExtractor.extract(late), profile.getFingerprint(), "晚于种子的记录不得成为基线");
     }
 
     private InteractionRecord makeRecord(String recordId, String invocationId, long timestamp, String response) {

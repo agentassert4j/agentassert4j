@@ -161,7 +161,7 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
     /**
      * 落库前补全分组键。
      * 在消费线程执行——指纹提取含响应体 JSON 解析，不允许回到业务线程。
-     * group_key 列有 NOT NULL 约束，上游缺失时回充分组器派生值，否则整批 INSERT 失败；
+     * invocation_key 列有 NOT NULL 约束，上游缺失时回充分组器派生值，否则整批 INSERT 失败；
      * 已有值不覆盖（上游显式设置的优先）。
      * 只回填 invocationKey 与 templateHash/skeletonHash 两个哈希投影：record.invocationId 是业务声明位，
      * 写入派生 hash 会让后续重派生把它误当声明锚，造成存储键与现算键分叉；invocation_id 列的 NOT NULL

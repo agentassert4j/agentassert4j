@@ -413,50 +413,7 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 - **是**：JVM 原生的 AI Agent 行为回归测试框架。旁路录制真实 LLM 交互 → 确定性四维指纹与基线 → prompt 变更按依赖图裁剪影响集 → 真实调用重放判定差异 → 按调用点对齐任务链 → 人工裁决；基线可导出为验收包做跨环境交付验收。
 - **刻意不是**：①不是监控/观测平台（落库是为了回归，不是为了看板）；②不是提示词管理器（不管理 prompt 内容，只管行为）；③不评判好坏——只陈述「与基线有无差异」，方向判断留给人；④判定链路 100% 确定性，永不引入 LLM-as-judge；⑤不是代理/网关——业务流量从不过它转发；⑥不驱动产品执行——录制靠旁路、验收靠验收人真实操作。
 
-**代码地图（模块分层）**：Maven reactor 共 11 个构建节点，产出 8 个 jar：
-
-```
-Layer 4   spring-boot3-starter        spring-boot4-starter      （自动装配聚合）
-               │  聚合 core+recorder+        │  聚合 core+recorder+
-               │  sdk-ai1+storage-sqlite     │  sdk-ai2+storage-sqlite
-Layer 3   sdk-spring-ai1         sdk-spring-ai2            （框架适配）
-          cli（组合根：core+recorder+storage-sqlite+picocli）
-               │
-Layer 2   recorder（core + Disruptor + SLF4J API）          （异步旁路管道）
-               │
-Layer 1   core（纯 java.base，零外部依赖——发布卖点）         （模型/SPI/算法/判定）
-          storage-sqlite（只依赖 core + SQLite JDBC，独立插件分支）（唯一存储后端）
-```
-
-铁律：**依赖单向，下层不感知上层**——core 里出现任何 `com.*`/`org.*` import 都是缺陷（CI 可 grep 验证）。
-
-**代码地图（core 内部六包）**：`model/` 数据模型（InteractionRecord、DeterministicFingerprint、TaskChain、AcceptancePack、InvocationProfile…）、`spi/` 全部 SPI 接口、`algorithm/` 纯算法（分组、指纹、对比、基线、影响分析、重放执行、任务链派生与对齐）、`result/` 判定结果（Verdict、ComparisonResult、TaskAlignment 等）、`util/` 工具（RecursiveJsonParser 是全框架唯一的 JSON 解析/序列化真源）、`config/` 配置加载。
-
-**表结构（五表总览，逐列解读见第 4 章）**：
-
-| 表 | 角色 | 一句话 |
-|----|------|--------|
-| `interactions` | 账本 | 只追加的交互历史，38 列 + 5 索引，一切分析的原始数据 |
-| `invocations` | 档案 | 每个调用点一行：现役基线指纹、待裁决候选、治理三列（审批人/时间/算法版本） |
-| `invocation_template_versions` | 历史 | 每次转正/重建时被替换的旧基线按模板版本归档，rollback 的数据来源 |
-| `prompt_texts` | 原文库 | template_hash → 提示词原文（hash 不可逆，原文只能落这里） |
-| `graph_snapshot` | 快照 | 整图单行 JSON（`id='current'`），派生数据、随时可重建 |
-
-任务与验收都没有自己的表：任务链是从 `interactions` 现场派生的视图（第 11 章），验收包是一个 JSON 文件（第 12 章）——派生事实不建实体表是全库的统一哲学。
-
-**生命周期（两条主线，细节散见各章、总图在 Part III 第 14 章）**：
-
-```
-一次交互的一生：
-业务线程: chatClient.call() ──→ SDK mapper 映射为 InteractionRecord
-              │（业务调用照常返回，全程零等待）      │
-              ↓                                    ↓
-        录制管道: 脱敏 → 兜底 → RingBuffer 入队（满则丢弃计数）
-              → 消费线程缓冲 →(满批/5s 定时)→ enrich 补派生字段
-              → SQLite interactions 落库
-              → CLI: status 画像 / baseline 建档 / replay 重放比对 / verify 验收比对
-              → 差异落为候选 → approve/reject → 基线转正/作废，旧基线归档
-```
+**代码地图与数据主链路（维护基准已移交 spec）**：模块分层、core 包结构、五表总览与数据主链路的现状基准由 `guide/spec/OVERVIEW.md`（骨架总览）承载——本章保留叙事职责，不再双写事实图；叙事与 spec 冲突时以 spec 为准并修订败方。各域细节随分域规格成文（`guide/spec/`），对应章逐步瘦身为指向 spec 的地图。
 
 **测试怎么钉住它**：全量回归覆盖 core / recorder / storage / cli（含私有 e2e 门控用例）/ 两代 SDK / 两 starter，仓库根 `mvn -B test` 必须全绿。测试文化三条：测契约不测实现（跨组件边界逐字段对齐）、确定性契约必测（排序稳定、转义往返、计数闭合）、错误路径必测（专用异常精确断言）。
 
@@ -620,7 +577,7 @@ recorded（到达即计数） = written（批量写成功）
 - `InvocationProfile`（调用点画像，对应 `invocations` 行）：身份列（invocationKey 主键、label、templateHash）+ 视图列（invocationName、invocationType、paramSignature）+ 治理列（fingerprint 现役基线、candidateFingerprint 候选、baselineStatus、versionTag、algoVersion、approvedBy/approvedAt、totalRecords）。
 - **统一身份空间**：声明与否共用同一派生文法、同一存储列（`invocation_key`）、同一图节点空间——影响分析、依赖图、治理三命令不再区分「声明/派生」双轨。标签只是视图：一个标签可覆盖多个调用点键（同标签多模板步骤），CLI 的 `--invocation` 四写法（业务标签 / 完整调用点键 / 唯一前缀 / status 显示短形如 `标签@8位`）等价解析。画像属于可从 interactions 全量重建的派生数据（BaselineService 重复执行安全）。
 
-**表结构**：`invocations` 16 列见第 4 章；`interactions` 的 `invocation_id`（声明位）与 `invocation_key`（派生键，NOT NULL，enrich 兜底）两列是身份落库点。
+**表结构**：`invocations` 15 列见第 4 章；`interactions` 的 `invocation_id`（声明位）与 `invocation_key`（派生键，NOT NULL，enrich 兜底）两列是身份落库点。
 
 **生命周期与并发契约**：解析是纯函数（无状态、无 IO），可在任何线程调用；同一记录永远得到同一 invocationKey——这是「派生规则冻结为身份契约」的前置性质。派生规则一经发布即冻结：任何变更 = 身份纪元事件（历史基线全部失配），必须走显式设计。
 
