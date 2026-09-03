@@ -20,6 +20,7 @@
         <module>agentassert4j-core</module>
         <module>agentassert4j-recorder</module>
         <module>agentassert4j-cli</module>
+        <module>agentassert4j-cli-standalone</module>
 
         <!-- 存储插件（聚合） -->
         <module>agentassert4j-storage</module>
@@ -99,6 +100,11 @@
             <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-nop</artifactId>
                 <version>${slf4j.version}</version>
             </dependency>
             <dependency>

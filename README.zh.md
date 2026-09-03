@@ -34,14 +34,14 @@ approve / reject 一键裁决。** 业务代码零改动，core 零外部依赖�
 
 ## 核心闭环
 
-<img src="assets/hero-loop.zh.png" alt="核心闭环：你的 Agent 旁路录制进单文件 SQLite，baseline 建档，改提示词后 replay --task 出逐步差异报告，approve / reject 裁决，export → verify 交付验收" width="880"/>
+<img src="assets/hero-loop.zh.png" alt="核心闭环：你的 Agent 旁路录制进单文件 SQLite，baseline 建档，改提示词真实跑一遍后 replay 出漂移检测与逐步对齐报告，approve / reject 裁决，export → verify 交付验收" width="880"/>
 
 | 环节 | 命令 | 发生了什么 |
 |------|------|-----------|
 | **录制即基线** | （自动） | 框架旁路拦截每次真实 LLM 调用，首录自动建档，零仪式 |
-| **冻结重放** | `replay --task --prompt` | 录制输入 + 新提示词真实重放：只有模板被改动影响的步骤真调用，其余继承基线结论 |
-| **自动对齐** | `replay --task` | 新版本真实执行后，按调用点自动配对两条链：缺步骤 / 新增步骤 / 逐步结构 diff |
-| **裁决门禁** | `approve` / `reject` | 预期改进转正（旧基线归档可回滚），回归丢弃；退出码 0/1/2 直接 gating |
+| **变更检测与对齐** | `replay` | 全项目漂移检测 + 逐任务按调用点对齐：缺步骤 / 新增步骤 / 逐步结构 diff，零 LLM 调用 |
+| **受控重驱（可选）** | `replay --re-drive` | 逐漂移点以最新归档模板重放历史输入做受控复核，花真实调用、预算池封顶 |
+| **裁决门禁** | `approve` / `reject` | bare 裁决全部待裁决候选；预期改进转正（旧基线归档可回滚），回归丢弃；退出码 0/1/2 直接 gating |
 
 ## 快速开始
 
@@ -81,38 +81,39 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 agentassert4j baseline --approver wang
 ```
 
-**4. 改提示词，重放整条任务链**
+**4. 改提示词，真实跑一遍，然后全项目对齐**
+
+提示词改完先**真实执行一遍**（冒烟或 e2e——新链自动入库），然后一条命令，零参数、零 LLM 调用：
 
 ```bash
-# --old-prompt 指明改动前的提示词文本：只有模板与之匹配的步骤按新提示词真重放，
-# 其余步骤不受这次改动影响，直接继承基线结论
-agentassert4j replay --task "订单 1234 的物流太慢" --prompt prompt-v2.txt --old-prompt prompt-v1.txt
+agentassert4j replay
 ```
 
 ```text
-任务「订单 1234 的物流太慢」（session 20260831-a3f2，5 步）：
-  [1] 意图识别      继承 PASS（未受影响）
-  [2] 查询订单      继承 PASS（未受影响）
-  [3] 查询物流      CHANGED  score=0.76  输出结构: 新增 delivery.promise
-  [4] 提交退款      分歧后下游——未执行（条件态：基线行为在此之后是否仍成立需真实重跑收口）
-  [5] 组织回复      分歧后下游——未执行（条件态：基线行为在此之后是否仍成立需真实重跑收口）
-任务汇总: PASS 2 | CHANGED 1 | 继承 2 | 分歧后 2 | 跳过 0（共 5 步，真重放 1 次）
+依赖图：3 节点 / 2 边
+模板漂移检测：同键漂移 1 · 标签裂键 0 · 下游波及 0（零模板点 0 个不可检测）
+  ▲ 查询物流@skl1e37f（order） 模板 ab12cd34 → 9e37f2c1
+任务「订单 1234 的物流太慢」对齐：基线链（session 20260831-a3f2）→ 新链（session 20260902-b7e1）
+  [1] 查询订单      PASS
+  [2] 查询物流      CHANGED  score=0.76 verdict=CHANGED | 新增字段: [delivery.promise]
+  [3] 提交退款      PASS
+对齐汇总: PASS 2 | CHANGED 1 | 缺步骤 0 | 新增步骤 0
+已落候选：查询物流@skl1e37f（行为差异待人工裁决——approve 接受为基线，reject 回退模板）。
 ```
 
-只有受影响的步骤发起真实调用；真重放遇 CHANGED 即停止后续步骤（标「分歧后下游」条件态）；文本措辞
-差异以低置信 diff 呈现给人看，**判定只看结构指纹**。重放发起真实 LLM 调用、产生真实费用——先加
-`--dry-run` 只出执行计划与成本预估（零调用、零建档），真实运行再用 `--max-total-calls/--max-total-tokens`
-预算池封顶。
+检测层先点名**哪些调用点的模板身份变了**（漂移点经依赖图扩散出下游波及面）；对齐层把每个任务的
+两条真实链按调用点配对——缺步骤 / 新增步骤 / 逐步结构 diff，文本措辞差异以低置信呈现给人看，
+**判定只看结构指纹**。整条命令零 API Key。想让框架用各点的新模板重放历史输入做受控复核，加
+`--re-drive`（花真实调用，先加 `--dry-run` 看报价，`--max-total-calls/--max-total-tokens` 预算池封顶）。
 
 **5. 裁决，然后真实执行自动对齐**
 
 ```bash
-agentassert4j approve --invocation 查询物流   # 预期内：候选转正，旧基线归档可回滚
-agentassert4j reject  --invocation 查询物流   # 回归：丢弃候选；提示词回滚是 git 的事
+agentassert4j approve   # bare = 裁决全部待裁决候选；预期内：转正，旧基线归档可回滚
+agentassert4j reject --invocation 查询物流   # 回归：缩域丢弃该候选；提示词回滚是 git 的事
 
-# 新版本真实跑过之后，同一命令去掉 --prompt：零 LLM 调用，自动配对两条链
-agentassert4j replay --task "订单 1234 的物流太慢"
-# 缺步骤 / 新增步骤 / 逐步结构 diff / 文本 diff（低置信）
+# 下一次真实执行之后再跑一次 bare replay：新链自动配对，差异继续逐条点名
+agentassert4j replay
 ```
 
 真实对齐报告长这样（虚构演示数据的真实输出——缺一步、新增一步、一个结构变化，逐条点名，exit 1）：
@@ -141,6 +142,24 @@ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 > 任务键 = 请求原文，随包出境。敏感任务请在录制时用
 > `RecordingContext.withMetadata("taskKey", <场景id>)` 声明任务键，原文不入包。
 
+## CI 一段式
+
+流水线里接入回归门禁固定为两步：应用带 recorder 跑一遍冒烟/e2e（新模板真实运行、归档入库），
+然后一条命令全项目门禁——零写死、零 API Key：
+
+```groovy
+stage('AgentAssert 行为回归') {
+  steps {
+    sh 'java -jar agentassert4j-cli-standalone-1.0.0.jar replay --ci --json'
+  }
+  post { always { archiveArtifacts 'agentassert4j.db, *.report.json' } }
+}
+```
+
+`--ci` 不为无基线调用点自动建档（新调用点先在本地 `baseline` 人工确认，缺档直接出 2），
+漂移身份不在流水线里收编（治理写不进 CI，出 0 附警告行）。`--re-drive` 属人工复核动作，
+不进流水线缺省。
+
 ## 四维指纹：判定看什么
 
 每次比对消费四维结构指纹，全部确定性运算，无概率模型：
@@ -165,12 +184,14 @@ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 | `baseline` | 从录制数据给每个调用点提取指纹、盖章建档（幂等）；`--force` 判定语义升级后重建 |
 | `baseline export` | 导出验收基线包（`--task` 缩域；`--include-samples` 附强制脱敏样本） |
 | `status` | 调用点清单与基线状态巡检；`--diff` 看待裁决差异 |
-| `replay` | 重放比对。任务域：`--task`（整链）/ `--affected`（波及面）；调用点域：`--prompt --invocation`（单点） |
-| `approve` / `reject` | 裁决候选指纹（转正 / 丢弃），`--invocation <目标>` 或 `--all` |
+| `replay` | 全项目模板漂移检测与任务对齐（缺省零 LLM 调用）；`--task`/`--invocation` 复合缩域；`--re-drive` 受控复核 |
+| `approve` / `reject` | 裁决候选指纹（转正 / 丢弃）。bare = 全部待裁决候选；`--invocation <目标>` 缩域 |
 | `rollback` | 把基线回滚到归档版本（`--invocation` `--version` 均必填） |
 | `verify` | 交付验收：验收包 × 本机真实执行链（只读） |
 | `rules` | 查看内置约束行为目录与规则文件写法 |
 | `graph show` | 依赖图谱只读视图（从录制数据现场重建） |
+| `doctor` | 全库体检：配置来源、计数闭合、候选状态审计 |
+| `completion` | 生成 shell 补全脚本（bash 风格） |
 
 巡检界面长这样（演示库真实输出——每行一个调用点：身份、基线状态、版本、候选、归档、业务标签）：
 
@@ -182,7 +203,7 @@ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 |-------|------|--------|
 | `0` | 无差异 | 放行 |
 | `1` | 存在行为差异（含缺步骤 / 新增步骤） | 人裁决 approve / reject |
-| `2` | 用法或基础设施故障 / 证据不完整（预算耗尽、覆盖缺口、`--ci` 遇无基线调用点） | 修环境，不算回归 |
+| `2` | 用法或基础设施故障 / 证据不完整（预算耗尽、覆盖缺口、`--ci` 遇无基线调用点、判定语义不符） | 修环境，不算回归 |
 
 `--json` 输出单行机器可读报告到 stdout（每命令一个 schema 标签），诊断与进度走 stderr——
 程序与人各看各的。通道契约与 schema 清单见 [OPERATIONS.md](OPERATIONS.md#4-ci-门禁配方)。
@@ -209,7 +230,7 @@ Spring AI 默认在模型侧内部执行完整工具回路的，框架通过**�
   `agentassert4j.invocation-id=tavern` 是唯一跨提示词编辑稳定的身份锚；
 - **动态模板按骨架定格**：组装后提示词内嵌日期/环境等动态段时，声明模板骨架
   （`withTemplateSkeleton(...)`，动态段换成稳定占位符）——同骨架异全文同键，
-  身份不再随每次运行漂移裂键；门控与重放仍以归档全文为准；
+  身份不再随每次运行漂移裂键；受控重驱仍以归档全文为准；
 - **零声明是一等公民**：不声明的记录按模板哈希归组，重放、裁决样样可用——agent loop 形态零声明
   即可完整使用，框架不逼人表态；
 - 判定正确性与声明质量解耦：声明只影响报告粒度，不影响判定对错。
@@ -222,7 +243,7 @@ Spring AI 默认在模型侧内部执行完整工具回路的，框架通过**�
 | 零侵入 | 录制失败宁可丢数据也绝不阻塞业务请求；每笔丢失进计数账本 |
 | core 零依赖 | 仅 java.base——JDK 8 客户可接入，发布无合规负担 |
 | 派生不建表 | 任务链与依赖图都是录制数据的派生视图，可随时全量重建 |
-| 能内部消化的不外溢 | 录制、归类、建档、选例、影响集、任务派生框架自己算；用户只改提示词和做裁决 |
+| 能内部消化的不外溢 | 录制、归类、建档、漂移检测、对齐、任务派生框架自己算；用户只改提示词和做裁决 |
 
 <details>
 <summary><strong>模块结构</strong></summary>

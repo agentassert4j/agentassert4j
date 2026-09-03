@@ -154,23 +154,27 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 
 ## 4. CI 门禁配方
 
-流水线里的推荐姿势：
+流水线里的一段式姿势（前置：应用带 recorder 跑一遍冒烟/e2e——新模板真实运行、归档入库）：
 
 ```bash
-# 提示词变更的整链门禁（--ci 拒绝为无基线调用点自动建档——防无人审的绿灯）
-agentassert4j replay --prompt prompt-latest.txt --old-prompt prompt-main.txt --affected --ci --json
+# 全项目门禁：--ci 拒绝为无基线调用点自动建档（防无人审的绿灯），漂移身份不收编
+agentassert4j replay --ci --json
 ```
 
-- **退出码分流**：`0` 绿灯放行；`1` 存在行为差异（含缺步骤/新增步骤）——人裁决 approve/reject；
-  `2` 用法或基础设施故障（含 `--ci` 无基线拒绝、判定语义不符、预算耗尽/证据不完整）——修环境，不算回归。
-- `--json`：stdout 只有单行机器可读报告（`agentassert4j.replay-report/1` / `task-report/1`），
+- **零写死、零 API Key**：bare 缺省即全项目变更检测与逐任务对齐，判定零 LLM 调用；
+  `--re-drive` 受控复核属人工动作，不进流水线缺省。
+- **退出码分流**：`0` 绿灯放行（`--ci` 下漂移未收编仍出 0，附「身份未收编」警告——收敛动作
+  留给人侧 replay 或 approve）；`1` 存在行为差异或证据缺口（对齐 CHANGED/缺步骤/新增步骤/
+  任务规则违规/漂移挂起）——人裁决 approve/reject；`2` 用法或基础设施故障（含 `--ci` 无基线
+  拒绝、判定语义不符、重驱预算耗尽/全败）——修环境，不算回归。
+- `--json`：stdout 逐行输出机器可读报告（`agentassert4j.task-report/1`，mode 分段：
+  drift-detection / task-align / drift-disposition / task-re-drive / task-dry-run），
   诊断与进度走 stderr；按退出码分流消费——0/1 解析 stdout，2 只读 stderr。
-  同一通道契约覆盖全部命令：9 个顶层命令加 `baseline export` 各有单行 `--json` 报告
-  （schema 清单见 §9），失败路径 stdout 零产出。
-- **预算池**（任务域 `--task/--affected` 生效）：`--max-total-calls/--max-total-tokens` 对本次运行全部
-  真实调用合计封顶；耗尽后剩余步骤标 skipped，整体 exit 2（证据不完整不允许冒充绿）。
-- **干跑**：任何重放加 `--dry-run` 只列执行计划与成本预估——零调用、零落库、零建档（调用点域列选例
-  清单；任务域列逐步计划：真重放 / 继承；任务域配置 `--max-total-calls` 时计划内如实模拟调用数截断（超出部分标 skipped），token 预算的截断点取决于重放响应长度、计划期不可预知）。真实对比模式（`--task` 无 `--prompt`）本身零调用，无需干跑。
+  同一通道契约覆盖全部命令（schema 清单见 §9），失败路径 stdout 零产出。
+- **预算池**（`--re-drive` 下生效）：`--max-total-calls/--max-total-tokens` 对本次运行全部真重驱
+  合计封顶；耗尽后剩余点标 skipped，整体 exit 2（证据不完整不允许冒充绿）。
+- **干跑**：`replay --dry-run` 输出漂移集、对齐计划与重驱成本预估——零调用、零落库、零建档、
+  零处置；重驱前先 `--dry-run` 看报价是推荐惯例。
 
 <img src="assets/cli-dry-run.png" alt="replay --task --dry-run：逐步执行计划与成本预估，未调用 LLM、未建档" width="720"/>
 
@@ -254,9 +258,9 @@ CLI 分析侧不受影响，仍可对既有库做巡检/验收。
 | 报告出现「违反任务规则」 | `rules.tasks` 纪律违规（缺必备步骤/次数越界/顺序不符）——明细点名标签与声明范围；确认是真实回归则改回，是纪律本身变了则更新 rules 文件后重跑 |
 | 报告提示「任务规则不适用」 | 配置了 tasks 但该链录制时未声明 taskKey（规则只对声明任务生效）——补声明后重录，或确认无需纪律门禁 |
 | 「违反任务规则」首录就报 | 自建基线（仅一条链）不评规则；规则从有对照的第二轮起生效——本行只在已有两条链时出现 |
-| 报告出现「跨版本配对」 | 同一声明调用点两侧提示词版本不同——判定照常但含混杂变量；受控实验用 `--old-prompt`（或 `--old-key <调用点锚>`，免导出旧模板全文）冻结重放 |
-| `--old-prompt` 失配且提示「未携带 template_hash」 | 库内记录缺全文哈希（旧版录制或捕获侧漏设）——重新录制即可（管道现自动派生投影） |
-| 想做影响裁剪但手里没有旧提示词全文 | 用 `--old-key <业务标签/键前缀/显示短形>`：门控哈希直接取库内画像真源列，与 `--old-prompt` 二选一互斥 |
+| 报告出现「跨版本配对」 | 同一声明调用点两侧提示词版本不同——判定照常但含混杂变量；受控复核用 `replay --re-drive`（先 `--dry-run` 看报价）逐点以最新归档模板重放 |
+| 重驱报告「归档模板原文缺席」 | 该漂移点在 `prompt_texts` 无全文可取（旧版录制或捕获侧漏设）——重新录制即可（管道现自动派生投影并归档） |
+| 首次 bare replay 报出大量漂移 | 建档种子取桶内最早记录——混合模板历史的库首跑会对「种子≠最新」的调用点各报一次，对齐 PASS 后逐点自动收编；属一次性收敛而非批量回归 |
 
 ## 8. 最小录制契约
 
@@ -310,7 +314,7 @@ try {
 |------|--------|------|
 | 存储 schema（`PRAGMA user_version`） | 1 | 预发布固定不演进，schema 变更=删库重建；发布后只增不改 |
 | 判定语义 | `det-v1` | 改变「同样差异得出什么判定」的变更必须递增；发布前恒定 |
-| 报告 schema | `agentassert4j.replay-report/1`、`task-report/1`、`verify-report/1`、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`graph/1`、`rules/1`（每命令 `--json` 各对应其一） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
+| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`、`verify-report/1`、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`graph/1`、`rules/1`（每命令 `--json` 各对应其一） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
 | Maven 版本 | `1.0.0-SNAPSHOT` | 发布时转正式版 |
 | CLI 可执行形态 | `agentassert4j-cli-standalone` | cli 模块的全依赖 shaded 产物（含 slf4j-nop 与 Main-Class），`java -jar` 直接运行 |
 

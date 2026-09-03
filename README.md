@@ -38,13 +38,13 @@ fully offline behind firewalls.
 
 ## The core loop
 
-<img src="assets/hero-loop.en.png" alt="The core loop: your agent is recorded out-of-band into a single-file SQLite; baseline establishes fingerprints; replay --task after a prompt edit produces a step-by-step diff; approve / reject adjudicate; export → verify delivers acceptance" width="880"/>
+<img src="assets/hero-loop.en.png" alt="The core loop: your agent is recorded out-of-band into a single-file SQLite; baseline establishes fingerprints; after a prompt edit really runs, replay produces drift detection and a step-by-step alignment report; approve / reject adjudicate; export → verify delivers acceptance" width="880"/>
 
 | Stage | Command | What happens |
 |-------|---------|--------------|
 | **Recording is the baseline** | (automatic) | The framework intercepts every real LLM call out-of-band; first recording establishes baselines automatically |
-| **Frozen replay** | `replay --task --prompt` | Recorded inputs + new prompt, real calls: only steps whose template was edited actually run; the rest inherit the baseline verdict |
-| **Automatic alignment** | `replay --task` | After the new version really runs, the two chains are paired by invocation: missing steps / added steps / per-step structure diff |
+| **Change detection & alignment** | `replay` | Whole-project drift detection + per-task invocation alignment: missing steps / added steps / per-step structure diff, zero LLM calls |
+| **Controlled re-drive (optional)** | `replay --re-drive` | Replays recorded inputs per drifted point against its latest archived template, real calls capped by a budget pool |
 | **Adjudicate & gate** | `approve` / `reject` | Intended change gets promoted (old baseline archived, rollback-able); regression gets discarded; exit codes 0/1/2 gate CI directly |
 
 ## Quick start
@@ -87,39 +87,44 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 agentassert4j baseline --approver wang
 ```
 
-**4. Change the prompt, replay the whole task chain**
+**4. Change the prompt, really run it once, then align the whole project**
+
+After editing a prompt, **really execute it once** (smoke or e2e — the new chain is recorded
+automatically), then one command with zero arguments and zero LLM calls:
 
 ```bash
-# --old-prompt names the prompt text BEFORE the edit: only steps whose template matches it
-# replay with the new prompt; the rest are unaffected and inherit the baseline verdict
-agentassert4j replay --task "Order 1234 arrived late, refund it" --prompt prompt-v2.txt --old-prompt prompt-v1.txt
+agentassert4j replay
 ```
 
 ```text
-Task "Order 1234 arrived late, refund it" (session 20260831-a3f2, 5 steps):
-  [1] classify-intent    inherited PASS (unaffected)
-  [2] query-order        inherited PASS (unaffected)
-  [3] query-logistics    CHANGED  score=0.76  output structure: added delivery.promise
-  [4] submit-refund      post-divergence — not executed (conditional: re-establish by a real re-run)
-  [5] compose-reply      post-divergence — not executed (conditional: re-establish by a real re-run)
-Task summary: PASS 2 | CHANGED 1 | inherited 2 | post-divergence 2 | skipped 0 (5 steps, 1 real call)
+dependency graph: 3 nodes / 2 edges
+template drift detection: same-key drifts 1 · label splits 0 · downstream 0 (zero-template 0 not detectable)
+  ▲ query-logistics@skl1e37f (order) template ab12cd34 → 9e37f2c1
+Task "Order 1234 arrived late, refund it" aligned: baseline (session 20260831-a3f2) → new (session 20260902-b7e1)
+  [1] query-order      PASS
+  [2] query-logistics  CHANGED  score=0.76 verdict=CHANGED | added fields: [delivery.promise]
+  [3] submit-refund    PASS
+alignment summary: PASS 2 | CHANGED 1 | missing 0 | added 0
+candidate registered: query-logistics@skl1e37f (pending human adjudication — approve to promote, reject to discard)
 ```
 
-Only affected steps make real calls; a CHANGED stops all later steps (marked "post-divergence");
-text-wording differences are shown as low-confidence diffs for humans — **the verdict only reads
-structural fingerprints**. Replays make real LLM calls and cost real money: preview the step plan and
-cost estimate with `--dry-run` (zero calls, no baselining), then cap real runs with the
-`--max-total-calls/--max-total-tokens` budget pool.
+(The CLI speaks Chinese; the block above is an English rendering of the same report shape.)
+The detection layer names **which invocations changed template identity** (drift points fan out over
+the dependency graph); the alignment layer pairs the two real chains of every task by invocation —
+missing steps / added steps / per-step structure diff, wording differences shown as low-confidence
+references for humans, **the verdict only reads structural fingerprints**. The whole command needs no
+API key. To have the framework replay recorded inputs against each point's new template as a
+controlled review, add `--re-drive` (real calls; preview with `--dry-run`, cap with
+`--max-total-calls/--max-total-tokens`).
 
 **5. Adjudicate, then align the real re-run automatically**
 
 ```bash
-agentassert4j approve --invocation query-logistics   # intended: promote, old baseline archived
-agentassert4j reject  --invocation query-logistics   # regression: discard; prompt rollback is git's job
+agentassert4j approve   # bare = adjudicate every pending candidate; intended: promote, old baseline archived
+agentassert4j reject --invocation query-logistics   # regression: discard that candidate; prompt rollback is git's job
 
-# After the new version has really run, drop --prompt: zero LLM calls, the two chains are paired
-agentassert4j replay --task "Order 1234 arrived late, refund it"
-# missing steps / added steps / per-step structure diff / low-confidence text diff
+# After the next real execution, run bare replay again: the new chain pairs automatically
+agentassert4j replay
 ```
 
 A real alignment report (genuine CLI output on fictional demo data — one missing step, one added
@@ -153,6 +158,26 @@ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 > The task key is the verbatim request text and travels inside the pack. For sensitive tasks, declare a
 > task key at recording time via `RecordingContext.withMetadata("taskKey", <scene-id>)`.
 
+## CI, the one-liner
+
+Gating a pipeline takes two fixed steps: run the app's smoke/e2e with the recorder on (the new
+template really runs and is archived), then one command gates the whole project — nothing hardcoded,
+no API key:
+
+```groovy
+stage('AgentAssert behavior regression') {
+  steps {
+    sh 'java -jar agentassert4j-cli-standalone-1.0.0.jar replay --ci --json'
+  }
+  post { always { archiveArtifacts 'agentassert4j.db, *.report.json' } }
+}
+```
+
+`--ci` never auto-baselines unbaselined invocations (new points are confirmed locally via `baseline`
+first; a missing baseline exits 2) and never collects drift identity inside the pipeline (governance
+writes stay out of CI; exit 0 with a warning line). `--re-drive` is a human review action and stays
+out of pipeline defaults.
+
 ## Four fingerprint dimensions: what the verdict reads
 
 Every comparison consumes four structural fingerprint dimensions — deterministic operations only:
@@ -179,12 +204,14 @@ verdict — see [OPERATIONS §2.3](OPERATIONS.md).
 | `baseline` | Extract fingerprints per invocation from recordings and stamp baselines (idempotent); `--force` rebuilds after a judgment-semantics upgrade |
 | `baseline export` | Export the acceptance pack (`--task` to narrow; `--include-samples` appends force-masked samples) |
 | `status` | Invocation list and baseline status; `--diff` shows pending candidate diffs |
-| `replay` | Replay & compare. Task scope: `--task` (whole chain) / `--affected` (blast radius); invocation scope: `--prompt --invocation` (single point) |
-| `approve` / `reject` | Adjudicate candidate fingerprints (promote / discard), `--invocation <target>` or `--all` |
+| `replay` | Whole-project template-drift detection and task alignment (zero LLM calls by default); `--task`/`--invocation` narrowing; `--re-drive` controlled review |
+| `approve` / `reject` | Adjudicate candidate fingerprints (promote / discard). bare = every pending candidate; `--invocation <target>` narrows |
 | `rollback` | Restore a baseline from the archive (`--invocation` and `--version` both required) |
 | `verify` | Delivery acceptance: pack × locally recorded chains (read-only) |
 | `rules` | List built-in behavior checks and rules-file syntax |
 | `graph show` | Read-only dependency graph (rebuilt from recordings on the spot) |
+| `doctor` | Whole-database health check: config source, counter closure, candidate audit |
+| `completion` | Emit a shell completion script (bash style) |
 
 The inspection surface looks like this (genuine CLI output on the demo data — one row per invocation:
 identity, baseline status, version, candidate, archived versions, business label; output in Chinese):
@@ -197,7 +224,7 @@ identity, baseline status, version, candidate, archived versions, business label
 |----------|---------|-----------|
 | `0` | No deviation | Pass |
 | `1` | Behavioral deviation (including missing/added steps) | Human adjudication: approve / reject |
-| `2` | Usage or infrastructure failure / incomplete evidence (budget exhausted, coverage gap, `--ci` with unbaselined invocations) | Fix the environment; not a regression |
+| `2` | Usage or infrastructure failure / incomplete evidence (budget exhausted, coverage gap, `--ci` with unbaselined invocations, judgment-semantics mismatch) | Fix the environment; not a regression |
 
 `--json` emits a single-line machine-readable report on stdout (one schema tag per command);
 diagnostics go to stderr. Channel contract and schema list in [OPERATIONS.md](OPERATIONS.md).
@@ -229,7 +256,7 @@ Invocation identity is derived deterministically from each record, in priority o
 - **Dynamic prompts freeze on the skeleton**: when the assembled prompt embeds volatile segments
   (dates, environment), declare a template skeleton (`withTemplateSkeleton(...)`, volatile parts
   replaced by stable placeholders) — same skeleton, different assembled text, same invocation; identity
-  no longer drifts per run. Gating and replay still use the archived full text;
+  no longer drifts per run. The controlled re-drive still uses the archived full text;
 - **Zero-declaration is a first-class citizen**: undeclared records group by template hash with full
   replay/adjudication support — loop-style agents work completely with no declarations;
 - Verdict correctness is decoupled from declaration quality: declarations affect report granularity,
@@ -243,7 +270,7 @@ Invocation identity is derived deterministically from each record, in priority o
 | Zero intrusion | The pipeline would rather drop data than block a business request; every loss is metered |
 | Zero-dependency core | java.base only — JDK 8 clients can integrate; no licensing burden |
 | Derived, not stored | Task chains and the dependency graph are derived views over recordings, rebuildable at any time |
-| Internalize, don't externalize | Recording, grouping, baselining, selection, impact analysis — the framework does the work; users edit prompts and adjudicate |
+| Internalize, don't externalize | Recording, grouping, baselining, drift detection, alignment, task derivation — the framework does the work; users edit prompts and adjudicate |
 
 <details>
 <summary><strong>Modules & building from source</strong></summary>
