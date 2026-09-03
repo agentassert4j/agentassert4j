@@ -68,9 +68,10 @@ public class VerifyRunner {
     /**
      * 执行验收比对。
      *
+     * @param dryRun 只读预演：装载包、列任务与本地链配对情况、跨模型注记，零判定零写入
      * @return 进程退出码（0 全部结构一致；1 任一结构偏差；2 用法/版本守卫/覆盖缺口）
      */
-    public int run(String packContent, String packDigest, String taskPrefix, String reportPath) {
+    public int run(String packContent, String packDigest, String taskPrefix, String reportPath, boolean dryRun) {
         AcceptancePack pack;
         try {
             pack = PackCodec.fromJson(packContent);
@@ -93,6 +94,10 @@ public class VerifyRunner {
         if (tasks.isEmpty()) {
             diagnostic("包内没有匹配前缀「" + taskPrefix + "」的任务。");
             return 2;
+        }
+
+        if (dryRun) {
+            return dryRunPlan(pack, tasks, localChains);
         }
 
         TreeSet<String> localServedModels = new TreeSet<>();
@@ -184,6 +189,52 @@ public class VerifyRunner {
             return 1;
         }
         return uncovered.isEmpty() ? 0 : 2;
+    }
+
+    /**
+     * 只读预演：包元信息、任务清单与本地链配对情况（覆盖/未覆盖/范围外）、
+     * 跨模型注记——验收人在执行前核对包与本库是否对得上。零判定零写入。
+     */
+    private int dryRunPlan(AcceptancePack pack, List<AcceptancePack.PackTask> tasks, List<TaskChain> localChains) {
+        info("验收预演（dry-run，未执行判定、未写报告）：包任务 " + tasks.size() + " 个，本地链 " + localChains.size() + " 条。");
+        for (AcceptancePack.PackTask task : tasks) {
+            TaskChain local = latestLocalChain(localChains, task.getTaskKey());
+            String pairing = local == null ? "本地无匹配链（执行后将计入覆盖缺口）" : "配对本地链 session " + local.getSessionId() + "（" + local.getRecords().size() + " 步，包基线 " + task.getSteps().size() + " 步）";
+            info("  " + task.getTaskKey() + " → " + pairing);
+        }
+        String crossModel = isCrossModelOverTasks(tasks, localChains, pack.getMeta().getServedModel());
+        if (!crossModel.isEmpty()) {
+            info("跨模型注记：包 served " + pack.getMeta().getServedModel() + " 与本地链 served " + crossModel + " 不一致——跨模型判定以结构指纹为主判据。");
+        }
+        if (jsonMode) {
+            out.println("{\"schema\":\"agentassert4j.verify-report/1\",\"mode\":\"dry-run\",\"summary\":{\"tasks\":" + tasks.size() + ",\"localChains\":" + localChains.size() + ",\"uncovered\":" + uncoveredCount(tasks, localChains) + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}");
+        }
+        return 0;
+    }
+
+    private int uncoveredCount(List<AcceptancePack.PackTask> tasks, List<TaskChain> localChains) {
+        int uncovered = 0;
+        for (AcceptancePack.PackTask task : tasks) {
+            if (latestLocalChain(localChains, task.getTaskKey()) == null) {
+                uncovered++;
+            }
+        }
+        return uncovered;
+    }
+
+    private String isCrossModelOverTasks(List<AcceptancePack.PackTask> tasks, List<TaskChain> localChains, String packServedModel) {
+        TreeSet<String> localServed = new TreeSet<>();
+        for (TaskChain chain : localChains) {
+            for (AcceptancePack.PackTask task : tasks) {
+                if (chain.getRequestText().equals(task.getTaskKey())) {
+                    collectLocalServedModels(chain, localServed);
+                }
+            }
+        }
+        if (localServed.isEmpty() || (packServedModel != null && localServed.size() == 1 && localServed.contains(packServedModel))) {
+            return "";
+        }
+        return String.join(", ", localServed);
     }
 
     /**

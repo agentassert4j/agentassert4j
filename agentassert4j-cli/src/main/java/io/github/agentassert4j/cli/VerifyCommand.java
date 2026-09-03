@@ -46,6 +46,9 @@ public class VerifyCommand implements Callable<Integer> {
     @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 验收报告（agentassert4j.verify-report/1）")
     boolean jsonOutput;
 
+    @Option(names = {"--dry-run"}, description = "只读预演：装载包并列任务/本地链配对与跨模型注记，零判定零写入")
+    boolean dryRun;
+
     @Override
     public Integer call() {
         String packContent;
@@ -62,7 +65,7 @@ public class VerifyCommand implements Callable<Integer> {
         try {
             repository = CliSupport.openRepository(db, jsonOutput ? System.err : System.out);
             DeterministicComparator comparator = CliSupport.createComparator(config);
-            return new VerifyRunner(repository, comparator, out, err, jsonOutput).run(packContent, digest, task, reportPath);
+            return new VerifyRunner(repository, comparator, out, err, jsonOutput).run(packContent, digest, task, reportPath, dryRun);
         } catch (RuntimeException e) {
             err.println("verify 失败：" + e.getMessage());
             return 2;

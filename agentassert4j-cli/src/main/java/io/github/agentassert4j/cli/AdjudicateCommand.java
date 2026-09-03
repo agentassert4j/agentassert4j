@@ -30,25 +30,14 @@ abstract class AdjudicateCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
     String db;
 
-    @Option(names = {"--invocation"}, description = "目标调用点：业务 invocationId、invocationKey 或其唯一前缀（完整列表见 status 命令）")
+    @Option(names = {"--invocation"}, description = "缩域裁决：业务 invocationId、invocationKey 或其唯一前缀（缺省裁决全部待裁决候选）")
     String invocation;
 
     @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 报告")
     boolean jsonOutput;
 
-    @Option(names = {"--all"}, description = "裁决所有存在候选指纹的调用点")
-    boolean all;
-
     @Override
     public Integer call() {
-        if (invocation != null && all) {
-            err.println("--invocation 与 --all 不能同时使用。");
-            return 2;
-        }
-        if (invocation == null && !all) {
-            err.println("需要 --invocation <业务标签 / invocationKey / 唯一前缀> 或 --all。");
-            return 2;
-        }
         StorageRepository repository = null;
         try {
             // --json 模式 stdout 只产出报告本体：配置披露改走 stderr，候选差异证据行不输出
@@ -105,6 +94,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
             targets.add(profile);
             return targets;
         }
+        // bare = 裁决全部待裁决候选（与「bare 命令=全项目完整默认能力」同一心智）
         for (InvocationProfile profile : repository.findAllInvocations()) {
             if (profile.getCandidateFingerprint() != null) {
                 targets.add(profile);
@@ -118,13 +108,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
             err.println("没有匹配 " + invocation + " 的调用点（可用：业务标签、invocationKey 前缀、status 显示短形如 标签@8位；完整列表见 status 命令）。");
             return;
         }
-        List<String> pending = new ArrayList<>();
-        for (InvocationProfile profile : repository.findAllInvocations()) {
-            if (profile.getCandidateFingerprint() != null) {
-                pending.add(profile.getInvocationKey());
-            }
-        }
-        err.println(pending.isEmpty() ? "没有任何待裁决的候选。" : "待裁决: " + String.join(", ", pending));
+        err.println("没有任何待裁决的候选。");
     }
 
     /**

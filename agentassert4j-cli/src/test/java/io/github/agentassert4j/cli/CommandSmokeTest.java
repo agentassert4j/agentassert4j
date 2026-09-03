@@ -1,9 +1,7 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
-import io.github.agentassert4j.util.HashUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -13,8 +11,6 @@ import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 
@@ -130,19 +126,16 @@ class CommandSmokeTest {
     }
 
     @Test
-    @DisplayName("replay --dry-run 经完整 Picocli 链路选例")
+    @DisplayName("replay --dry-run 经完整 Picocli 链路预演对齐计划")
     void replayDryRun_fullCommandLine() throws Exception {
         seedOneRecord();
-        new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
-        Path promptFile = tempDir.resolve("new-prompt.txt");
-        Files.write(promptFile, "新提示词内容".getBytes(StandardCharsets.UTF_8));
 
         ByteArrayOutputStream out = redirectStdout();
-        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--prompt", promptFile.toString(), "--dry-run");
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--dry-run");
 
         assertEquals(0, exit);
-        assertTrue(out.toString().contains("rec-1"), "dry-run 应列出选例: " + out);
-        assertTrue(out.toString().contains("未调用 LLM"));
+        assertTrue(out.toString().contains("对齐计划"), "dry-run 应预演对齐计划: " + out);
+        assertTrue(out.toString().contains("零 LLM 调用"), "缺省对齐零调用必须披露: " + out);
     }
 
     @Test
@@ -152,7 +145,19 @@ class CommandSmokeTest {
         int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--help");
 
         assertEquals(0, exit, "replay --help 必须展示帮助并返回 0");
-        assertTrue(out.toString().contains("--max-cases"), "帮助文本必须包含选项列表: " + out);
+        assertTrue(out.toString().contains("--invocation"), "帮助文本必须包含选项列表: " + out);
+    }
+
+    @Test
+    @DisplayName("completion 生成 bash 补全脚本且覆盖 replay 子命令")
+    void completion_generatesBashScript() {
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("completion");
+
+        assertEquals(0, exit);
+        String script = out.toString();
+        assertTrue(script.contains("_agentassert4j"), "补全函数名必须以脚本名命名: " + script);
+        assertTrue(script.contains("replay"), "子命令补全必须含 replay: " + script);
     }
 
     @Test
@@ -184,48 +189,36 @@ class CommandSmokeTest {
     }
 
     @Test
-    @DisplayName("approve 的 --skill 与 --all 互斥")
-    void adjudicate_skillAndAll_mutuallyExclusive() {
-        PrintStream originalErr = System.err;
-        ByteArrayOutputStream errOut = new ByteArrayOutputStream();
-        System.setErr(new PrintStream(errOut, true));
-        int exit;
-        try {
-            exit = new CommandLine(new AgentAssert4jCli()).execute("approve", "--db", dbPath, "--invocation", "chat:x", "--all");
-        } finally {
-            System.setErr(originalErr);
-        }
+    @DisplayName("approve bare = 裁决全部待裁决候选，无候选时显式说明")
+    void adjudicate_bare_reportsNoCandidates() {
+        ByteArrayOutputStream out = redirectStdout();
+        ByteArrayOutputStream errOut = redirectStderr();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("approve", "--db", dbPath);
 
         assertEquals(2, exit);
-        assertTrue(errOut.toString().contains("不能同时使用"), "互斥必须显式报错而非静默忽略其一: " + errOut);
+        assertTrue(errOut.toString().contains("没有任何待裁决的候选"), "bare 无候选必须显式说明而非误报成功: " + errOut);
     }
 
+
     @Test
-    @DisplayName("--max-cases < 1 拒绝执行而非误导性「未找到用例」")
-    void replay_maxCasesBelowOne_rejected() throws Exception {
-        Path promptFile = tempDir.resolve("prompt.txt");
-        Files.write(promptFile, "新提示词".getBytes(StandardCharsets.UTF_8));
+    @DisplayName("replay help 终态：三层模型参数面，拆除参数不复活")
+    void replayHelp_finalParamSurface() {
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--help");
 
-        PrintStream originalErr = System.err;
-        ByteArrayOutputStream errOut = new ByteArrayOutputStream();
-        System.setErr(new PrintStream(errOut, true));
-        int exit;
-        try {
-            exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--prompt", promptFile.toString(), "--max-cases", "0");
-        } finally {
-            System.setErr(originalErr);
+        assertEquals(0, exit);
+        String help = out.toString();
+        for (String dead : new String[]{"--prompt", "--old-prompt", "--old-key", "--affected", "--max-cases", "--selection", "--no-establish"}) {
+            assertFalse(help.contains(dead), "已拆除参数不得出现在 help: " + dead);
         }
-
-        assertEquals(2, exit);
-        assertTrue(errOut.toString().contains("--max-cases 必须 ≥ 1"), "参数下限必须显式报错: " + errOut);
+        for (String live : new String[]{"--task", "--invocation", "--ci", "--re-drive", "--full-chain", "--max-total-calls", "--max-total-tokens", "--dry-run", "--json", "--db"}) {
+            assertTrue(help.contains(live), "终态参数必须在场: " + live);
+        }
     }
 
     @Test
     @DisplayName("replay --json 冷启动：stdout 零污染，指导信息走 stderr")
-    void replayJson_coldStart_stdoutCleanErrorsOnStderr() throws Exception {
-        Path promptFile = tempDir.resolve("prompt.txt");
-        Files.write(promptFile, "新提示词".getBytes(StandardCharsets.UTF_8));
-
+    void replayJson_coldStart_stdoutCleanErrorsOnStderr() {
         PrintStream originalOut = System.out;
         PrintStream originalErr = System.err;
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -234,7 +227,7 @@ class CommandSmokeTest {
         System.setErr(new PrintStream(errOut, true));
         int exit;
         try {
-            exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--prompt", promptFile.toString(), "--json");
+            exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--json");
         } finally {
             System.setOut(originalOut);
             System.setErr(originalErr);
@@ -242,16 +235,13 @@ class CommandSmokeTest {
 
         assertEquals(2, exit);
         assertEquals("", out.toString(), "--json 模式 stdout 只允许报告本体，冷启动失败不得产出 JSON: " + out);
-        assertTrue(errOut.toString().contains("未找到可重放用例"), "用法错误必须走 stderr 供 CI 采集: " + errOut);
+        assertTrue(errOut.toString().contains("未录制到任何交互数据"), "用法错误必须走 stderr 供 CI 采集: " + errOut);
     }
 
     @Test
-    @DisplayName("replay --json --dry-run 输出单行 dry-run 报告")
-    void replayJsonDryRun_singleLineReport() throws Exception {
+    @DisplayName("replay --json --dry-run 逐行输出检测与对齐计划报告")
+    void replayJsonDryRun_stageReports() throws Exception {
         seedOneRecord();
-        new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
-        Path promptFile = tempDir.resolve("new-prompt.txt");
-        Files.write(promptFile, "新提示词内容".getBytes(StandardCharsets.UTF_8));
 
         PrintStream originalOut = System.out;
         PrintStream originalErr = System.err;
@@ -260,7 +250,7 @@ class CommandSmokeTest {
         System.setErr(new PrintStream(new ByteArrayOutputStream(), true));
         int exit;
         try {
-            exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--prompt", promptFile.toString(), "--dry-run", "--json");
+            exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--dry-run", "--json");
         } finally {
             System.setOut(originalOut);
             System.setErr(originalErr);
@@ -268,10 +258,10 @@ class CommandSmokeTest {
 
         assertEquals(0, exit);
         String report = out.toString().trim();
-        assertTrue(report.startsWith("{\"schema\":\"agentassert4j.replay-report/1\""), "stdout 必须以报告 JSON 开头: " + report);
-        assertFalse(report.contains("\n"), "报告必须单行（消费方按行读取）: " + report);
-        assertTrue(report.contains("\"mode\":\"dry-run\""), "dry-run 报告必须标明模式: " + report);
-        assertTrue(report.contains("rec-1"), "选例清单必须含 recordId: " + report);
+        assertTrue(report.startsWith("{\"schema\":\"agentassert4j.task-report/1\""), "stdout 必须以报告 JSON 开头: " + report);
+        assertTrue(report.contains("\"mode\":\"drift-detection\""), "漂移检测报告必须先行: " + report);
+        assertTrue(report.contains("\"mode\":\"task-dry-run\""), "对齐计划报告必须随行: " + report);
+        assertFalse(report.contains("\"mode\":\"replay"), "调用点域报告模式已随统一引擎退役: " + report);
     }
 
     @Test
@@ -301,128 +291,5 @@ class CommandSmokeTest {
         return buffer;
     }
 
-    private Path writePromptFile(String name, String content) throws Exception {
-        Path file = tempDir.resolve(name);
-        Files.write(file, content.getBytes(StandardCharsets.UTF_8));
-        return file;
-    }
 
-    @Test
-    @DisplayName("replay --old-key 以画像模板哈希门控，干跑计划与 --old-prompt 同哈希口径一致")
-    void replayOldKey_resolvesProfileHash_gatesLikeOldPrompt() throws Exception {
-        String oldPromptText = "旧版系统提示词全文";
-        String oldHash = HashUtil.sha256(oldPromptText);
-        seedOneRecord("session-1", 1000L, oldHash);
-        seedOneRecord("session-2", 9000L, oldHash);
-        redirectStdout();
-        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath));
-        ByteArrayOutputStream replayOut = redirectStdout();
-        Path newPromptFile = writePromptFile("new-prompt.txt", "新提示词全文");
-
-        int byKey = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--prompt", newPromptFile.toString(), "--old-key", "queryOrder@" + oldHash.substring(0, 8), "--dry-run");
-
-        assertEquals(0, byKey, replayOut.toString());
-        assertTrue(replayOut.toString().contains("真重放（受影响）"), replayOut.toString());
-        assertTrue(replayOut.toString().contains("，历史链）：") && replayOut.toString().contains("，最新链）："), "两链干跑计划必须带定性标注: " + replayOut);
-    }
-
-    @Test
-    @DisplayName("replay --old-key 与 --old-prompt 互斥")
-    void replayOldKey_conflictsWithOldPrompt() throws Exception {
-        redirectStdout();
-        ByteArrayOutputStream errOut = redirectStderr();
-        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--prompt", writePromptFile("n.txt", "新").toString(), "--old-key", "queryOrder@abcd1234", "--old-prompt", writePromptFile("o.txt", "旧").toString());
-
-        assertEquals(2, exit);
-        assertTrue(errOut.toString().contains("互斥"), errOut.toString());
-    }
-
-    @Test
-    @DisplayName("replay 真实对比不接受 --old-key/--old-prompt（无裁剪可做）")
-    void replayOldRoot_rejectedInRealComparison() throws Exception {
-        redirectStdout();
-        ByteArrayOutputStream errOut = redirectStderr();
-        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--old-key", "queryOrder@abcd1234");
-
-        assertEquals(2, exit);
-        assertTrue(errOut.toString().contains("仅在冻结重放"), errOut.toString());
-    }
-
-    @Test
-    @DisplayName("replay 任务域拒绝 --selection/--max-cases（静默忽略清零）")
-    void replayTaskScope_rejectsInvocationScopeSelectionKnobs() throws Exception {
-        redirectStdout();
-        ByteArrayOutputStream errOut = redirectStderr();
-        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--prompt", writePromptFile("n.txt", "新").toString(), "--old-prompt", writePromptFile("o.txt", "旧").toString(), "--max-cases", "2");
-
-        assertEquals(2, exit);
-        assertTrue(errOut.toString().contains("仅在调用点范围有效"), errOut.toString());
-    }
-
-    @Test
-    @DisplayName("replay --old-key 未命中任何调用点 → exit 2 带诊断")
-    void replayOldKey_unknownSelector_exit2() throws Exception {
-        redirectStdout();
-        ByteArrayOutputStream errOut = redirectStderr();
-        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--prompt", writePromptFile("n.txt", "新").toString(), "--old-key", "no-such-label-xyz");
-
-        assertEquals(2, exit);
-        assertTrue(errOut.toString().contains("replay 失败"), errOut.toString());
-        assertTrue(errOut.toString().contains("没有匹配 no-such-label-xyz"), errOut.toString());
-    }
-
-    @Test
-    @DisplayName("replay --old-key 指向无模板哈希的画像（adhoc 锚）→ exit 2 带指引")
-    void replayOldKey_profileWithoutTemplateHash_exit2() throws Exception {
-        InvocationProfile adhoc = new InvocationProfile();
-        adhoc.setInvocationKey("adhoc:no-anchor");
-        adhoc.setInvocationName("adhoc:no-anchor");
-        repository.saveInvocationProfile(adhoc);
-
-        redirectStdout();
-        ByteArrayOutputStream errOut = redirectStderr();
-        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--prompt", writePromptFile("n.txt", "新").toString(), "--old-key", "adhoc:no-anchor");
-
-        assertEquals(2, exit);
-        assertTrue(errOut.toString().contains("画像没有模板哈希"), errOut.toString());
-    }
-
-    @Test
-    @DisplayName("replay --full-chain 用于真实对比 → exit 2（静默忽略清零）")
-    void replayFullChain_rejectedInRealComparison() throws Exception {
-        redirectStdout();
-        ByteArrayOutputStream errOut = redirectStderr();
-        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--full-chain");
-
-        assertEquals(2, exit);
-        assertTrue(errOut.toString().contains("仅在冻结重放"), errOut.toString());
-    }
-
-    @Test
-    @DisplayName("replay --json 模式：同内容提示走 stderr，stdout 保持单行 JSON")
-    void replaySamePromptHint_jsonMode_routesToStderr() throws Exception {
-        seedOneRecord("session-1", 1000L, HashUtil.sha256("同内容提示词"));
-        ByteArrayOutputStream out = redirectStdout();
-        ByteArrayOutputStream errOut = redirectStderr();
-        Path same = writePromptFile("same.txt", "同内容提示词");
-        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--prompt", same.toString(), "--old-prompt", same.toString(), "--dry-run", "--json");
-
-        assertEquals(0, exit);
-        assertTrue(out.toString().trim().startsWith("{"), "stdout 必须是纯 JSON: " + out);
-        assertFalse(out.toString().contains("噪声探针"), "提示不得污染 stdout JSON: " + out);
-        assertTrue(errOut.toString().contains("同模板噪声探针口径"), errOut.toString());
-    }
-
-    @Test
-    @DisplayName("replay --prompt 与 --old-prompt 同内容：提示噪声探针口径")
-    void replaySamePromptContent_hintsNoiseProbeSemantics() throws Exception {
-        seedOneRecord("session-1", 1000L, HashUtil.sha256("同内容提示词"));
-        ByteArrayOutputStream out = redirectStdout();
-        redirectStderr();
-        Path same = writePromptFile("same.txt", "同内容提示词");
-        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--task", "查订单", "--prompt", same.toString(), "--old-prompt", same.toString(), "--dry-run");
-
-        assertEquals(0, exit);
-        assertTrue(out.toString().contains("同模板噪声探针口径"), out.toString());
-    }
 }

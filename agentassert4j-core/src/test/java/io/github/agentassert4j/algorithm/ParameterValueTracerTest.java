@@ -462,11 +462,6 @@ class ParameterValueTracerTest {
         }
 
         @Override
-        public Set<String> findInvocationKeysByTemplateHash(String hash) {
-            return Collections.emptySet();
-        }
-
-        @Override
         public List<InteractionRecord> findBySessionId(String sessionId) {
             return data.getOrDefault(sessionId, Collections.emptyList());
         }
@@ -509,17 +504,18 @@ class ParameterValueTracerTest {
         }
 
         @Override
-        public void archiveTemplateVersion(ArchivedTemplateVersion archived) {
+        public void archiveTemplateVersion(io.github.agentassert4j.model.ArchivedTemplateVersion archived) {
         }
 
         @Override
-        public ArchivedTemplateVersion findArchivedVersion(String invocationId, String tag) {
+        public io.github.agentassert4j.model.ArchivedTemplateVersion findArchivedVersion(String invocationKey, String versionTag) {
             return null;
         }
 
         @Override
-        public List<ArchivedTemplateVersion> findArchivedVersions(String invocationId) {
+        public List<io.github.agentassert4j.model.ArchivedTemplateVersion> findArchivedVersions(String invocationKey) {
             return Collections.emptyList();
         }
+
     }
 }

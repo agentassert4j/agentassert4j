@@ -148,10 +148,27 @@ class VerifyExportTest {
         String digest = HashUtil.sha256(json);
 
         VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
-        int exit = runner.run(json, digest, null, null);
+        int exit = runner.run(json, digest, null, null, false);
 
         assertEquals(0, exit, "同环境往返必须 PASS: " + output);
         assertTrue(output.toString().contains("PASS 1"), output.toString());
+    }
+
+    @Test
+    @DisplayName("verify --dry-run：只读预演配对情况，零判定零写入")
+    void dryRun_readOnly() throws Exception {
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        establishBaselines();
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+        String digest = HashUtil.sha256(json);
+
+        VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+        int exit = runner.run(json, digest, null, null, true);
+
+        assertEquals(0, exit);
+        assertTrue(output.toString().contains("验收预演"), "dry-run 必须输出预演标题: " + output);
+        assertTrue(output.toString().contains("配对本地链"), "dry-run 必须列出配对情况: " + output);
+        assertFalse(output.toString().contains("PASS 1"), "dry-run 不得产出判定汇总: " + output);
     }
 
     @Test
@@ -166,7 +183,7 @@ class VerifyExportTest {
         String digest = HashUtil.sha256(json);
 
         VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
-        int exit = runner.run(json, digest, null, null);
+        int exit = runner.run(json, digest, null, null, false);
 
         assertEquals(0, exit, "同环境往返必 PASS（步骤指纹必须逐记录提取，画像指纹口径下第二步假 CHANGED）: " + output);
     }
@@ -202,7 +219,7 @@ class VerifyExportTest {
             saveRecord("c1", customerDb, 9000L, "V10", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
 
-            int exit = runner.run(json, "digest", null, null);
+            int exit = runner.run(json, "digest", null, null, false);
 
             assertEquals(2, exit, "包任务无精确匹配链 = 覆盖缺口（前缀同名链不得冒充）: " + output);
             String report = output.toString();
@@ -229,7 +246,7 @@ class VerifyExportTest {
             new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null);
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
 
-            int exit = runner.run(json, "digest", null, null);
+            int exit = runner.run(json, "digest", null, null, false);
 
             assertEquals(0, exit);
             String report = output.toString();
@@ -238,7 +255,7 @@ class VerifyExportTest {
 
             ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
             VerifyRunner jsonRunner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
-            assertEquals(0, jsonRunner.run(json, "digest", null, null));
+            assertEquals(0, jsonRunner.run(json, "digest", null, null, false));
             assertTrue(jsonOut.toString().contains("\"hints\":[\"范围外本地链"), "JSON 报告必须携带 hints 供机器消费: " + jsonOut);
         } finally {
             customerDb.close();
@@ -259,7 +276,7 @@ class VerifyExportTest {
             new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null);
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
 
-            int exit = runner.run(json, "digest", null, null);
+            int exit = runner.run(json, "digest", null, null, false);
 
             assertEquals(0, exit, "跨模型+结构一致 → PASS");
             assertTrue(output.toString().contains("跨模型"), "必须标注跨模型: " + output);
@@ -278,7 +295,7 @@ class VerifyExportTest {
 
         VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
 
-        assertEquals(2, runner.run(tampered, "digest", null, null));
+        assertEquals(2, runner.run(tampered, "digest", null, null, false));
         assertTrue(output.toString().contains("版本守卫"), output.toString());
     }
 
@@ -293,7 +310,7 @@ class VerifyExportTest {
         emptyDb.initialize();
         try {
             VerifyRunner runner = new VerifyRunner(emptyDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
-            assertEquals(2, runner.run(json, "digest", null, null), "包任务未执行 = 证据缺口");
+            assertEquals(2, runner.run(json, "digest", null, null, false), "包任务未执行 = 证据缺口");
         } finally {
             emptyDb.close();
         }
@@ -322,7 +339,7 @@ class VerifyExportTest {
 
         // 包路径：包=最新链的行为证据（折叠+逐记录指纹），本地同链现场重提 → 自洽 PASS
         VerifyRunner packRunner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
-        int packExit = packRunner.run(json, "digest", null, null);
+        int packExit = packRunner.run(json, "digest", null, null, false);
         assertEquals(0, packExit, "包内指纹与本地重提同口径，同链必自洽 PASS: " + output);
 
         // 库内路径：两条链喂同一对齐核 → 两轮间的结构变化 = CHANGED
@@ -350,7 +367,7 @@ class VerifyExportTest {
 
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
             Path reportPath = tempDir.resolve("verify-report.md");
-            int exit = runner.run(json, "digest", null, reportPath.toString());
+            int exit = runner.run(json, "digest", null, reportPath.toString(), false);
 
             assertEquals(0, exit, "同标签跨版本且行为一致 → PASS（版本差异不作缺/新增）: " + output);
             assertTrue(output.toString().contains("PASS 1"), output.toString());
@@ -360,7 +377,7 @@ class VerifyExportTest {
 
             ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
             VerifyRunner jsonRunner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
-            assertEquals(0, jsonRunner.run(json, "digest", null, null));
+            assertEquals(0, jsonRunner.run(json, "digest", null, null, false));
             String verifyJson = jsonOut.toString().trim();
             assertTrue(verifyJson.contains("\"invocationLabel\":\"verdict\""), verifyJson);
             assertTrue(verifyJson.contains("\"versionSwitch\":true"), verifyJson);
@@ -385,7 +402,7 @@ class VerifyExportTest {
             new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null);
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
             Path reportPath = tempDir.resolve("verify-report-changed.md");
-            int exit = runner.run(json, "digest", null, reportPath.toString());
+            int exit = runner.run(json, "digest", null, reportPath.toString(), false);
 
             assertEquals(1, exit, "跨版本配对不豁免行为判定: " + output);
             assertTrue(output.toString().contains("CHANGED 1"), output.toString());

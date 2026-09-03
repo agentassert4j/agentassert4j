@@ -75,11 +75,6 @@ class InMemoryStorageRepository implements StorageRepository {
     }
 
     @Override
-    public Set<String> findInvocationKeysByTemplateHash(String hash) {
-        return Collections.emptySet();
-    }
-
-    @Override
     public List<InteractionRecord> findBySessionId(String sessionId) {
         return Collections.emptyList();
     }

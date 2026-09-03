@@ -573,7 +573,7 @@ recorded（到达即计数） = written（批量写成功）
   - **锚点 4 请求锚点兜底**：无声明无骨架无模板（无 system prompt 的应用）→ `adhoc:<sha256(modelRequestRaw)>`，退而 `adhoc:<sha256(userInput)>`，双缺失 `adhoc:no-anchor`（程序化构造防御）。键是溯源身份不是判定输入，因此输入派生键合法。
   - **键文法单射**：标签/骨架哈希/模板 hash/请求哈希全部经百分号编码（`% : + [ ] ,` 转义）后入键，前缀命名空间（`invocation:`/`skeleton:`/`template:`/`adhoc:`）互相隔离——用户可控字符串永不与文法结构字符混淆，任何团队的命名规范零约束零碰撞（黄金键测试钉住字面值，含冒号注入对抗用例）。
   - **invocationKey 永不进指纹**：指纹维度保持输出侧，输入侧（键、变量、历史）不参与判定——判定正确性与声明质量解耦，零声明应用（agent loop 主形态）是一等公民路径。
-  - **双哈希各司其职**：全文哈希（`template_hash` 列）答「这条记录是用哪份完整文本组装的」——`--old-prompt` 门控与重放取回的依据；骨架哈希（文本现算优先、`skeleton_hash` 投影列兜底）答「这条记录属于哪个调用点」。骨架不参与门控与重放取回，`--old-prompt` 仍须归档全文。
+  - **双哈希各司其职**：全文哈希（`template_hash` 列）答「这条记录是用哪份完整文本组装的」——受控重驱模板取回的依据；骨架哈希（文本现算优先、`skeleton_hash` 投影列兜底）答「这条记录属于哪个调用点」。骨架不参与模板取回，重驱取归档全文。
 - `InvocationProfile`（调用点画像，对应 `invocations` 行）：身份列（invocationKey 主键、label、templateHash）+ 视图列（invocationName、invocationType、paramSignature）+ 治理列（fingerprint 现役基线、candidateFingerprint 候选、baselineStatus、versionTag、algoVersion、approvedBy/approvedAt、totalRecords）。
 - **统一身份空间**：声明与否共用同一派生文法、同一存储列（`invocation_key`）、同一图节点空间——影响分析、依赖图、治理三命令不再区分「声明/派生」双轨。标签只是视图：一个标签可覆盖多个调用点键（同标签多模板步骤），CLI 的 `--invocation` 四写法（业务标签 / 完整调用点键 / 唯一前缀 / status 显示短形如 `标签@8位`）等价解析。画像属于可从 interactions 全量重建的派生数据（BaselineService 重复执行安全）。
 
@@ -689,7 +689,7 @@ recorded（到达即计数） = written（批量写成功）
 
 ---
 
-## 第 9 章 重放执行（调用点域）
+## 第 9 章 重放执行（受控重驱与执行器）
 
 **本幕回顾**：第 3 幕（改提示词的勇气）与第 7 幕（门禁）的全部技术内容。
 
@@ -702,7 +702,7 @@ recorded（到达即计数） = written（批量写成功）
 - `LlmClient`（SPI，3 方法）：`chat(request, timeoutMs)` / `name()` / `isAvailable()`。Javadoc 钉死的超时契约：`timeoutMs` 是**单次尝试**的预算（连接与读取各自的上限）；任一次尝试超时立即抛 `LlmTimeoutException`，**不得重试**（预算已耗尽，重试只翻倍证据成本）；可重试失败仅限 HTTP 429/5xx 与连接被拒。core 只定义契约，实现在上层（cli 的 `OpenAiCompatibleClient`）。
 - `RegressionTestExecutor`（core，4 构造参数：llmClient/comparator/baselineManager/rules）——`execute(baselineRecord, newSystemPrompt, userInput, config)` 单条流程：
   1. dryRun → 直接返回 SKIP 结果，不调 LLM；
-  2. `buildReplayRequest`：新 prompt 设为 systemPrompt；历史用户输入、多轮上下文（**完整复制**——tool 轮的 toolCallId/toolName 是与原对话对齐的关联键，丢弃会被服务端拒绝；system 帧不注入，模板域由 systemPrompt 承载；骨架声明不影响重放——请求重建与 --old-prompt 门控都以归档全文（template_hash）为准，骨架只定调用点身份）、工具定义（从录制 JSON 数组原样拆装——**重放不带工具，模型无法发起工具调用，工具维指纹必然假阳性**；损坏定义跳过宁可不带）；
+  2. `buildReplayRequest`：新 prompt 设为 systemPrompt；历史用户输入、多轮上下文（**完整复制**——tool 轮的 toolCallId/toolName 是与原对话对齐的关联键，丢弃会被服务端拒绝；system 帧不注入，模板域由 systemPrompt 承载；骨架声明不影响重放——请求重建与受控重驱的模板取回都以归档全文（template_hash）为准，骨架只定调用点身份）、工具定义（从录制 JSON 数组原样拆装——**重放不带工具，模型无法发起工具调用，工具维指纹必然假阳性**；损坏定义跳过宁可不带）；
   3. **链式半重放（编排记录的专用路径）**：观察装饰产出的记录带完整编排与每轮结果，`execute` 在入口路由——结果道具齐备即走链式：拿基线录制的旧结果当道具，逐轮重建「当时输入」并比对响应的 tool_calls 与基线编排的下一片段（工具名 + 参数解析后严格相等；tool_call id 是关联键不参与），全部轮次匹配后末轮四维比对收口；分歧即停并输出「第 k 轮工具决策分歧」定位。合成帧（assistant 发起调用 + tool 结果）以合成 tool_call_id 关联、参数与结果内容无损——`TurnContext.toolArguments` 承载真实参数，历史录制帧仍以 "{}" 占位（协议校验只看结构）。结果道具缺失（录制时工具失败）退回单发重放；
   4. `llmClient.chat` 异常三分类：`LlmTimeoutException` → TIMEOUT 结果、`LlmApiException` → API_ERROR、其余 RuntimeException → ERROR（客户端编程错误也转为单条结果，批量不中断）；
   5. 成功后 `buildCurrentRecord` 构造当前记录（不持久化）：重放路径的 `ToolCall.argTypes` 由 `ArgTypeUtil.derive` 按同一词表补齐（与捕获侧对称，否则参数类型维必失配）；调用时刻遥测（served/finishReason/usage/latency）就地落位；
@@ -713,18 +713,8 @@ recorded（到达即计数） = written（批量写成功）
   - 请求体手拼（转义统一走 `RecursiveJsonParser.escape`）：消息序列 system → previousTurns → user（多模态时 content 是原样注入的 JSON 数组）；**tool 消息前若缺「assistant 发起调用」帧则按已知 id/toolName 合成最小合法帧**（历史录制没有该轮的独立载体，arguments 以空对象占位）；缺失 callId 的 tool 帧跳过该轮并告警（保住其余用例）；`temperature` 为 null/非 finite 时不携带该成员（推理模型方言：发送 0.0 会被 400 拒绝）；`extraBodyFields` 作为顶层成员原样追加（DeepSeek 思考态等方言逃生舱）。
   - 响应解析统一走 `RecursiveJsonParser` 导航（choices[0].message.content / tool_calls / usage 子树 / 顶层 model / finish_reason）；usage 子树原文逐字存 `usageRaw`；缓存 token 取 `prompt_tokens_details.cached_tokens`、思考 token 取 `completion_tokens_details.reasoning_tokens`（**input_tokens 语义钉死为总处理输入 token**）；`finish_reason` 归一为枚举词表 stop/tool_calls/max_tokens/content_filter/other。
   - `ProviderDialects`（数据注册表，资源文件 `provider-dialects.json`）：规则 = `matchModelPrefix` + `dropParams`，当前仅收录「发送即报错」的方言（o1/o3/o4/gpt-5 → drop temperature）；命中时显式配置的参数被裁掉并**一次性 WARN**（点名 extraBody 逃生舱，防静默丢配置的排障黑洞）；快照损坏等同缺席，退化不中断。
-- `ReplayRunner`（cli，8 构造参数含注入的 out/err/jsonMode）——`run()` 全流程顺序：
-  1. `executionConfig.validate()` 钳位（timeoutMs 下限 1000——0 在 HttpURLConnection 语义里是无限等待；温度钳 0–2、非 finite 置 null）；
-  2. `warnIfModelDiffers`：重放模型与录制模型不一致时告警（配置未指定模型时以 `llmClient.name()` 实际生效值比对，堵住「默认模型 ≠ 录制模型」的盲区）；
-  3. 非 CI 且非 dry-run：`BaselineService.establishMissing` 自动建档（JSON 模式下用丢弃流吞输出）；
-  4. `--invocation` 过滤解析（业务标签 / 完整调用点键 / 唯一前缀 / 显示短形四写法，见第 13 章）；
-  5. **图现场重建** + 快照留档（dry-run 只读不落盘），打印节点/边统计；
-  6. 选例两模式：提供 `--old-prompt` 时走影响裁剪（`ImpactAnalyzer`，第 10 章；分析错误或冷启动 → exit 2 并打印分析消息），否则默认选例（全库按调用点分桶，每调用点取规范序尾部 N 条——最新，`--selection oldest` 取头部，`--max-cases` 定 N，默认 3）；
-  7. 空用例 → exit 2；**CI 守卫**：用例集中有无基线的调用点 → 点名拒绝，exit 2；**判定语义守卫**：基线 `algoVersion` ≠ 当前 `JudgmentSemantics.VERSION`（含未标记历史行）→ 拒绝并指引 `baseline --force`，exit 2；不可归组记录剔除出判定集并告警（证据不完整不允许出结论）；
-  8. `CostEstimator.estimate` 打印成本预估；dry-run → 打印选例清单，exit 0；
-  9. 逐例执行、汇总行 `汇总: PASS x | CHANGED y | 失败 n（共 m），tokens 输入 a / 输出 b`；每条用例行带 `score`、summary、`〔served 模型 X ≠ 录制 Y〕` 注记、`[tokens in/out]`、以及非 PASS 用例的**文本差异注记**（`TextDiffUtils.diff` 取前 3 条 +/~/- 证据行，总预算 300 字符截断——结构指纹说明「哪里不同」，注记补充「说了什么不同的话」；判定只看指纹，注记是展示层）；
-  10. 全部失败且无比对结果 → exit 2（基础设施故障不得被 CI 误读成回归）；有差异 → 打印待裁决 invocationKeys 与 approve/reject 指引；最终退出码：`changed + failed == 0 ? 0 : 1`。
-  - **输出通道契约**：JSON 模式（`--json`）stdout 只产出单行证据报告 `{"schema":"agentassert4j.replay-report/1","mode":"replay|dry-run","judgmentSemantics":...,"summary":{...},"cases":[...],"pendingInvocationKeys":[...]}`（白名单字段、null 缺省即契约；summary 计数键 pass/changed/failed，用例对象含 dims 五维结论与 replayOutput 原文——仅 CHANGED 用例填充，64KB 截断并置标志），进度静默、诊断走 stderr；消费方按退出码分流——0/1 解析 stdout，2 只读 stderr。同一条通道纪律是**全命令统一契约**：9 个顶层命令加 `baseline export` 各自产出单行报告（schema 标签见第 13 章命令全景表），失败路径 stdout 零产出、配置披露与告警改走 stderr。
+- `TaskReplayRunner`（cli，统一重放引擎）——bare 命令即全项目完整默认能力，三层判定模型：**身份检测**（DriftDetector 全库只读巡检画像模板身份 vs 最新记录，检测报告全项目零调用）→ **真实对齐**（逐任务最新链 vs 次新链按调用点对齐，零调用，退出码载体）→ **受控重驱**（`--re-drive` 显式开启：逐漂移点以该点最新归档模板重驱录制输入，预算池合计封顶，`--full-chain` 扩为缩域内全部记录）。漂移处置状态机把每个漂移点收敛到三出口之一：对齐 PASS → 开发态自动收编（`--ci` 不落治理写、附警告）；CHANGED → 现场重提指纹落候选等人工裁决；证据缺口（缺步骤/新增/规则违规/无可对齐证据）→ 挂起。守卫六项在引擎入口：判定语义版本、`--ci` 未建档拒绝、换模型告警（含默认模型盲区）、图重建与快照、全败按基础设施故障出 2（重驱层）、served 模型就地标注。**本块是地图不是规格**——编排细节、退出码复合与行为矩阵以 `guide/spec/replay.md` 为基准（该 spec 以落地代码成文）。
+  - **输出通道契约**（全命令统一）：`--json` 模式 stdout 只产报告本体（replay 为 `agentassert4j.task-report/1`，逐行分段：drift-detection / task-align / drift-disposition / task-re-drive / task-dry-run），进度静默、诊断走 stderr；失败路径 stdout 零产出、配置披露与告警改走 stderr。报告 schema 总表见 `guide/spec/cli.md`。
 - `CostEstimator`（core）：价格真源是随 jar 分发的精选快照 `model_prices.json`（LiteLLM MIT 库裁剪，发布前再生成；`_meta` 前缀键是元信息非价格行），查找 = 精确命中后按最长包含匹配归入模型族。两个入口同一张表：`estimate`（执行前预估文案，固定 1000 输入/500 输出口径；**模型无价格时只报调用次数、不编造货币数**）与 `estimateCallCostUsd`（捕获时刻按实际 token 计价，查不到返回 null）；快照缺席/损坏等同无价格表。
 
 **表结构**：重放不新增表——它的持久化后果只有候选指纹写入 `invocations.candidate_fingerprint`（第 7 章）。
@@ -741,13 +731,13 @@ recorded（到达即计数） = written（批量写成功）
 
 ---
 
-## 第 10 章 影响分析与依赖图
+## 第 10 章 依赖图与漂移感知
 
 **本幕回顾**：第 5 幕（这次改动波及谁）。
 
 **设计问题**：全量重放又贵又慢，而「改了共享提示词会波及谁」是一个**数据问题**——答案在录制数据里，不在任何声明文件里。框架的解法：提示词指纹（templateHash）反查谁在用它 + 调用点依赖图补上传递波及。图用纯内存邻接表（既定结论：图数据库永久不引入——本框架规模是数十调用点/数百边，与图数据库的门槛差几个数量级，BFS 遍历微秒级、快照 JSON 小于 5KB）。
 
-**概念与术语**：直接影响（使用旧 prompt hash 的调用点）与传递波及（图上下游）；HIGH/LOW 置信度边；全局提示词与局部提示词（按共享调用点数划分，决定采样还是全量）。
+**概念与术语**：漂移点（identity 域三分形态：同键漂移/标签裂键/未建档全新键）与传递波及（图下游 BFS）；HIGH/LOW 置信度边。统一引擎缺省全量对齐后，「改了会波及谁」由检测报告陈述、由处置与重驱消费，不再承担选链省钱职责。
 
 **代码地图**：
 
@@ -756,8 +746,8 @@ recorded（到达即计数） = written（批量写成功）
   - 第 2 层：字段名前缀匹配（驼峰/下划线/连字符取首段，最短 3 字符——`orderId`→`order`）→ **LOW**。
   - 调用点身份：记录已富化用存储 invocationKey，否则解析器现算。
 - `InMemoryDependencyGraph`——图本身：正向邻接表（`LinkedHashMap`，**插入序保证快照字节可复现**）+ 反向邻接表。`addEdge` 四参：同边重复添加保最高置信度、合并 throughNodes；`traverseDownstream` BFS（visited 防环）；`detectCycles` DFS 三色染色 + 显式栈——只有「回边目标到栈顶」的区段才算环，环外尾部祖先不算；`fromJson` **fail-closed**——source/target 缺失或 confidence 非法的边整条跳过（派生数据宁缺勿错，不造幽灵拓扑污染影响集）。
-- `ImpactAnalyzer.analyzeChange(oldPromptHash, newPromptHash)`——`newPromptHash` 当前未消费（预留新增调用点检测）。流程：`findInvocationKeysByTemplateHash` 查直接影响（统一键空间，声明与否同路）→ 空则区分冷启动两种文案（库里完全无数据 vs hash 不匹配）→ 图遍历下游合并全受影响集 → **自适应密度**：直接受影响调用点数 ≥ `GLOBAL_PROMPT_THRESHOLD`（10）视为全局提示词，全部受影响调用点每个按规范序（timestamp + recordId 排序）取前 `GLOBAL_SAMPLE_PER_INVOCATION`（3）条；局部提示词全量。查询失败返回 `AnalysisResult.error`（与冷启动的合法空数据严格区分，不吞成空集误导诊断）。
-- **图的生命周期（谁读谁写，全部已接线）**：`replay` = 唯一写者（每次现场重建，快照 `saveGraphQuietly` 留档供巡检，写失败只告警）；`graph show` = 只读现场重建（永远最新，不落盘）；`status` = 读快照展示（标注「最近一次 replay 生成」）；录制管道**永不**建图。任务域的 `--affected` 复用同一套「模板哈希 → 调用点」查询定位受影响任务链（第 11 章），但冻结重放的受影响裁剪刻意**只取直接命中**、不做图下游传播——冻结重放喂的是录制原输入，下游节点的模板又没变，真重放只会复现原行为、不产生验证信号（下游的真实影响由真实再执行 + 对齐收口）。
+- `DriftDetector`（core，纯只读巡检）——逐画像键比对「最新可分组记录的模板哈希 vs 画像模板哈希」（凭据=存储键与现算键双一致的记录，损坏记录倒序回退），漂移点按键锚点分三分形态：骨架锚点**同键漂移**（全文变体共存）、声明无骨架**标签裂键**（未建档新键与既有画像标签相同）、template:/adhoc: 全新键（无画像对照，不进漂移集）；漂移键经 `traverseDownstream` 扩散为下游波及集；零模板点排除出检测集并计数，单键查询失败跳过并计数（退化可见不中断）。检测、治理身份前移与重驱取点共用同一 `latestIdentityRecord` 口径。
+- **图的生命周期（谁读谁写，全部已接线）**：`replay` = 唯一写者（每次现场重建，快照 `saveGraphQuietly` 留档供巡检，写失败只告警，dry-run 不落盘）；`graph show` = 只读现场重建（永远最新，不落盘）；`status` = 读快照展示（标注「最近一次 replay 生成」）；录制管道**永不**建图。图的消费方只剩两个：检测报告的下游波及叙事，与 `--re-drive` 的目标裁剪——缺省全量对齐零调用后，为省调用而做的选链传播已无存在理由（统一引擎批的旧假设重审结论）。
 
 **表结构**：`graph_snapshot`（id='current' 单行，`graph_json` 含 nodeCount/edgeCount/edges[source,target,confidence,throughNodes]）——快照只是巡检留档，分析永远用重建后的内存图。
 
@@ -767,11 +757,11 @@ recorded（到达即计数） = written（批量写成功）
 
 ## 第 11 章 任务回归
 
-**本幕回顾**：第 4 幕（一句话改动，整条链的回归）与第 5 幕的 `--affected`。
+**本幕回顾**：第 4 幕（一句话改动，整条链的回归）。
 
-**设计问题**：单点重放回答「这个调用点稳不稳」，回答不了小王最大的痛点——「一次用户请求触发的整条链路，改完之后还成立吗」。人工对比两条真实链是 agent 开发里最磨人的活：两条链长度都可能不一样、步骤顺序可能交错、措辞必然不同。框架的答案分三层：**把「一次用户请求」从录制数据里确定性地划出来（任务链）**、**把两条链按调用点配对对齐（不按序号——模板版本更替会让步骤错位）**、**把冻结重放与真实对比统一成一个回放单元**。任务不是新实体：任务链是录制数据的派生视图（与依赖图同哲学——派生事实不建表），零 schema 变更、可随时全量重建。
+**设计问题**：单点重放回答「这个调用点稳不稳」，回答不了小王最大的痛点——「一次用户请求触发的整条链路，改完之后还成立吗」。人工对比两条真实链是 agent 开发里最磨人的活：两条链长度都可能不一样、步骤顺序可能交错、措辞必然不同。框架的答案分三层：**把「一次用户请求」从录制数据里确定性地划出来（任务链）**、**把两条链按调用点配对对齐（不按序号——模板版本更替会让步骤错位）**、**把行为比对收敛为「两次真实执行之间」的按调用点对齐判定（受控重驱作为花调用的显式复核层）**。任务不是新实体：任务链是录制数据的派生视图（与依赖图同哲学——派生事实不建表），零 schema 变更、可随时全量重建。
 
-**概念与术语**：任务链（task chain，会话内一次请求触发的全部记录）、任务键（`(session_id, 请求文本)`——会话内键）、声明任务键（`metadata.taskKey`，声明优先于派生）、对齐键（invocationKey）、冻结重放（--prompt，重演历史输入）/真实对比（无 --prompt，最新链 vs 次新链）、分歧即停的 task 级推广（CHANGED 后停止真重放，下游标条件态）、预算池（本次运行全局封顶）。
+**概念与术语**：任务链（task chain，会话内一次请求触发的全部记录）、任务键（`(session_id, 请求文本)`——会话内键）、声明任务键（`metadata.taskKey`，声明优先于派生）、对齐键（invocationKey，声明标签跨模板版本配对）、统一重放引擎（bare = 全项目漂移检测 + 逐任务对齐 + 漂移处置）、受控重驱（`--re-drive`，逐点归档模板注入）、漂移处置三出口（收编/候选/挂起）、缩域（`--task` × `--invocation` 复合 AND）、预算池（重驱层全局封顶）。
 
 **代码地图**：
 
@@ -786,24 +776,19 @@ recorded（到达即计数） = written（批量写成功）
 完整 invocationKey（版本即身份，跨版本不配对）。
   - `align(baselineSteps, newChain, comparator, rules)`：基线侧改由调用方给定 `Map<invocationKey, List<BaselineStep>>`（指纹步骤）——交付验收（第 12 章）用同一对齐核消费包内指纹，不做第二台差分引擎。
   - `prefixDependent` 标注：链内任一记录 `turnIndex>0` 或 `previousTurns` 非空 = 该链携带会话前缀 → 报告提示「真实再执行对照必须重演到该问为止的整个会话前缀，否则差异源于上下文缺失而非回归」（防误报，不阻断）。
-- `TaskReplayRunner`（cli）——任务域两个互斥模式的编排：
-  - **冻结重放**（提供 `--prompt`）：`--task` 精确命中的全部链**逐链回放**（同文本多链 = 同一任务的多轮执行实例，每轮都验证；`--dry-run` 先出执行计划与成本预估，零调用零建档，调用数预算的截断点在计划中如实模拟（超出部分标 skipped），token 预算取决于重放响应长度、计划期不可预知（如实注明））——选链器语义：请求文本精确相等优先，精确未命中时前缀匹配、命中多个不同任务文本属歧义即报错列候选（与 `--invocation` 目标选择器同款标准）。按规范序逐记录复用 `RegressionTestExecutor`（历史输入原样）。提供 `--old-prompt` 时影响裁剪：`findInvocationKeysByTemplateHash(sha256(oldPrompt))` 直查受影响调用点（**不做图下游传播**——第 10 章的边界理由），非受影响记录**继承 PASS**（标注「未受影响」）；受影响无命中 → exit 2。真重放按序推进，**遇 CHANGED 即停止后续真重放**，后续标注「分歧后下游（条件态：基线行为在此之后是否仍成立需真实重跑收口）」；`--full-chain` 取消裁剪与分歧即停，全部真重放。开头自动建档（与单点重放同款语义——候选落库以画像存在为前提；干跑不建档）。
-  - **真实对比**（无 `--prompt`）：前缀命中同名链，最新 vs 次新走 `TaskAligner`，零 LLM 调用；仅一条链 = 首录即基线，报告标注自建基线，exit 0。对齐报告附**成本对照行**：token 合计恒显示（原始 int 无缺失语义），费用按报告时本地价格表两侧同基准重算（逐记录 servedModel 回退请求模型；任一记录无价即货币项整项省略）。
-  - **预算池**：`--max-total-calls/--max-total-tokens` 对本次运行全部真重放**合计**封顶；耗尽 → 剩余待重放记录 skipped（原因 budget_exhausted）；继承 PASS 不计 skipped。超时/API 错误同样落 skipped 口径（证据缺口不允许冒充绿）。
-  - **报告**：人类可读逐步行（序号、调用点短键、判定、摘要；CHANGED 步附工具/参数/结果摘要与费用——首次验收的链视图要素；文本差异注记低置信呈现，与单点重放同口径；任务规则违规逐条出「违反任务规则」行，配置了 tasks 而链未声明 taskKey 时出诊断行）+ `agentassert4j.task-report/1` 单行 JSON（mode=`task-frozen-replay|task-align|task-dry-run`、task{request,sessionId}、summary{total,pass,changed,inherited,postDivergence,skipped,missing,added；对齐模式另有 ruleViolations 计数；dry-run 模式为 chains/chainIndex/chainCount/total/plannedReplay/inherited/skipped——多链各一行，chainIndex/chainCount 供消费端拼装总量}、对齐模式另带 ruleViolations[] 数组与 baseline/current{tokens,costUsd 可空}、steps[]{recordId,invocationKey,action:replayed|inherited|post-divergence|skipped|aligned|missing|added|planned-replay,verdict,dims 五维,summary,replayOutput 仅 CHANGED 64KB 截断}、baselineTime/newChainTime、prefixDependent）。
-- `replay` 命令的旗标校验（`ReplayCommand.call()`）：`--task`/`--invocation`/`--affected` 三范围互斥；`--full-chain` 与预算池旗标仅任务域有效；`--affected` 要求同时给 `--prompt` 与 `--old-prompt`；调用点范围要求 `--prompt`（任务域对比模式可省）；预算值必须 ≥1。
+- `TaskReplayRunner`（cli，统一重放引擎）——三层流程与漂移处置状态机的编排细节、缩域复合语义、退出码复合与 task-report/1 报告契约**以 `guide/spec/replay.md` 为基准**（本块只留叙事骨架）。仍值得知道的实现事实：对齐仍逐任务取「最新链 vs 次新链」，每对两侧指纹现场重提（不消费任何存档值）；CHANGED 步就地现场重提指纹落候选（重放与裁决通常不在同一进程，候选必须落库）；对齐报告附成本对照行（token 合计恒显，无价记录使货币项整项省略）；`--re-drive` 的模板取「该点最新归档全文」而非记录自身哈希——语义是「用各点自己的新模板对录制输入复核」。
 
 **表结构**：无新表、无新列——任务键声明住在 `interactions.metadata` JSON（吸收层），链是读侧派生。
 
-**生命周期与并发契约——任务域退出码**（两模式统一）：
+**生命周期与并发契约——退出码复合**（全命令统一 0/1/2，replay 侧）：
 
 | 退出码 | 触发条件 |
 |--------|---------|
-| 1 | 任一配对 CHANGED / 缺步骤 / 新增步骤 / 任务规则违规（缺与新增、纪律违规是行为差异，属回归信号） |
-| 2 | 仅 skipped>0（预算耗尽或调用失败——证据不完整不允许冒充绿）或无匹配链等用法问题 |
-| 0 | 全部 PASS / 继承；真实对比自建基线 |
+| 1 | 行为差异或证据缺口——对齐 CHANGED/缺步骤/新增步骤/任务规则违规/漂移挂起/重驱 CHANGED（「没跑够」，真实重跑或重驱可补） |
+| 2 | 用法、数据或环境问题——选链错误、`--ci` 守卫与语义守卫拒绝、重驱预算耗尽、重驱全败（「被截断或环境故障」） |
+| 0 | 无回归（`--ci` 下漂移未收编仍出 0，附警告行） |
 
-**测试怎么钉住它**：`TaskChainViewTest`（派生/前推/声明优先/同文本并链/会话开头无请求排除/损坏 metadata 退化）、`TaskAlignerTest`（matched/missing/added/富余不判差异/前缀标注/指纹基线重载 + 任务规则——缺必备步/次数越界/乱序/违规呈现顺序/未声明不评/键不匹配不评/无标签不参与）、`TaskReplayRunnerTest`（冻结重放全链、影响裁剪继承 PASS、异模板步骤继承 PASS、分歧即停恰发 1 次、预算恰发 N 次、CHANGED 压过 skipped、真实对比配对、自建基线 exit 0、链式编排分歧即停、选择器歧义与控制字符可见化、未命中诊断、干跑零调用零建档/裁剪计划/JSON 契约/对齐模式拒绝 + 任务规则端到端/未声明诊断/JSON 违规计数与数组/成本对照 token 恒显/无价省略、定点十进制、干跑预算截断模拟/多链 chainIndex/不可见 Unicode 可见化）。
+**测试怎么钉住它**：`TaskChainViewTest`（派生/声明优先/同文本并链/损坏 metadata 退化）、`TaskAlignerTest`（配对三分类/富余不判差异/versionSwitch 注记 + 任务规则三约束）、`TaskReplayRunnerTest`（对齐判定与选择器、缩域 AND、漂移处置三出口七场景、守卫六项、受控重驱七场景、JSON 三段报告）、`ReplayFlowTest`（候选→approve/reject→rollback 跨命令收敛全链）。
 
 ---
 
@@ -853,20 +838,7 @@ recorded（到达即计数） = written（批量写成功）
 
 **代码地图**：
 
-- **命令全景**（picocli，根命令 `agentassert4j`，全部子命令带 `mixinStandardHelpOptions`）：
-
-| 命令 | 关键选项 | 职责 |
-|------|---------|------|
-| `baseline` | `--db --invocation --approver --force --json`(baseline-report/1) | 从录制建档（幂等）/按当前语义重建；子命令 `export`（第 12 章，--json 出 export-report/1 元数据报告） |
-| `status` | `--db --diff --json`(status/1) | 画像巡检（invocationKey/状态/版本/候选/归档版本/业务标签）+ 候选差异 + 依赖图快照行 |
-| `replay` | `--prompt --old-prompt --invocation --task --affected --full-chain --max-total-calls --max-total-tokens --max-cases --selection --ci --no-establish --dry-run --json` | 调用点域与任务域重放（第 9/11 章） |
-| `approve` / `reject` | `--invocation <目标> --all --approver --json`(adjudication/1，action 字段区分) | 裁决：渲染候选差异 → 转正/丢弃 |
-| `rollback` | `--invocation --version`(均必选) `--json`(rollback/1) | 从归档恢复 |
-| `rules` | `--json`(rules/1) | 内置行为目录 + 规则配置示例 |
-| `graph show` | `--db --json`(graph/1) | 依赖图只读视图（节点/边/置信度/穿透节点/环） |
-| `verify` | `--pack(必选) --task --db --report --json`(verify-report/1) | 交付验收（第 12 章） |
-
-  JSON 输出通道是**全命令统一契约**：9 个顶层命令加 `baseline export` 各自产出单行报告，字段为完整领域字段集（baseline-report/1 含逐调用点建档结果、adjudication/1 以 action 字段区分 approve/reject、export-report/1 含 out/taskCount/stepCount/sha256/excluded、rollback/1 含 invocationKey/versionTag 等），由 `JsonContractTest` 逐命令钉住——单行性、schema 前缀、关键字段存在、失败路径 stdout 零产出、UTF-8 严格可解码。
+- **命令全景**（picocli，根命令 `agentassert4j`，全部子命令带 `mixinStandardHelpOptions`）：`status` / `baseline`(含 `export`) / `replay` / `approve` / `reject` / `rollback` / `rules` / `graph show` / `verify` / `doctor` / `completion`。各命令的 bare 语义、参数终态与报告 schema **以 `guide/spec/cli.md` 为基准**（本表不再双写参数矩阵——replay help 的终态参数面有测试钉，拆除参数不复活）。JSON 输出通道是**全命令统一契约**（stdout 只产报告本体、诊断走 stderr、失败路径 stdout 零产出），由 `JsonContractTest` 逐命令钉住；根 help 以 exitCodeList 呈现退出码契约。
 
 - `CliSupport`（包私有，命令间共用逻辑）：
   - `installUtf8Console`：主入口统一 UTF-8 直写标准流（绕过 Windows 控制台默认编码，中文报告不乱码）。

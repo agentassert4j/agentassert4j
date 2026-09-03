@@ -143,16 +143,11 @@ class TaskChainViewTest {
         }
 
         @Override
-        public java.util.Set<String> findInvocationKeysByTemplateHash(String hash) {
-            return new java.util.HashSet<>();
-        }
-
-        @Override
         public List<InteractionRecord> findBySessionId(String sessionId) {
             List<InteractionRecord> result = new ArrayList<>();
-            for (InteractionRecord r : records) {
-                if (sessionId.equals(r.getSessionId())) {
-                    result.add(r);
+            for (InteractionRecord record : records) {
+                if (sessionId.equals(record.getSessionId())) {
+                    result.add(record);
                 }
             }
             return result;
@@ -160,7 +155,14 @@ class TaskChainViewTest {
 
         @Override
         public List<String> findAllSessionIds() {
-            return new ArrayList<>(Arrays.asList("sA", "sB"));
+            List<String> result = new ArrayList<>();
+            for (InteractionRecord record : records) {
+                if (!result.contains(record.getSessionId())) {
+                    result.add(record.getSessionId());
+                }
+            }
+            return result;
         }
+
     }
 }

@@ -1,8 +1,10 @@
 package io.github.agentassert4j.cli;
 
+import io.github.agentassert4j.algorithm.DriftDetector;
 import io.github.agentassert4j.algorithm.InMemoryDependencyGraph;
 import io.github.agentassert4j.model.ArchivedTemplateVersion;
 import io.github.agentassert4j.model.InvocationProfile;
+import io.github.agentassert4j.result.DriftReport;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import picocli.CommandLine.Command;
@@ -46,13 +48,14 @@ public class StatusCommand implements Callable<Integer> {
             repository = CliSupport.openRepository(db, jsonOutput ? err : out);
             List<InvocationProfile> profiles = repository.findAllInvocations();
             Map<String, String> labelsByInvocationKey = businessLabelsByInvocationKey(repository);
+            Map<String, String> driftByInvocationKey = templateDriftByInvocationKey(repository, profiles);
 
             if (jsonOutput) {
                 StringBuilder invocations = new StringBuilder();
                 for (InvocationProfile profile : profiles) {
                     if (invocations.length() > 0) invocations.append(",");
                     String archivedTags = archivedVersionTags(repository, profile.getInvocationKey());
-                    invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(profile.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), ""))).append("\",\"status\":\"").append(profile.getBaselineStatus()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(profile.getVersionTag() != null ? profile.getVersionTag() : "")).append("\",\"hasCandidate\":").append(profile.getCandidateFingerprint() != null).append(",\"archivedVersions\":\"").append(RecursiveJsonParser.escape(archivedTags)).append("\"}");
+                    invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(profile.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), ""))).append("\",\"status\":\"").append(profile.getBaselineStatus()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(profile.getVersionTag() != null ? profile.getVersionTag() : "")).append("\",\"hasCandidate\":").append(profile.getCandidateFingerprint() != null).append(",\"templateDrift\":\"").append(driftByInvocationKey.getOrDefault(profile.getInvocationKey(), "none")).append("\",\"archivedVersions\":\"").append(RecursiveJsonParser.escape(archivedTags)).append("\"}");
                 }
                 StringBuilder uncoveredJson = new StringBuilder();
                 for (String tag : uncoveredBusinessTags(repository, profiles)) {
@@ -68,11 +71,11 @@ public class StatusCommand implements Callable<Integer> {
                 return 0;
             }
 
-            out.println("invocationKey                                              状态       版本   候选  归档版本      业务标签");
+            out.println("invocationKey                                              状态       版本   候选  漂移  归档版本      业务标签");
             for (InvocationProfile profile : profiles) {
                 String archivedTags = archivedVersionTags(repository, profile.getInvocationKey());
-                out.printf("  %-50s %-9s %-6s %-4s %-12s %s%n", CliSupport.displayKey(profile.getInvocationKey()), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "有" : "-", archivedTags.isEmpty() ? "-" : archivedTags, labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), "-"));
-                printTemplateText(repository, profile.getInvocationKey());
+                out.printf("  %-50s %-9s %-6s %-4s %-4s %-12s %s%n", CliSupport.displayKey(profile.getInvocationKey()), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "有" : "-", driftSymbol(driftByInvocationKey.get(profile.getInvocationKey())), archivedTags.isEmpty() ? "-" : archivedTags, labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), "-"));
+                printTemplateText(repository, profile);
                 if (diff) {
                     printCandidateDiff(profile);
                 }
@@ -152,26 +155,62 @@ public class StatusCommand implements Callable<Integer> {
     }
 
     /**
-     * 模板文本巡检：chat 类基线的模板原文在录制时随记录归档进 prompt_texts
-     * （以 templateHash 为键），这里回放给审阅者——审批面对的模板一目了然。
-     * 文本缺席（老数据或 userInput 锚点的会话）静默跳过，不阻断巡检。
+     * 画像模板身份的漂移三态（● 一致 / ▲ 漂移 / - 无身份）：与 replay 共用同一
+     * 检测器单一真源，巡检不跑 replay 就能看见「哪里漂了」。检测与下游扩散无关，
+     * 不依赖图快照。
      */
-    private void printTemplateText(StorageRepository repository, String invocationKey) {
-        if (invocationKey == null || !invocationKey.startsWith("chat:")) {
+    private static Map<String, String> templateDriftByInvocationKey(StorageRepository repository, List<InvocationProfile> profiles) {
+        DriftReport drift = DriftDetector.detect(repository, null);
+        Map<String, String> result = new HashMap<>();
+        for (DriftReport.DriftPoint point : drift.getSameKeyDrifts()) {
+            result.put(point.getInvocationKey(), "drifted");
+        }
+        for (String key : drift.getZeroTemplateKeys()) {
+            result.put(key, "none");
+        }
+        for (InvocationProfile profile : profiles) {
+            result.putIfAbsent(profile.getInvocationKey(), "clean");
+        }
+        return result;
+    }
+
+    private static String driftSymbol(String driftStatus) {
+        if ("drifted".equals(driftStatus)) {
+            return "▲";
+        }
+        return "clean".equals(driftStatus) ? "●" : "-";
+    }
+
+    /**
+     * 模板原文巡检：按画像模板哈希反查 prompt_texts 归档原文，随 --diff 渲染——
+     * 与候选差异同属审阅证据，缺省巡检不渲染（百画像×长模板全量输出不可读）。
+     * 行数超限截断；原文缺席（无模板身份的调用点）静默跳过。
+     */
+    private void printTemplateText(StorageRepository repository, InvocationProfile profile) {
+        if (!diff) {
+            return;
+        }
+        String hash = profile.getTemplateHash();
+        if (hash == null || hash.isEmpty()) {
             return;
         }
         String text;
         try {
-            text = repository.findTemplateText(invocationKey.substring("chat:".length()));
+            text = repository.findTemplateText(hash);
         } catch (RuntimeException e) {
             return;
         }
         if (text == null || text.trim().isEmpty()) {
             return;
         }
-        out.println("      └ 模板原文：");
-        for (String line : text.replace("\r\n", "\n").split("\n", -1)) {
-            out.println("        " + line);
+        out.println("      └ 模板原文（" + hash.substring(0, Math.min(8, hash.length())) + "）:");
+        String[] lines = text.replace("\r\n", "\n").split("\n", -1);
+        int shown = Math.min(lines.length, 20);
+        for (int i = 0; i < shown; i++) {
+            out.println("        " + lines[i]);
+        }
+        if (lines.length > shown) {
+            out.println("        …（其余 " + (lines.length - shown) + " 行省略）");
         }
     }
 

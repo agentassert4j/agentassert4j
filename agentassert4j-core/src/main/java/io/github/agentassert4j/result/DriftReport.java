@@ -18,7 +18,7 @@ public class DriftReport {
     private final List<DriftPoint> sameKeyDrifts = new ArrayList<>();
     private final List<DriftPoint> labelSplits = new ArrayList<>();
     private final List<String> downstreamKeys = new ArrayList<>();
-    private int zeroTemplateProfiles;
+    private final List<String> zeroTemplateKeys = new ArrayList<>();
     private int skippedQueries;
 
     /**
@@ -44,14 +44,17 @@ public class DriftReport {
     }
 
     /**
-     * 因无可比对模板身份而跳过检测的画像数（零模板点：无模板身份即无漂移语义）
+     * 因无可比对模板身份而排除出检测的画像键（零模板点：无模板身份即无漂移语义）
      */
-    public int getZeroTemplateProfiles() {
-        return zeroTemplateProfiles;
+    public List<String> getZeroTemplateKeys() {
+        return zeroTemplateKeys;
     }
 
-    public void setZeroTemplateProfiles(int zeroTemplateProfiles) {
-        this.zeroTemplateProfiles = zeroTemplateProfiles;
+    /**
+     * 因无可比对模板身份而跳过检测的画像数
+     */
+    public int getZeroTemplateProfiles() {
+        return zeroTemplateKeys.size();
     }
 
     /**

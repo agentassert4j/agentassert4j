@@ -57,11 +57,6 @@ class SimpleTestRepo implements StorageRepository {
     }
 
     @Override
-    public Set<String> findInvocationKeysByTemplateHash(String hash) {
-        return interactions.stream().filter(r -> hash.equals(r.getTemplateHash())).map(InteractionRecord::getInvocationKey).filter(id -> id != null && !id.isEmpty()).collect(Collectors.toSet());
-    }
-
-    @Override
     public List<InteractionRecord> findByInvocationKey(String invocationKey) {
         return interactions.stream().filter(r -> invocationKey.equals(r.getInvocationKey())).collect(Collectors.toList());
     }

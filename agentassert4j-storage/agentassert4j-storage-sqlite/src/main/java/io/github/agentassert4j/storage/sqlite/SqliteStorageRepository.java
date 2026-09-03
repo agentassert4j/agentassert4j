@@ -248,21 +248,6 @@ public class SqliteStorageRepository implements StorageRepository {
         return queryInteractions("SELECT * FROM interactions WHERE template_hash = ?" + " ORDER BY timestamp ASC, seq ASC, record_id ASC", hash);
     }
 
-    @Override
-    public synchronized Set<String> findInvocationKeysByTemplateHash(String hash) {
-        Set<String> result = new HashSet<>();
-        String sql = "SELECT DISTINCT invocation_key FROM interactions WHERE template_hash = ?";
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setString(1, hash);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) result.add(rs.getString("invocation_key"));
-            }
-        } catch (SQLException e) {
-            LOG.log(Level.SEVERE, "findInvocationKeysByTemplateHash failed", e);
-            throw new StorageException("findInvocationKeysByTemplateHash", e);
-        }
-        return result;
-    }
 
     @Override
     public synchronized List<InteractionRecord> findBySessionId(String sessionId) {

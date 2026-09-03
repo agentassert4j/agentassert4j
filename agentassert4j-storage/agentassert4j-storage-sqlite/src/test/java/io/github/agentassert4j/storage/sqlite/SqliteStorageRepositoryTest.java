@@ -82,22 +82,6 @@ class SqliteStorageRepositoryTest {
         assertEquals(2, results.size());
     }
 
-    @Test
-    void findInvocationKeysByTemplateHash() {
-        // 反查返回调用点键（不是声明标签）：键空间统一，声明与否同路
-        InteractionRecord r1 = createSampleRecord("r1", "s1", "sk-alpha", "hash-111");
-        r1.setInvocationKey("invocation:sk-alpha:hash-111");
-        repo.saveInteraction(r1);
-        InteractionRecord r2 = createSampleRecord("r2", "s2", "sk-beta", "hash-111");
-        r2.setInvocationKey("template:hash-111");
-        repo.saveInteraction(r2);
-        repo.saveInteraction(createSampleRecord("r3", "s3", "sk-gamma", "hash-222"));
-
-        Set<String> invocationKeys = repo.findInvocationKeysByTemplateHash("hash-111");
-        assertEquals(2, invocationKeys.size());
-        assertTrue(invocationKeys.contains("invocation:sk-alpha:hash-111"));
-        assertTrue(invocationKeys.contains("template:hash-111"));
-    }
 
     @Test
     void skeletonHash_roundTrip() {
@@ -648,7 +632,6 @@ class SqliteStorageRepositoryTest {
 
         assertThrows(StorageException.class, () -> repo.saveInteraction(r));
         assertThrows(StorageException.class, () -> repo.saveInteractions(Collections.singletonList(r)));
-        assertThrows(StorageException.class, () -> repo.findInvocationKeysByTemplateHash("h"));
         assertThrows(StorageException.class, () -> repo.findAllSessionIds());
         assertThrows(StorageException.class, () -> repo.findAllInvocations());
         assertThrows(StorageException.class, () -> repo.saveInvocationProfile(new InvocationProfile()));

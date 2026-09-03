@@ -72,7 +72,7 @@ public final class DriftDetector {
             }
             InteractionRecord anchor = latestIdentityRecord(records, key);
             if (anchor == null || anchor.getTemplateHash() == null || anchor.getTemplateHash().isEmpty()) {
-                report.setZeroTemplateProfiles(report.getZeroTemplateProfiles() + 1);
+                report.getZeroTemplateKeys().add(key);
                 continue;
             }
             if (!anchor.getTemplateHash().equals(profile.getTemplateHash())) {
@@ -135,8 +135,9 @@ public final class DriftDetector {
      * 键桶内最新可分组记录：按规范序（时间、序号、记录 ID）倒序扫描，返回首个现算键
      * 与存储键一致的记录。单条损坏或键不一致即跳过回退；全部不可用返回 null。
      * 返回记录的模板哈希可为 null（零模板点），由调用方决定保守语义。
+     * 检测、治理身份前移与重驱取点共用本口径（存储键×现算键双一致才可作身份凭据）。
      */
-    static InteractionRecord latestIdentityRecord(List<InteractionRecord> records, String expectedKey) {
+    public static InteractionRecord latestIdentityRecord(List<InteractionRecord> records, String expectedKey) {
         List<InteractionRecord> ordered = new ArrayList<>(records);
         ordered.sort(canonicalOrder());
         for (int i = ordered.size() - 1; i >= 0; i--) {
