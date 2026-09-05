@@ -687,6 +687,53 @@ class BaselineManagerTest {
     }
 
     @Nested
+    @DisplayName("recordCandidate - 同指纹短路")
+    class SameFingerprintCandidate {
+
+        private static final String KEY = "invocation:order-flow:skl-1";
+
+        @Test
+        @DisplayName("候选指纹与现役基线一致 → 不登记（false），画像原样保留")
+        void identicalToActiveBaseline_notRegistered() {
+            InvocationProfile profile = makeProfileWithBaseline(KEY, "order-flow");
+            profile.setTemplateHash("h1");
+            repo.saveInvocationProfile(profile);
+            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
+            DeterministicFingerprint activeFingerprint = profile.getFingerprint();
+
+            boolean registered = manager.recordCandidate(repo.findByInvocationKey(KEY).get(0), activeFingerprint);
+
+            assertFalse(registered, "与现役一致的候选不得登记");
+            InvocationProfile updated = repo.findInvocationByKey(KEY);
+            assertEquals(BaselineStatus.BASELINE, updated.getBaselineStatus(), "画像不得翻转 CANDIDATE");
+            assertNull(updated.getCandidateFingerprint());
+        }
+
+        @Test
+        @DisplayName("候选与现役不一致 → 正常登记（true），既有未裁决候选不被同指纹空候选覆盖")
+        void differentFromBaseline_registers() {
+            InvocationProfile profile = makeProfileWithBaseline(KEY, "order-flow");
+            profile.setTemplateHash("h1");
+            DeterministicFingerprint pendingCandidate = new DeterministicFingerprint();
+            profile.setCandidateFingerprint(pendingCandidate);
+            profile.setBaselineStatus(BaselineStatus.CANDIDATE);
+            repo.saveInvocationProfile(profile);
+            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
+
+            DeterministicFingerprint activeFingerprint = profile.getFingerprint();
+            boolean registered = manager.recordCandidate(repo.findByInvocationKey(KEY).get(0), activeFingerprint);
+
+            assertFalse(registered, "与现役一致的候选不登记");
+            assertEquals(pendingCandidate, repo.findInvocationByKey(KEY).getCandidateFingerprint(), "既有未裁决候选必须原样保留，不得被无信息候选覆盖");
+
+            DeterministicFingerprint different = new DeterministicFingerprint();
+            different.setToolCallSet(Collections.singleton("otherTool"));
+            assertTrue(manager.recordCandidate(repo.findByInvocationKey(KEY).get(0), different), "不同指纹正常登记");
+            assertEquals(BaselineStatus.CANDIDATE, repo.findInvocationByKey(KEY).getBaselineStatus());
+        }
+    }
+
+    @Nested
     @DisplayName("模板身份前移 - approve 前移、rollback 恢复、显式收编")
     class TemplateIdentity {
 

@@ -580,6 +580,28 @@ class TaskReplayRunnerTest {
         }
 
         @Test
+        @DisplayName("缩域即重驱域：--re-drive --task 无漂移也重驱缩域内调用点")
+        void reDrive_narrowedScope_drivesWithoutDrift() {
+            saveIdenticalLabeledChains();
+            repository.saveTemplateText("hash-a", "归档模板全文");
+            stubClient.setScriptedContent("{\"v\":1}");
+
+            assertEquals(0, runner.run("查订单", null, false, false, true, false, null, null));
+            assertEquals(1, stubClient.calls, "缩域内调用点应被重驱");
+            assertTrue(output.toString().contains("（缩域内全部调用点）"), output.toString());
+        }
+
+        @Test
+        @DisplayName("bare 重驱无漂移仍为零目标（漂移点裁剪不因缩域缺省生效）")
+        void reDrive_bare_zeroDrift_zeroTargets() {
+            saveIdenticalLabeledChains();
+
+            assertEquals(0, runner.run(null, null, false, false, true, false, null, null));
+            assertEquals(0, stubClient.calls);
+            assertTrue(output.toString().contains("（仅漂移点）"), output.toString());
+        }
+
+        @Test
         @DisplayName("dry-run 重驱：只出成本预估，零调用")
         void reDrive_dryRun_estimateOnly() {
             seedArchivedSkeletonDrift("{\"result\":\"ok\"}");

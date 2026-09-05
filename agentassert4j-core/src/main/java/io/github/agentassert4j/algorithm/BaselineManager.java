@@ -151,13 +151,18 @@ public class BaselineManager {
      * 回归执行器在对比结果非 PASS 时调用——候选必须经持久层落库，
      * 否则 approve 在新进程中不可达（重放与裁决通常不在同一进程）。
      *
+     * <p>候选指纹与画像现役指纹一致时不登记（画像原样保留，含既未裁决的既有候选）——
+     * 与基线无差异的候选不携带裁决信息，登记只会制造「有候选却无差异」的困惑界面；
+     * 该形态出现在画像以较新记录建档（身份已前移）而对照链是更早记录的场合。</p>
+     *
      * @param baseline  产生候选时所用基线交互记录（invocationKey 由解析器从记录重算）
      * @param candidate 回归测试提取的新指纹
+     * @return 是否实际登记（false = 与现役指纹一致未登记，或入参为空）
      * @throws IllegalStateException 该调用点无画像时抛出（先录制建立基线）
      */
-    public synchronized void recordCandidate(InteractionRecord baseline, DeterministicFingerprint candidate) {
+    public synchronized boolean recordCandidate(InteractionRecord baseline, DeterministicFingerprint candidate) {
         if (baseline == null || candidate == null) {
-            return;
+            return false;
         }
 
         String invocationKey = InvocationResolver.resolve(baseline).getInvocationKey();
@@ -165,10 +170,14 @@ public class BaselineManager {
         if (profile == null) {
             throw new IllegalStateException("Invocation profile not found: " + invocationKey);
         }
+        if (candidate.equals(profile.getFingerprint())) {
+            return false;
+        }
 
         profile.setCandidateFingerprint(candidate);
         profile.setBaselineStatus(BaselineStatus.CANDIDATE);
         repository.saveInvocationProfile(profile);
+        return true;
     }
 
     /**

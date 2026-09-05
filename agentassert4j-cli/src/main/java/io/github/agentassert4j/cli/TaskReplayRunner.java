@@ -136,9 +136,10 @@ public class TaskReplayRunner {
             diagnostic("缩域未命中任何任务链（先录制交互，或用 status 核对调用点/任务前缀）。");
             return 2;
         }
+        boolean narrowed = taskPrefix != null || invocationKey != null;
 
         if (dryRun) {
-            return dryRunPlan(scoped, reDrive, drift);
+            return dryRunPlan(scoped, reDrive, drift, narrowed);
         }
 
         // --ci 未建档守卫：缩域内存在未建档调用点即拒绝判定——
@@ -171,7 +172,6 @@ public class TaskReplayRunner {
         BaselineManager manager = new BaselineManager(repository);
         Map<String, StepOutcome> outcomes = new LinkedHashMap<>();
         AlignmentTotals totals = new AlignmentTotals();
-        boolean narrowed = taskPrefix != null || invocationKey != null;
 
         List<List<TaskChain>> groups = groupByRequestText(scoped);
         for (List<TaskChain> group : groups) {
@@ -197,7 +197,7 @@ public class TaskReplayRunner {
         // 第 3 层 受控重驱（显式开启）：逐点以最新归档模板重驱录制输入
         ReDriveTotals reDriveTotals = new ReDriveTotals();
         if (reDrive) {
-            reDriveLayer(drift, fullChain, scoped, manager, maxTotalCalls, maxTotalTokens, reDriveTotals);
+            reDriveLayer(drift, fullChain, narrowed, scoped, manager, maxTotalCalls, maxTotalTokens, reDriveTotals);
         }
 
         if (!jsonMode && totals.pendingCandidates > 0) {
@@ -233,16 +233,29 @@ public class TaskReplayRunner {
     }
 
     /**
-     * 受控重驱目标集：--full-chain 为缩域内全部记录逐条重驱；缺省为仅漂移点
-     * （同键漂移 + 标签裂键，含挂起点补证），每键取最新可分组记录——域外键不在
-     * 缩域链键集内、天然排除。
+     * 受控重驱目标集，三档优先级：--full-chain 为缩域内全部记录逐条重驱；带缩域
+     * （--task/--invocation）为缩域内全部调用点每键取最新可分组记录——显式缩域即
+     * 显式重驱域，不要求漂移在册；缺省为仅漂移点（同键漂移 + 标签裂键，含挂起点
+     * 补证）。漂移键不在缩域链键集内、天然排除。
      */
-    private List<InteractionRecord> reDriveTargets(DriftReport drift, boolean fullChain, List<TaskChain> scoped) {
+    private List<InteractionRecord> reDriveTargets(DriftReport drift, boolean fullChain, boolean narrowed, List<TaskChain> scoped) {
         List<InteractionRecord> targets = new ArrayList<>();
         if (fullChain) {
             for (TaskChain chain : scoped) {
                 for (InteractionRecord record : chain.getRecords()) {
                     if (CliSupport.invocationKeyOfRecord(record) != null) {
+                        targets.add(record);
+                    }
+                }
+            }
+            return targets;
+        }
+        if (narrowed) {
+            Set<String> seen = new LinkedHashSet<>();
+            for (TaskChain chain : scoped) {
+                for (InteractionRecord record : chain.getRecords()) {
+                    String key = CliSupport.invocationKeyOfRecord(record);
+                    if (key != null && seen.add(key)) {
                         targets.add(record);
                     }
                 }
@@ -282,9 +295,9 @@ public class TaskReplayRunner {
      * 重放执行器——检测报告已确认漂移点真实运行过，归档原文必然可反查；原文缺席
      * 属数据缺口，跳过计数可见。预算池对全部真重驱合计封顶。
      */
-    private void reDriveLayer(DriftReport drift, boolean fullChain, List<TaskChain> scoped, BaselineManager manager, Integer maxTotalCalls, Integer maxTotalTokens, ReDriveTotals rd) {
-        List<InteractionRecord> targets = reDriveTargets(drift, fullChain, scoped);
-        info("受控重驱：以各点最新归档模板重驱 " + targets.size() + " 条记录" + (fullChain ? "（--full-chain 扩域）" : "（仅漂移点）") + "。");
+    private void reDriveLayer(DriftReport drift, boolean fullChain, boolean narrowed, List<TaskChain> scoped, BaselineManager manager, Integer maxTotalCalls, Integer maxTotalTokens, ReDriveTotals rd) {
+        List<InteractionRecord> targets = reDriveTargets(drift, fullChain, narrowed, scoped);
+        info("受控重驱：以各点最新归档模板重驱 " + targets.size() + " 条记录" + (fullChain ? "（--full-chain 扩域）" : narrowed ? "（缩域内全部调用点）" : "（仅漂移点）") + "。");
         if (!targets.isEmpty()) {
             info(CostEstimator.estimate(targets, llmClient.name()));
         }
@@ -479,9 +492,13 @@ public class TaskReplayRunner {
                     worstOutcome(outcomes, step.getInvocationKey(), StepOutcome.CHANGED);
                     InteractionRecord changedRecord = newRecords.get(step.getNewRecordId());
                     if (changedRecord != null) {
-                        manager.recordCandidate(changedRecord, FingerprintExtractor.extract(changedRecord, rules, changedRecord.getInvocationId()));
-                        totals.pendingCandidates++;
-                        info("已落候选：" + CliSupport.displayKey(step.getInvocationKey()) + "（行为差异待人工裁决——approve 接受为基线，reject 回退模板）。");
+                        boolean registered = manager.recordCandidate(changedRecord, FingerprintExtractor.extract(changedRecord, rules, changedRecord.getInvocationId()));
+                        if (registered) {
+                            totals.pendingCandidates++;
+                            info("已落候选：" + CliSupport.displayKey(step.getInvocationKey()) + "（行为差异待人工裁决——approve 接受为基线，reject 回退模板）。");
+                        } else {
+                            info("差异相对对照链成立，但该记录指纹与画像现役基线一致——未登记候选（无裁决对象）。");
+                        }
                     }
                 } else {
                     pass++;
@@ -828,11 +845,11 @@ public class TaskReplayRunner {
      * 只读预演：漂移集已在上文报告，这里列出将发生的任务配对与规则适用性，
      * 供 CI 在执行前核对选链是否如愿。
      */
-    private int dryRunPlan(List<TaskChain> scoped, boolean reDrive, DriftReport drift) {
+    private int dryRunPlan(List<TaskChain> scoped, boolean reDrive, DriftReport drift, boolean narrowed) {
         List<List<TaskChain>> groups = groupByRequestText(scoped);
         info("对齐计划（dry-run，未执行判定、未建档、未处置）：共 " + groups.size() + " 个任务、零 LLM 调用。");
         if (reDrive) {
-            List<InteractionRecord> planned = reDriveTargets(drift, false, scoped);
+            List<InteractionRecord> planned = reDriveTargets(drift, false, narrowed, scoped);
             info("重驱计划（--re-drive）：将逐点以最新归档模板真重驱 " + planned.size() + " 条记录。");
             if (!planned.isEmpty()) {
                 info(CostEstimator.estimate(planned, llmClient.name()));

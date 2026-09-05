@@ -43,7 +43,7 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--ci"}, description = "CI 模式：不自动建档，缩域内存在未建档调用点拒绝判定（退出码 2），漂移身份不收编（附警告出 0）——治理写不进流水线")
     boolean ciMode;
 
-    @Option(names = {"--re-drive"}, description = "受控重驱（花 LLM 调用）：逐漂移点以最新归档模板重驱录制输入复核行为；建议先 --dry-run 看报价")
+    @Option(names = {"--re-drive"}, description = "受控重驱（花 LLM 调用）：缺省逐漂移点、带 --task/--invocation 缩域时改为缩域内全部调用点——以最新归档模板重驱录制输入复核行为；建议先 --dry-run 看报价")
     boolean reDrive;
 
     @Option(names = {"--full-chain"}, description = "重驱扩域：取消「仅漂移点」裁剪，缩域内全部记录逐条重驱（要求 --re-drive）")

@@ -2,7 +2,7 @@
 
 > 最近复核：364801f / 2026-09-03 · S7 成文（会话内对照统一重放引擎 TaskReplayRunner /
 > TaskAligner / TaskChainView 实现逐项对账——本 spec 以统一引擎落地代码为基准）
-> 验证三档占比：【测试钉】12 条 ·【命令可证】0 条 ·【人工对账】0 条
+> 验证三档占比：【测试钉】13 条 ·【命令可证】0 条 ·【人工对账】0 条
 
 ## 职责与边界
 
@@ -64,14 +64,18 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
    【测试钉】`TaskReplayRunnerTest.Alignment.stepDiff_changed_exits1_andRegistersCandidate`
    + `ReplayFlowTest.DiffAndAdjudicate`
 10. **对齐差异的语义**：对齐层陈述「最近两次真实执行之间行为变了吗」——事实差异在新真实链
-    入账前如实存续；approve 清候选转正基线、收敛漂移身份，不追溯改写已录链。【测试钉】
+    入账前如实存续；approve 清候选转正基线、收敛漂移身份，不追溯改写已录链。变异/测试工件链
+    是只追加事实：被拒工件任务在两条干净链入账前每次 bare replay 如实 exit 1，自愈方式 =
+    该任务再真实执行两轮；CI 库是本流水线新鲜录制，工件不跨库携带。【测试钉】
     `ReplayFlowTest.DiffAndAdjudicate.diff_candidate_approve_settles`
 11. **served 模型对偶检测**：基线链与新链的 served 模型族不相交即报告模型身份变更（同模板
     跨执行行为漂移的主因），零新增存储。【测试钉】`Guards.servedModelPairNoted`
-12. **受控重驱层**：`--re-drive` 逐点以最新归档模板真重驱（目标=漂移点∩缩域，每键取最新
-    可分组记录；`--full-chain` 扩为缩域内全部记录）；预算池合计封顶、原文缺席跳过可见、
-    全败出 2；dry-run 出成本报价。【测试钉】`TaskReplayRunnerTest.ReDrive`（PASS/CHANGED 落
-    候选/预算/全败/原文缺席/fullChain/dry-run 七场景）
+12. **受控重驱层**：`--re-drive` 逐点以最新归档模板真重驱，目标三档优先级——`--full-chain`
+    为缩域内全部记录逐条；带缩域（`--task`/`--invocation`）为缩域内全部调用点每键取最新
+    可分组记录（显式缩域即显式重驱域，不要求漂移在册）；缺省为仅漂移点（同键漂移 + 标签
+    裂键，含挂起点补证）。预算池合计封顶、原文缺席跳过可见、全败出 2；dry-run 出成本报价。
+    【测试钉】`TaskReplayRunnerTest.ReDrive`（PASS/CHANGED 落候选/预算/全败/原文缺席/
+    fullChain/缩域即域/bare 零漂移零目标/dry-run 九场景）
 
 ## 行为矩阵
 
@@ -110,4 +114,5 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
 
 | 日期 | 方式 | 发现 |
 |---|---|---|
+| 2026-09-04 | 盲跑复盘批（同日）：D1 同指纹候选短路 + 缩域即重驱域落地 | 契约 9 增补登记前置（候选≠现役指纹，governance.md 同步）；契约 12 增缩域分支；契约 10 增工件自愈语义——三处均来自 dogfood 门 13 盲跑的实际摩擦（无信息候选界面/定向复核无入口/工件任务长期 exit 1） |
 | 2026-09-03 | S7 成文：统一引擎落地代码全量对账（TaskReplayRunner/TaskAligner/TaskChainView） | ①调用点域采样引擎（ReplayRunner/ImpactAnalyzer/AnalysisResult）已随统一引擎批拆除，replay-report/1 模式随之退役（task-report/1 承接）；②「同键富余不判差异」与「缺步骤」的边界经测试夹具纠偏后钉清——富余=同键记录数不齐，缺步骤=键整组缺席；③重驱层为下一批次唯一人工对账项 |

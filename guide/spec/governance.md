@@ -47,7 +47,7 @@ stateDiagram-v2
 |---|---|---|---|
 | 首次建档（autoEstablish） | 桶内无画像或指纹空 | 种子记录现场重提指纹，versionTag=v1，盖章 | BASELINE |
 | 重复建档 | 指纹已有 | 幂等跳过 | 不变 |
-| 判定 CHANGED 落候选（D1） | 画像存在 | recordCandidate（首个 CHANGED 配对的新记录 + 现场重提指纹） | CANDIDATE |
+| 判定 CHANGED 落候选（D1） | 画像存在；候选指纹 ≠ 画像现役指纹（一致即无裁决对象，不登记不翻转） | recordCandidate（首个 CHANGED 配对的新记录 + 现场重提指纹） | CANDIDATE（不一致时）/ 不变（一致时） |
 | approve | CANDIDATE，否则抛 IllegalStateException | ①归档旧基线 ②身份前移（顺序钉死）③候选升基线 ④tag 跳过归档占用 ⑤盖章 | BASELINE |
 | reject | CANDIDATE，否则抛（与 approve 对称） | 丢弃候选，保留旧基线（回退模板是 git 的职责） | BASELINE |
 | rollback(key, tag) | 归档行存在，否则抛 | 当前基线先归档 → 按快照恢复指纹/模板哈希/语义版本/审批/tag | BASELINE |
@@ -144,5 +144,6 @@ stateDiagram-v2
 
 | 日期 | 方式 | 发现 |
 |---|---|---|
+| 2026-09-04 | 盲跑复盘批：D1 登记前置条件落地（同指纹候选不登记） | 状态机「落候选」事件增前置（候选≠现役指纹）；形态来自 dogfood 盲跑实况——画像以变异期记录建档时，对齐 CHANGED 的候选与现役一致，登记即产生无信息候选与困惑界面（MIG-V1 实况）；【测试钉】`BaselineManagerTest.SameFingerprintCandidate` |
 | 2026-09-03 | 统一重放引擎落地后复核（同日）：漂移处置状态机接线完成 | 契约 9/10 升【测试钉】（DriftStateMachine 七场景 + 单一写入口断言）；「对齐层陈述最近两次真实执行之间的差异」语义经端到端钉确认——approve 清候选转正基线，事实差异在新真实链入账前如实存续（ReplayFlowTest.diff_candidate_approve_settles），与 S4 成文时的收敛表述细化一致 |
 | 2026-09-03 | S4 成文：BaselineManager/BaselineService/DriftDetector/AdjudicateCommand/StatusCommand 全量对账 | ①漂移处置状态机与 `--ci` 写纪律为已批准设计、引擎接线未落地（契约 9/10 人工对账，随统一引擎批升级）；②「Rule B 建档即收编」与「种子=桶内最早记录」经核不冲突——裂键新桶内记录全文哈希同值，最早记录即最新模板；③status 已有候选差异预览与未建档视图（Rule C 承接面现成），漂移列为统一引擎批增量 |
