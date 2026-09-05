@@ -21,6 +21,11 @@
 3. **core 零外部依赖（仅 java.base）是发布卖点与合规优势**，不是待优化技术债。
 4. **SQLite 是 v1 唯一存储后端**；mysql/pg 是双向门延迟项而非否决项，真实需求出现前不重建。
 5. **判定语义 100% 确定性**（见 R9）——核心链路永不引入 LLM/概率模型做判定。
+6. **CLI 人类通道输出 = 英文单语**（2026-09-05 裁决，1.0.0 版本翻转前完成迁移）——发布面
+   （Maven Central + GitHub + Apache-2.0）是全球分发意图，CLI 输出（差异报告）是价值交付物
+   本体；不做运行时多语言（gettext-commons 为 LGPL 触发许可一票否决，ResourceBundle 双目录
+   为永久双真源税且 zh 需求未出现）；文档级本地化（双语 README）已覆盖国内受众；JSON 机器
+   契约本已语言无关。实施细节见 docs/阶段性 英文单语输出迁移专项调研。
 
 ---
 
@@ -498,6 +503,26 @@ sdk-spring-ai1 与 spring-boot3-starter 随 Spring AI 保持 17，不受此条�
 - **视角清单勾稽**：上述各项审查视角逐项给出「发现/无问题」结论
 - **严重度分级**：HIGH（功能错误/数据丢失/不可逆风险）/ MEDIUM（降级路径错误/资源泄漏/边界缺陷）/ LOW（清理项）
 - **修复闭环**：每个修复项标注「修复后定向验证」方式
+
+### 12.9 CLI 输出文案规范（英文原生风格）
+
+用户可见输出（CLI 的 stdout/stderr 与生成的 markdown 报告）一律英文，且必须按英文工具的
+母语习惯书写，**禁止镜像翻译中文句式**——逐句直译产出 translationese（每个词都对、整体
+像翻译软件），与工具生态格格不入。六条规则：
+
+1. **报告与汇总用名词短语或 git 式计数**，不用完整句——"Drift: 1 same-key, 0 downstream"；
+   "Aligned 3 steps: 2 pass, 1 changed"。
+2. **指引句动词开头**，命令与键用反引号——"Run `agentassert4j baseline` locally first, then retry."
+3. **错误 = 现象 + 下一步动作**，不用破折号补语——"All re-drive calls failed (no comparisons).
+   Check llm config, then retry."
+4. **缺失用 no X found**，不用完整句直译。
+5. **就地标注用短标签**——"(served: X, recorded: Y)"。
+6. **术语与 JSON 枚举同词**——invocation/baseline/drift/collect/re-drive 等在人类通道与
+   机器通道必须同形。
+
+句式 sentence case；全角标点与「」不出现在输出；中文**数据**（用户提示词/任务文本原样出现
+在报告中）不在此列，由 UTF-8 直写保证渲染。每批交付抽查新文案自问「git/gh 的作者会这么写
+吗」——答案是「这是翻译」即返工。完整中英正反例表与术语对照见 guide/spec/cli.md。
 
 ---
 

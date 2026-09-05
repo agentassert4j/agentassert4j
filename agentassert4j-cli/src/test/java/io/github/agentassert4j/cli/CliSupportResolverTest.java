@@ -104,7 +104,7 @@ class CliSupportResolverTest {
         saveRecord("r2", "queryOrder", "hash-b");
 
         IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "queryOrder"));
-        assertTrue(e.getMessage().contains("覆盖多个调用点"));
+        assertTrue(e.getMessage().contains("covers multiple invocations"));
         assertTrue(e.getMessage().contains("invocation:queryOrder:hash-a") && e.getMessage().contains("invocation:queryOrder:hash-b"));
     }
 
@@ -115,7 +115,7 @@ class CliSupportResolverTest {
         establishAll();
 
         IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "no-such"));
-        assertTrue(e.getMessage().contains("没有匹配"));
+        assertTrue(e.getMessage().contains("No invocation matching"));
     }
 
     @Test
@@ -127,7 +127,7 @@ class CliSupportResolverTest {
         String resolved = CliSupport.resolveInvocationFilter(repository, "invocation:queryOrder", new PrintStream(output));
 
         assertEquals("queryOrder", resolved);
-        assertTrue(output.toString().contains("业务标签 queryOrder"));
+        assertTrue(output.toString().contains("business label queryOrder"));
     }
 
     @Test
@@ -165,7 +165,7 @@ class CliSupportResolverTest {
         establishAll();
 
         IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "queryOrder@abcdef12"));
-        assertTrue(e.getMessage().contains("撞车"));
+        assertTrue(e.getMessage().contains("hash collision"));
         assertTrue(e.getMessage().contains("invocation:queryOrder:abcdef1200000001") && e.getMessage().contains("invocation:queryOrder:abcdef1200000002"));
     }
 
@@ -177,7 +177,7 @@ class CliSupportResolverTest {
 
         // 「@toolong」不是 8 位 → 不按显示短形处理，走前缀/标签路径后无命中报错
         IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "sk1@toolong"));
-        assertTrue(e.getMessage().contains("没有匹配"));
+        assertTrue(e.getMessage().contains("No invocation matching"));
     }
 
     @Test
@@ -201,8 +201,8 @@ class CliSupportResolverTest {
         String resolved = CliSupport.resolveInvocationFilter(repository, "queryOrder@abcdef12", new PrintStream(output));
 
         assertEquals("queryOrder", resolved);
-        assertTrue(output.toString().contains("显示短形"), output.toString());
-        assertTrue(output.toString().contains("业务标签 queryOrder"));
+        assertTrue(output.toString().contains("display form"), output.toString());
+        assertTrue(output.toString().contains("business label queryOrder"));
     }
 
     @Test
@@ -221,7 +221,7 @@ class CliSupportResolverTest {
         CliSupport.warnUnknownBehaviors(rules, new PrintStream(output));
 
         String warning = output.toString();
-        assertTrue(warning.contains("未知行为 noSuchBehavior"), "笔误的 behavior 必须点破而非静默忽略: " + warning);
+        assertTrue(warning.contains("unknown behaviors: noSuchBehavior"), "笔误的 behavior 必须点破而非静默忽略: " + warning);
         assertTrue(warning.contains("mustUseChinese"), "告警必须列出合法行为名: " + warning);
     }
 

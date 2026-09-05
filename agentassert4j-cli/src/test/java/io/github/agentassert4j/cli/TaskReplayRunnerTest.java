@@ -163,7 +163,7 @@ class TaskReplayRunnerTest {
             InvocationProfile profile = repository.findInvocationByKey("invocation:order:hash-a");
             assertNotNull(profile.getCandidateFingerprint(), "CHANGED 步必须落候选（显式 replay 即测试行为）");
             assertEquals(BaselineStatus.CANDIDATE, profile.getBaselineStatus());
-            assertTrue(output.toString().contains("已落候选"));
+            assertTrue(output.toString().contains("Candidate registered"));
         }
 
         @Test
@@ -176,7 +176,7 @@ class TaskReplayRunnerTest {
             int exit = runner.run(null, null, false, false, false, false, null, null);
 
             assertEquals(1, exit);
-            assertTrue(output.toString().contains("缺步骤"));
+            assertTrue(output.toString().contains("missing step"));
         }
 
         @Test
@@ -195,7 +195,7 @@ class TaskReplayRunnerTest {
             saveRecord("a-1", "session-a", 1000L, "{\"result\":\"ok\"}");
 
             assertEquals(0, runner.run(null, null, false, false, false, false, null, null));
-            assertTrue(output.toString().contains("首录即基线"));
+            assertTrue(output.toString().contains("first recording becomes the baseline"));
         }
 
         @Test
@@ -218,7 +218,7 @@ class TaskReplayRunnerTest {
             TaskReplayRunner ruledRunner = new TaskReplayRunner(repository, new StubLlmClient(), new DeterministicComparator(ComparatorConfig.defaults()), rules, TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), false);
 
             assertEquals(1, ruledRunner.run(null, null, false, false, false, false, null, null));
-            assertTrue(output.toString().contains("违反任务规则"));
+            assertTrue(output.toString().contains("Task rule violation"));
         }
     }
 
@@ -306,9 +306,9 @@ class TaskReplayRunnerTest {
             assertEquals(0, runner.run(null, null, false, false, false, false, null, null));
 
             assertEquals("hash-new", repository.findInvocationByKey("invocation:order:skl-1").getTemplateHash(), "画像身份必须前移到最新记录哈希");
-            assertTrue(output.toString().contains("已收编"));
+            assertTrue(output.toString().contains("Collected:"));
             runner.run(null, null, false, false, false, false, null, null);
-            assertTrue(output.toString().contains("模板身份一致"), "收编后检测不应再命中");
+            assertTrue(output.toString().contains("template identities consistent"), "收编后检测不应再命中");
         }
 
         @Test
@@ -319,7 +319,7 @@ class TaskReplayRunnerTest {
             assertEquals(0, runner.run(null, null, true, false, false, false, null, null));
 
             assertEquals("hash-old", repository.findInvocationByKey("invocation:order:skl-1").getTemplateHash(), "CI 模式不得落治理写");
-            assertTrue(output.toString().contains("身份未收编"));
+            assertTrue(output.toString().contains("Identity not collected"));
         }
 
         @Test
@@ -345,7 +345,7 @@ class TaskReplayRunnerTest {
             InvocationProfile profile = repository.findInvocationByKey("invocation:order:skl-1");
             assertEquals("hash-old", profile.getTemplateHash());
             assertNull(profile.getCandidateFingerprint());
-            assertTrue(output.toString().contains("挂起"));
+            assertTrue(output.toString().contains("Hung:"));
         }
 
         @Test
@@ -355,7 +355,7 @@ class TaskReplayRunnerTest {
             saveSkeletonRecord("l-1", "session-l", 1500L, "查订单", "lonely", "skl-1", "hash-new", "{\"result\":\"ok\"}");
 
             assertEquals(1, runner.run(null, null, false, false, false, false, null, null));
-            assertTrue(output.toString().contains("挂起"));
+            assertTrue(output.toString().contains("Hung:"));
         }
 
         @Test
@@ -367,7 +367,7 @@ class TaskReplayRunnerTest {
             saveRecord("x-2", "session-x2", 2000L, "写诗任务", "poem", "hash-p", "{\"result\":\"ok\"}", null);
 
             assertEquals(0, runner.run("写诗", null, false, false, false, false, null, null));
-            assertTrue(output.toString().contains("域外漂移"));
+            assertTrue(output.toString().contains("Drift outside scope"));
         }
 
         @Test
@@ -380,8 +380,8 @@ class TaskReplayRunnerTest {
             saveRecord("x-2", "session-x2", 2000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
 
             assertEquals(1, runner.run(null, null, false, false, false, false, null, null));
-            assertTrue(output.toString().contains("挂起"));
-            assertFalse(output.toString().contains("域外"), "缩域内的键不得误标域外: " + output);
+            assertTrue(output.toString().contains("Hung:"));
+            assertFalse(output.toString().contains("Drift outside scope"), "缩域内的键不得误标域外: " + output);
         }
 
         @Test
@@ -394,7 +394,7 @@ class TaskReplayRunnerTest {
             assertEquals(0, runner.run(null, null, false, false, false, false, null, null));
 
             assertNotNull(repository.findInvocationByKey("invocation:order:hash-new"), "裂键新档必须已建立");
-            assertTrue(output.toString().contains("新键建档"));
+            assertTrue(output.toString().contains("new profile established"));
         }
     }
 
@@ -411,7 +411,7 @@ class TaskReplayRunnerTest {
             repository.saveInvocationProfile(profile);
 
             assertEquals(2, runner.run(null, null, false, false, false, false, null, null));
-            assertTrue(output.toString().contains("判定语义版本不一致"));
+            assertTrue(output.toString().contains("Judgment semantics version mismatch"));
         }
 
         @Test
@@ -431,7 +431,7 @@ class TaskReplayRunnerTest {
             saveIdenticalLabeledChains();
 
             assertEquals(2, runner.run(null, null, true, false, false, false, null, null));
-            assertTrue(output.toString().contains("尚无基线，CI 模式拒绝判定"));
+            assertTrue(output.toString().contains("Refusing to judge in --ci mode"));
         }
 
         @Test
@@ -452,7 +452,7 @@ class TaskReplayRunnerTest {
 
             modelRunner.run(null, null, false, false, false, false, null, null);
 
-            assertTrue(output.toString().contains("与录制模型"), "换模型必须告警: " + output);
+            assertTrue(output.toString().contains("differs from recorded models"), "换模型必须告警: " + output);
         }
 
         @Test
@@ -464,7 +464,7 @@ class TaskReplayRunnerTest {
 
             runner.run(null, null, false, false, false, false, null, null);
 
-            assertTrue(output.toString().contains("模型身份变更"));
+            assertTrue(output.toString().contains("model identity changed"));
         }
 
         @Test
@@ -476,7 +476,7 @@ class TaskReplayRunnerTest {
 
             runner.run(null, null, false, false, false, false, null, null);
 
-            assertTrue(output.toString().contains("served 模型 model-b ≠ 基线 model-a"));
+            assertTrue(output.toString().contains("(served: model-b, baseline: model-a)"));
         }
 
         @Test
@@ -488,7 +488,7 @@ class TaskReplayRunnerTest {
 
             assertNull(repository.findInvocationByKey("invocation:order:hash-a"), "dry-run 不得建档");
             assertNull(repository.loadGraph(), "dry-run 不得落图快照");
-            assertTrue(output.toString().contains("对齐计划"));
+            assertTrue(output.toString().contains("Alignment plan"));
         }
     }
 
@@ -516,8 +516,8 @@ class TaskReplayRunnerTest {
 
             assertEquals(0, runner.run(null, null, false, false, true, false, null, null));
             assertEquals(1, stubClient.calls, "仅漂移点重驱，恰一次调用");
-            assertTrue(output.toString().contains("受控重驱"));
-            assertTrue(output.toString().contains("重驱 PASS"));
+            assertTrue(output.toString().contains("Re-drive:"));
+            assertTrue(output.toString().contains("re-drive PASS"));
         }
 
         @Test
@@ -541,7 +541,7 @@ class TaskReplayRunnerTest {
 
             assertEquals(2, runner.run(null, null, false, false, true, false, 1, null));
             assertEquals(1, stubClient.calls);
-            assertTrue(output.toString().contains("预算耗尽"));
+            assertTrue(output.toString().contains("budget exhausted"));
         }
 
         @Test
@@ -551,7 +551,7 @@ class TaskReplayRunnerTest {
             stubClient.failWith(new io.github.agentassert4j.spi.LlmApiException("simulated outage"));
 
             assertEquals(2, runner.run(null, null, false, false, true, false, null, null));
-            assertTrue(output.toString().contains("重驱全部失败"));
+            assertTrue(output.toString().contains("All re-drive calls failed"));
         }
 
         @Test
@@ -563,7 +563,7 @@ class TaskReplayRunnerTest {
 
             assertEquals(2, runner.run(null, null, false, false, true, false, null, null));
             assertEquals(0, stubClient.calls);
-            assertTrue(output.toString().contains("原文缺席"));
+            assertTrue(output.toString().contains("archived template text missing"));
         }
 
         @Test
@@ -588,7 +588,7 @@ class TaskReplayRunnerTest {
 
             assertEquals(0, runner.run("查订单", null, false, false, true, false, null, null));
             assertEquals(1, stubClient.calls, "缩域内调用点应被重驱");
-            assertTrue(output.toString().contains("（缩域内全部调用点）"), output.toString());
+            assertTrue(output.toString().contains("(all invocations in scope)"), output.toString());
         }
 
         @Test
@@ -598,7 +598,7 @@ class TaskReplayRunnerTest {
 
             assertEquals(0, runner.run(null, null, false, false, true, false, null, null));
             assertEquals(0, stubClient.calls);
-            assertTrue(output.toString().contains("（仅漂移点）"), output.toString());
+            assertTrue(output.toString().contains("(drift points only)"), output.toString());
         }
 
         @Test
@@ -608,7 +608,7 @@ class TaskReplayRunnerTest {
 
             assertEquals(0, runner.run(null, null, false, true, true, false, null, null));
             assertEquals(0, stubClient.calls);
-            assertTrue(output.toString().contains("重驱计划"));
+            assertTrue(output.toString().contains("Re-drive plan"));
         }
     }
 

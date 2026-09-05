@@ -58,12 +58,12 @@ class DoctorCommandTest {
 
         assertEquals(0, exit, "doctor 是人用体检，恒 0");
         String report = output.toString();
-        assertTrue(report.contains("身份体检："), report);
-        assertTrue(report.contains("覆盖体检："), report);
-        assertTrue(report.contains("规则体检："), report);
-        assertTrue(report.contains("未建档调用点：无。"), report);
-        assertTrue(report.contains("template_hash 缺失记录：0 条"), report);
-        assertTrue(report.contains("tasks 期望错位：无（未配置 tasks 规则）。"), report);
+        assertTrue(report.contains("Identity check:"), report);
+        assertTrue(report.contains("Coverage check:"), report);
+        assertTrue(report.contains("Rules check:"), report);
+        assertTrue(report.contains("Unestablished invocations: none."), report);
+        assertTrue(report.contains("Records missing template_hash: 0"), report);
+        assertTrue(report.contains("tasks expectation mismatches: none (no tasks rules configured)."), report);
     }
 
     @Test
@@ -80,10 +80,10 @@ class DoctorCommandTest {
 
         assertEquals(0, exit);
         String report = output.toString();
-        assertTrue(report.contains("多步零标签链 1 条"), "s3 两步无标签链被识别: " + report);
-        assertTrue(report.contains("重复请求文本任务族 1 个"), "查订单跨 s1/s2 重复: " + report);
-        assertTrue(report.contains("建议声明 taskKey"), report);
-        assertTrue(report.contains("未建档调用点 2 个（重跑 baseline 收编）"), "h2 版本与零声明键均未建档可见: " + report);
+        assertTrue(report.contains("1 multi-step unlabeled chain"), "s3 两步无标签链被识别: " + report);
+        assertTrue(report.contains("1 repeated request-text family"), "查订单跨 s1/s2 重复: " + report);
+        assertTrue(report.contains("declare taskKey"), report);
+        assertTrue(report.contains("2 unestablished invocations"), "h2 版本与零声明键均未建档可见: " + report);
         assertTrue(report.contains("q@h2"), "未建档版本短形列出: " + report);
         assertTrue(report.contains("tpl@aaa"), "零声明未建档键短形列出: " + report);
     }
@@ -99,7 +99,7 @@ class DoctorCommandTest {
 
         assertEquals(0, exit);
         String report = output.toString();
-        assertTrue(report.contains("重复请求文本任务族：无"), "已声明族的重复是声明在起作用，不建议重复声明: " + report);
+        assertTrue(report.contains("Repeated request-text families: none"), "已声明族的重复是声明在起作用，不建议重复声明: " + report);
     }
 
     private void save(String recordId, String sessionId, long timestamp, String userInput, String invocationKey, String label, String templateHash) {

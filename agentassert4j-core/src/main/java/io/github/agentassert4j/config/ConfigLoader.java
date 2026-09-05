@@ -162,7 +162,7 @@ public final class ConfigLoader {
         if (explicitPath != null) {
             String content = loadFromFile(explicitPath);
             if (content == null) {
-                throw new IllegalStateException("显式指定的配置文件不可读: " + explicitPath + "（系统属性 " + pathProperty + "）");
+                throw new IllegalStateException("Explicitly configured config file is not readable: " + explicitPath + " (system property " + pathProperty + ")");
             }
             origin.append(explicitPath);
             return content;

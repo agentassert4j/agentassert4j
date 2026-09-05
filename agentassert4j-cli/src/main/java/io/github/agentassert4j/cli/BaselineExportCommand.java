@@ -34,26 +34,26 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-08-30
  */
-@Command(name = "export", description = "把当前基线导出为验收基线包（单 JSON；缺省全量任务链，--task 缩域）", mixinStandardHelpOptions = true)
+@Command(name = "export", description = "Export the current baselines as an acceptance pack (single JSON; all task chains by default, --task narrows)", mixinStandardHelpOptions = true)
 public class BaselineExportCommand implements Callable<Integer> {
 
     // 输出通道：实例字段——包内测试可注入替代流
     PrintStream out = System.out;
     PrintStream err = System.err;
 
-    @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
+    @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--task"}, description = "只导出请求文本匹配该前缀的任务链（缺省全量）")
+    @Option(names = {"--task"}, description = "Export only task chains whose request text matches this prefix (defaults to all)")
     String task;
 
-    @Option(names = {"--include-samples"}, description = "附加每步输入/输出样本（强制 MASK 脱敏，判定不消费）")
+    @Option(names = {"--include-samples"}, description = "Attach per-step input/output samples (force-masked; never consumed by verdicts)")
     boolean includeSamples;
 
-    @Option(names = {"--out"}, defaultValue = "acceptance-pack.json", description = "输出文件路径（默认 ./acceptance-pack.json）")
+    @Option(names = {"--out"}, defaultValue = "acceptance-pack.json", description = "Output file path (default ./acceptance-pack.json)")
     String outPath;
 
-    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 报告（agentassert4j.export-report/1）")
+    @Option(names = {"--json"}, description = "Print a single-line JSON report to stdout (agentassert4j.export-report/1)")
     boolean jsonOutput;
 
     @Override
@@ -68,7 +68,7 @@ public class BaselineExportCommand implements Callable<Integer> {
                 chains.removeIf(c -> !c.getRequestText().startsWith(task));
             }
             if (chains.isEmpty()) {
-                err.println("没有匹配的任务链可导出（先录制并建立基线，或核对 --task 前缀）。");
+                err.println("No task chains to export. Record interactions and establish baselines first, or check the --task prefix.");
                 return 2;
             }
 
@@ -119,13 +119,13 @@ public class BaselineExportCommand implements Callable<Integer> {
                 if (complete && !packTask.getSteps().isEmpty()) {
                     pack.getTasks().add(packTask);
                 } else {
-                    excluded.add(chain.getRequestText() + "（存在未建档步骤）");
+                    excluded.add(chain.getRequestText() + " (unestablished steps present)");
                 }
             }
             meta.setServedModel(String.join(",", servedModels));
 
             if (pack.getTasks().isEmpty()) {
-                err.println("没有任何任务链具备完整基线指纹，包未生成。未建档链：" + String.join("；", excluded));
+                err.println("No task chain has complete baseline fingerprints; pack not written. Unestablished chains: " + String.join("; ", excluded));
                 return 2;
             }
 
@@ -133,7 +133,7 @@ public class BaselineExportCommand implements Callable<Integer> {
             try {
                 Files.write(Paths.get(outPath), json.getBytes(StandardCharsets.UTF_8));
             } catch (IOException e) {
-                err.println("验收包写入失败：" + e.getMessage());
+                err.println("Failed to write the acceptance pack: " + e.getMessage());
                 return 2;
             }
             int stepCount = pack.getTasks().stream().mapToInt(t -> t.getSteps().size()).sum();
@@ -146,15 +146,15 @@ public class BaselineExportCommand implements Callable<Integer> {
                 out.println("{\"schema\":\"agentassert4j.export-report/1\",\"out\":\"" + RecursiveJsonParser.escape(outPath) + "\",\"taskCount\":" + pack.getTasks().size() + ",\"stepCount\":" + stepCount + ",\"sha256\":\"" + HashUtil.sha256(json) + "\",\"excluded\":[" + excludedJson + "]}");
                 return 0;
             }
-            out.println("验收包已导出：" + outPath);
-            out.println("  任务链 " + pack.getTasks().size() + " 条 / 步骤 " + stepCount + " 个" + (includeSamples ? "（含脱敏样本）" : "（无样本）"));
-            out.println("  SHA-256：" + HashUtil.sha256(json) + "（请与验收方对账）");
+            out.println("Acceptance pack written: " + outPath);
+            out.println("  " + CliSupport.plural(pack.getTasks().size(), "task chain") + " / " + CliSupport.plural(stepCount, "step") + (includeSamples ? " (masked samples included)" : " (no samples)"));
+            out.println("  SHA-256: " + HashUtil.sha256(json) + " (reconcile with the accepting party)");
             if (!excluded.isEmpty()) {
-                out.println("  警告：以下任务链存在未建档步骤，已排除：" + String.join("；", excluded));
+                out.println("  Warning: task chains with unestablished steps were excluded: " + String.join("; ", excluded));
             }
             return 0;
         } catch (RuntimeException e) {
-            err.println("导出失败：" + e.getMessage());
+            err.println("export failed: " + e.getMessage());
             return 2;
         } finally {
             if (repository != null) {

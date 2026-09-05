@@ -104,7 +104,7 @@ class OpenAiCompatibleClientTest {
         String logs = errOut.toString();
         assertTrue(logs.contains("temperature"), "用户显式配置被注册表裁剪必须告警: " + logs);
         assertTrue(logs.contains("extraBody"), "告警必须指明逃生舱: " + logs);
-        int occurrences = logs.split("temperature 已从请求中移除", -1).length - 1;
+        int occurrences = logs.split("temperature was dropped from the request", -1).length - 1;
         assertEquals(1, occurrences, "同客户端重复命中只告警一次（批量重放不刷屏）: " + logs);
     }
 

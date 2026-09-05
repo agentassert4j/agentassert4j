@@ -91,7 +91,7 @@ class ReplayFlowTest {
         @DisplayName("空库冷启动 → 退出码 2 带录制引导")
         void coldStart_exit2() {
             assertEquals(2, runner().run(null, null, false, false, false, false, null, null));
-            assertTrue(output.toString().contains("未录制到任何交互数据"));
+            assertTrue(output.toString().contains("No recorded interactions found"));
         }
     }
 
@@ -118,7 +118,7 @@ class ReplayFlowTest {
             assertEquals("v2", settled.getVersionTag());
             // 对齐层陈述的是「最近两次真实执行之间变了」——事实差异在新真实链入账前如实存续
             assertEquals(1, runner().run(null, null, false, false, false, false, null, null));
-            assertTrue(output.toString().contains("对齐汇总: PASS 0 | CHANGED 1"));
+            assertTrue(output.toString().contains("Alignment summary: PASS 0 | CHANGED 1"));
         }
 
         @Test
@@ -200,7 +200,7 @@ class ReplayFlowTest {
             repository.saveInvocationProfile(stale);
 
             assertEquals(2, runner().run(null, null, false, false, false, false, null, null));
-            assertTrue(output.toString().contains("判定语义版本不一致"));
+            assertTrue(output.toString().contains("Judgment semantics version mismatch"));
 
             new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", true, null, null);
             assertEquals(JudgmentSemantics.VERSION, repository.findInvocationByKey(key).getAlgoVersion());

@@ -58,16 +58,17 @@ public final class CostEstimator {
      *
      * @param testCases 待测用例列表
      * @param model     模型名称
-     * @return 预估字符串，如 "预估 12 次 API 调用，约 $0.0480（模型：gpt-4o）"
+     * @return 预估字符串，如 "Estimated 12 API calls, approx. $0.0480 (model: gpt-4o)"
      */
     public static String estimate(List<InteractionRecord> testCases, String model) {
         int totalCalls = testCases.size();
         Double costPerCall = estimateCallCostUsd(model, PREVIEW_INPUT_TOKENS, PREVIEW_OUTPUT_TOKENS);
+        String calls = totalCalls + " API call" + (totalCalls == 1 ? "" : "s");
         if (costPerCall == null) {
-            return String.format("预估 %d 次 API 调用（模型：%s 不在价格快照中，费用未知）", totalCalls, model);
+            return String.format("Estimated %s (model %s not in the price snapshot; cost unknown)", calls, model);
         }
         double estimatedCost = totalCalls * costPerCall;
-        return String.format("预估 %d 次 API 调用，约 $%.4f（模型：%s）", totalCalls, estimatedCost, model);
+        return String.format("Estimated %s, approx. $%.4f (model: %s)", calls, estimatedCost, model);
     }
 
     /**
@@ -163,7 +164,7 @@ public final class CostEstimator {
                 out.write(buffer, 0, read);
             }
         } catch (IOException e) {
-            throw new IllegalStateException("model_prices.json 读取失败", e);
+            throw new IllegalStateException("Failed to read model_prices.json", e);
         }
         return new String(out.toByteArray(), StandardCharsets.UTF_8);
     }

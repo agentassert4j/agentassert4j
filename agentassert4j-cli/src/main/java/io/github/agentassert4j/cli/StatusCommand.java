@@ -23,7 +23,7 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "status", description = "查看已录制调用点与基线状态", mixinStandardHelpOptions = true)
+@Command(name = "status", aliases = {"s"}, description = "Show recorded invocations and baseline status", mixinStandardHelpOptions = true)
 public class StatusCommand implements Callable<Integer> {
 
     // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
@@ -31,13 +31,13 @@ public class StatusCommand implements Callable<Integer> {
     PrintStream err = System.err;
 
 
-    @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
+    @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--diff"}, description = "对存在候选指纹的 调用点 渲染候选与基线的逐维差异")
+    @Option(names = {"--diff"}, description = "Render per-dimension candidate vs baseline diffs for invocations holding candidate fingerprints")
     boolean diff;
 
-    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 巡检报告（agentassert4j.status/1）")
+    @Option(names = {"--json"}, description = "Print a single-line JSON inspection report to stdout (agentassert4j.status/1)")
     boolean jsonOutput;
 
     @Override
@@ -71,10 +71,10 @@ public class StatusCommand implements Callable<Integer> {
                 return 0;
             }
 
-            out.println("invocationKey                                              状态       版本   候选  漂移  归档版本      业务标签");
+            out.printf("  %-50s %-9s %-6s %-4s %-5s %-12s %s%n", "invocationKey", "status", "ver", "cand", "drift", "archived", "label");
             for (InvocationProfile profile : profiles) {
                 String archivedTags = archivedVersionTags(repository, profile.getInvocationKey());
-                out.printf("  %-50s %-9s %-6s %-4s %-4s %-12s %s%n", CliSupport.displayKey(profile.getInvocationKey()), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "有" : "-", driftSymbol(driftByInvocationKey.get(profile.getInvocationKey())), archivedTags.isEmpty() ? "-" : archivedTags, labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), "-"));
+                out.printf("  %-50s %-9s %-6s %-4s %-5s %-12s %s%n", CliSupport.displayKey(profile.getInvocationKey()), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "yes" : "-", driftSymbol(driftByInvocationKey.get(profile.getInvocationKey())), archivedTags.isEmpty() ? "-" : archivedTags, labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), "-"));
                 printTemplateText(repository, profile);
                 if (diff) {
                     printCandidateDiff(profile);
@@ -83,14 +83,14 @@ public class StatusCommand implements Callable<Integer> {
 
             List<String> uncovered = uncoveredBusinessTags(repository, profiles);
             for (String tag : uncovered) {
-                out.println("  " + tag + ": 已录制但无基线（先执行 baseline）");
+                out.println("  " + tag + ": recorded but no baseline (run `agentassert4j baseline` first)");
             }
             printUnestablished(repository, profiles);
-            out.println("共 " + profiles.size() + " 个基线画像。");
+            out.println("Total: " + CliSupport.plural(profiles.size(), "invocation profile") + ".");
             printGraphSnapshot(repository);
             return 0;
         } catch (RuntimeException e) {
-            err.println("status 失败：" + e.getMessage());
+            err.println("status failed: " + e.getMessage());
             return 2;
         } finally {
             if (repository != null) {
@@ -148,7 +148,7 @@ public class StatusCommand implements Callable<Integer> {
         if (profile.getCandidateFingerprint() == null) {
             return;
         }
-        out.println("      └ 候选差异（基线 → 候选）:");
+        out.println("      └ candidate diff (baseline → candidate):");
         for (String line : FingerprintDiffRenderer.render(profile.getFingerprint(), profile.getCandidateFingerprint())) {
             out.println("        " + line);
         }
@@ -203,14 +203,14 @@ public class StatusCommand implements Callable<Integer> {
         if (text == null || text.trim().isEmpty()) {
             return;
         }
-        out.println("      └ 模板原文（" + hash.substring(0, Math.min(8, hash.length())) + "）:");
+        out.println("      └ template text (" + hash.substring(0, Math.min(8, hash.length())) + "):");
         String[] lines = text.replace("\r\n", "\n").split("\n", -1);
         int shown = Math.min(lines.length, 20);
         for (int i = 0; i < shown; i++) {
             out.println("        " + lines[i]);
         }
         if (lines.length > shown) {
-            out.println("        …（其余 " + (lines.length - shown) + " 行省略）");
+            out.println("        ... (" + CliSupport.plural(lines.length - shown, "more line") + " omitted)");
         }
     }
 
@@ -245,12 +245,12 @@ public class StatusCommand implements Callable<Integer> {
     private void printUnestablished(StorageRepository repository, List<InvocationProfile> profiles) {
         List<CliSupport.InvocationFootprint> unestablished = unestablishedFootprints(repository, profiles);
         if (unestablished.isEmpty()) {
-            out.println("未建档调用点：无。");
+            out.println("Unestablished invocations: none.");
             return;
         }
-        out.println("未建档调用点（重跑 baseline 收编）：");
+        out.println("Unestablished invocations (run `agentassert4j baseline` to collect):");
         for (CliSupport.InvocationFootprint footprint : unestablished) {
-            out.println("  " + CliSupport.displayKey(footprint.invocationKey) + "（" + (footprint.label != null ? footprint.label : "无标签") + "）记录 " + footprint.recordCount + " 条，最近会话 " + footprint.lastSessionId);
+            out.println("  " + CliSupport.displayKey(footprint.invocationKey) + " (" + (footprint.label != null ? footprint.label : "no label") + ") " + CliSupport.plural(footprint.recordCount, "record") + ", latest session " + footprint.lastSessionId);
         }
     }
 
@@ -280,10 +280,10 @@ public class StatusCommand implements Callable<Integer> {
             // 快照缺席不阻断状态巡检
         }
         if (json == null || json.trim().isEmpty()) {
-            out.println("依赖图：无快照（执行 replay 后生成；实时视图用 graph show）。");
+            out.println("Dependency graph: no snapshot (generated by replay; live view with `graph show`).");
             return;
         }
         InMemoryDependencyGraph graph = InMemoryDependencyGraph.fromJson(json);
-        out.println("依赖图快照：" + graph.nodeCount() + " 节点 / " + graph.edgeCount() + " 边（最近一次 replay 生成；实时视图用 graph show）");
+        out.println("Dependency graph snapshot: " + CliSupport.plural(graph.nodeCount(), "node") + " / " + CliSupport.plural(graph.edgeCount(), "edge") + " (generated by the latest replay; live view with `graph show`)");
     }
 }

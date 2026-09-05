@@ -88,7 +88,7 @@ public class InvocationRulesConfig {
                 if (entry.getValue() instanceof Map) {
                     config.taskRules.put(taskKey, TaskRule.fromJson((Map<String, Object>) entry.getValue(), taskKey, config.parseNotes));
                 } else {
-                    config.parseNotes.add("任务 " + taskKey + " 的声明不是对象，已整体忽略");
+                    config.parseNotes.add("task " + taskKey + " declaration is not an object; ignored entirely");
                 }
             }
         }
@@ -322,7 +322,7 @@ public class InvocationRulesConfig {
                         Map<String, Object> m = (Map<String, Object>) entry.getValue();
                         steps.put(entry.getKey(), new StepCount(asInteger(m.get("min"), taskKey, entry.getKey(), "min", notes), asInteger(m.get("max"), taskKey, entry.getKey(), "max", notes)));
                     } else {
-                        notes.add("任务 " + taskKey + " 的步骤 " + entry.getKey() + " 声明不是对象，已整体忽略");
+                        notes.add("task " + taskKey + " step " + entry.getKey() + " declaration is not an object; ignored entirely");
                     }
                 }
             }
@@ -352,10 +352,10 @@ public class InvocationRulesConfig {
                 if (d == Math.floor(d) && !Double.isInfinite(d)) {
                     return number.intValue();
                 }
-                notes.add("任务 " + taskKey + " 的步骤 " + step + " 的 " + bound + " 不是整数（" + value + "），已忽略");
+                notes.add("task " + taskKey + " step " + step + " has a non-integer " + bound + " (" + value + "); ignored");
                 return null;
             }
-            notes.add("任务 " + taskKey + " 的步骤 " + step + " 的 " + bound + " 不是数字（" + value + "），已忽略");
+            notes.add("task " + taskKey + " step " + step + " has a non-numeric " + bound + " (" + value + "); ignored");
             return null;
         }
 

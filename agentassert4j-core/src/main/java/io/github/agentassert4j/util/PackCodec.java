@@ -68,12 +68,12 @@ public final class PackCodec {
     public static AcceptancePack fromJson(String json) {
         Object parsed = RecursiveJsonParser.parse(json);
         if (!(parsed instanceof Map)) {
-            throw new IllegalArgumentException("验收包不是合法 JSON 对象。");
+            throw new IllegalArgumentException("The acceptance pack is not a JSON object.");
         }
         Map<?, ?> root = (Map<?, ?>) parsed;
         String schema = asString(root.get("schema"));
         if (!AcceptancePack.SCHEMA.equals(schema)) {
-            throw new IllegalArgumentException("验收包 schema 不支持：" + schema + "（期望 " + AcceptancePack.SCHEMA + "）。");
+            throw new IllegalArgumentException("Unsupported acceptance pack schema: " + schema + " (expected " + AcceptancePack.SCHEMA + ").");
         }
         AcceptancePack pack = new AcceptancePack();
         Map<?, ?> meta = root.get("meta") instanceof Map ? (Map<?, ?>) root.get("meta") : null;

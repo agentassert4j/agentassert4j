@@ -174,18 +174,18 @@ public final class TaskAligner {
         List<TaskRuleViolation> violations = new ArrayList<>();
         for (String required : rule.getRequiredSteps()) {
             if (!counts.containsKey(required)) {
-                violations.add(new TaskRuleViolation(Type.REQUIRED_STEP_MISSING, required, "缺少必备步骤「" + required + "」"));
+                violations.add(new TaskRuleViolation(Type.REQUIRED_STEP_MISSING, required, "Missing required step '" + required + "'"));
             }
         }
         if (!rule.getRequiredOrder().isEmpty() && !isSubsequence(rule.getRequiredOrder(), labelSequence)) {
-            violations.add(new TaskRuleViolation(Type.ORDER_VIOLATION, String.join(",", rule.getRequiredOrder()), "步骤「" + String.join(",", rule.getRequiredOrder()) + "」未出现或顺序不符"));
+            violations.add(new TaskRuleViolation(Type.ORDER_VIOLATION, String.join(",", rule.getRequiredOrder()), "Steps '" + String.join(",", rule.getRequiredOrder()) + "' missing or out of order"));
         }
         for (Map.Entry<String, StepCount> entry : rule.getSteps().entrySet()) {
             String label = entry.getKey();
             int count = counts.containsKey(label) ? counts.get(label) : 0;
             StepCount bounds = entry.getValue();
             if (bounds.outOfRange(count)) {
-                violations.add(new TaskRuleViolation(Type.STEP_COUNT_OUT_OF_RANGE, label, "步骤「" + label + "」出现 " + count + " 次，超出声明范围 [" + (bounds.getMin() == null ? "无下限" : bounds.getMin()) + ", " + (bounds.getMax() == null ? "无上限" : bounds.getMax()) + "]"));
+                violations.add(new TaskRuleViolation(Type.STEP_COUNT_OUT_OF_RANGE, label, "Step '" + label + "' occurred " + count + (count == 1 ? " time" : " times") + ", outside declared range [" + (bounds.getMin() == null ? "unbounded" : bounds.getMin()) + ", " + (bounds.getMax() == null ? "unbounded" : bounds.getMax()) + "]"));
             }
         }
         return violations;

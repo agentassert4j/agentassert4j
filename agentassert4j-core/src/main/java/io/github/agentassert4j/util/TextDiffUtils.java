@@ -26,7 +26,7 @@ public final class TextDiffUtils {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("文本发生变化");
+        sb.append("Text changed");
 
         // 按行分割
         String[] oldLines = oldText.split("\n", -1);
@@ -57,16 +57,16 @@ public final class TextDiffUtils {
             if (oldLine == null) {
                 addedLines++;
                 if (changes.size() < 5) {
-                    changes.add("+ [行" + (i + 1) + "] " + truncate(newLine, 80));
+                    changes.add("+ [line " + (i + 1) + "] " + truncate(newLine, 80));
                 }
             } else if (newLine == null) {
                 removedLines++;
                 if (changes.size() < 5) {
-                    changes.add("- [行" + (i + 1) + "] " + truncate(oldLine, 80));
+                    changes.add("- [line " + (i + 1) + "] " + truncate(oldLine, 80));
                 }
             } else if (!oldLine.equals(newLine)) {
                 if (changes.size() < 5) {
-                    changes.add("~ [行" + (i + 1) + "] " + truncate(newLine, 80));
+                    changes.add("~ [line " + (i + 1) + "] " + truncate(newLine, 80));
                 }
             }
         }
@@ -77,12 +77,12 @@ public final class TextDiffUtils {
         Set<String> reallyRemoved = new LinkedHashSet<>(oldLineSet);
         reallyRemoved.removeAll(newLineSet);
 
-        sb.append(": 旧 ").append(oldLen).append(" 行 → 新 ").append(newLen).append(" 行");
+        sb.append(": old ").append(oldLen).append(oldLen == 1 ? " line" : " lines").append(" → new ").append(newLen).append(newLen == 1 ? " line" : " lines");
         if (!reallyAdded.isEmpty()) {
-            sb.append(", 新增 ").append(reallyAdded.size()).append(" 行");
+            sb.append(", ").append(reallyAdded.size()).append(" added");
         }
         if (!reallyRemoved.isEmpty()) {
-            sb.append(", 删除 ").append(reallyRemoved.size()).append(" 行");
+            sb.append(", ").append(reallyRemoved.size()).append(" removed");
         }
 
         if (!changes.isEmpty()) {
@@ -92,7 +92,7 @@ public final class TextDiffUtils {
             }
             int remaining = Math.abs(newLen - oldLen) - changes.size();
             if (remaining > 0) {
-                sb.append("... 还有 ").append(remaining).append(" 处变更");
+                sb.append("... and ").append(remaining).append(" more");
             }
         }
 

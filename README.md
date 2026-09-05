@@ -79,6 +79,8 @@ try (RecordingContext scope = RecordingContext.start(sessionId).withInvocationId
 # Download the standalone jar from GitHub Releases (single file, zero install) and alias it;
 # on Windows use the full command directly
 alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
+# Optional shorter alias (same community convention as kubectl's k; full names always kept)
+alias aa='agentassert4j'
 ```
 
 **3. Establish baselines** (idempotent, safe to re-run)
@@ -97,18 +99,16 @@ agentassert4j replay
 ```
 
 ```text
-dependency graph: 3 nodes / 2 edges
-template drift detection: same-key drifts 1 · label splits 0 · downstream 0 (zero-template 0 not detectable)
-  ▲ query-logistics@skl1e37f (order) template ab12cd34 → 9e37f2c1
-Task "Order 1234 arrived late, refund it" aligned: baseline (session 20260831-a3f2) → new (session 20260902-b7e1)
-  [1] query-order      PASS
-  [2] query-logistics  CHANGED  score=0.76 verdict=CHANGED | added fields: [delivery.promise]
-  [3] submit-refund    PASS
-alignment summary: PASS 2 | CHANGED 1 | missing 0 | added 0
-candidate registered: query-logistics@skl1e37f (pending human adjudication — approve to promote, reject to discard)
+Dependency graph: 3 nodes / 2 edges
+Drift: 1 same-key, 0 label splits, 0 downstream (0 zero-template invocations undetectable)
+  ▲ query-logistics@skl1e37f (query-logistics) template ab12cd34 → 9e37f2c1
+Task "Order 1234 arrived late, refund it": baseline chain (session 20260831-a3f2) → new chain (session 20260902-b7e1)
+  [1] query-order  PASS
+  [2] query-logistics@skl1e37f  score=0.76 verdict=CHANGED | added fields: [delivery.promise]
+Candidate registered: query-logistics@skl1e37f (behavior change awaiting adjudication; approve promotes to baseline, reject discards).
+  [3] submit-refund  PASS
+Alignment summary: PASS 2 | CHANGED 1 | missing 0 | added 0
 ```
-
-(The CLI speaks Chinese; the block above is an English rendering of the same report shape.)
 The detection layer names **which invocations changed template identity** (drift points fan out over
 the dependency graph); the alignment layer pairs the two real chains of every task by invocation —
 missing steps / added steps / per-step structure diff, wording differences shown as low-confidence

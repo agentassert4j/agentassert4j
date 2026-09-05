@@ -19,14 +19,14 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-08-28
  */
-@Command(name = "rules", description = "查看内置约束行为目录与规则文件写法", mixinStandardHelpOptions = true)
+@Command(name = "rules", aliases = {"ru"}, description = "Show the built-in constraint behavior catalog and rules file examples", mixinStandardHelpOptions = true)
 public class RulesCommand implements Callable<Integer> {
 
     // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
     PrintStream out = System.out;
     PrintStream err = System.err;
 
-    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 行为目录")
+    @Option(names = {"--json"}, description = "Print the behavior catalog as a single-line JSON to stdout")
     boolean jsonOutput;
 
     @Override
@@ -41,17 +41,17 @@ public class RulesCommand implements Callable<Integer> {
             out.println("{\"schema\":\"agentassert4j.rules/1\",\"behaviors\":[" + items + "]}");
             return 0;
         }
-        out.println("内置约束行为（agentassert4j-rules.json 的 behaviors 字段可用的全部名称）:");
+        out.println("Built-in constraint behaviors (all names accepted by the behaviors field in agentassert4j-rules.json):");
         for (String name : builtins) {
             out.println("  " + name + " — " + describe(name));
         }
         out.println();
-        out.println("规则文件示例（agentassert4j-rules.json，与 agentassert4j.json 同目录查找）:");
+        out.println("Rules file example (agentassert4j-rules.json, looked up next to agentassert4j.json):");
         out.println("{");
         out.println("  \"invocations\": {");
-        out.println("    \"<业务 invocationId>\": {");
-        out.println("      \"requiredKeywords\": [\"订单\"],");
-        out.println("      \"forbiddenKeywords\": [\"抱歉\"],");
+        out.println("    \"<business invocationId>\": {");
+        out.println("      \"requiredKeywords\": [\"order\"],");
+        out.println("      \"forbiddenKeywords\": [\"sorry\"],");
         out.println("      \"regexPatterns\": [\"\\\\d{6,}\"],");
         out.println("      \"behaviors\": [\"mustUseChinese\", \"jsonOutput\"]");
         out.println("    }");
@@ -63,23 +63,23 @@ public class RulesCommand implements Callable<Integer> {
     private static String describe(String name) {
         switch (name) {
             case "mustUseChinese":
-                return "输出含中文（多行安全）";
+                return "output contains Chinese characters (multiline-safe)";
             case "mustUseEnglish":
-                return "输出含拉丁字母且不含中文";
+                return "output contains Latin letters and no Chinese characters";
             case "containsCjk":
-                return "输出含 CJK 字符（含日文假名）";
+                return "output contains CJK characters (including Japanese kana)";
             case "jsonOutput":
-                return "输出为 JSON 形态（{ 或 [ 开头）";
+                return "output is JSON-shaped (starts with { or [)";
             case "nonEmptyOutput":
-                return "输出非空";
+                return "output is not empty";
             case "noError":
-                return "本次交互未出现错误字段";
+                return "no error field appeared in this interaction";
             case "returnsErrorCode":
-                return "输出包含错误码字段";
+                return "output contains an error-code field";
             case "returnsEmptyOnError":
-                return "出错时输出为空";
+                return "output is empty on error";
             default:
-                return "见 core 的 BehaviorChecker javadoc";
+                return "see the BehaviorChecker javadoc in core";
         }
     }
 }

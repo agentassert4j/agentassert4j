@@ -468,7 +468,7 @@ class DeterministicComparatorTest {
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
-        assertTrue(r.getSummary().contains("工具集变化"));
+        assertTrue(r.getSummary().contains("tool set changed"));
     }
 
     @Test
@@ -478,7 +478,7 @@ class DeterministicComparatorTest {
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
-        assertTrue(r.getSummary().contains("参数类型变化"));
+        assertTrue(r.getSummary().contains("param types changed"));
     }
 
     @Test
@@ -488,7 +488,7 @@ class DeterministicComparatorTest {
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
-        assertTrue(r.getSummary().contains("新增字段"));
+        assertTrue(r.getSummary().contains("added fields"));
     }
 
     @Test
@@ -498,7 +498,7 @@ class DeterministicComparatorTest {
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
-        assertTrue(r.getSummary().contains("删除字段"));
+        assertTrue(r.getSummary().contains("removed fields"));
     }
 
     @Test
@@ -532,6 +532,6 @@ class DeterministicComparatorTest {
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
         assertFalse(r.isFieldTypeMatch());
-        assertTrue(r.getSummary().contains("字段类型变化"), "类型不匹配必须可见于摘要: " + r.getSummary());
+        assertTrue(r.getSummary().contains("field types changed"), "类型不匹配必须可见于摘要: " + r.getSummary());
     }
 }

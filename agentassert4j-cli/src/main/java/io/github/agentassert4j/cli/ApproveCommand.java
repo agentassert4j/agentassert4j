@@ -11,10 +11,10 @@ import picocli.CommandLine.Option;
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "approve", description = "接受候选指纹为新基线（旧基线归档，可 rollback）", mixinStandardHelpOptions = true)
+@Command(name = "approve", aliases = {"a"}, description = "Promote the candidate fingerprint to baseline (previous baseline archived, restorable via rollback)", mixinStandardHelpOptions = true)
 public class ApproveCommand extends AdjudicateCommand {
 
-    @Option(names = {"--approver"}, description = "审批人身份，随基线与归档留痕（缺省取当前系统用户）")
+    @Option(names = {"--approver"}, description = "Approver identity recorded with the baseline and its archives (defaults to the current OS user)")
     String approver;
 
     @Override
@@ -29,7 +29,7 @@ public class ApproveCommand extends AdjudicateCommand {
 
     @Override
     String describeResult(InvocationProfile profile) {
-        return "已批准（审批人 " + resolvedApprover() + "），基线 " + profile.getVersionTag() + "（旧基线已归档）";
+        return "Approved (approver " + resolvedApprover() + "); baseline " + profile.getVersionTag() + " (previous baseline archived)";
     }
 
     private String resolvedApprover() {

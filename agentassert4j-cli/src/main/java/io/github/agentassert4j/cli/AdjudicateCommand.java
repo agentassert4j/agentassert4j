@@ -27,13 +27,13 @@ abstract class AdjudicateCommand implements Callable<Integer> {
     PrintStream err = System.err;
 
 
-    @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
+    @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--invocation"}, description = "缩域裁决：业务 invocationId、invocationKey 或其唯一前缀（缺省裁决全部待裁决候选）")
+    @Option(names = {"--invocation"}, description = "Adjudication scope: business invocationId, invocationKey, or a unique prefix (defaults to all pending candidates)")
     String invocation;
 
-    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 报告")
+    @Option(names = {"--json"}, description = "Print a single-line JSON report to stdout")
     boolean jsonOutput;
 
     @Override
@@ -72,7 +72,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
             err.println(e.getMessage());
             return 2;
         } catch (RuntimeException e) {
-            err.println("裁决失败：" + e.getMessage());
+            err.println("adjudication failed: " + e.getMessage());
             return 2;
         } finally {
             if (repository != null) {
@@ -89,7 +89,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
             String invocationKey = CliSupport.resolveInvocationKeyTarget(repository, invocation);
             InvocationProfile profile = repository.findInvocationByKey(invocationKey);
             if (profile == null) {
-                throw new IllegalStateException("调用点 " + invocationKey + " 尚无基线画像（先执行 baseline）。");
+                throw new IllegalStateException("Invocation " + invocationKey + " has no baseline profile (run `agentassert4j baseline` first).");
             }
             targets.add(profile);
             return targets;
@@ -105,10 +105,10 @@ abstract class AdjudicateCommand implements Callable<Integer> {
 
     private void printNoTargets(StorageRepository repository) {
         if (invocation != null) {
-            err.println("没有匹配 " + invocation + " 的调用点（可用：业务标签、invocationKey 前缀、status 显示短形如 标签@8位；完整列表见 status 命令）。");
+            err.println("No invocation matching " + invocation + " (accepted: business label, invocationKey prefix, or the status display form like label@8hex; see `status` for the full list).");
             return;
         }
-        err.println("没有任何待裁决的候选。");
+        err.println("No candidates pending adjudication.");
     }
 
     /**
@@ -119,7 +119,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
         if (target.getCandidateFingerprint() == null) {
             return;
         }
-        out.println("  " + target.getInvocationKey() + " 候选差异（基线 → 候选）:");
+        out.println("  " + target.getInvocationKey() + " candidate diff (baseline → candidate):");
         for (String line : FingerprintDiffRenderer.render(target.getFingerprint(), target.getCandidateFingerprint())) {
             out.println("    " + line);
         }

@@ -18,7 +18,7 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "baseline", description = "为已录制的交互建立基线（幂等，可重复执行）；export 子命令导出验收包", mixinStandardHelpOptions = true, subcommands = {BaselineExportCommand.class})
+@Command(name = "baseline", aliases = {"b"}, description = "Establish baselines for recorded interactions (idempotent, safe to re-run); the export subcommand writes an acceptance pack", mixinStandardHelpOptions = true, subcommands = {BaselineExportCommand.class})
 public class BaselineCommand implements Callable<Integer> {
 
     // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
@@ -26,19 +26,19 @@ public class BaselineCommand implements Callable<Integer> {
     PrintStream err = System.err;
 
 
-    @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
+    @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--invocation"}, description = "只处理该调用点：业务 invocationId 或 invocationKey 唯一前缀（缺省全部调用点）")
+    @Option(names = {"--invocation"}, description = "Only this invocation: business invocationId or a unique invocationKey prefix (defaults to all)")
     String invocation;
 
-    @Option(names = {"--approver"}, description = "操作者身份，随基线审批留痕（缺省取当前系统用户）")
+    @Option(names = {"--approver"}, description = "Operator identity recorded with the baseline approval (defaults to the current OS user)")
     String approver;
 
-    @Option(names = {"--force"}, description = "以当前判定语义重建基线：已有基线也被当前算法新指纹覆盖（判定语义升级后的恢复路径）")
+    @Option(names = {"--force"}, description = "Rebuild baselines under the current judgment semantics: existing baselines are overwritten by fresh fingerprints (recovery path after a judgment-semantics upgrade)")
     boolean force;
 
-    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 报告")
+    @Option(names = {"--json"}, description = "Print a single-line JSON report to stdout")
     boolean jsonOutput;
 
     @Override
@@ -64,14 +64,14 @@ public class BaselineCommand implements Callable<Integer> {
                 }
                 out.println("{\"schema\":\"agentassert4j.baseline-report/1\",\"force\":" + force + ",\"established\":" + established + ",\"invocations\":[" + invocations + "]}");
             } else {
-                out.println(established > 0 ? "完成：" + established + " 个 调用点 " + (force ? "重建" : "新建") + "基线。" : "完成：所有 调用点 均已有基线。");
+                out.println(established > 0 ? "Done: " + CliSupport.plural(established, "invocation") + " " + (force ? "re-established" : "established") + "." : "Done: every invocation already has a baseline.");
             }
             return 0;
         } catch (IllegalStateException e) {
             err.println(e.getMessage());
             return 2;
         } catch (RuntimeException e) {
-            err.println("baseline 失败：" + e.getMessage());
+            err.println("baseline failed: " + e.getMessage());
             return 2;
         } finally {
             if (repository != null) {

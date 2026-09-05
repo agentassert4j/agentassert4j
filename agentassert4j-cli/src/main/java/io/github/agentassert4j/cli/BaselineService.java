@@ -65,7 +65,7 @@ public class BaselineService {
             InvocationProfile existing = repository.findInvocationByKey(invocationKey);
             boolean hadBaseline = existing != null && existing.getFingerprint() != null;
             if (hadBaseline && !force) {
-                out.println("  " + displayLabel(records) + invocationKey + ": 基线已存在（" + existing.getVersionTag() + "）");
+                out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + existing.getVersionTag() + ")");
                 if (outcomes != null) {
                     outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "exists", existing.getVersionTag()));
                 }
@@ -75,7 +75,7 @@ public class BaselineService {
             if (force) {
                 if (hadBaseline) {
                     // 破坏性操作必须留痕：被覆盖的旧基线进入归档，rollback 可恢复
-                    out.println("  警告：分组 " + invocationKey + " 的既有基线 " + existing.getVersionTag() + "（审批人 " + existing.getApprovedBy() + "）将被当前语义重建覆盖，旧基线已归档、可用 rollback 恢复。");
+                    out.println("  Warning: existing baseline " + existing.getVersionTag() + " (approved by " + existing.getApprovedBy() + ") of " + invocationKey + " will be rebuilt under the current semantics; the old baseline is archived and restorable via `rollback`.");
                 }
                 // 重建取桶内规范序首条可分组记录（分桶已剔除不可分组记录）；
                 // 逐条调用会让版本标签随记录数连跳
@@ -98,7 +98,7 @@ public class BaselineService {
                 created.setTotalRecords(records.size());
                 repository.saveInvocationProfile(created);
             }
-            out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "已按当前判定语义重建基线（" + created.getVersionTag() + "）" : "新建基线"));
+            out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "baseline re-established under the current judgment semantics (" + created.getVersionTag() + ")" : "baseline established"));
             if (outcomes != null) {
                 outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), hadBaseline ? "reestablished" : "created", created != null ? created.getVersionTag() : null));
             }
@@ -122,23 +122,23 @@ public class BaselineService {
         List<String> violations = new ArrayList<>();
         for (String keyword : rule.getRequiredKeywords()) {
             if (!response.contains(keyword)) {
-                violations.add("缺少必需关键词「" + keyword + "」");
+                violations.add("missing required keyword '" + keyword + "'");
             }
         }
         for (String keyword : rule.getForbiddenKeywords()) {
             if (response.contains(keyword)) {
-                violations.add("出现禁用关键词「" + keyword + "」");
+                violations.add("forbidden keyword '" + keyword + "' present");
             }
         }
         if (rule.getRegexPatterns() != null) {
             for (RegexPattern pattern : rule.getRegexPatterns()) {
                 if (!pattern.matches(response)) {
-                    violations.add("正则不命中「" + pattern.getPattern() + "」");
+                    violations.add("regex '" + pattern.getPattern() + "' not matched");
                 }
             }
         }
         if (!violations.isEmpty()) {
-            out.println("  警告：种子记录不满足声明规则（该组后续重放都会在内容规则维度判差异，请检查 rules 声明是否过窄）：");
+            out.println("  Warning: the seed record violates the declared rules (every replay of this group will flag content-rule differences; check whether the rules declaration is too narrow):");
             for (String violation : violations) {
                 out.println("    - " + violation);
             }

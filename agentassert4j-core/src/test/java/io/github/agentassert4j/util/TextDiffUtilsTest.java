@@ -28,14 +28,14 @@ class TextDiffUtilsTest {
     void diff_nullToContent() {
         String result = TextDiffUtils.diff(null, "hello");
         assertNotNull(result);
-        assertTrue(result.contains("文本发生变化"));
+        assertTrue(result.contains("Text changed"));
     }
 
     @Test
     void diff_contentToNull() {
         String result = TextDiffUtils.diff("hello", null);
         assertNotNull(result);
-        assertTrue(result.contains("文本发生变化"));
+        assertTrue(result.contains("Text changed"));
     }
 
     @Test
@@ -44,7 +44,7 @@ class TextDiffUtilsTest {
         String nw = "line1\nline2\nline3";
         String result = TextDiffUtils.diff(old, nw);
         assertNotNull(result);
-        assertTrue(result.contains("文本发生变化"));
+        assertTrue(result.contains("Text changed"));
     }
 
     @Test
@@ -53,7 +53,7 @@ class TextDiffUtilsTest {
         String nw = "line1\nline3";
         String result = TextDiffUtils.diff(old, nw);
         assertNotNull(result);
-        assertTrue(result.contains("文本发生变化"));
+        assertTrue(result.contains("Text changed"));
     }
 
     @Test
@@ -69,6 +69,6 @@ class TextDiffUtilsTest {
     void diff_completelyDifferent() {
         String result = TextDiffUtils.diff("aaa", "bbb");
         assertNotNull(result);
-        assertTrue(result.contains("文本发生变化"));
+        assertTrue(result.contains("Text changed"));
     }
 }

@@ -24,7 +24,7 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-09-02
  */
-@Command(name = "doctor", description = "库体检：身份/覆盖/规则三段确定性体检（只读，不判定不建档）", mixinStandardHelpOptions = true)
+@Command(name = "doctor", aliases = {"d"}, description = "Health check: deterministic identity/coverage/rules inspection (read-only; no verdicts, no baselines)", mixinStandardHelpOptions = true)
 public class DoctorCommand implements Callable<Integer> {
 
     private static final int MAX_SAMPLES = 3;
@@ -32,7 +32,7 @@ public class DoctorCommand implements Callable<Integer> {
     PrintStream out = System.out;
     PrintStream err = System.err;
 
-    @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
+    @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
     @Override
@@ -50,7 +50,7 @@ public class DoctorCommand implements Callable<Integer> {
             printRulesSection(rules, chains);
             return 0;
         } catch (RuntimeException e) {
-            err.println("doctor 失败：" + e.getMessage());
+            err.println("doctor failed: " + e.getMessage());
             return 2;
         } finally {
             if (repository != null) {
@@ -64,7 +64,7 @@ public class DoctorCommand implements Callable<Integer> {
      * 框架价值前需要补的声明，都在这里以确定性事实呈现。
      */
     private void printIdentitySection(List<InteractionRecord> records, List<TaskChain> chains) {
-        out.println("身份体检：");
+        out.println("Identity check:");
         Map<String, Set<String>> variantsBySkeleton = new LinkedHashMap<>();
         Map<String, Integer> recordsBySkeleton = new LinkedHashMap<>();
         for (InteractionRecord record : records) {
@@ -78,11 +78,11 @@ public class DoctorCommand implements Callable<Integer> {
             }
         }
         if (recordsBySkeleton.isEmpty()) {
-            out.println("  无骨架声明记录——动态模板场景建议在录制出口声明 templateSkeleton（见 OPERATIONS 最小录制契约）。");
+            out.println("  No skeleton-declared records; for dynamic templates consider declaring templateSkeleton at the recording exit (see the minimal recording contract in OPERATIONS).");
         } else {
             for (Map.Entry<String, Integer> entry : recordsBySkeleton.entrySet()) {
                 Set<String> variants = variantsBySkeleton.getOrDefault(entry.getKey(), new LinkedHashSet<>());
-                out.println("  " + CliSupport.displayKey("skeleton:" + entry.getKey()) + "：记录 " + entry.getValue() + " 条，全文变体 " + variants.size() + " 个");
+                out.println("  " + CliSupport.displayKey("skeleton:" + entry.getKey()) + ": " + CliSupport.plural(entry.getValue(), "record") + ", " + CliSupport.plural(variants.size(), "full-text variant"));
             }
         }
 
@@ -100,11 +100,11 @@ public class DoctorCommand implements Callable<Integer> {
             }
         }
         if (unlabeledMultiStep.isEmpty()) {
-            out.println("  多步零标签链：无。");
+            out.println("  Multi-step unlabeled chains: none.");
         } else {
-            out.println("  多步零标签链 " + unlabeledMultiStep.size() + " 条——逐步可见性与任务规则都依赖调用点标签（invocationId），建议为关键调用点建立标签词汇表：");
+            out.println("  " + CliSupport.plural(unlabeledMultiStep.size(), "multi-step unlabeled chain") + " (step visibility and task rules both rely on invocationId labels); consider building a label vocabulary for key invocations:");
             for (TaskChain chain : samples(unlabeledMultiStep)) {
-                out.println("    「" + CliSupport.visibleText(CliSupport.abbreviateText(chain.getRequestText(), 60)) + "」（session " + chain.getSessionId() + "，" + chain.getRecords().size() + " 步）");
+                out.println("    '" + CliSupport.visibleText(CliSupport.abbreviateText(chain.getRequestText(), 60)) + "' (session " + chain.getSessionId() + ", " + CliSupport.plural(chain.getRecords().size(), "step") + ")");
             }
         }
 
@@ -124,11 +124,11 @@ public class DoctorCommand implements Callable<Integer> {
             }
         }
         if (repeatedFamilies.isEmpty()) {
-            out.println("  重复请求文本任务族：无（同请求多会话重复出现的未声明任务适合声明 taskKey，规则精修只对声明任务生效）。");
+            out.println("  Repeated request-text families: none (undeclared tasks repeating across sessions are good taskKey candidates; rule refinement only applies to declared tasks).");
         } else {
-            out.println("  重复请求文本任务族 " + repeatedFamilies.size() + " 个——建议声明 taskKey（规则精修与跨会话配对的前置）：");
+            out.println("  " + CliSupport.plural(repeatedFamilies.size(), "repeated request-text family") + " (declare taskKey to enable rule refinement and cross-session pairing):");
             for (String request : samples(repeatedFamilies)) {
-                out.println("    「" + CliSupport.visibleText(CliSupport.abbreviateText(request, 60)) + "」出现于 " + sessionsByRequest.get(request).size() + " 个会话");
+                out.println("    '" + CliSupport.visibleText(CliSupport.abbreviateText(request, 60)) + "' appears in " + CliSupport.plural(sessionsByRequest.get(request).size(), "session"));
             }
         }
     }
@@ -137,7 +137,7 @@ public class DoctorCommand implements Callable<Integer> {
      * 覆盖段：未收编录制与哈希投影缺口。
      */
     private void printCoverageSection(StorageRepository repository, List<InvocationProfile> profiles, List<InteractionRecord> records) {
-        out.println("覆盖体检：");
+        out.println("Coverage check:");
         List<CliSupport.InvocationFootprint> unestablished = new ArrayList<>();
         Set<String> established = new HashSet<>();
         for (InvocationProfile profile : profiles) {
@@ -149,11 +149,11 @@ public class DoctorCommand implements Callable<Integer> {
             }
         }
         if (unestablished.isEmpty()) {
-            out.println("  未建档调用点：无。");
+            out.println("  Unestablished invocations: none.");
         } else {
-            out.println("  未建档调用点 " + unestablished.size() + " 个（重跑 baseline 收编）：");
+            out.println("  " + CliSupport.plural(unestablished.size(), "unestablished invocation") + " (run `agentassert4j baseline` to collect):");
             for (CliSupport.InvocationFootprint footprint : samples(unestablished)) {
-                out.println("    " + CliSupport.displayKey(footprint.invocationKey) + "（" + (footprint.label != null ? footprint.label : "无标签") + "）记录 " + footprint.recordCount + " 条");
+                out.println("    " + CliSupport.displayKey(footprint.invocationKey) + " (" + (footprint.label != null ? footprint.label : "no label") + ") " + CliSupport.plural(footprint.recordCount, "record"));
             }
         }
         int missingTemplateHash = 0;
@@ -162,14 +162,14 @@ public class DoctorCommand implements Callable<Integer> {
                 missingTemplateHash++;
             }
         }
-        out.println("  template_hash 缺失记录：" + missingTemplateHash + " 条" + (missingTemplateHash > 0 ? "——这些记录缺全文归档与全文门控凭据（重录可补齐）。" : "。"));
+        out.println("  Records missing template_hash: " + missingTemplateHash + (missingTemplateHash > 0 ? "; these records lack full-text archives and template-gate credentials (re-recording fixes this)." : "."));
     }
 
     /**
      * 规则段：解析注记回放与期望错位（配了键但库内从未出现声明链）。
      */
     private void printRulesSection(InvocationRulesConfig rules, List<TaskChain> chains) {
-        out.println("规则体检：");
+        out.println("Rules check:");
         CliSupport.warnMalformedTaskRules(rules, out);
         Set<String> declaredSeen = new LinkedHashSet<>();
         for (TaskChain chain : chains) {
@@ -184,9 +184,9 @@ public class DoctorCommand implements Callable<Integer> {
             }
         }
         if (mismatched.isEmpty()) {
-            out.println("  tasks 期望错位：无" + (rules.getDeclaredTaskKeys().isEmpty() ? "（未配置 tasks 规则）。" : "。"));
+            out.println("  tasks expectation mismatches: none" + (rules.getDeclaredTaskKeys().isEmpty() ? " (no tasks rules configured)." : "."));
         } else {
-            out.println("  tasks 期望错位 " + mismatched.size() + " 个——已配规则但库内从未出现该声明链（核对键拼写或确认录制范围）：");
+            out.println("  " + CliSupport.plural(mismatched.size(), "tasks expectation mismatch") + " (rule declared but the declared chain never appeared in the library; check key spelling or recording scope):");
             for (String key : samples(mismatched)) {
                 out.println("    " + key);
             }

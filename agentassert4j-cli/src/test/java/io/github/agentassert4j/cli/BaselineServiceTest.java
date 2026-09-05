@@ -59,8 +59,8 @@ class BaselineServiceTest {
 
         assertEquals(1, established, "规则违例不阻断建档");
         String report = output.toString();
-        assertTrue(report.contains("种子记录不满足声明规则"), "必须输出种子违例告警: " + report);
-        assertTrue(report.contains("缺少必需关键词「订单号」"), "告警列出违例关键词: " + report);
+        assertTrue(report.contains("violates the declared rules"), "必须输出种子违例告警: " + report);
+        assertTrue(report.contains("missing required keyword '订单号'"), "告警列出违例关键词: " + report);
         InvocationProfile profile = repository.findInvocationByKey(invocationKeyOf("skill-1"));
         assertNotNull(profile, "基线已建立");
         assertNotNull(profile.getFingerprint(), "基线指纹已落库");
@@ -75,7 +75,7 @@ class BaselineServiceTest {
 
         new BaselineService(repository).establishMissing(out, "tester", false, null, rules);
 
-        assertFalse(output.toString().contains("种子记录不满足声明规则"), "合规种子不得误报: " + output);
+        assertFalse(output.toString().contains("violates the declared rules"), "合规种子不得误报: " + output);
     }
 
     @Test
@@ -88,8 +88,8 @@ class BaselineServiceTest {
         new BaselineService(repository).establishMissing(out, "tester", false, null, rules);
 
         String report = output.toString();
-        assertTrue(report.contains("出现禁用关键词「抱歉」"), "禁用关键词违例可见: " + report);
-        assertTrue(report.contains("正则不命中"), "正则违例可见: " + report);
+        assertTrue(report.contains("forbidden keyword '抱歉' present"), "禁用关键词违例可见: " + report);
+        assertTrue(report.contains("not matched"), "正则违例可见: " + report);
     }
 
     @Test

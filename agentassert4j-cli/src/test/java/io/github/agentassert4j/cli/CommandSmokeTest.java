@@ -75,12 +75,12 @@ class CommandSmokeTest {
         ByteArrayOutputStream out = redirectStdout();
         int first = new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
         assertEquals(0, first);
-        assertTrue(out.toString().contains("新建基线"), "首跑应建立基线: " + out);
+        assertTrue(out.toString().contains("baseline established"), "首跑应建立基线: " + out);
 
         ByteArrayOutputStream second = redirectStdout();
         int rerun = new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
         assertEquals(0, rerun);
-        assertTrue(second.toString().contains("基线已存在"), "重复执行不得重复建: " + second);
+        assertTrue(second.toString().contains("baseline exists"), "重复执行不得重复建: " + second);
     }
 
     @Test
@@ -95,9 +95,9 @@ class CommandSmokeTest {
         assertEquals(0, exit);
         String text = out.toString();
         assertTrue(text.contains("queryOrder@hash-old"), "应以人读短形列出基线画像: " + text);
-        assertTrue(text.contains("未建档调用点：无。"), "全部建档后应明示无未建档调用点: " + text);
+        assertTrue(text.contains("Unestablished invocations: none."), "全部建档后应明示无未建档调用点: " + text);
         assertTrue(text.contains("BASELINE"), "应展示基线状态: " + text);
-        assertFalse(text.contains("无基线"), "已建基线后不应再提示无基线: " + text);
+        assertFalse(text.contains("no baseline"), "已建基线后不应再提示无基线: " + text);
     }
 
     @Test
@@ -112,7 +112,7 @@ class CommandSmokeTest {
 
         assertEquals(0, exit);
         String text = out.toString();
-        assertTrue(text.contains("未建档调用点（重跑 baseline 收编）"), "新版本应进未建档段: " + text);
+        assertTrue(text.contains("Unestablished invocations (run `agentassert4j baseline` to collect)"), "新版本应进未建档段: " + text);
         assertTrue(text.contains("queryOrder@hash-new"), "未建档版本以短形列出: " + text);
     }
 
@@ -122,7 +122,7 @@ class CommandSmokeTest {
         ByteArrayOutputStream out = redirectStdout();
         int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath);
         assertEquals(0, exit);
-        assertTrue(out.toString().contains("共 0 个基线画像"));
+        assertTrue(out.toString().contains("Total: 0 invocation profiles"));
     }
 
     @Test
@@ -134,8 +134,8 @@ class CommandSmokeTest {
         int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--dry-run");
 
         assertEquals(0, exit);
-        assertTrue(out.toString().contains("对齐计划"), "dry-run 应预演对齐计划: " + out);
-        assertTrue(out.toString().contains("零 LLM 调用"), "缺省对齐零调用必须披露: " + out);
+        assertTrue(out.toString().contains("Alignment plan"), "dry-run 应预演对齐计划: " + out);
+        assertTrue(out.toString().contains("zero LLM calls"), "缺省对齐零调用必须披露: " + out);
     }
 
     @Test
@@ -183,8 +183,8 @@ class CommandSmokeTest {
 
         assertEquals(0, exit);
         String text = out.toString();
-        assertTrue(text.contains("归档版本"), "rollback 的可选值来源必须可见: " + text);
-        assertTrue(text.contains("业务标签"), "invocationKey 与业务标签的对照必须就地可见: " + text);
+        assertTrue(text.contains("archived"), "rollback 的可选值来源必须可见: " + text);
+        assertTrue(text.contains("label"), "invocationKey 与业务标签的对照必须就地可见: " + text);
         assertTrue(text.contains("queryOrder"), "业务标签列应展示用户代码里的标识: " + text);
     }
 
@@ -196,7 +196,7 @@ class CommandSmokeTest {
         int exit = new CommandLine(new AgentAssert4jCli()).execute("approve", "--db", dbPath);
 
         assertEquals(2, exit);
-        assertTrue(errOut.toString().contains("没有任何待裁决的候选"), "bare 无候选必须显式说明而非误报成功: " + errOut);
+        assertTrue(errOut.toString().contains("No candidates pending adjudication"), "bare 无候选必须显式说明而非误报成功: " + errOut);
     }
 
 
@@ -214,6 +214,17 @@ class CommandSmokeTest {
         for (String live : new String[]{"--task", "--invocation", "--ci", "--re-drive", "--full-chain", "--max-total-calls", "--max-total-tokens", "--dry-run", "--json", "--db"}) {
             assertTrue(help.contains(live), "终态参数必须在场: " + live);
         }
+    }
+
+    @Test
+    @DisplayName("命令短别名与完整名并存可达")
+    void commandAliases_shortAndFullForms() {
+        seedOneRecord();
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("s", "--db", dbPath));
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath));
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("rp", "--help"));
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("replay", "--help"));
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("b", "--db", dbPath));
     }
 
     @Test
@@ -235,7 +246,7 @@ class CommandSmokeTest {
 
         assertEquals(2, exit);
         assertEquals("", out.toString(), "--json 模式 stdout 只允许报告本体，冷启动失败不得产出 JSON: " + out);
-        assertTrue(errOut.toString().contains("未录制到任何交互数据"), "用法错误必须走 stderr 供 CI 采集: " + errOut);
+        assertTrue(errOut.toString().contains("No recorded interactions found"), "用法错误必须走 stderr 供 CI 采集: " + errOut);
     }
 
     @Test
@@ -272,7 +283,7 @@ class CommandSmokeTest {
 
         assertEquals(0, exit);
         String text = out.toString();
-        assertTrue(text.contains("配置："), "隐式查找链的命中结果必须披露: " + text);
+        assertTrue(text.contains("Config: "), "隐式查找链的命中结果必须披露: " + text);
         assertTrue(text.contains("agentassert4j.json"), "披露必须指明来源文件: " + text);
     }
 

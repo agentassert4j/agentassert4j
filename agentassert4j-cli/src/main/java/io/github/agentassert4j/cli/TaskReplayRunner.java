@@ -106,7 +106,7 @@ public class TaskReplayRunner {
 
         List<TaskChain> chains = CliSupport.taskChains(repository);
         if (chains.isEmpty()) {
-            diagnostic("未录制到任何交互数据（先运行 Agent 积累录制）。");
+            diagnostic("No recorded interactions found. Run your agent first to build up recordings.");
             return 2;
         }
 
@@ -118,7 +118,7 @@ public class TaskReplayRunner {
         if (!dryRun) {
             saveGraphQuietly(graph);
         }
-        info("依赖图：" + graph.nodeCount() + " 节点 / " + graph.edgeCount() + " 边" + (graph.edgeCount() == 0 ? "（无多轮会话数据时图为空，无下游波及）" : ""));
+        info("Dependency graph: " + graph.nodeCount() + " nodes / " + graph.edgeCount() + " edges" + (graph.edgeCount() == 0 ? " (empty without multi-turn session data; no downstream propagation)" : ""));
 
         // 第 1 层 身份检测（全项目，零调用）
         DriftReport drift = DriftDetector.detect(repository, graph);
@@ -133,7 +133,7 @@ public class TaskReplayRunner {
             return 2;
         }
         if (scoped.isEmpty()) {
-            diagnostic("缩域未命中任何任务链（先录制交互，或用 status 核对调用点/任务前缀）。");
+            diagnostic("No task chains matched the scope. Record interactions first, or check invocation keys and task prefixes with `status`.");
             return 2;
         }
         boolean narrowed = taskPrefix != null || invocationKey != null;
@@ -147,11 +147,11 @@ public class TaskReplayRunner {
         if (ciMode) {
             Set<String> unbaselined = unbaselinedKeysInScope(scoped);
             if (!unbaselined.isEmpty()) {
-                diagnostic("以下调用点尚无基线，CI 模式拒绝判定：");
+                diagnostic("Refusing to judge in --ci mode: the following invocations have no baseline:");
                 for (String key : unbaselined) {
                     diagnostic("  " + key);
                 }
-                diagnostic("先在本地执行 `agentassert4j baseline` 人工确认后重试，或去掉 --ci 以自动建档。");
+                diagnostic("Run `agentassert4j baseline` locally to review and establish baselines, then retry; or drop --ci to auto-establish.");
                 return 2;
             }
         } else {
@@ -201,8 +201,8 @@ public class TaskReplayRunner {
         }
 
         if (!jsonMode && totals.pendingCandidates > 0) {
-            info("待裁决: " + String.join(", ", pendingInvocationKeys()));
-            info("用 `agentassert4j approve --invocation <invocationKey 前缀>` 接受，或 `agentassert4j reject --invocation <invocationKey 前缀>` 拒绝。");
+            info("Pending adjudication: " + String.join(", ", pendingInvocationKeys()));
+            info("Accept with `agentassert4j approve --invocation <prefix>`, or reject with `agentassert4j reject --invocation <prefix>`.");
         }
 
         // 退出码复合：行为差异或证据缺口（没跑够）→ 1；环境/预算截断 → 2；否则 0
@@ -211,7 +211,7 @@ public class TaskReplayRunner {
             return 1;
         }
         if (reDriveTotals.failed > 0 && reDriveTotals.pass == 0) {
-            diagnostic("重驱全部失败、无任何比对结果——疑似配置/凭据/网络问题，请检查 llm 配置后重试。");
+            diagnostic("All re-drive calls failed (no comparisons). Check llm config, credentials and network, then retry.");
             return 2;
         }
         if (reDriveTotals.skipped > 0) {
@@ -297,7 +297,7 @@ public class TaskReplayRunner {
      */
     private void reDriveLayer(DriftReport drift, boolean fullChain, boolean narrowed, List<TaskChain> scoped, BaselineManager manager, Integer maxTotalCalls, Integer maxTotalTokens, ReDriveTotals rd) {
         List<InteractionRecord> targets = reDriveTargets(drift, fullChain, narrowed, scoped);
-        info("受控重驱：以各点最新归档模板重驱 " + targets.size() + " 条记录" + (fullChain ? "（--full-chain 扩域）" : narrowed ? "（缩域内全部调用点）" : "（仅漂移点）") + "。");
+        info("Re-drive: " + CliSupport.plural(targets.size(), "record") + " using each point\'s latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + ".");
         if (!targets.isEmpty()) {
             info(CostEstimator.estimate(targets, llmClient.name()));
         }
@@ -309,7 +309,7 @@ public class TaskReplayRunner {
             String key = CliSupport.invocationKeyOfRecord(record);
             if (budgetExhausted(maxTotalCalls, maxTotalTokens, rd.callsUsed, rd.tokensUsed)) {
                 rd.skipped++;
-                info(stepLine(index, key, "重驱跳过（预算耗尽 budget_exhausted）"));
+                info(stepLine(index, key, "re-drive skipped (budget exhausted)"));
                 if (stepJsons != null) {
                     stepJsons.add("{\"recordId\":\"" + RecursiveJsonParser.escape(record.getRecordId()) + "\",\"invocationKey\":\"" + RecursiveJsonParser.escape(key != null ? key : "") + "\",\"action\":\"skipped\"}");
                 }
@@ -325,7 +325,7 @@ public class TaskReplayRunner {
             }
             if (templateText == null || templateText.isEmpty()) {
                 rd.skipped++;
-                info(stepLine(index, key, "重驱跳过（归档模板原文缺席——重新录制该调用点后重试）"));
+                info(stepLine(index, key, "re-drive skipped (archived template text missing; re-record this invocation and retry)"));
                 if (stepJsons != null) {
                     stepJsons.add("{\"recordId\":\"" + RecursiveJsonParser.escape(record.getRecordId()) + "\",\"invocationKey\":\"" + RecursiveJsonParser.escape(key != null ? key : "") + "\",\"action\":\"skipped\"}");
                 }
@@ -340,10 +340,10 @@ public class TaskReplayRunner {
             String served = servedNote(result, record);
             if (comparison != null && comparison.getVerdict() == Verdict.CHANGED) {
                 rd.changed++;
-                info(stepLine(index, key, "重驱 CHANGED  " + comparison.getSummary()) + served);
+                info(stepLine(index, key, "re-drive CHANGED " + comparison.getSummary()) + served);
             } else if (comparison != null) {
                 rd.pass++;
-                info(stepLine(index, key, "重驱 PASS") + served);
+                info(stepLine(index, key, "re-drive PASS") + served);
             } else {
                 rd.failed++;
                 info(stepLine(index, key, result.getStatus() + " " + (result.getErrorMessage() != null ? result.getErrorMessage() : "")));
@@ -352,7 +352,7 @@ public class TaskReplayRunner {
                 stepJsons.add(reDriveStepJson(record, key, result));
             }
         }
-        info("重驱汇总: PASS " + rd.pass + " | CHANGED " + rd.changed + " | 失败 " + rd.failed + " | 跳过 " + rd.skipped + "（真重驱 " + rd.callsUsed + " 次" + (rd.tokensUsed > 0 ? "，tokens " + rd.tokensUsed : "") + "）");
+        info("Re-drive summary: PASS " + rd.pass + " | CHANGED " + rd.changed + " | failed " + rd.failed + " | skipped " + rd.skipped + " (" + CliSupport.plural(rd.callsUsed, "real re-drive call") + (rd.tokensUsed > 0 ? ", " + CliSupport.plural(rd.tokensUsed, "token") : "") + ")");
         if (jsonMode) {
             StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-re-drive\"");
             sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
@@ -368,7 +368,7 @@ public class TaskReplayRunner {
         if (served == null || recorded == null || served.equals(recorded)) {
             return "";
         }
-        return "  〔served 模型 " + served + " ≠ 录制 " + recorded + "〕";
+        return "  (served: " + served + ", recorded: " + recorded + ")";
     }
 
     private static String reDriveStepJson(InteractionRecord record, String key, RegressionTestResult result) {
@@ -455,9 +455,9 @@ public class TaskReplayRunner {
         Map<String, InteractionRecord> baselineRecords = recordsById(baseline);
         Map<String, InteractionRecord> newRecords = recordsById(newChain);
 
-        info("任务「" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "」对齐：基线链（session " + baseline.getSessionId() + "）→ 新链（session " + newChain.getSessionId() + "）");
+        info("Task \"" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "\": baseline chain (session " + baseline.getSessionId() + ") → new chain (session " + newChain.getSessionId() + ")");
         if (rules != null && rules.hasTaskRules() && !newChain.isDeclared()) {
-            info("注意：本任务未声明 taskKey，任务规则不适用。");
+            info("Note: task has no declared taskKey; task rules do not apply.");
         }
         int missing = 0;
         int added = 0;
@@ -469,18 +469,18 @@ public class TaskReplayRunner {
             String label = CliSupport.displayKey(step.getInvocationKey());
             if (step.getKind() == StepKind.MISSING) {
                 missing++;
-                String detail = "缺步骤——基线执行了「" + label + "」，新链未调用";
+                String detail = "missing step: baseline invoked '" + label + "', new chain did not";
                 if (step.getInvocationLabel() != null && ruleRequiredLabels.contains(step.getInvocationLabel())) {
-                    detail += "（违反任务规则：必备步骤）";
+                    detail += " (task rule violation: required step)";
                 }
                 info(stepLine(index, step.getInvocationKey(), detail));
                 worstOutcome(outcomes, step.getInvocationKey(), StepOutcome.GAP);
             } else if (step.getKind() == StepKind.ADDED) {
                 added++;
-                info(stepLine(index, step.getInvocationKey(), "新增步骤——新链调用了「" + label + "」，基线未调用"));
+                info(stepLine(index, step.getInvocationKey(), "added step: new chain invoked '" + label + "', baseline did not"));
                 worstOutcome(outcomes, step.getInvocationKey(), StepOutcome.GAP);
             } else {
-                String versionPrefix = step.isVersionSwitch() ? "跨版本配对——" : "";
+                String versionPrefix = step.isVersionSwitch() ? "cross-version pair: " : "";
                 String served = servedModelNote(baselineRecords.get(step.getBaselineRecordId()), newRecords.get(step.getNewRecordId()));
                 if (step.getVerdict() == Verdict.CHANGED) {
                     changed++;
@@ -495,9 +495,9 @@ public class TaskReplayRunner {
                         boolean registered = manager.recordCandidate(changedRecord, FingerprintExtractor.extract(changedRecord, rules, changedRecord.getInvocationId()));
                         if (registered) {
                             totals.pendingCandidates++;
-                            info("已落候选：" + CliSupport.displayKey(step.getInvocationKey()) + "（行为差异待人工裁决——approve 接受为基线，reject 回退模板）。");
+                            info("Candidate registered: " + CliSupport.displayKey(step.getInvocationKey()) + " (behavior change awaiting adjudication; approve promotes to baseline, reject discards).");
                         } else {
-                            info("差异相对对照链成立，但该记录指纹与画像现役基线一致——未登记候选（无裁决对象）。");
+                            info("Difference holds against the paired chain, but the record fingerprint equals the profile's active baseline; no candidate registered (nothing to adjudicate).");
                         }
                     }
                 } else {
@@ -506,22 +506,22 @@ public class TaskReplayRunner {
                     worstOutcome(outcomes, step.getInvocationKey(), StepOutcome.PASS);
                 }
                 if (step.getSurplusCount() > 0) {
-                    info("    （该调用点两侧记录数不齐，富余 " + step.getSurplusCount() + " 条未配对，不判差异）");
+                    info("    (uneven record counts on this invocation; " + step.getSurplusCount() + " surplus unpaired, excluded from judgment)");
                 }
             }
         }
         for (TaskRuleViolation violation : violations) {
-            info("违反任务规则: " + violation.getDetail());
+            info("Task rule violation: " + violation.getDetail());
         }
-        info("对齐汇总: PASS " + pass + " | CHANGED " + changed + " | 缺步骤 " + missing + " | 新增步骤 " + added + (violations.isEmpty() ? "" : " | 违规 " + violations.size()) + (alignment.getCrossVersionCount() > 0 ? " | 跨版本 " + alignment.getCrossVersionCount() : ""));
+        info("Alignment summary: PASS " + pass + " | CHANGED " + changed + " | missing " + missing + " | added " + added + (violations.isEmpty() ? "" : " | " + CliSupport.plural(violations.size(), "rule violation")) + (alignment.getCrossVersionCount() > 0 ? " | cross-version " + alignment.getCrossVersionCount() : ""));
         ChainCost baselineCost = new ChainCost(baseline);
         ChainCost currentCost = new ChainCost(newChain);
-        info("成本对照: 基线 " + formatTokens(baselineCost.tokens) + formatCost(baselineCost.costUsd) + " → 当前 " + formatTokens(currentCost.tokens) + formatCost(currentCost.costUsd));
+        info("Cost: baseline " + formatTokens(baselineCost.tokens) + formatCost(baselineCost.costUsd) + " → current " + formatTokens(currentCost.tokens) + formatCost(currentCost.costUsd));
         if (alignment.getCrossVersionCount() > 0) {
-            info("注意：跨版本配对存在提示词版本混杂——版本切换下的判定可作为行为信号，受控复核用 --re-drive 逐点重驱。");
+            info("Note: cross-version pairs mix template versions; treat the verdict as a behavioral signal and use --re-drive for controlled per-point re-checks.");
         }
         if (alignment.isPrefixDependent()) {
-            info("注意：任务链携带会话前缀——真实再执行对照必须重演到该问为止的整个会话前缀，否则差异源于上下文缺失而非回归。");
+            info("Note: chain carries a session prefix; real re-execution must replay the whole session up to this question, otherwise differences come from missing context rather than regression.");
         }
         String modelShift = servedModelPairNote(baseline, newChain);
         if (!modelShift.isEmpty()) {
@@ -585,11 +585,11 @@ public class TaskReplayRunner {
             if (!scopedKeys.contains(key)) {
                 totals.external++;
                 action = "external";
-                info("域外漂移（未处置）：" + shown + "——不在本次缩域的对齐范围内，仅检测报告可见。");
+                info("Drift outside scope (not disposed): " + shown + " (outside this run's alignment scope; visible in the drift report only)");
             } else {
                 totals.hung++;
                 action = "hung";
-                info("挂起：" + shown + "（无可对齐证据——真实重跑该任务后再执行本命令补证）。");
+                info("Hung: " + shown + " (no alignable evidence; re-run the task for real and replay to complete the evidence)");
             }
         } else if (outcome == StepOutcome.CHANGED) {
             // 候选登记已在对齐层随 CHANGED 步就地报告，这里只记处置计数
@@ -598,17 +598,17 @@ public class TaskReplayRunner {
         } else if (outcome == StepOutcome.GAP) {
             totals.hung++;
             action = "hung";
-            info("挂起：" + shown + "（对齐证据缺口——不收编、不落候选，真实重跑补证后自动归入其余出口）。");
+            info("Hung: " + shown + " (alignment evidence gap; no collect, no candidate; a real re-run resolves it into another exit)");
         } else if (ciMode) {
             // --ci 模式：PASS 也不落治理写——收敛动作留给开发态 replay 或 approve
             totals.uncollected++;
             action = "uncollected";
-            info("身份未收编（--ci 模式不写治理状态）：" + shown + "——本次出 0，收编请在开发态执行 replay。");
+            info("Identity not collected (--ci writes no governance state): " + shown + " (exit stays 0; run replay in dev mode to collect)");
         } else {
             boolean advanced = manager.advanceTemplateIdentity(key);
             totals.collected++;
             action = "collected";
-            info("已收编：" + shown + "（行为无差异——" + ("label-split".equals(kind) && !advanced ? "新键建档即以最新模板为身份" : "模板身份 " + shortHash(point.getProfileTemplateHash()) + " → " + shortHash(point.getLatestTemplateHash())) + "）。");
+            info("Collected: " + shown + " (no behavioral difference; " + ("label-split".equals(kind) && !advanced ? "new profile established with the latest template as identity" : "template identity " + shortHash(point.getProfileTemplateHash()) + " → " + shortHash(point.getLatestTemplateHash())) + ")");
         }
         if (dispositionJsons != null) {
             dispositionJsons.add("{\"invocationKey\":\"" + RecursiveJsonParser.escape(key) + "\",\"kind\":\"" + kind + "\",\"action\":\"" + action + "\"}");
@@ -616,7 +616,7 @@ public class TaskReplayRunner {
     }
 
     private static String shortHash(String hash) {
-        return hash == null || hash.isEmpty() ? "无" : hash.substring(0, Math.min(8, hash.length()));
+        return hash == null || hash.isEmpty() ? "none" : hash.substring(0, Math.min(8, hash.length()));
     }
 
     /**
@@ -627,11 +627,11 @@ public class TaskReplayRunner {
         try {
             for (InvocationProfile profile : repository.findAllInvocations()) {
                 if (profile.getAlgoVersion() == null || !JudgmentSemantics.VERSION.equals(profile.getAlgoVersion())) {
-                    problems.add("判定语义版本不一致：" + profile.getInvocationKey() + " 的基线由 " + (profile.getAlgoVersion() == null ? "未标记版本" : profile.getAlgoVersion()) + " 批准，当前引擎为 " + JudgmentSemantics.VERSION + "。拒绝判定以防止静默重解释历史基线，请执行 `agentassert4j baseline --force` 以当前语义重建基线。");
+                    problems.add("Judgment semantics version mismatch: " + profile.getInvocationKey() + " baseline was approved by " + (profile.getAlgoVersion() == null ? "an unmarked version" : profile.getAlgoVersion()) + ", current engine is " + JudgmentSemantics.VERSION + ". Refusing to judge to avoid silently re-interpreting historical baselines. Run `agentassert4j baseline --force` to re-establish baselines under the current semantics.");
                 }
             }
         } catch (RuntimeException e) {
-            return "判定语义校验失败（存储不可读）：" + e.getMessage();
+            return "Judgment semantics check failed (storage unreadable): " + e.getMessage();
         }
         return problems.isEmpty() ? null : String.join(System.lineSeparator(), problems);
     }
@@ -654,7 +654,7 @@ public class TaskReplayRunner {
             }
         }
         if (ungroupable > 0) {
-            diagnostic("警告：" + ungroupable + " 条记录分组失败、已剔除出本次判定集：" + String.join(", ", samples) + (ungroupable > samples.size() ? " 等" : ""));
+            diagnostic("Warning: " + CliSupport.plural(ungroupable, "record") + " failed key grouping and were excluded from this judgment set: " + String.join(", ", samples) + (ungroupable > samples.size() ? ", and more" : ""));
         }
     }
 
@@ -698,7 +698,7 @@ public class TaskReplayRunner {
             return;
         }
         if (!recordedModels.isEmpty() && !recordedModels.contains(configModel)) {
-            diagnostic("警告：重放模型 " + configModel + " 与录制模型 " + recordedModels + " 不一致，行为判定结果不与基线直接可比（换模型属实验性操作）。");
+            diagnostic("Warning: replay model " + configModel + " differs from recorded models " + recordedModels + "; verdicts are not directly comparable to baselines (model switching is experimental).");
         }
     }
 
@@ -709,7 +709,7 @@ public class TaskReplayRunner {
         try {
             repository.saveGraph(graph.toJson());
         } catch (RuntimeException e) {
-            diagnostic("警告：依赖图快照写入失败（不影响本次分析）：" + e.getMessage());
+            diagnostic("Warning: dependency graph snapshot write failed (analysis unaffected): " + e.getMessage());
         }
     }
 
@@ -723,7 +723,7 @@ public class TaskReplayRunner {
         if (baselineModels.isEmpty() || newModels.isEmpty() || newModels.equals(baselineModels)) {
             return "";
         }
-        return "注意：模型身份变更——基线 served " + baselineModels + " → 当前 " + newModels + "。行为差异可能源于换模型而非提示词。";
+        return "Note: model identity changed (baseline served " + baselineModels + " → current " + newModels + "); differences may come from the model switch rather than the prompt.";
     }
 
     private static Set<String> servedModelsOf(TaskChain chain) {
@@ -749,7 +749,7 @@ public class TaskReplayRunner {
         if (served == null || recorded == null || served.equals(recorded)) {
             return "";
         }
-        return "  〔served 模型 " + served + " ≠ 基线 " + recorded + "〕";
+        return "  (served: " + served + ", baseline: " + recorded + ")";
     }
 
     private static Map<String, InteractionRecord> recordsById(TaskChain chain) {
@@ -816,7 +816,7 @@ public class TaskReplayRunner {
             for (String text : sorted) {
                 shown.add(CliSupport.visibleText(CliSupport.abbreviateText(text, 60)));
             }
-            diagnostic("--task " + CliSupport.visibleText(taskPrefix) + " 前缀匹配到多个任务：" + String.join("、", shown) + "，请提供更长前缀。");
+            diagnostic("--task '" + CliSupport.visibleText(taskPrefix) + "' matches multiple tasks: " + String.join(", ", shown) + "; provide a longer prefix.");
             return null;
         }
         return prefixed;
@@ -834,8 +834,8 @@ public class TaskReplayRunner {
     }
 
     private void printSelfEstablished(TaskChain only) {
-        info("任务「" + CliSupport.abbreviateText(only.getRequestText(), 80) + "」仅一条链（session " + only.getSessionId() + "）——首录即基线，自建基线完成（" + only.getRecords().size() + " 步）。");
-        info("下次真实再执行后重跑本命令，将自动配对本次基线并出对齐报告。");
+        info("Task \"" + CliSupport.abbreviateText(only.getRequestText(), 80) + "\" has a single chain (session " + only.getSessionId() + "); first recording becomes the baseline (" + CliSupport.plural(only.getRecords().size(), "step") + ").");
+        info("Re-run this command after the next real execution to pair against this baseline and produce an alignment report.");
         if (jsonMode) {
             out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-align\",\"selfEstablished\":true,\"task\":{\"request\":\"" + RecursiveJsonParser.escape(only.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(only.getSessionId()) + "\"},\"summary\":{\"total\":" + only.getRecords().size() + ",\"pass\":" + only.getRecords().size() + ",\"changed\":0,\"skipped\":0,\"missing\":0,\"added\":0},\"steps\":[],\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}");
         }
@@ -847,10 +847,10 @@ public class TaskReplayRunner {
      */
     private int dryRunPlan(List<TaskChain> scoped, boolean reDrive, DriftReport drift, boolean narrowed) {
         List<List<TaskChain>> groups = groupByRequestText(scoped);
-        info("对齐计划（dry-run，未执行判定、未建档、未处置）：共 " + groups.size() + " 个任务、零 LLM 调用。");
+        info("Alignment plan (dry-run; no judgments, no baselines, no dispositions): " + CliSupport.plural(groups.size(), "task") + ", zero LLM calls.");
         if (reDrive) {
             List<InteractionRecord> planned = reDriveTargets(drift, false, narrowed, scoped);
-            info("重驱计划（--re-drive）：将逐点以最新归档模板真重驱 " + planned.size() + " 条记录。");
+            info("Re-drive plan (--re-drive): " + CliSupport.plural(planned.size(), "record") + " to re-drive with each point\'s latest archived template.");
             if (!planned.isEmpty()) {
                 info(CostEstimator.estimate(planned, llmClient.name()));
             }
@@ -858,10 +858,10 @@ public class TaskReplayRunner {
         for (List<TaskChain> group : groups) {
             TaskChain latest = group.get(group.size() - 1);
             if (group.size() == 1) {
-                info("  任务「" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "」仅一条链（" + latest.getRecords().size() + " 步）→ 首录自建基线。");
+                info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": single chain (" + CliSupport.plural(latest.getRecords().size(), "step") + ") → first recording self-establishes the baseline.");
             } else {
                 TaskChain baseline = group.get(group.size() - 2);
-                info("  任务「" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "」→ 配对基线 session " + baseline.getSessionId() + "（" + baseline.getRecords().size() + " 步）→ 新链 session " + latest.getSessionId() + "（" + latest.getRecords().size() + " 步）。任务规则：" + ruleApplicability(latest));
+                info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": baseline session " + baseline.getSessionId() + " (" + CliSupport.plural(baseline.getRecords().size(), "step") + ") → new chain session " + latest.getSessionId() + " (" + CliSupport.plural(latest.getRecords().size(), "step") + "). Task rules: " + ruleApplicability(latest));
             }
             if (jsonMode) {
                 out.println(dryRunAlignJson(latest.getRequestText(), group.size() > 1 ? baselineSessionOf(group) : null, group.size() > 1 ? group.get(group.size() - 2).getRecords().size() : null, latest.getSessionId(), latest.getRecords().size()));
@@ -876,16 +876,16 @@ public class TaskReplayRunner {
 
     private String ruleApplicability(TaskChain chain) {
         if (rules == null || !rules.hasTaskRules()) {
-            return "rules 未配置任务规则。";
+            return "no task rules configured.";
         }
         if (!chain.isDeclared()) {
-            return "本任务未声明 taskKey，规则不适用。";
+            return "taskKey not declared; rules do not apply.";
         }
         InvocationRulesConfig.TaskRule rule = rules.getTaskRule(chain.getRequestText());
         if (rule.isEmpty()) {
-            return "已声明 taskKey，但规则文件无该键的任务规则。";
+            return "taskKey declared but no task rule for it in the rules file.";
         }
-        return "将评估 requiredSteps " + rule.getRequiredSteps().size() + " 项 / requiredOrder " + rule.getRequiredOrder().size() + " 项 / steps " + rule.getSteps().size() + " 项。";
+        return "will evaluate requiredSteps " + rule.getRequiredSteps().size() + ", requiredOrder " + rule.getRequiredOrder().size() + ", steps " + rule.getSteps().size() + ".";
     }
 
     /**
@@ -908,23 +908,23 @@ public class TaskReplayRunner {
      */
     private void printDriftReport(DriftReport drift) {
         if (!drift.hasDrift()) {
-            info("模板漂移检测：全部调用点模板身份一致（零模板点 " + drift.getZeroTemplateProfiles() + " 个不可检测）。");
+            info("Drift: all invocation template identities consistent (" + CliSupport.plural(drift.getZeroTemplateProfiles(), "zero-template invocation") + " undetectable).");
             return;
         }
-        info("模板漂移检测：同键漂移 " + drift.getSameKeyDrifts().size() + " · 标签裂键 " + drift.getLabelSplits().size() + " · 下游波及 " + drift.getDownstreamKeys().size() + "（零模板点 " + drift.getZeroTemplateProfiles() + " 个不可检测）");
+        info("Drift: " + drift.getSameKeyDrifts().size() + " same-key, " + CliSupport.plural(drift.getLabelSplits().size(), "label split") + ", " + drift.getDownstreamKeys().size() + " downstream (" + CliSupport.plural(drift.getZeroTemplateProfiles(), "zero-template invocation") + " undetectable)");
         for (DriftReport.DriftPoint point : drift.getSameKeyDrifts()) {
-            info("  ▲ " + CliSupport.displayKey(point.getInvocationKey()) + (point.getLabel() != null ? "（" + point.getLabel() + "）" : "") + " 模板 " + shortHash(point.getProfileTemplateHash()) + " → " + shortHash(point.getLatestTemplateHash()));
+            info("  ▲ " + CliSupport.displayKey(point.getInvocationKey()) + (point.getLabel() != null ? " (" + point.getLabel() + ")" : "") + " template " + shortHash(point.getProfileTemplateHash()) + " → " + shortHash(point.getLatestTemplateHash()));
         }
         for (DriftReport.DriftPoint point : drift.getLabelSplits()) {
-            info("  ▲+ " + CliSupport.displayKey(point.getInvocationKey()) + "（" + point.getLabel() + "）裂键新档，模板 " + shortHash(point.getLatestTemplateHash()));
+            info("  ▲+ " + CliSupport.displayKey(point.getInvocationKey()) + " (" + point.getLabel() + ") label split, new profile on template " + shortHash(point.getLatestTemplateHash()));
         }
         if (!drift.getDownstreamKeys().isEmpty()) {
-            info("  ↳ 下游波及: " + String.join(", ", drift.getDownstreamKeys()));
+            info("  ↳ downstream: " + String.join(", ", drift.getDownstreamKeys()));
         }
         if (drift.getSkippedQueries() > 0) {
-            info("  警告：" + drift.getSkippedQueries() + " 次检测查询失败被跳过（详见存储日志）。");
+            info("  Warning: " + CliSupport.plural(drift.getSkippedQueries(), "detection query") + " failed and were skipped (see storage logs).");
         }
-        info("（提示：建档种子取桶内最早记录，首次全量对账会对种子≠最新模板的调用点各报一次漂移，对齐 PASS 后逐点自动收编——批量漂移多为一次性收敛。）");
+        info("(Baseline seeds take the earliest record per bucket; the first full audit reports one drift per invocation whose seed template differs from its latest one, auto-collected point by point after a PASS alignment; mass drifts are usually one-time convergence.)");
     }
 
     private static String driftJson(DriftReport drift) {
@@ -966,6 +966,7 @@ public class TaskReplayRunner {
         return "  [" + index + "] " + CliSupport.displayKey(key) + "  " + detail;
     }
 
+
     private static String abbreviate(String text, int budget) {
         return CliSupport.abbreviateText(text, budget);
     }
@@ -995,8 +996,8 @@ public class TaskReplayRunner {
         if (evidences.isEmpty()) {
             return "";
         }
-        String note = "  ↳ 文本差异（低置信）" + String.join("；", evidences);
-        return note.length() <= TEXT_DIFF_BUDGET ? note : note.substring(0, TEXT_DIFF_BUDGET) + "…";
+        String note = "  ↳ text diff (low confidence) " + String.join("; ", evidences);
+        return note.length() <= TEXT_DIFF_BUDGET ? note : note.substring(0, TEXT_DIFF_BUDGET) + "...";
     }
 
     private static String dryRunAlignJson(String request, String baselineSession, Integer baselineSteps, String newSession, int newSteps) {

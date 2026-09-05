@@ -637,7 +637,7 @@ class RegressionTestExecutorTest {
             assertEquals(2, client.requests.size(), "分歧后不再发起调用");
             assertEquals(Verdict.CHANGED, result.getComparison().getVerdict());
             String summary = result.getComparison().getSummary();
-            assertTrue(summary.contains("第 2 轮"), "定位到分歧轮次: " + summary);
+            assertTrue(summary.contains("round 2"), "定位到分歧轮次: " + summary);
             assertTrue(summary.contains("get_logistics") && summary.contains("cancel_order"), "摘要点名该轮基线决策与实际决策: " + summary);
         }
 
@@ -679,7 +679,7 @@ class RegressionTestExecutorTest {
 
             assertEquals(3, client.requests.size());
             assertEquals(Verdict.CHANGED, result.getComparison().getVerdict());
-            assertTrue(result.getComparison().getSummary().contains("第 3 轮"), "末轮多出的编排定位到收口轮: " + result.getComparison().getSummary());
+            assertTrue(result.getComparison().getSummary().contains("round 3"), "末轮多出的编排定位到收口轮: " + result.getComparison().getSummary());
         }
 
         @Test

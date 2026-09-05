@@ -9,18 +9,18 @@ import picocli.CommandLine.Command;
  *
  * <p>典型流程：</p>
  * <pre>
- * agentassert4j status                            # 巡检调用点画像与基线状态
- * agentassert4j replay                            # 全项目漂移检测 + 逐任务对齐（零 LLM 调用）
- * agentassert4j replay --re-drive                 # 受控重驱：逐漂移点以归档模板复核（花调用）
- * agentassert4j approve                           # 裁决全部待裁决候选
- * agentassert4j rollback --invocation ab12cd34 --version v1   # 恢复到归档基线
- * agentassert4j completion > agentassert4j.bash   # 生成 shell 补全脚本
+ * agentassert4j status                            # inspect invocations and baseline status
+ * agentassert4j replay                            # project-wide drift detection + per-task alignment (zero LLM calls)
+ * agentassert4j replay --re-drive                 # controlled re-drive: re-check drift points with archived templates (spends calls)
+ * agentassert4j approve                           # adjudicate all pending candidates
+ * agentassert4j rollback --invocation ab12cd34 --version v1   # restore an archived baseline
+ * agentassert4j completion > agentassert4j.bash   # generate a shell completion script
  * </pre>
  *
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "agentassert4j", version = "AgentAssert4j 1.0.0-SNAPSHOT", description = {"AI Agent 行为回归测试框架 — 旁路录制、确定性基线、变更检测与真实对齐、人工裁决。", "", "bare 命令 = 全项目完整默认能力（replay 缺省零 LLM 调用）；参数只做缩域或开关。", "常用组合：replay 全项目变更检测 → 对齐 CHANGED/漂移落候选 → approve/reject 裁决 → rollback 回溯。"}, exitCodeList = {"0", "无行为回归（--ci 模式下漂移未收编仍出 0，附警告行）", "1", "行为差异或证据缺口：对齐 CHANGED/缺步骤/新增步骤/规则违规/漂移挂起（没跑够，真实重跑或重驱可补）", "2", "用法、数据或环境问题：选链错误、守卫拒绝、预算耗尽、重驱全败（被截断或环境故障）"}, subcommands = {BaselineCommand.class, StatusCommand.class, ReplayCommand.class, ApproveCommand.class, RejectCommand.class, RollbackCommand.class, RulesCommand.class, GraphCommand.class, VerifyCommand.class, DoctorCommand.class, CompletionCommand.class}, mixinStandardHelpOptions = true)
+@Command(name = "agentassert4j", version = "AgentAssert4j 1.0.0-SNAPSHOT", description = {"AI Agent behavior regression testing framework — side-channel recording, deterministic baselines, change detection with real alignment, human adjudication.", "", "Bare commands are the full-project default (replay makes zero LLM calls by default); flags only narrow scope or toggle behavior.", "Typical loop: replay for project-wide change detection → CHANGED/drift lands candidates → approve/reject to adjudicate → rollback to recover."}, exitCodeList = {"0", "no behavioral regression (in --ci mode, uncollected drift still exits 0 with a warning)", "1", "behavioral difference or evidence gap: alignment CHANGED/missing steps/added steps/rule violations/hung drifts (evidence incomplete; re-run for real or re-drive to complete)", "2", "usage, data or environment problem: selector errors, guard refusals, budget exhausted, all re-drives failed (truncated or broken environment)"}, subcommands = {BaselineCommand.class, StatusCommand.class, ReplayCommand.class, ApproveCommand.class, RejectCommand.class, RollbackCommand.class, RulesCommand.class, GraphCommand.class, VerifyCommand.class, DoctorCommand.class, CompletionCommand.class}, mixinStandardHelpOptions = true)
 public class AgentAssert4jCli {
 
     public static void main(String[] args) {

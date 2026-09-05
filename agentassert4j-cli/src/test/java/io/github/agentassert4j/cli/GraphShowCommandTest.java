@@ -67,7 +67,7 @@ class GraphShowCommandTest {
         assertTrue(output.contains("invocation:refundOrder:hash-r-2"), "节点必须含下游调用点键");
         assertTrue(output.contains("invocation:queryOrder:hash-r-1 -> invocation:refundOrder:hash-r-2"), "值流边必须渲染");
         assertTrue(output.contains("HIGH"), "字段值精确匹配是 HIGH 置信度");
-        assertTrue(output.contains("环：无"));
+        assertTrue(output.contains("Cycles: none"));
     }
 
     @Test
@@ -79,8 +79,8 @@ class GraphShowCommandTest {
 
         assertEquals(0, exit);
         String output = stdout.toString();
-        assertTrue(output.contains("提示：无边"), "空图必须解释边的数据来源条件");
-        assertTrue(output.contains("节点（0）"), "节点派生自边，无边即无节点");
+        assertTrue(output.contains("Note: no edges"), "空图必须解释边的数据来源条件");
+        assertTrue(output.contains("Nodes (0)"), "节点派生自边，无边即无节点");
     }
 
     /**

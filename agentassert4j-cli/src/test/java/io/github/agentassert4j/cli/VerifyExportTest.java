@@ -166,8 +166,8 @@ class VerifyExportTest {
         int exit = runner.run(json, digest, null, null, true);
 
         assertEquals(0, exit);
-        assertTrue(output.toString().contains("验收预演"), "dry-run 必须输出预演标题: " + output);
-        assertTrue(output.toString().contains("配对本地链"), "dry-run 必须列出配对情况: " + output);
+        assertTrue(output.toString().contains("Verification dry-run"), "dry-run 必须输出预演标题: " + output);
+        assertTrue(output.toString().contains("pairs with local chain"), "dry-run 必须列出配对情况: " + output);
         assertFalse(output.toString().contains("PASS 1"), "dry-run 不得产出判定汇总: " + output);
     }
 
@@ -223,8 +223,8 @@ class VerifyExportTest {
 
             assertEquals(2, exit, "包任务无精确匹配链 = 覆盖缺口（前缀同名链不得冒充）: " + output);
             String report = output.toString();
-            assertTrue(report.contains("覆盖缺口 1"), "V1 必须列为覆盖缺口: " + report);
-            assertTrue(report.contains("范围外链 1"), "V10 链必须列为范围外: " + report);
+            assertTrue(report.contains("coverage gaps 1"), "V1 必须列为覆盖缺口: " + report);
+            assertTrue(report.contains("out-of-scope chains 1"), "V10 链必须列为范围外: " + report);
         } finally {
             customerDb.close();
         }
@@ -250,13 +250,13 @@ class VerifyExportTest {
 
             assertEquals(0, exit);
             String report = output.toString();
-            assertTrue(report.contains("范围外链 1"), report);
-            assertTrue(report.contains("提示：范围外本地链通常来自验收包导出之后的新录制"), "范围外必须带因果提示: " + report);
+            assertTrue(report.contains("out-of-scope chains 1"), report);
+            assertTrue(report.contains("usually come from recordings made after the pack export"), "范围外必须带因果提示: " + report);
 
             ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
             VerifyRunner jsonRunner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
             assertEquals(0, jsonRunner.run(json, "digest", null, null, false));
-            assertTrue(jsonOut.toString().contains("\"hints\":[\"范围外本地链"), "JSON 报告必须携带 hints 供机器消费: " + jsonOut);
+            assertTrue(jsonOut.toString().contains("\"hints\":[\"Out-of-scope local chains"), "JSON 报告必须携带 hints 供机器消费: " + jsonOut);
         } finally {
             customerDb.close();
         }
@@ -279,7 +279,7 @@ class VerifyExportTest {
             int exit = runner.run(json, "digest", null, null, false);
 
             assertEquals(0, exit, "跨模型+结构一致 → PASS");
-            assertTrue(output.toString().contains("跨模型"), "必须标注跨模型: " + output);
+            assertTrue(output.toString().contains("Cross-model"), "必须标注跨模型: " + output);
         } finally {
             customerDb.close();
         }
@@ -296,7 +296,7 @@ class VerifyExportTest {
         VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
 
         assertEquals(2, runner.run(tampered, "digest", null, null, false));
-        assertTrue(output.toString().contains("版本守卫"), output.toString());
+        assertTrue(output.toString().contains("Version guard"), output.toString());
     }
 
     @Test
@@ -373,7 +373,7 @@ class VerifyExportTest {
             assertTrue(output.toString().contains("PASS 1"), output.toString());
             // 逐步明细（含版本注记）在验收报告文件；stdout 只有汇总行
             String markdown = new String(Files.readAllBytes(reportPath), StandardCharsets.UTF_8);
-            assertTrue(markdown.contains("跨版本配对 h-old→h-new"), "报告必须带版本注记: " + markdown);
+            assertTrue(markdown.contains("cross-version pair h-old→h-new"), "报告必须带版本注记: " + markdown);
 
             ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
             VerifyRunner jsonRunner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
@@ -407,7 +407,7 @@ class VerifyExportTest {
             assertEquals(1, exit, "跨版本配对不豁免行为判定: " + output);
             assertTrue(output.toString().contains("CHANGED 1"), output.toString());
             String markdown = new String(Files.readAllBytes(reportPath), StandardCharsets.UTF_8);
-            assertTrue(markdown.contains("跨版本配对 h-old→h-new"), "注记与判定并存: " + markdown);
+            assertTrue(markdown.contains("cross-version pair h-old→h-new"), "注记与判定并存: " + markdown);
         } finally {
             customerDb.close();
         }

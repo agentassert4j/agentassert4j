@@ -33,22 +33,22 @@ final class FingerprintDiffRenderer {
             added.removeAll(baseCalls);
             Set<String> removed = new TreeSet<>(baseCalls);
             removed.removeAll(candCalls);
-            StringBuilder sb = new StringBuilder("工具集: ").append(baseCalls).append(" → ").append(candCalls);
+            StringBuilder sb = new StringBuilder("Tool set: ").append(baseCalls).append(" → ").append(candCalls);
             if (!added.isEmpty()) {
-                sb.append("（新增 ").append(added).append("）");
+                sb.append(" (added ").append(added).append(")");
             }
             if (!removed.isEmpty()) {
-                sb.append("（删除 ").append(removed).append("）");
+                sb.append(" (removed ").append(removed).append(")");
             }
             lines.add(sb.toString());
         }
 
-        appendMapDiff(lines, "参数类型", baseline == null ? null : baseline.getToolParamTypes(), candidate == null ? null : candidate.getToolParamTypes());
+        appendMapDiff(lines, "Param types", baseline == null ? null : baseline.getToolParamTypes(), candidate == null ? null : candidate.getToolParamTypes());
 
         String baseType = baseline == null ? null : baseline.getOutputContentType();
         String candType = candidate == null ? null : candidate.getOutputContentType();
         if (!String.valueOf(baseType).equals(String.valueOf(candType))) {
-            lines.add("输出内容类型: " + baseType + " → " + candType);
+            lines.add("Output content type: " + baseType + " → " + candType);
         }
 
         Set<String> basePaths = sortedCopy(baseline == null ? null : baseline.getOutputFieldPaths());
@@ -58,39 +58,39 @@ final class FingerprintDiffRenderer {
             added.removeAll(basePaths);
             Set<String> removed = new TreeSet<>(basePaths);
             removed.removeAll(candPaths);
-            StringBuilder sb = new StringBuilder("输出字段集:");
+            StringBuilder sb = new StringBuilder("Output field set:");
             if (!added.isEmpty()) {
-                sb.append(" 新增 ").append(added).append(";");
+                sb.append(" added ").append(added).append(";");
             }
             if (!removed.isEmpty()) {
-                sb.append(" 删除 ").append(removed).append(";");
+                sb.append(" removed ").append(removed).append(";");
             }
             lines.add(sb.toString());
         }
 
-        appendMapDiff(lines, "字段类型", baseline == null ? null : baseline.getOutputFieldTypeMap(), candidate == null ? null : candidate.getOutputFieldTypeMap());
+        appendMapDiff(lines, "Field types", baseline == null ? null : baseline.getOutputFieldTypeMap(), candidate == null ? null : candidate.getOutputFieldTypeMap());
 
         if (baseline != null && candidate != null && baseline.getTextLengthMagnitude() != candidate.getTextLengthMagnitude()) {
-            lines.add("输出长度数量级: " + baseline.getTextLengthMagnitude() + " → " + candidate.getTextLengthMagnitude());
+            lines.add("Output length magnitude: " + baseline.getTextLengthMagnitude() + " → " + candidate.getTextLengthMagnitude());
         }
 
-        appendSetDiff(lines, "必含关键词", baseline == null ? null : baseline.getRequiredKeywords(), candidate == null ? null : candidate.getRequiredKeywords());
-        appendSetDiff(lines, "禁含关键词", baseline == null ? null : baseline.getForbiddenKeywords(), candidate == null ? null : candidate.getForbiddenKeywords());
+        appendSetDiff(lines, "Required keywords", baseline == null ? null : baseline.getRequiredKeywords(), candidate == null ? null : candidate.getRequiredKeywords());
+        appendSetDiff(lines, "Forbidden keywords", baseline == null ? null : baseline.getForbiddenKeywords(), candidate == null ? null : candidate.getForbiddenKeywords());
 
         int baseRegex = baseline == null || baseline.getRegexPatterns() == null ? 0 : baseline.getRegexPatterns().size();
         int candRegex = candidate == null || candidate.getRegexPatterns() == null ? 0 : candidate.getRegexPatterns().size();
         if (baseRegex != candRegex) {
-            lines.add("正则规则条数: " + baseRegex + " → " + candRegex);
+            lines.add("Regex rule count: " + baseRegex + " → " + candRegex);
         }
 
-        appendSetDiff(lines, "约束行为", baseline == null ? null : baseline.getDeclaredBehaviors(), candidate == null ? null : candidate.getDeclaredBehaviors());
+        appendSetDiff(lines, "Declared behaviors", baseline == null ? null : baseline.getDeclaredBehaviors(), candidate == null ? null : candidate.getDeclaredBehaviors());
 
         if (baseline != null && candidate != null && baseline.isHasError() != candidate.isHasError()) {
-            lines.add("错误标记: " + (baseline.isHasError() ? "有" : "无") + " → " + (candidate.isHasError() ? "有" : "无"));
+            lines.add("Error marker: " + (baseline.isHasError() ? "yes" : "no") + " → " + (candidate.isHasError() ? "yes" : "no"));
         }
 
         if (lines.isEmpty()) {
-            lines.add("候选与基线指纹在所有维度一致。");
+            lines.add("Candidate fingerprint matches the baseline in all dimensions.");
         }
         return lines;
     }
@@ -105,14 +105,14 @@ final class FingerprintDiffRenderer {
         for (Map.Entry<String, String> entry : baseSorted.entrySet()) {
             String candValue = candSorted.get(entry.getKey());
             if (candValue == null) {
-                sb.append(" 移除 ").append(entry.getKey()).append(":").append(entry.getValue()).append(";");
+                sb.append(" removed ").append(entry.getKey()).append(":").append(entry.getValue()).append(";");
             } else if (!candValue.equals(entry.getValue())) {
                 sb.append(" ").append(entry.getKey()).append("(").append(entry.getValue()).append("→").append(candValue).append(");");
             }
         }
         for (Map.Entry<String, String> entry : candSorted.entrySet()) {
             if (!baseSorted.containsKey(entry.getKey())) {
-                sb.append(" 新增 ").append(entry.getKey()).append(":").append(entry.getValue()).append(";");
+                sb.append(" added ").append(entry.getKey()).append(":").append(entry.getValue()).append(";");
             }
         }
         lines.add(sb.toString());

@@ -67,7 +67,7 @@ final class CliSupport {
         // 隐式查找链（cwd → home → classpath）命中了哪个文件必须就地披露——
         // 错误目录下运行时旧配置静默生效是最难查的排障黑洞
         String configSource = ConfigLoader.describeMainConfigSource();
-        out.println(configSource != null ? "配置：" + configSource : "配置：未找到 agentassert4j.json，使用内置默认值。");
+        out.println(configSource != null ? "Config: " + configSource : "Config: no agentassert4j.json found; using built-in defaults.");
         String url = dbOverride != null ? dbOverride : config.getStorage().getUrl();
         SqliteStorageRepository repository = new SqliteStorageRepository(expandHome(url));
         repository.initialize();
@@ -119,7 +119,7 @@ final class CliSupport {
             return "";
         }
         String flat = text.replaceAll("\\s+", " ").trim();
-        return flat.length() <= budget ? flat : flat.substring(0, budget) + "…";
+        return flat.length() <= budget ? flat : flat.substring(0, budget) + "...";
     }
 
     /**
@@ -130,7 +130,7 @@ final class CliSupport {
      */
     static String displayKey(String invocationKey) {
         if (invocationKey == null || invocationKey.isEmpty()) {
-            return "(未解析调用点)";
+            return "(unresolved invocation)";
         }
         String[] segments = invocationKey.split(":");
         if ("invocation".equals(segments[0]) && segments.length >= 2) {
@@ -284,11 +284,11 @@ final class CliSupport {
         if (displayMatch != null) {
             List<String> labelMatches = businessLabelsForKey(repository, displayMatch);
             if (labelMatches.size() == 1) {
-                out.println("提示：--invocation " + filter + " 按显示短形匹配到 " + displayMatch + "（业务标签 " + labelMatches.get(0) + "）");
+                out.println("Note: --invocation " + filter + " matched display form " + displayMatch + " (business label " + labelMatches.get(0) + ")");
                 return labelMatches.get(0);
             }
             if (labelMatches.size() > 1) {
-                throw new IllegalStateException("--invocation " + filter + " 对应调用点键覆盖多个业务标签：" + String.join(", ", labelMatches) + "，请使用确切的业务标签。");
+                throw new IllegalStateException("--invocation " + filter + " maps to multiple business labels: " + String.join(", ", labelMatches) + "; use the exact business label.");
             }
         }
         List<InvocationProfile> prefixMatches = new ArrayList<>();
@@ -302,7 +302,7 @@ final class CliSupport {
             for (InvocationProfile profile : prefixMatches) {
                 keys.add(profile.getInvocationKey());
             }
-            throw new IllegalStateException("--invocation " + filter + " 前缀匹配到多个调用点：" + String.join(", ", keys) + "，请提供更长前缀。");
+            throw new IllegalStateException("--invocation " + filter + " prefix matches multiple invocations: " + String.join(", ", keys) + "; provide a longer prefix.");
         }
         if (prefixMatches.isEmpty()) {
             return filter;
@@ -310,11 +310,11 @@ final class CliSupport {
         String targetInvocationKey = prefixMatches.get(0).getInvocationKey();
         List<String> businessMatches = businessLabelsForKey(repository, targetInvocationKey);
         if (businessMatches.size() == 1) {
-            out.println("提示：--invocation " + filter + " 按 invocationKey 前缀匹配到 " + targetInvocationKey + "（业务标签 " + businessMatches.get(0) + "）");
+            out.println("Note: --invocation " + filter + " matched invocationKey prefix " + targetInvocationKey + " (business label " + businessMatches.get(0) + ")");
             return businessMatches.get(0);
         }
         if (businessMatches.size() > 1) {
-            throw new IllegalStateException("--invocation " + filter + " 对应调用点键覆盖多个业务标签：" + String.join(", ", businessMatches) + "，请使用确切的业务标签。");
+            throw new IllegalStateException("--invocation " + filter + " maps to multiple business labels: " + String.join(", ", businessMatches) + "; use the exact business label.");
         }
         return filter;
     }
@@ -328,7 +328,7 @@ final class CliSupport {
      */
     static String resolveInvocationKeyTarget(StorageRepository repository, String filter) {
         if (filter == null || filter.isEmpty()) {
-            throw new IllegalStateException("缺少目标 调用点。");
+            throw new IllegalStateException("Missing invocation target.");
         }
         for (InvocationProfile profile : repository.findAllInvocations()) {
             if (filter.equals(profile.getInvocationKey())) {
@@ -345,10 +345,10 @@ final class CliSupport {
                 }
             }
             if (invocationKeys.isEmpty()) {
-                throw new IllegalStateException("业务标签 " + filter + " 下没有可分组的录制记录，无法定位 调用点。");
+                throw new IllegalStateException("No groupable records under business label " + filter + "; cannot resolve the invocation.");
             }
             if (invocationKeys.size() > 1) {
-                throw new IllegalStateException("业务标签 " + filter + " 覆盖多个调用点：" + String.join(", ", invocationKeys) + "，请用 invocationKey（或其唯一前缀、或 status 显示短形）指定。");
+                throw new IllegalStateException("Business label " + filter + " covers multiple invocations: " + String.join(", ", invocationKeys) + "; specify one with an invocationKey (unique prefix or the status display form).");
             }
             return invocationKeys.iterator().next();
         }
@@ -363,14 +363,14 @@ final class CliSupport {
             }
         }
         if (prefixMatches.isEmpty()) {
-            throw new IllegalStateException("没有匹配 " + filter + " 的调用点（可用：业务标签、invocationKey 前缀、status 显示短形如 标签@8位；完整列表见 status 命令）。");
+            throw new IllegalStateException("No invocation matching " + filter + " (accepted: business label, invocationKey prefix, or the status display form like label@8hex; see `status` for the full list).");
         }
         if (prefixMatches.size() > 1) {
             List<String> keys = new ArrayList<>();
             for (InvocationProfile profile : prefixMatches) {
                 keys.add(profile.getInvocationKey());
             }
-            throw new IllegalStateException("前缀匹配到多个调用点：" + String.join(", ", keys) + "，请提供更长的前缀。");
+            throw new IllegalStateException("Prefix matches multiple invocations: " + String.join(", ", keys) + "; provide a longer prefix.");
         }
         return prefixMatches.get(0).getInvocationKey();
     }
@@ -411,7 +411,7 @@ final class CliSupport {
             for (InvocationProfile profile : matches) {
                 keys.add(profile.getInvocationKey());
             }
-            throw new IllegalStateException("显示短形 " + filter + " 对应多个调用点（细分哈希前 8 位撞车）：" + String.join(", ", keys) + "，请提供完整 invocationKey。");
+            throw new IllegalStateException("Display form " + filter + " matches multiple invocations (subdivision hash collision in the first 8 hex chars): " + String.join(", ", keys) + "; provide the full invocationKey.");
         }
         return matches.get(0).getInvocationKey();
     }
@@ -435,6 +435,13 @@ final class CliSupport {
     /**
      * 全库任务链（跨会话，按链首时间升序）——任务域命令的统一派生入口。
      */
+    /**
+     * 计数名词的原生单复数形态（"1 record" / "2 records"；零取复数是英文惯例）。
+     */
+    static String plural(long n, String noun) {
+        return n + " " + noun + (n == 1 ? "" : "s");
+    }
+
     static List<TaskChain> taskChains(StorageRepository repository) {
         return TaskChainView.resolveAll(repository);
     }
@@ -500,7 +507,7 @@ final class CliSupport {
      */
     static void warnUnknownBehaviors(InvocationRulesConfig rules, PrintStream out) {
         for (String invocationId : rules.getDeclaredInvocationIds()) {
-            warnUnknownBehaviors("调用点 " + invocationId, rules.getRulesForInvocation(invocationId), out);
+            warnUnknownBehaviors("invocation " + invocationId, rules.getRulesForInvocation(invocationId), out);
         }
     }
 
@@ -510,7 +517,7 @@ final class CliSupport {
     static void warnUnknownBehaviors(String owner, InvocationRule rule, PrintStream out) {
         Set<String> unknown = unknownBehaviors(rule);
         if (!unknown.isEmpty()) {
-            out.println("警告：" + owner + " 声明了未知行为 " + String.join(", ", unknown) + "（该规则将被忽略）。合法行为名：" + String.join(", ", new TreeSet<>(BehaviorChecker.getBuiltinBehaviorNames())));
+            out.println("Warning: " + owner + " declares unknown behaviors: " + String.join(", ", unknown) + " (the rule will be ignored). Valid behavior names: " + String.join(", ", new TreeSet<>(BehaviorChecker.getBuiltinBehaviorNames())));
         }
     }
 
@@ -534,26 +541,26 @@ final class CliSupport {
      */
     static void warnMalformedTaskRules(InvocationRulesConfig rules, PrintStream out) {
         for (String note : rules.getParseNotes()) {
-            out.println("警告：rules.tasks " + note + "。");
+            out.println("Warning: rules.tasks " + note + ".");
         }
         for (String taskKey : rules.getDeclaredTaskKeys()) {
             if (taskKey == null || taskKey.trim().isEmpty()) {
-                out.println("警告：rules.tasks 存在空任务键声明（该规则永不匹配，请改用录制时声明的 taskKey）。");
+                out.println("Warning: rules.tasks has an empty task key declaration (never matches; use the taskKey declared at recording time).");
                 continue;
             }
             InvocationRulesConfig.TaskRule rule = rules.getTaskRule(taskKey);
             if (rule.getRequiredSteps().isEmpty() && rule.getRequiredOrder().isEmpty() && rule.getSteps().isEmpty()) {
-                out.println("警告：任务 " + taskKey + " 未声明任何约束（requiredSteps/requiredOrder/steps 全空），该规则无约束力。");
+                out.println("Warning: task " + taskKey + " declares no constraints (requiredSteps/requiredOrder/steps all empty); the rule has no effect.");
             }
             if (!rule.getRequiredOrder().isEmpty() && rule.getRequiredOrder().stream().anyMatch(step -> step == null || step.trim().isEmpty())) {
-                out.println("警告：任务 " + taskKey + " 的 requiredOrder 含空标签。");
+                out.println("Warning: task " + taskKey + " has empty labels in requiredOrder.");
             }
             for (Map.Entry<String, InvocationRulesConfig.StepCount> entry : rule.getSteps().entrySet()) {
                 InvocationRulesConfig.StepCount bounds = entry.getValue();
                 if (bounds.isUnbounded()) {
-                    out.println("警告：任务 " + taskKey + " 的步骤 " + entry.getKey() + " 声明了 min/max 双缺（无约束力）。");
+                    out.println("Warning: task " + taskKey + " step " + entry.getKey() + " declares neither min nor max (no constraint).");
                 } else if (bounds.getMin() != null && bounds.getMax() != null && bounds.getMin() > bounds.getMax()) {
-                    out.println("警告：任务 " + taskKey + " 的步骤 " + entry.getKey() + " 声明 min(" + bounds.getMin() + ") > max(" + bounds.getMax() + ")（永不满足，判为全违规）。");
+                    out.println("Warning: task " + taskKey + " step " + entry.getKey() + " declares min(" + bounds.getMin() + ") > max(" + bounds.getMax() + ") (unsatisfiable; judged as all violations).");
                 }
             }
         }

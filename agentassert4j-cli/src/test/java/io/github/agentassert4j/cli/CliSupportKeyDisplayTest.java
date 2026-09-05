@@ -38,8 +38,8 @@ class CliSupportKeyDisplayTest {
         assertEquals("adhoc@a1b2c3d4", CliSupport.displayKey("adhoc:a1b2c3d4e5"));
         assertEquals("adhoc", CliSupport.displayKey("adhoc:no-anchor"));
         assertEquals("weird-key", CliSupport.displayKey("weird-key"));
-        assertEquals("(未解析调用点)", CliSupport.displayKey(null));
-        assertEquals("(未解析调用点)", CliSupport.displayKey(""));
+        assertEquals("(unresolved invocation)", CliSupport.displayKey(null));
+        assertEquals("(unresolved invocation)", CliSupport.displayKey(""));
     }
 
     @Test

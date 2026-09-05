@@ -205,22 +205,22 @@ public class DeterministicComparator {
         sb.append(String.format("score=%.2f verdict=%s", r.getScore(), r.getVerdict()));
 
         if (r.isToolCallMatch() && r.isParamTypeMatch()) {
-            sb.append(" | 工具调用匹配");
+            sb.append(" | tool calls match");
         } else {
-            if (!r.isToolCallMatch()) sb.append(" | 工具集变化");
-            if (!r.isParamTypeMatch()) sb.append(" | 参数类型变化");
+            if (!r.isToolCallMatch()) sb.append(" | tool set changed");
+            if (!r.isParamTypeMatch()) sb.append(" | param types changed");
         }
 
         if (r.getAddedFields() != null && !r.getAddedFields().isEmpty()) {
-            sb.append(" | 新增字段: ").append(r.getAddedFields());
+            sb.append(" | added fields: ").append(r.getAddedFields());
         }
         if (r.getRemovedFields() != null && !r.getRemovedFields().isEmpty()) {
-            sb.append(" | 删除字段: ").append(r.getRemovedFields());
+            sb.append(" | removed fields: ").append(r.getRemovedFields());
         }
-        if (!r.isFieldTypeMatch()) sb.append(" | 字段类型变化");
-        if (!r.isKeywordMatch()) sb.append(" | 内容规则不匹配");
-        if (!r.isRegexMatch()) sb.append(" | 正则规则不匹配");
-        if (!r.isBehaviorMatch()) sb.append(" | 行为约束不满足");
+        if (!r.isFieldTypeMatch()) sb.append(" | field types changed");
+        if (!r.isKeywordMatch()) sb.append(" | content rules mismatch");
+        if (!r.isRegexMatch()) sb.append(" | regex rules mismatch");
+        if (!r.isBehaviorMatch()) sb.append(" | behavior constraints failed");
 
         return sb.toString();
     }

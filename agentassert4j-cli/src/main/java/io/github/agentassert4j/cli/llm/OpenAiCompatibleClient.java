@@ -207,7 +207,7 @@ public class OpenAiCompatibleClient implements LlmClient {
         while ((read = stream.read(chunk)) != -1) {
             if (buffer.size() + read > MAX_RESPONSE_BYTES) {
                 // 异常端点可能返回任意大小的响应体，无上限会拖垮客户端内存
-                throw new IOException("LLM 响应体超过 " + MAX_RESPONSE_BYTES + " 字节上限，已中止读取");
+                throw new IOException("LLM response body exceeds the " + MAX_RESPONSE_BYTES + " byte limit; aborted reading");
             }
             buffer.write(chunk, 0, read);
         }
@@ -278,7 +278,7 @@ public class OpenAiCompatibleClient implements LlmClient {
             sb.append(",\"temperature\":").append(request.getTemperature());
         } else if (request.getTemperature() != null && Double.isFinite(request.getTemperature()) && !dialectWarned && DIALECTS.droppedParamsFor(model).contains("temperature")) {
             dialectWarned = true;
-            LOG.warn("模型 {} 属方言裁剪族：显式配置的 temperature 已从请求中移除（该模型族对标准温度参数返回 400）；如需覆盖请改用 llm.extraBody 注入。", model);
+            LOG.warn("Model {} belongs to a dialect family that rejects the temperature parameter; the explicit temperature was dropped from the request. To override, inject it via llm.extraBody.", model);
         }
 
         // messages
@@ -306,7 +306,7 @@ public class OpenAiCompatibleClient implements LlmClient {
                     if (callId == null || callId.trim().isEmpty()) {
                         // 缺失/空 callId 的 tool 帧必被服务端 400 拒绝整个请求——
                         // 跳过该轮保住其余用例，丢弃事实显式告警
-                        System.err.println("警告：历史轮 tool 消息缺失 toolCallId，重放请求已跳过该轮（content 长度 " + (turn.getContent() == null ? 0 : turn.getContent().length()) + "）。");
+                        System.err.println("Warning: history tool message has no toolCallId; the turn was skipped in the replay request (content length " + (turn.getContent() == null ? 0 : turn.getContent().length()) + ").");
                         continue;
                     }
                     // OpenAI 方言的硬约束：tool 消息必须紧跟在携带同 id tool_calls 的
@@ -392,7 +392,7 @@ public class OpenAiCompatibleClient implements LlmClient {
         try {
             Object parsed = RecursiveJsonParser.parse(body);
             if (!(parsed instanceof Map)) {
-                throw new LlmApiException("Failed to parse response: 响应体不是合法 JSON 对象");
+                throw new LlmApiException("Failed to parse response: body is not a JSON object");
             }
             Map<?, ?> root = (Map<?, ?>) parsed;
 

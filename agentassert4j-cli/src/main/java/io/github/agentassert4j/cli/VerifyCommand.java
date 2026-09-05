@@ -24,29 +24,29 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-08-30
  */
-@Command(name = "verify", description = "交付验收：用验收基线包核对本机真实执行的任务链（导入只读，不落库）", mixinStandardHelpOptions = true)
+@Command(name = "verify", aliases = {"v"}, description = "Acceptance verification: check locally executed task chains against the acceptance pack (read-only import, nothing persisted)", mixinStandardHelpOptions = true)
 public class VerifyCommand implements Callable<Integer> {
 
     // 输出通道：实例字段——包内测试可注入替代流
     PrintStream out = System.out;
     PrintStream err = System.err;
 
-    @Option(names = {"--pack"}, required = true, description = "验收基线包文件路径（baseline export 的产物）")
+    @Option(names = {"--pack"}, required = true, description = "Acceptance pack file (produced by `baseline export`)")
     String packPath;
 
-    @Option(names = {"--task"}, description = "只核对请求文本/任务键匹配该前缀的包任务（缺省全量）")
+    @Option(names = {"--task"}, description = "Verify only pack tasks whose request text/task key matches this prefix (defaults to all)")
     String task;
 
-    @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
+    @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--report"}, description = "markdown 验收报告输出路径（交付证据）")
+    @Option(names = {"--report"}, description = "Markdown verification report output path (delivery evidence)")
     String reportPath;
 
-    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 验收报告（agentassert4j.verify-report/1）")
+    @Option(names = {"--json"}, description = "Print a single-line JSON verification report to stdout (agentassert4j.verify-report/1)")
     boolean jsonOutput;
 
-    @Option(names = {"--dry-run"}, description = "只读预演：装载包并列任务/本地链配对与跨模型注记，零判定零写入")
+    @Option(names = {"--dry-run"}, description = "Read-only preview: load the pack and list task/local-chain pairings with cross-model notes; no verdicts, no writes")
     boolean dryRun;
 
     @Override
@@ -55,7 +55,7 @@ public class VerifyCommand implements Callable<Integer> {
         try {
             packContent = new String(Files.readAllBytes(Paths.get(packPath)), StandardCharsets.UTF_8);
         } catch (Exception e) {
-            err.println("无法读取验收包文件：" + packPath);
+            err.println("Cannot read the acceptance pack file: " + packPath);
             return 2;
         }
         String digest = HashUtil.sha256(packContent);
@@ -67,7 +67,7 @@ public class VerifyCommand implements Callable<Integer> {
             DeterministicComparator comparator = CliSupport.createComparator(config);
             return new VerifyRunner(repository, comparator, out, err, jsonOutput).run(packContent, digest, task, reportPath, dryRun);
         } catch (RuntimeException e) {
-            err.println("verify 失败：" + e.getMessage());
+            err.println("verify failed: " + e.getMessage());
             return 2;
         } finally {
             if (repository != null) {

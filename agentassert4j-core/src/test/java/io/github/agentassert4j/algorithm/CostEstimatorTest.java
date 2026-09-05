@@ -84,7 +84,7 @@ class CostEstimatorTest {
         List<InteractionRecord> cases = Collections.singletonList(makeRecord(0));
         String result = CostEstimator.estimate(cases, "gpt-4o");
 
-        assertTrue(result.contains("预估 1 次 API 调用"));
+        assertTrue(result.contains("Estimated 1 API call"));
         assertTrue(result.contains("gpt-4o"));
         assertTrue(result.contains("$0.0075"), "预估文案按 1000/500 token 口径计价: " + result);
     }
@@ -95,7 +95,7 @@ class CostEstimatorTest {
         List<InteractionRecord> cases = Arrays.asList(makeRecord(0), makeRecord(2));
         String result = CostEstimator.estimate(cases, "gpt-4o");
 
-        assertTrue(result.contains("预估 2 次 API 调用"));
+        assertTrue(result.contains("Estimated 2 API calls"));
     }
 
     @Test
@@ -104,8 +104,8 @@ class CostEstimatorTest {
         List<InteractionRecord> cases = Collections.singletonList(makeRecord(0));
         String result = CostEstimator.estimate(cases, "my-private-model");
 
-        assertTrue(result.contains("预估 1 次 API 调用"));
-        assertTrue(result.contains("费用未知"), "无价格模型必须明示费用未知: " + result);
+        assertTrue(result.contains("Estimated 1 API call"));
+        assertTrue(result.contains("cost unknown"), "无价格模型必须明示费用未知: " + result);
         assertFalse(result.contains("$"), "无价格不得出现任何货币金额: " + result);
     }
 }

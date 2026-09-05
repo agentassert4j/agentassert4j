@@ -22,7 +22,7 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-08-28
  */
-@Command(name = "rollback", description = "把活跃基线恢复到指定版本的归档基线", mixinStandardHelpOptions = true)
+@Command(name = "rollback", aliases = {"rb"}, description = "Restore the active baseline to an archived version", mixinStandardHelpOptions = true)
 public class RollbackCommand implements Callable<Integer> {
 
     // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
@@ -30,16 +30,16 @@ public class RollbackCommand implements Callable<Integer> {
     PrintStream err = System.err;
 
 
-    @Option(names = {"--db"}, description = "SQLite 数据库路径（默认取 agentassert4j.json 的 storage.url）")
+    @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--invocation"}, required = true, description = "目标调用点：业务 invocationId、invocationKey 或其唯一前缀（完整列表见 status 命令）")
+    @Option(names = {"--invocation"}, required = true, description = "Target invocation: business invocationId, invocationKey, or a unique prefix (see `status` for the full list)")
     String invocation;
 
-    @Option(names = {"--version"}, required = true, description = "目标归档版本标签（可选值见 status 的归档版本列）")
+    @Option(names = {"--version"}, required = true, description = "Target archived version tag (see the archived column in `status`)")
     String version;
 
-    @Option(names = {"--json"}, description = "stdout 只输出单行 JSON 报告")
+    @Option(names = {"--json"}, description = "Print a single-line JSON report to stdout")
     boolean jsonOutput;
 
     @Override
@@ -51,7 +51,7 @@ public class RollbackCommand implements Callable<Integer> {
             String invocationKey = CliSupport.resolveInvocationKeyTarget(repository, invocation);
             InvocationProfile target = repository.findInvocationByKey(invocationKey);
             if (target == null) {
-                throw new IllegalStateException("调用点 " + invocationKey + " 尚无基线画像。");
+                throw new IllegalStateException("Invocation " + invocationKey + " has no baseline profile.");
             }
             ensureVersionExists(repository, invocationKey, version);
             new BaselineManager(repository).rollback(invocationKey, version);
@@ -59,14 +59,14 @@ public class RollbackCommand implements Callable<Integer> {
             if (jsonOutput) {
                 out.println("{\"schema\":\"agentassert4j.rollback/1\",\"invocationKey\":\"" + RecursiveJsonParser.escape(invocationKey) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(version) + "\",\"status\":\"" + reloaded.getBaselineStatus() + "\",\"approvedBy\":\"" + RecursiveJsonParser.escape(reloaded.getApprovedBy() != null ? reloaded.getApprovedBy() : "") + "\",\"ok\":true}");
             } else {
-                out.println("  " + invocationKey + " → " + version + "（审批人 " + reloaded.getApprovedBy() + "）");
+                out.println("  " + invocationKey + " → " + version + " (approver " + reloaded.getApprovedBy() + ")");
             }
             return 0;
         } catch (IllegalStateException e) {
             err.println(e.getMessage());
             return 2;
         } catch (RuntimeException e) {
-            err.println("回滚失败：" + e.getMessage());
+            err.println("rollback failed: " + e.getMessage());
             return 2;
         } finally {
             if (repository != null) {
@@ -89,6 +89,6 @@ public class RollbackCommand implements Callable<Integer> {
         for (ArchivedTemplateVersion archived : repository.findArchivedVersions(invocationKey)) {
             available.add(archived.getVersionTag());
         }
-        throw new IllegalStateException("调用点 " + invocationKey + " 没有归档版本 " + version + (available.isEmpty() ? "，且没有任何归档（从未 approve 过或基线未经替换）。" : "。可选版本：" + String.join(", ", available)));
+        throw new IllegalStateException("Invocation " + invocationKey + " has no archived version " + version + (available.isEmpty() ? "; there are no archived versions at all (never approved, or the baseline was never replaced)." : ". Available versions: " + String.join(", ", available)));
     }
 }

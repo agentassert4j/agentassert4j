@@ -89,7 +89,7 @@ public class RegressionTestExecutor {
         } catch (RuntimeException e) {
             // 客户端实现的编程错误（NPE/非法参数等）同样转为单条 ERROR——
             // 批量回归不允许一条记录的意外异常中断整体
-            return RegressionTestResult.error(baseline.getRecordId(), "LLM 客户端未捕获异常：" + e.getClass().getSimpleName() + "：" + e.getMessage());
+            return RegressionTestResult.error(baseline.getRecordId(), "LLM client threw uncaught exception: " + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
 
         // 3-5. LLM 调用成功后的处理（构建当前记录/提取指纹/对比与候选落库/结果封装）。
@@ -405,7 +405,7 @@ public class RegressionTestExecutor {
             return RegressionTestResult.apiError(baseline.getRecordId(), e.getMessage());
         } catch (RuntimeException e) {
             // 防御性：链路中的意外异常（LLM 客户端或末轮指纹/对比的后处理）不向批量调用方逃逸
-            return RegressionTestResult.error(baseline.getRecordId(), "链式重放未捕获异常：" + e.getClass().getSimpleName() + "：" + e.getMessage());
+            return RegressionTestResult.error(baseline.getRecordId(), "Chained half-replay threw uncaught exception: " + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }
 
@@ -472,7 +472,7 @@ public class RegressionTestExecutor {
             ToolCall next = baseline.getToolCalls().get(cursor);
             expected = next.getToolName() + "(" + next.getArguments() + ")";
         } else {
-            expected = "编排已结束（无更多工具调用）";
+            expected = "orchestration ended (no more tool calls)";
         }
         StringBuilder actual = new StringBuilder();
         for (ToolCallResult decision : decisions) {
@@ -482,7 +482,7 @@ public class RegressionTestExecutor {
             actual.append(decision.getToolName()).append("(").append(decision.getArguments()).append(")");
         }
         if (actual.length() == 0) {
-            actual.append("未发起工具调用");
+            actual.append("no tool call issued");
         }
         ComparisonResult comparison = new ComparisonResult();
         comparison.setVerdict(Verdict.CHANGED);
@@ -495,7 +495,7 @@ public class RegressionTestExecutor {
         comparison.setBehaviorMatch(true);
         comparison.setAddedFields(Collections.<String>emptySet());
         comparison.setRemovedFields(Collections.<String>emptySet());
-        comparison.setSummary("第 " + round + " 轮工具决策分歧（链式半重放于分歧处停止）：基线为 " + expected + "，实际为 " + actual);
+        comparison.setSummary("Tool decision diverged at round " + round + " (chained half-replay stopped at the divergence); baseline: " + expected + ", actual: " + actual);
         RegressionTestResult result = new RegressionTestResult();
         result.setBaselineRecordId(baseline.getRecordId());
         result.setInvocationId(baseline.getInvocationId());

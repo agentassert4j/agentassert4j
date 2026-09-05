@@ -10,7 +10,7 @@ import picocli.CommandLine.Command;
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "reject", description = "拒绝候选指纹，保留旧基线", mixinStandardHelpOptions = true)
+@Command(name = "reject", aliases = {"rj"}, description = "Discard the candidate fingerprint and keep the current baseline", mixinStandardHelpOptions = true)
 public class RejectCommand extends AdjudicateCommand {
 
     @Override
@@ -25,6 +25,6 @@ public class RejectCommand extends AdjudicateCommand {
 
     @Override
     String describeResult(InvocationProfile profile) {
-        return "已拒绝，保留基线 " + profile.getVersionTag();
+        return "Rejected; baseline kept at " + profile.getVersionTag();
     }
 }

@@ -73,6 +73,8 @@ try (RecordingContext scope = RecordingContext.start(sessionId).withInvocationId
 ```bash
 # 从 GitHub Releases 下载 standalone jar（单文件、零安装），起个别名；Windows 用户直接用完整命令
 alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
+# 可选：更短别名（kubectl 的 k 同款社区约定；完整名永远保留）
+alias aa='agentassert4j'
 ```
 
 **3. 建基线**（幂等，可重复执行）
@@ -89,16 +91,18 @@ agentassert4j baseline --approver wang
 agentassert4j replay
 ```
 
+输出为英文单语（2026-09-05 裁决，中文受众读英文输出）：
+
 ```text
-依赖图：3 节点 / 2 边
-模板漂移检测：同键漂移 1 · 标签裂键 0 · 下游波及 0（零模板点 0 个不可检测）
-  ▲ 查询物流@skl1e37f（order） 模板 ab12cd34 → 9e37f2c1
-任务「订单 1234 的物流太慢」对齐：基线链（session 20260831-a3f2）→ 新链（session 20260902-b7e1）
-  [1] 查询订单      PASS
-  [2] 查询物流      CHANGED  score=0.76 verdict=CHANGED | 新增字段: [delivery.promise]
-  [3] 提交退款      PASS
-对齐汇总: PASS 2 | CHANGED 1 | 缺步骤 0 | 新增步骤 0
-已落候选：查询物流@skl1e37f（行为差异待人工裁决——approve 接受为基线，reject 回退模板）。
+Dependency graph: 3 nodes / 2 edges
+Drift: 1 same-key, 0 label splits, 0 downstream (0 zero-template invocations undetectable)
+  ▲ 查询物流@skl1e37f (查询物流) template ab12cd34 → 9e37f2c1
+Task "订单 1234 的物流太慢": baseline chain (session 20260831-a3f2) → new chain (session 20260902-b7e1)
+  [1] 查询订单  PASS
+  [2] 查询物流@skl1e37f  score=0.76 verdict=CHANGED | added fields: [delivery.promise]
+Candidate registered: 查询物流@skl1e37f (behavior change awaiting adjudication; approve promotes to baseline, reject discards).
+  [3] 提交退款  PASS
+Alignment summary: PASS 2 | CHANGED 1 | missing 0 | added 0
 ```
 
 检测层先点名**哪些调用点的模板身份变了**（漂移点经依赖图扩散出下游波及面）；对齐层把每个任务的

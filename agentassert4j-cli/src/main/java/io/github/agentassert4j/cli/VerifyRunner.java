@@ -76,11 +76,11 @@ public class VerifyRunner {
         try {
             pack = PackCodec.fromJson(packContent);
         } catch (IllegalArgumentException e) {
-            diagnostic("验收包被拒绝：" + e.getMessage());
+            diagnostic("Acceptance pack rejected: " + e.getMessage());
             return 2;
         }
         if (pack.getMeta() == null || !JudgmentSemantics.VERSION.equals(pack.getMeta().getJudgmentSemantics())) {
-            diagnostic("版本守卫：验收包判定语义为 " + (pack.getMeta() == null ? "未标记" : pack.getMeta().getJudgmentSemantics()) + "，当前引擎为 " + JudgmentSemantics.VERSION + "——拒绝判定以防止静默重解释。");
+            diagnostic("Version guard: pack judgment semantics is " + (pack.getMeta() == null ? "unmarked" : pack.getMeta().getJudgmentSemantics()) + ", current engine is " + JudgmentSemantics.VERSION + ". Refusing to judge to avoid silent re-interpretation.");
             return 2;
         }
 
@@ -92,7 +92,7 @@ public class VerifyRunner {
             }
         }
         if (tasks.isEmpty()) {
-            diagnostic("包内没有匹配前缀「" + taskPrefix + "」的任务。");
+            diagnostic("No tasks in the pack match prefix '" + taskPrefix + "'.");
             return 2;
         }
 
@@ -156,7 +156,7 @@ public class VerifyRunner {
                 }
             }
             if (!matched) {
-                unmatchedLocal.add(chain.getRequestText() + "（session " + chain.getSessionId() + "）");
+                unmatchedLocal.add(chain.getRequestText() + " (session " + chain.getSessionId() + ")");
             }
         }
 
@@ -165,16 +165,16 @@ public class VerifyRunner {
         // 用户第一反应是配对故障，实际是数据卫生问题
         List<String> hints = new ArrayList<>();
         if (!unmatchedLocal.isEmpty()) {
-            hints.add("范围外本地链通常来自验收包导出之后的新录制（新任务未建档或未入包）——先执行 baseline 补建档并重新导出验收包，或确认这些链本就属交付范围外。");
+            hints.add("Out-of-scope local chains usually come from recordings made after the pack export (new tasks not baselined or not in the pack). Run `agentassert4j baseline` to establish them and re-export the pack, or confirm they are out of delivery scope.");
         }
-        info("验收汇总: PASS " + pass + " | CHANGED " + changed + " | 缺步骤 " + missing + " | 新增步骤 " + added + " | 覆盖缺口 " + uncovered.size() + " | 范围外链 " + unmatchedLocal.size());
+        info("Verification summary: PASS " + pass + " | CHANGED " + changed + " | missing " + missing + " | added " + added + " | coverage gaps " + uncovered.size() + " | out-of-scope chains " + unmatchedLocal.size());
         for (String hint : hints) {
-            info("提示：" + hint);
+            info("Note: " + hint);
         }
-        info("包 digest(SHA-256): " + packDigest);
+        info("Pack digest (SHA-256): " + packDigest);
         boolean crossModel = !localServedModels.isEmpty() && pack.getMeta().getServedModel() != null && !String.join(",", localServedModels).equals(pack.getMeta().getServedModel());
         if (crossModel) {
-            info("跨模型验收：开发侧 " + pack.getMeta().getServedModel() + " / 本地 " + String.join(",", localServedModels) + "——结构判定有效，文本差异属措辞预期内。");
+            info("Cross-model acceptance: dev side " + pack.getMeta().getServedModel() + " / local " + String.join(",", localServedModels) + "; structural verdicts valid, text differences are expected wording variation.");
         }
 
         if (jsonMode) {
@@ -182,7 +182,7 @@ public class VerifyRunner {
         }
         if (reportPath != null) {
             writeMarkdownReport(reportPath, pack, packDigest, crossModel, localServedModels, reportSections, uncovered, unmatchedLocal, pass, changed, missing, added);
-            info("验收报告已写出：" + reportPath);
+            info("Verification report written: " + reportPath);
         }
 
         if (changed + missing + added > 0) {
@@ -196,15 +196,15 @@ public class VerifyRunner {
      * 跨模型注记——验收人在执行前核对包与本库是否对得上。零判定零写入。
      */
     private int dryRunPlan(AcceptancePack pack, List<AcceptancePack.PackTask> tasks, List<TaskChain> localChains) {
-        info("验收预演（dry-run，未执行判定、未写报告）：包任务 " + tasks.size() + " 个，本地链 " + localChains.size() + " 条。");
+        info("Verification dry-run (no judgments, no report written): " + CliSupport.plural(tasks.size(), "pack task") + ", " + CliSupport.plural(localChains.size(), "local chain") + ".");
         for (AcceptancePack.PackTask task : tasks) {
             TaskChain local = latestLocalChain(localChains, task.getTaskKey());
-            String pairing = local == null ? "本地无匹配链（执行后将计入覆盖缺口）" : "配对本地链 session " + local.getSessionId() + "（" + local.getRecords().size() + " 步，包基线 " + task.getSteps().size() + " 步）";
+            String pairing = local == null ? "no matching local chain (counts as a coverage gap when executed)" : "pairs with local chain session " + local.getSessionId() + " (" + CliSupport.plural(local.getRecords().size(), "step") + "; pack baseline " + CliSupport.plural(task.getSteps().size(), "step") + ")";
             info("  " + task.getTaskKey() + " → " + pairing);
         }
         String crossModel = isCrossModelOverTasks(tasks, localChains, pack.getMeta().getServedModel());
         if (!crossModel.isEmpty()) {
-            info("跨模型注记：包 served " + pack.getMeta().getServedModel() + " 与本地链 served " + crossModel + " 不一致——跨模型判定以结构指纹为主判据。");
+            info("Cross-model note: pack served " + pack.getMeta().getServedModel() + " differs from local served " + crossModel + "; structural fingerprints are the primary evidence for cross-model verdicts.");
         }
         if (jsonMode) {
             out.println("{\"schema\":\"agentassert4j.verify-report/1\",\"mode\":\"dry-run\",\"summary\":{\"tasks\":" + tasks.size() + ",\"localChains\":" + localChains.size() + ",\"uncovered\":" + uncoveredCount(tasks, localChains) + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}");
@@ -272,20 +272,20 @@ public class VerifyRunner {
 
     private String renderTask(AcceptancePack.PackTask task, TaskAlignment alignment, boolean crossModel) {
         StringBuilder sb = new StringBuilder();
-        sb.append("### 任务「").append(task.getTaskKey()).append("」\n\n");
-        sb.append("- 判定: **").append(alignment.getVerdict()).append("**");
+        sb.append("### Task \"").append(task.getTaskKey()).append("\"\n\n");
+        sb.append("- Verdict: **").append(alignment.getVerdict()).append("**");
         if (crossModel) {
-            sb.append("（跨模型：文本差异属措辞预期内）");
+            sb.append(" (cross-model: text differences are expected wording variation)");
         }
         sb.append('\n');
         int index = 0;
         for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
             index++;
-            sb.append("- 步骤 ").append(index).append(" `").append(shortKey(step.getInvocationKey())).append("` ");
+            sb.append("- Step ").append(index).append(" `").append(shortKey(step.getInvocationKey())).append("` ");
             if (step.getKind() == TaskAlignment.StepKind.MISSING) {
-                sb.append("**缺步骤**（开发侧执行、验收未出现）\n");
+                sb.append("**missing step** (executed on the dev side, absent locally)\n");
             } else if (step.getKind() == TaskAlignment.StepKind.ADDED) {
-                sb.append("**新增步骤**（验收出现、开发侧未执行）\n");
+                sb.append("**added step** (present locally, not executed on the dev side)\n");
             } else {
                 ComparisonResult comparison = step.getComparison();
                 sb.append("**").append(step.getVerdict()).append("**");
@@ -296,15 +296,15 @@ public class VerifyRunner {
                     }
                 }
                 if (step.isVersionSwitch()) {
-                    sb.append("（跨版本配对 ").append(shortHash(step.getBaselineSubdivision())).append("→").append(shortHash(step.getNewSubdivision())).append("）");
+                    sb.append(" (cross-version pair ").append(shortHash(step.getBaselineSubdivision())).append("→").append(shortHash(step.getNewSubdivision())).append(")");
                 }
                 sb.append('\n');
                 String diff = textDiffNote(step.getBaselineModelResponse(), step.getNewModelResponse());
                 if (!diff.isEmpty()) {
-                    sb.append("  - ").append(diff).append("（文本差异低置信").append(crossModel ? "，跨模型属预期内" : "").append("）\n");
+                    sb.append("  - ").append(diff).append(" (text diff, low confidence").append(crossModel ? "; expected under cross-model" : "").append(")\n");
                 }
                 if (step.getSurplusCount() > 0) {
-                    sb.append("  - 该调用点两侧记录数不齐，富余 ").append(step.getSurplusCount()).append(" 条未配对\n");
+                    sb.append("  - uneven record counts on this invocation; ").append(step.getSurplusCount()).append(" surplus unpaired\n");
                 }
             }
         }
@@ -314,21 +314,21 @@ public class VerifyRunner {
 
     private void writeMarkdownReport(String reportPath, AcceptancePack pack, String digest, boolean crossModel, TreeSet<String> localServedModels, List<String> sections, List<String> uncovered, List<String> unmatchedLocal, int pass, int changed, int missing, int added) {
         StringBuilder sb = new StringBuilder();
-        sb.append("# AgentAssert 交付验收报告\n\n");
-        sb.append("| 项 | 值 |\n|----|----|\n");
-        sb.append("| 包 schema | ").append(AcceptancePack.SCHEMA).append(" |\n");
-        sb.append("| 包 SHA-256 | `").append(digest).append("` |\n");
-        sb.append("| 判定语义 | ").append(JudgmentSemantics.VERSION).append(" |\n");
-        sb.append("| 开发侧 servedModel | ").append(pack.getMeta().getServedModel() != null ? pack.getMeta().getServedModel() : "（未记录）").append(" |\n");
-        sb.append("| 验收侧 servedModel | ").append(localServedModels.isEmpty() ? "（未记录）" : String.join(",", localServedModels)).append(" |\n");
-        sb.append("| 跨模型验收 | ").append(crossModel ? "是（结构判定有效，文本差异属措辞预期内）" : "否").append(" |\n\n");
-        sb.append("**判定汇总**: PASS ").append(pass).append(" | CHANGED ").append(changed).append(" | 缺步骤 ").append(missing).append(" | 新增步骤 ").append(added).append('\n');
+        sb.append("# AgentAssert Acceptance Verification Report\n\n");
+        sb.append("| Item | Value |\n|----|----|\n");
+        sb.append("| Pack schema | ").append(AcceptancePack.SCHEMA).append(" |\n");
+        sb.append("| Pack SHA-256 | `").append(digest).append("` |\n");
+        sb.append("| Judgment semantics | ").append(JudgmentSemantics.VERSION).append(" |\n");
+        sb.append("| Dev-side servedModel | ").append(pack.getMeta().getServedModel() != null ? pack.getMeta().getServedModel() : "(not recorded)").append(" |\n");
+        sb.append("| Local servedModel | ").append(localServedModels.isEmpty() ? "(not recorded)" : String.join(",", localServedModels)).append(" |\n");
+        sb.append("| Cross-model | ").append(crossModel ? "yes (structural verdicts valid; text differences are expected wording variation)" : "no").append(" |\n\n");
+        sb.append("**Verdict summary**: PASS ").append(pass).append(" | CHANGED ").append(changed).append(" | missing ").append(missing).append(" | added ").append(added).append('\n');
         if (!uncovered.isEmpty()) {
-            sb.append("\n> **覆盖缺口**（包内任务未在验收侧执行，证据不完整）：").append(String.join("；", uncovered)).append('\n');
+            sb.append("\n> **Coverage gaps** (pack tasks not executed locally; evidence incomplete): ").append(String.join("; ", uncovered)).append('\n');
         }
         if (!unmatchedLocal.isEmpty()) {
-            sb.append("\n> 范围外本地链（未判定）：").append(String.join("；", unmatchedLocal)).append('\n');
-            sb.append("> 提示：范围外链通常来自包导出后的新录制——先 baseline 补建档并重新导出验收包，或确认其属交付范围外。\n");
+            sb.append("\n> Out-of-scope local chains (not judged): ").append(String.join("; ", unmatchedLocal)).append('\n');
+            sb.append("> Note: out-of-scope chains usually come from recordings made after the pack export. Run `agentassert4j baseline` to establish them and re-export the pack, or confirm they are out of delivery scope.\n");
         }
         sb.append('\n');
         for (String section : sections) {
@@ -337,7 +337,7 @@ public class VerifyRunner {
         try {
             Files.write(Paths.get(reportPath), sb.toString().getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
-            diagnostic("验收报告写入失败：" + e.getMessage());
+            diagnostic("Failed to write the verification report: " + e.getMessage());
         }
     }
 
@@ -362,12 +362,12 @@ public class VerifyRunner {
         if (evidences.isEmpty()) {
             return "";
         }
-        String note = "文本差异: " + String.join("；", evidences);
-        return note.length() <= TEXT_DIFF_BUDGET ? note : note.substring(0, TEXT_DIFF_BUDGET) + "…";
+        String note = "text diff: " + String.join("; ", evidences);
+        return note.length() <= TEXT_DIFF_BUDGET ? note : note.substring(0, TEXT_DIFF_BUDGET) + "...";
     }
 
     private static String shortKey(String key) {
-        return key.length() <= 48 ? key : key.substring(0, 48) + "…";
+        return key.length() <= 48 ? key : key.substring(0, 48) + "...";
     }
 
     private static String shortHash(String hash) {

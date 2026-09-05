@@ -262,13 +262,13 @@ class InvocationRulesConfigTest {
             boolean nonIntegerNoted = false;
             boolean nonMapNoted = false;
             for (String note : config.getParseNotes()) {
-                if (note.contains("t1") && note.contains("A") && note.contains("min") && note.contains("不是数字")) {
+                if (note.contains("t1") && note.contains("A") && note.contains("min") && note.contains("non-numeric")) {
                     stringNoted = true;
                 }
-                if (note.contains("B") && note.contains("不是整数")) {
+                if (note.contains("B") && note.contains("non-integer")) {
                     nonIntegerNoted = true;
                 }
-                if (note.contains("C") && note.contains("已整体忽略")) {
+                if (note.contains("C") && note.contains("ignored entirely")) {
                     nonMapNoted = true;
                 }
             }

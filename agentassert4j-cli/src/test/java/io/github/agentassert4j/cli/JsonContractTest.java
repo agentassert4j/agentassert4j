@@ -155,9 +155,9 @@ class JsonContractTest {
             assertTrue(report.contains("\"label\":\"queryOrder\""), report);
             assertTrue(report.contains("\"action\":\"created\""), report);
             assertTrue(report.contains("\"versionTag\":\"v1\""), report);
-            assertFalse(stdout().contains("新建基线"), "建档过程行是人类输出，不得污染 stdout: " + stdout());
-            assertFalse(stdout().contains("配置："), "配置披露在 --json 模式改走 stderr: " + stdout());
-            assertTrue(stderr().contains("配置："), "配置披露改走 stderr 供排障: " + stderr());
+            assertFalse(stdout().contains("baseline established"), "建档过程行是人类输出，不得污染 stdout: " + stdout());
+            assertFalse(stdout().contains("Config: "), "配置披露在 --json 模式改走 stderr: " + stdout());
+            assertTrue(stderr().contains("Config: "), "配置披露改走 stderr 供排障: " + stderr());
         }
 
         @Test
@@ -279,7 +279,7 @@ class JsonContractTest {
 
             assertEquals(2, exit);
             assertEquals("", stdout().trim(), "失败路径 stdout 不得产出任何内容: " + stdout());
-            assertTrue(stderr().contains("没有归档版本"), "可选值提示必须走 stderr: " + stderr());
+            assertTrue(stderr().contains("no archived versions"), "可选值提示必须走 stderr: " + stderr());
         }
     }
 
@@ -304,7 +304,7 @@ class JsonContractTest {
             assertTrue(report.contains("\"hasCandidate\":false"), report);
             assertTrue(report.contains("\"archivedVersions\":\"\""), report);
             assertTrue(report.contains("\"uncovered\":[]"), "建档后无覆盖缺口: " + report);
-            assertFalse(stdout().contains("共 "), "人类巡检汇总行不得污染 stdout: " + stdout());
+            assertFalse(stdout().contains("Total: "), "人类巡检汇总行不得污染 stdout: " + stdout());
         }
 
         @Test
@@ -336,7 +336,7 @@ class JsonContractTest {
             assertTrue(report.contains("\"confidence\":\"HIGH\""), report);
             assertTrue(report.contains("\"throughNodes\":["), report);
             assertTrue(report.contains("\"cycles\":[]"), report);
-            assertFalse(stdout().contains("节点（"), "人类渲染不得污染 stdout: " + stdout());
+            assertFalse(stdout().contains("Nodes ("), "人类渲染不得污染 stdout: " + stdout());
         }
 
         @Test
