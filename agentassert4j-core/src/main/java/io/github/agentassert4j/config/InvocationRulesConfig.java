@@ -61,7 +61,6 @@ public class InvocationRulesConfig {
      * @param json JSON 格式的规则文本
      * @return 解析后的规则配置
      */
-    @SuppressWarnings("unchecked")
     public static InvocationRulesConfig fromJson(String json) {
         InvocationRulesConfig config = new InvocationRulesConfig();
         if (TextUtil.isBlank(json)) return config;
@@ -69,14 +68,35 @@ public class InvocationRulesConfig {
         Object parsed = RecursiveJsonParser.parse(json);
         if (!(parsed instanceof Map)) return config;
 
-        Map<String, Object> root = (Map<String, Object>) parsed;
+        @SuppressWarnings("unchecked") Map<String, Object> root = (Map<String, Object>) parsed;
+        config.loadFromMap(root);
+        return config;
+    }
+
+    /**
+     * 从规则 JSON 的 Map 形态重建配置（与 {@link #toMap} 对称）——验收包内嵌的
+     * 声明规则段由此还原，使验收侧与开发侧以同一份规则对称评估维度 3/4。
+     * null/非 Map 输入安全退化为空配置。
+     *
+     * @param root 规则声明 Map（invocations/tasks 两段，形态同 agentassert4j-rules.json）
+     * @return 重建的规则配置
+     */
+    public static InvocationRulesConfig fromMap(Map<String, Object> root) {
+        InvocationRulesConfig config = new InvocationRulesConfig();
+        config.loadFromMap(root);
+        return config;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void loadFromMap(Map<String, Object> root) {
+        if (root == null) return;
         Object invocationsObj = root.get("invocations");
         if (invocationsObj instanceof Map) {
             Map<String, Object> invocationsMap = (Map<String, Object>) invocationsObj;
             for (Map.Entry<String, Object> entry : invocationsMap.entrySet()) {
                 String invocationId = entry.getKey();
                 if (entry.getValue() instanceof Map) {
-                    config.rules.put(invocationId, InvocationRule.fromJson((Map<String, Object>) entry.getValue()));
+                    this.rules.put(invocationId, InvocationRule.fromJson((Map<String, Object>) entry.getValue()));
                 }
             }
         }
@@ -86,13 +106,36 @@ public class InvocationRulesConfig {
             for (Map.Entry<String, Object> entry : tasksMap.entrySet()) {
                 String taskKey = entry.getKey();
                 if (entry.getValue() instanceof Map) {
-                    config.taskRules.put(taskKey, TaskRule.fromJson((Map<String, Object>) entry.getValue(), taskKey, config.parseNotes));
+                    this.taskRules.put(taskKey, TaskRule.fromJson((Map<String, Object>) entry.getValue(), taskKey, this.parseNotes));
                 } else {
-                    config.parseNotes.add("task " + taskKey + " declaration is not an object; ignored entirely");
+                    this.parseNotes.add("task " + taskKey + " declaration is not an object; ignored entirely");
                 }
             }
         }
-        return config;
+    }
+
+    /**
+     * 序列化为规则声明 Map（与 {@link #fromMap} 对称）——随验收包出境的声明规则段，
+     * 形态同 agentassert4j-rules.json 的 invocations/tasks 两段；空段省略键。
+     * 只含声明内容（断言），不含任何录制原文。
+     */
+    public Map<String, Object> toMap() {
+        Map<String, Object> root = new LinkedHashMap<>();
+        if (!rules.isEmpty()) {
+            Map<String, Object> invocations = new LinkedHashMap<>();
+            for (Map.Entry<String, InvocationRule> entry : rules.entrySet()) {
+                invocations.put(entry.getKey(), entry.getValue().toMap());
+            }
+            root.put("invocations", invocations);
+        }
+        if (!taskRules.isEmpty()) {
+            Map<String, Object> tasks = new LinkedHashMap<>();
+            for (Map.Entry<String, TaskRule> entry : taskRules.entrySet()) {
+                tasks.put(entry.getKey(), entry.getValue().toMap());
+            }
+            root.put("tasks", tasks);
+        }
+        return root;
     }
 
     /**
@@ -254,6 +297,35 @@ public class InvocationRulesConfig {
         public Set<String> getBehaviors() {
             return behaviors;
         }
+
+        /**
+         * 序列化为声明 Map（缺省空段省略键）——与 {@link #fromJson(Map)} 对称
+         */
+        public Map<String, Object> toMap() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            if (!requiredKeywords.isEmpty()) {
+                map.put("requiredKeywords", new ArrayList<>(requiredKeywords));
+            }
+            if (!forbiddenKeywords.isEmpty()) {
+                map.put("forbiddenKeywords", new ArrayList<>(forbiddenKeywords));
+            }
+            if (!regexPatterns.isEmpty()) {
+                List<Object> patterns = new ArrayList<>();
+                for (RegexPattern pattern : regexPatterns) {
+                    Map<String, Object> p = new LinkedHashMap<>();
+                    p.put("pattern", pattern.getPattern());
+                    if (pattern.getDescription() != null && !pattern.getDescription().isEmpty()) {
+                        p.put("description", pattern.getDescription());
+                    }
+                    patterns.add(p);
+                }
+                map.put("regexPatterns", patterns);
+            }
+            if (!behaviors.isEmpty()) {
+                map.put("behaviors", new ArrayList<>(behaviors));
+            }
+            return map;
+        }
     }
 
     /**
@@ -306,6 +378,34 @@ public class InvocationRulesConfig {
          */
         public Map<String, StepCount> getSteps() {
             return steps;
+        }
+
+        /**
+         * 序列化为声明 Map（空段/缺省边界省略键）——与 {@link #fromJson(Map, String, List)} 对称
+         */
+        public Map<String, Object> toMap() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            if (!requiredSteps.isEmpty()) {
+                map.put("requiredSteps", new ArrayList<>(requiredSteps));
+            }
+            if (!requiredOrder.isEmpty()) {
+                map.put("requiredOrder", new ArrayList<>(requiredOrder));
+            }
+            if (!steps.isEmpty()) {
+                Map<String, Object> stepsMap = new LinkedHashMap<>();
+                for (Map.Entry<String, StepCount> entry : steps.entrySet()) {
+                    Map<String, Object> bounds = new LinkedHashMap<>();
+                    if (entry.getValue().getMin() != null) {
+                        bounds.put("min", entry.getValue().getMin());
+                    }
+                    if (entry.getValue().getMax() != null) {
+                        bounds.put("max", entry.getValue().getMax());
+                    }
+                    stepsMap.put(entry.getKey(), bounds);
+                }
+                map.put("steps", stepsMap);
+            }
+            return map;
         }
 
         @SuppressWarnings("unchecked")

@@ -2,13 +2,16 @@ package io.github.agentassert4j.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 验收基线包 — 开发侧基线的可交付载体（`agentassert4j.acceptance-pack/1`）。
  *
- * <p>包内容天然脱敏：只携带结构指纹与调用点键，不携带用户输入输出、rules 配置
- * 与模板原文；{@code --include-samples} 附加的样本已在导出侧强制脱敏（见
- * {@link BaselineStep}）。序列化/反序列化经 PackCodec，schema 字段即版本守卫。</p>
+ * <p>包内容天然脱敏：只携带结构指纹、调用点键与声明规则段（规则是断言而非提示词），
+ * 不携带用户输入输出与模板原文；{@code --include-samples} 附加的样本已在导出侧强制
+ * 脱敏（见 {@link BaselineStep}）。声明规则段使验收侧以与导出侧同一份规则**对称**
+ * 评估维度 3/4；无规则段的包在验收侧降级跳过维度 3/4。序列化/反序列化经 PackCodec，
+ * schema 字段即版本守卫。</p>
  *
  * @author axy-yxa
  * @since 2026-08-30
@@ -19,6 +22,11 @@ public class AcceptancePack {
 
     private PackMeta meta;
     private final List<PackTask> tasks = new ArrayList<>();
+    /**
+     * 声明规则段（invocations/tasks 两段，形态同 agentassert4j-rules.json 的声明 Map）；
+     * null = 包不含规则（验收侧维度 3/4 降级跳过）。内容为断言声明，非录制原文。
+     */
+    private Map<String, Object> rules;
 
     public PackMeta getMeta() {
         return meta;
@@ -30,6 +38,14 @@ public class AcceptancePack {
 
     public List<PackTask> getTasks() {
         return tasks;
+    }
+
+    public Map<String, Object> getRules() {
+        return rules;
+    }
+
+    public void setRules(Map<String, Object> rules) {
+        this.rules = rules;
     }
 
     /**

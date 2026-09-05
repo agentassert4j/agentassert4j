@@ -4,6 +4,7 @@ import io.github.agentassert4j.algorithm.DeterministicComparator;
 import io.github.agentassert4j.algorithm.JudgmentSemantics;
 import io.github.agentassert4j.algorithm.TaskAligner;
 import io.github.agentassert4j.algorithm.TaskChainView;
+import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.AcceptancePack;
 import io.github.agentassert4j.model.BaselineStep;
 import io.github.agentassert4j.model.InteractionRecord;
@@ -100,6 +101,11 @@ public class VerifyRunner {
             return dryRunPlan(pack, tasks, localChains);
         }
 
+        // 维度 3/4 与任务纪律的比对口径来自基线侧声明：包内嵌规则段是验收侧的规则真源，
+        // 不读本地规则文件；无规则段的包退化为空规则——两侧默认 match，报告注记降级
+        InvocationRulesConfig packRules = InvocationRulesConfig.fromMap(pack.getRules());
+        boolean rulesEmbedded = packRules.hasRules();
+
         TreeSet<String> localServedModels = new TreeSet<>();
         List<String> uncovered = new ArrayList<>();
         List<String> unmatchedLocal = new ArrayList<>();
@@ -121,7 +127,7 @@ public class VerifyRunner {
                 step.setInvocationId(TaskAligner.declaredLabelOfKey(step.getInvocationKey()));
                 baselineSteps.computeIfAbsent(step.getInvocationKey(), k -> new ArrayList<>()).add(step);
             }
-            TaskAlignment alignment = TaskAligner.align(baselineSteps, local, comparator, null);
+            TaskAlignment alignment = TaskAligner.align(baselineSteps, local, comparator, packRules);
             alignment.setBaselineTime(task.getBaselineTime());
             alignment.setNewChainTime(local.firstTimestamp());
             boolean crossModel = isCrossModel(local, pack.getMeta().getServedModel());
@@ -181,7 +187,7 @@ public class VerifyRunner {
             out.println(verifyJson(pack, packDigest, pass, changed, missing, added, uncovered.size(), unmatchedLocal.size(), crossModel, taskJsons, uncovered, hints));
         }
         if (reportPath != null) {
-            writeMarkdownReport(reportPath, pack, packDigest, crossModel, localServedModels, reportSections, uncovered, unmatchedLocal, pass, changed, missing, added);
+            writeMarkdownReport(reportPath, pack, packDigest, crossModel, rulesEmbedded, localServedModels, reportSections, uncovered, unmatchedLocal, pass, changed, missing, added);
             info("Verification report written: " + reportPath);
         }
 
@@ -312,13 +318,14 @@ public class VerifyRunner {
         return sb.toString();
     }
 
-    private void writeMarkdownReport(String reportPath, AcceptancePack pack, String digest, boolean crossModel, TreeSet<String> localServedModels, List<String> sections, List<String> uncovered, List<String> unmatchedLocal, int pass, int changed, int missing, int added) {
+    private void writeMarkdownReport(String reportPath, AcceptancePack pack, String digest, boolean crossModel, boolean rulesEmbedded, TreeSet<String> localServedModels, List<String> sections, List<String> uncovered, List<String> unmatchedLocal, int pass, int changed, int missing, int added) {
         StringBuilder sb = new StringBuilder();
         sb.append("# AgentAssert Acceptance Verification Report\n\n");
         sb.append("| Item | Value |\n|----|----|\n");
         sb.append("| Pack schema | ").append(AcceptancePack.SCHEMA).append(" |\n");
         sb.append("| Pack SHA-256 | `").append(digest).append("` |\n");
         sb.append("| Judgment semantics | ").append(JudgmentSemantics.VERSION).append(" |\n");
+        sb.append("| Content rules | ").append(rulesEmbedded ? "embedded in pack (dimensions 3/4 active)" : "not embedded in pack (dimensions 3/4 skipped)").append(" |\n");
         sb.append("| Dev-side servedModel | ").append(pack.getMeta().getServedModel() != null ? pack.getMeta().getServedModel() : "(not recorded)").append(" |\n");
         sb.append("| Local servedModel | ").append(localServedModels.isEmpty() ? "(not recorded)" : String.join(",", localServedModels)).append(" |\n");
         sb.append("| Cross-model | ").append(crossModel ? "yes (structural verdicts valid; text differences are expected wording variation)" : "no").append(" |\n\n");

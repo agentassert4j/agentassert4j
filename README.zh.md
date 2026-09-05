@@ -131,7 +131,8 @@ agentassert4j replay
 <img src="assets/acceptance-flow.zh.png" alt="交付验收流程：开发侧导出验收包 → SHA-256 对账搬运 → 验收侧真实执行 → verify 出报告" width="880"/>
 
 ```bash
-# 开发侧：导出验收包（单 JSON；天然脱敏——只有结构指纹与调用点键），记录打印的 SHA-256 与验收方对账
+# 开发侧：导出验收包（单 JSON；天然脱敏——结构指纹、调用点键与声明规则段，无原文无模板），
+# 记录打印的 SHA-256 与验收方对账
 agentassert4j baseline export --out acceptance-pack.json
 
 # 验收侧：客户环境真实执行验收请求后，一条命令核对并产出报告

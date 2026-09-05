@@ -140,8 +140,9 @@ different model**:
 <img src="assets/acceptance-flow.en.png" alt="Acceptance flow: dev side exports the pack → reconcile SHA-256 → acceptance side really executes → verify produces the report" width="880"/>
 
 ```bash
-# Dev side: export the acceptance pack (single JSON, naturally sanitized — structure fingerprints and
-# invocation keys only); note the printed SHA-256 for reconciliation
+# Dev side: export the acceptance pack (single JSON, naturally sanitized — structure fingerprints,
+# invocation keys and the declared rules section, no raw text or templates); note the printed
+# SHA-256 for reconciliation
 agentassert4j baseline export --out acceptance-pack.json
 
 # Acceptance side: after the acceptance engineer really executes the requests, one command verifies

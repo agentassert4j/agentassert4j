@@ -62,6 +62,9 @@ public final class PackCodec {
             tasks.add(t);
         }
         root.put("tasks", tasks);
+        if (pack.getRules() != null && !pack.getRules().isEmpty()) {
+            root.put("rules", pack.getRules());
+        }
         return RecursiveJsonParser.serialize(root);
     }
 
@@ -76,6 +79,10 @@ public final class PackCodec {
             throw new IllegalArgumentException("Unsupported acceptance pack schema: " + schema + " (expected " + AcceptancePack.SCHEMA + ").");
         }
         AcceptancePack pack = new AcceptancePack();
+        if (root.get("rules") instanceof Map) {
+            @SuppressWarnings("unchecked") Map<String, Object> rules = (Map<String, Object>) root.get("rules");
+            pack.setRules(rules);
+        }
         Map<?, ?> meta = root.get("meta") instanceof Map ? (Map<?, ?>) root.get("meta") : null;
         if (meta != null) {
             AcceptancePack.PackMeta m = new AcceptancePack.PackMeta();

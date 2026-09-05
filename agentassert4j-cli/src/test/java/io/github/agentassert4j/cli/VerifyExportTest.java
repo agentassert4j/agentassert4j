@@ -4,6 +4,7 @@ import io.github.agentassert4j.algorithm.ComparatorConfig;
 import io.github.agentassert4j.algorithm.DeterministicComparator;
 import io.github.agentassert4j.algorithm.TaskAligner;
 import io.github.agentassert4j.algorithm.TaskChainView;
+import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.TaskChain;
@@ -411,5 +412,74 @@ class VerifyExportTest {
         } finally {
             customerDb.close();
         }
+    }
+
+    @Test
+    @DisplayName("自违守卫：违规基线链被排除并警告，洁净包自往返必 PASS")
+    void verify_rulesEmbedded_selfRoundtripPassesWithGuard() throws Exception {
+        Path rulesFile = tempDir.resolve("rules.json");
+        Files.write(rulesFile, "{\"invocations\":{\"refund\":{\"requiredKeywords\":[\"order\"]}}}".getBytes(StandardCharsets.UTF_8));
+        System.setProperty(ConfigLoader.RULES_PATH_PROPERTY, rulesFile.toString());
+        try {
+            saveRecord("r1", "s1", 1000L, "clean request", "invocation:order:h-order", "order", "your order 123 shipped", "dev-model");
+            saveRecord("r2", "s2", 2000L, "refund request", "invocation:refund:h-refund", "refund", "done", "dev-model");
+            establishBaselines();
+            String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+            assertTrue(json.contains("\"rules\""), "声明规则段必须随包出境: " + json);
+            assertTrue(output.toString().contains("violate their own declared content rules"), "自违排除必须警告: " + output);
+            assertFalse(json.contains("refund request"), "违规基线链不得入包: " + json);
+
+            VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+            int exit = runner.run(json, "digest", null, null, false);
+            assertEquals(0, exit, "洁净基线包自往返必 PASS: " + output);
+            assertTrue(output.toString().contains("PASS 1 | CHANGED 0"), output.toString());
+        } finally {
+            System.clearProperty(ConfigLoader.RULES_PATH_PROPERTY);
+        }
+    }
+
+    @Test
+    @DisplayName("检出力：验收侧记录缺失必需关键词 → 维度 3 判 CHANGED")
+    void verify_rulesEmbedded_detectsAcceptanceSideKeywordLoss() throws Exception {
+        Path rulesFile = tempDir.resolve("rules.json");
+        Files.write(rulesFile, "{\"invocations\":{\"refund\":{\"requiredKeywords\":[\"order\"]}}}".getBytes(StandardCharsets.UTF_8));
+        System.setProperty(ConfigLoader.RULES_PATH_PROPERTY, rulesFile.toString());
+        try {
+            saveRecord("r1", "s1", 1000L, "refund request", "invocation:refund:h-refund", "refund", "your order 123 shipped", "dev-model");
+            establishBaselines();
+            String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+
+            SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer.db").toString());
+            customerDb.initialize();
+            try {
+                saveRecord("c1", customerDb, 9000L, "refund request", "invocation:refund:h-refund", "refund", "done", "cust-model");
+                VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+                Path reportPath = tempDir.resolve("detect-report.md");
+                int exit = runner.run(json, "digest", null, reportPath.toString(), false);
+                assertEquals(1, exit, "验收侧丢必需关键词 → 维度 3 必须参与判定: " + output);
+                String markdown = new String(Files.readAllBytes(reportPath), StandardCharsets.UTF_8);
+                assertTrue(markdown.contains("content rules mismatch"), "维度 3 失配必须呈现: " + markdown);
+            } finally {
+                customerDb.close();
+            }
+        } finally {
+            System.clearProperty(ConfigLoader.RULES_PATH_PROPERTY);
+        }
+    }
+
+    @Test
+    @DisplayName("降级：无规则段的包跳过维度 3/4 并在报告注记")
+    void verify_withoutRulesSection_degradesWithNote() throws Exception {
+        saveRecord("r1", "s1", 1000L, "refund request", "invocation:refund:h-refund", "refund", "your order 123 shipped", "dev-model");
+        establishBaselines();
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+        assertFalse(json.contains("\"rules\""), "无声明时不得入规则段: " + json);
+
+        Path reportPath = tempDir.resolve("verify-report.md");
+        VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+        int exit = runner.run(json, "digest", null, reportPath.toString(), false);
+        assertEquals(0, exit, "无规则段降级：维度 3/4 两侧默认 match: " + output);
+        String markdown = new String(Files.readAllBytes(reportPath), StandardCharsets.UTF_8);
+        assertTrue(markdown.contains("not embedded in pack (dimensions 3/4 skipped)"), "降级必须注记: " + markdown);
     }
 }

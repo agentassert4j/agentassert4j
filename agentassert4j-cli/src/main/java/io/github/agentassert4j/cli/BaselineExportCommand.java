@@ -1,14 +1,13 @@
 package io.github.agentassert4j.cli;
 
-import io.github.agentassert4j.algorithm.FingerprintExtractor;
-import io.github.agentassert4j.algorithm.JudgmentSemantics;
-import io.github.agentassert4j.algorithm.TaskChainView;
+import io.github.agentassert4j.algorithm.*;
 import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.recorder.DataSanitizer;
 import io.github.agentassert4j.recorder.RecorderConfig;
 import io.github.agentassert4j.recorder.SanitizeStrategy;
+import io.github.agentassert4j.result.ComparisonResult;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.HashUtil;
 import io.github.agentassert4j.util.PackCodec;
@@ -93,6 +92,7 @@ public class BaselineExportCommand implements Callable<Integer> {
                 packTask.setBaselineTime(chain.firstTimestamp());
 
                 boolean complete = true;
+                boolean selfViolating = false;
                 for (InteractionRecord record : chain.getRecords()) {
                     String key = CliSupport.invocationKeyOfRecord(record);
                     InvocationProfile profile = key == null ? null : repository.findInvocationByKey(key);
@@ -106,6 +106,13 @@ public class BaselineExportCommand implements Callable<Integer> {
                     // 步骤指纹逐记录现场提取（与 verify 重提侧、库内任务对齐同口径）——
                     // 画像指纹是建档种子记录的单份快照，同键多记录时冒充其他步骤必然假 CHANGED
                     step.setFingerprint(FingerprintExtractor.extract(record, rules, record.getInvocationId()));
+                    // 自违守卫：基线响应违反自己声明的内容规则 → 该链永不自往返 PASS，
+                    // 不允许作为「承诺行为」出境；排除与警告就地可见
+                    if (selfViolatesDeclaredRules(step.getFingerprint(), record.getModelResponse())) {
+                        complete = false;
+                        selfViolating = true;
+                        break;
+                    }
                     if (sanitizer != null) {
                         InteractionRecord sanitized = sanitizer.sanitize(record);
                         step.setSampleInput(sanitized.getUserInput());
@@ -118,14 +125,21 @@ public class BaselineExportCommand implements Callable<Integer> {
                 }
                 if (complete && !packTask.getSteps().isEmpty()) {
                     pack.getTasks().add(packTask);
+                } else if (selfViolating) {
+                    excluded.add(chain.getRequestText() + " (baseline violates its own content rules)");
                 } else {
                     excluded.add(chain.getRequestText() + " (unestablished steps present)");
                 }
             }
             meta.setServedModel(String.join(",", servedModels));
+            // 声明规则段随包出境（断言而非提示词）：验收侧以同一份规则对称评估任务纪律；
+            // 维度 3/4 的比对语义 = 基线声明 × 当前响应，导出侧声明本就随指纹入包
+            if (rules != null && (rules.hasRules() || rules.hasTaskRules())) {
+                pack.setRules(rules.toMap());
+            }
 
             if (pack.getTasks().isEmpty()) {
-                err.println("No task chain has complete baseline fingerprints; pack not written. Unestablished chains: " + String.join("; ", excluded));
+                err.println("No task chain has complete baseline fingerprints; pack not written. Excluded chains: " + String.join("; ", excluded));
                 return 2;
             }
 
@@ -149,6 +163,16 @@ public class BaselineExportCommand implements Callable<Integer> {
             out.println("Acceptance pack written: " + outPath);
             out.println("  " + CliSupport.plural(pack.getTasks().size(), "task chain") + " / " + CliSupport.plural(stepCount, "step") + (includeSamples ? " (masked samples included)" : " (no samples)"));
             out.println("  SHA-256: " + HashUtil.sha256(json) + " (reconcile with the accepting party)");
+            List<String> ruleViolated = new ArrayList<>();
+            for (String reason : excluded) {
+                if (reason.contains("(baseline violates its own content rules)")) {
+                    ruleViolated.add(reason);
+                }
+            }
+            if (!ruleViolated.isEmpty()) {
+                err.println("  Warning: task chains whose baselines violate their own declared content rules were excluded: " + String.join("; ", ruleViolated));
+                err.println("  Fix the baseline (re-record under the current template) or the rules declaration, then re-export.");
+            }
             if (!excluded.isEmpty()) {
                 out.println("  Warning: task chains with unestablished steps were excluded: " + String.join("; ", excluded));
             }
@@ -181,5 +205,17 @@ public class BaselineExportCommand implements Callable<Integer> {
     private static DataSanitizer forcedMaskSanitizer() {
         RecorderConfig config = RecorderConfig.builder().sanitizeStrategy(SanitizeStrategy.MASK).sanitizeUserInput(true).sanitizeModelResponse(true).build();
         return new DataSanitizer(config);
+    }
+
+    /**
+     * 自违检查：以与生产判定完全同源的语义自比较（指纹对自己、响应对自己）评估
+     * 基线响应是否满足自己声明的内容规则——单一真源，不复制第二套 dim3 判定。
+     */
+    private static boolean selfViolatesDeclaredRules(DeterministicFingerprint fingerprint, String response) {
+        if (fingerprint == null) {
+            return false;
+        }
+        ComparisonResult result = new DeterministicComparator(ComparatorConfig.defaults()).compare(fingerprint, fingerprint, response);
+        return !result.isKeywordMatch() || !result.isRegexMatch();
     }
 }

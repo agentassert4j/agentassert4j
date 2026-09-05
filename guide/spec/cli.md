@@ -53,7 +53,10 @@ schema、退出码契约、help 终态。
 5. **报告 schema**：status=agentassert4j.status/1（画像含 templateDrift 三态）；replay=
    agentassert4j.task-report/1（mode: drift-detection / task-align / task-dry-run /
    drift-disposition / task-re-drive）；裁决=agentassert4j.adjudication/1；验收=
-   agentassert4j.verify-report/1（含 dry-run mode）；导出=acceptance-pack/1；doctor=doctor/1。
+   agentassert4j.verify-report/1（含 dry-run mode）；导出=acceptance-pack/1（内嵌声明规则段：
+   invocations/tasks 断言原文随包出境，verify 以包内规则对本地记录**对称**评估维度 3/4 与
+   任务纪律——补齐参照源抽象的双路径同语义（库内路径用本地规则，包路径用包内规则）；
+   无规则段的包降级跳过维度 3/4 并在报告注记）；doctor=doctor/1。
    开发期版本恒定，mode 扩展属开发期语义演进。【测试钉】`JsonContractTest` +
    `TaskReplayRunnerTest.JsonContract`（replay-report/1 已随统一引擎退役，禁止回归）
 6. **status 漂移列**：画像行模板身份三态（● 一致/▲ 漂移/- 无身份）与 replay 共用同一检测器
