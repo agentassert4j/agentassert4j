@@ -204,7 +204,7 @@ verdict — see [OPERATIONS §2.3](OPERATIONS.md).
 |---------|--------------|
 | `baseline` | Extract fingerprints per invocation from recordings and stamp baselines (idempotent); `--force` rebuilds after a judgment-semantics upgrade |
 | `baseline export` | Export the acceptance pack (`--task` to narrow; `--include-samples` appends force-masked samples) |
-| `status` | Invocation list and baseline status; `--diff` shows pending candidate diffs |
+| `status` | Invocation list and baseline status; `--diff` shows pending candidate diffs; `--invocation` narrows |
 | `replay` | Whole-project template-drift detection and task alignment (zero LLM calls by default); `--task`/`--invocation` narrowing; `--re-drive` controlled review |
 | `approve` / `reject` | Adjudicate candidate fingerprints (promote / discard). bare = every pending candidate; `--invocation <target>` narrows |
 | `rollback` | Restore a baseline from the archive (`--invocation` and `--version` both required) |

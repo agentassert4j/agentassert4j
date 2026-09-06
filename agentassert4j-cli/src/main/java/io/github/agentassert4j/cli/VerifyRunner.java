@@ -37,6 +37,10 @@ import java.util.*;
 public class VerifyRunner {
 
     private static final int TEXT_DIFF_BUDGET = 300;
+    /**
+     * 全量运行的范围外链明细上限——超出部分以计数收尾（缩域运行本就只出计数）
+     */
+    private static final int OUT_OF_SCOPE_DETAIL_LIMIT = 20;
 
     private final StorageRepository repository;
     private final DeterministicComparator comparator;
@@ -170,7 +174,8 @@ public class VerifyRunner {
         // 因果提示：范围外链最常见的成因是包导出后才录制（未建档或未入包）——不指路时
         // 用户第一反应是配对故障，实际是数据卫生问题
         List<String> hints = new ArrayList<>();
-        if (!unmatchedLocal.isEmpty()) {
+        boolean narrowedRun = taskPrefix != null;
+        if (!unmatchedLocal.isEmpty() && !narrowedRun) {
             hints.add("Out-of-scope local chains usually come from recordings made after the pack export (new tasks not baselined or not in the pack). Run `agentassert4j baseline` to establish them and re-export the pack, or confirm they are out of delivery scope.");
         }
         info("Verification summary: PASS " + pass + " | CHANGED " + changed + " | missing " + missing + " | added " + added + " | coverage gaps " + uncovered.size() + " | out-of-scope chains " + unmatchedLocal.size());
@@ -187,7 +192,7 @@ public class VerifyRunner {
             out.println(verifyJson(pack, packDigest, pass, changed, missing, added, uncovered.size(), unmatchedLocal.size(), crossModel, taskJsons, uncovered, hints));
         }
         if (reportPath != null) {
-            writeMarkdownReport(reportPath, pack, packDigest, crossModel, rulesEmbedded, localServedModels, reportSections, uncovered, unmatchedLocal, pass, changed, missing, added);
+            writeMarkdownReport(reportPath, pack, packDigest, crossModel, rulesEmbedded, narrowedRun, localServedModels, reportSections, uncovered, unmatchedLocal, pass, changed, missing, added);
             info("Verification report written: " + reportPath);
         }
 
@@ -318,7 +323,7 @@ public class VerifyRunner {
         return sb.toString();
     }
 
-    private void writeMarkdownReport(String reportPath, AcceptancePack pack, String digest, boolean crossModel, boolean rulesEmbedded, TreeSet<String> localServedModels, List<String> sections, List<String> uncovered, List<String> unmatchedLocal, int pass, int changed, int missing, int added) {
+    private void writeMarkdownReport(String reportPath, AcceptancePack pack, String digest, boolean crossModel, boolean rulesEmbedded, boolean narrowedRun, TreeSet<String> localServedModels, List<String> sections, List<String> uncovered, List<String> unmatchedLocal, int pass, int changed, int missing, int added) {
         StringBuilder sb = new StringBuilder();
         sb.append("# AgentAssert Acceptance Verification Report\n\n");
         sb.append("| Item | Value |\n|----|----|\n");
@@ -334,8 +339,17 @@ public class VerifyRunner {
             sb.append("\n> **Coverage gaps** (pack tasks not executed locally; evidence incomplete): ").append(String.join("; ", uncovered)).append('\n');
         }
         if (!unmatchedLocal.isEmpty()) {
-            sb.append("\n> Out-of-scope local chains (not judged): ").append(String.join("; ", unmatchedLocal)).append('\n');
-            sb.append("> Note: out-of-scope chains usually come from recordings made after the pack export. Run `agentassert4j baseline` to establish them and re-export the pack, or confirm they are out of delivery scope.\n");
+            if (narrowedRun) {
+                sb.append("\n> Out-of-scope local chains (not judged): ").append(unmatchedLocal.size()).append(" outside the --task prefix; expected in a narrowed run, not listed.\n");
+            } else {
+                List<String> shown = unmatchedLocal.size() <= OUT_OF_SCOPE_DETAIL_LIMIT ? unmatchedLocal : unmatchedLocal.subList(0, OUT_OF_SCOPE_DETAIL_LIMIT);
+                sb.append("\n> Out-of-scope local chains (not judged): ").append(String.join("; ", shown));
+                if (unmatchedLocal.size() > shown.size()) {
+                    sb.append("; ... and ").append(unmatchedLocal.size() - shown.size()).append(" more");
+                }
+                sb.append('\n');
+                sb.append("> Note: out-of-scope chains usually come from recordings made after the pack export. Run `agentassert4j baseline` to establish them and re-export the pack, or confirm they are out of delivery scope.\n");
+            }
         }
         sb.append('\n');
         for (String section : sections) {

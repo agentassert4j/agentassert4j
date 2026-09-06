@@ -228,6 +228,72 @@ class CommandSmokeTest {
     }
 
     @Test
+    @DisplayName("status --invocation 缩域：人读视图按标签过滤，--json 恒全量")
+    void status_narrowedByInvocation() {
+        seedOneRecord();
+        // 第二个标签的画像，用于断言被过滤掉
+        InteractionRecord other = new InteractionRecord();
+        other.setRecordId("rec-verdict");
+        other.setSessionId("session-verdict");
+        other.setTimestamp(2000L);
+        other.setSeq(2000L);
+        other.setInvocationId("verdict");
+        other.setInvocationKey("invocation:verdict:hash-v");
+        other.setTemplateHash("hash-v");
+        other.setUserInput("裁决");
+        other.setTurnIndex(0);
+        other.setModelResponse("{\"verdict\":\"DONE\"}");
+        other.setToolCalls(new ArrayList<>());
+        other.setHasToolCalls(false);
+        InteractionRecord other2 = new InteractionRecord();
+        other2.setRecordId("rec-verdict-2");
+        other2.setSessionId("session-verdict-2");
+        other2.setTimestamp(2100L);
+        other2.setSeq(2100L);
+        other2.setInvocationId("verdict");
+        other2.setInvocationKey("invocation:verdict:hash-v2");
+        other2.setTemplateHash("hash-v2");
+        other2.setUserInput("裁决二");
+        other2.setTurnIndex(0);
+        other2.setModelResponse("{\"verdict\":\"RETRY\"}");
+        other2.setToolCalls(new ArrayList<>());
+        other2.setHasToolCalls(false);
+        repository.saveInteraction(other2);
+        repository.saveInteraction(other);
+        repository.saveTemplateText("hash-old", "baseline template body for queryOrder");
+        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null);
+
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--invocation", "queryOrder", "--db", dbPath);
+        assertEquals(0, exit);
+        String text = out.toString();
+        assertTrue(text.contains("queryOrder"), "命中标签的行必须在场: " + text);
+        assertFalse(text.contains("verdict@"), "未命中标签的行必须被过滤: " + text);
+
+        ByteArrayOutputStream twoBucket = redirectStdout();
+        int twoBucketExit = new CommandLine(new AgentAssert4jCli()).execute("status", "--invocation", "verdict", "--db", dbPath);
+        assertEquals(0, twoBucketExit);
+        String twoBucketText = twoBucket.toString();
+        assertTrue(twoBucketText.contains("verdict@hash-v"), "标签缩域必须显示该标签的行: " + twoBucketText);
+        assertTrue(twoBucketText.contains("verdict@hash-v2"), "一标签多模板桶必须并排显示: " + twoBucketText);
+        assertTrue(twoBucketText.contains("2 of 3 invocation profiles (narrowed by --invocation)"), "桶并排时总数对照: " + twoBucketText);
+        assertTrue(text.contains("narrowed by --invocation"), "缩域总数行必须如实标注: " + text);
+        assertTrue(text.contains("1 of 3 invocation profiles (narrowed by --invocation)"), "总数行必须给出过滤前后对照: " + text);
+
+        ByteArrayOutputStream diffOut = redirectStdout();
+        int diffExit = new CommandLine(new AgentAssert4jCli()).execute("status", "--diff", "--invocation", "queryOrder", "--db", dbPath);
+        assertEquals(0, diffExit);
+        String diffText = diffOut.toString();
+        assertTrue(diffText.contains("template text (hash-old)"), "缩域内模板原文渲染: " + diffText);
+        assertFalse(diffText.contains("template text (hash-v)"), "缩域外模板原文不得渲染: " + diffText);
+
+        ByteArrayOutputStream jsonOut = redirectStdout();
+        int jsonExit = new CommandLine(new AgentAssert4jCli()).execute("status", "--invocation", "queryOrder", "--json", "--db", dbPath);
+        assertEquals(0, jsonExit);
+        assertTrue(jsonOut.toString().contains("\"verdict\""), "--json 通道恒全量: " + jsonOut);
+    }
+
+    @Test
     @DisplayName("replay --json 冷启动：stdout 零污染，指导信息走 stderr")
     void replayJson_coldStart_stdoutCleanErrorsOnStderr() {
         PrintStream originalOut = System.out;

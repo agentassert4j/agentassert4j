@@ -188,7 +188,7 @@ stage('AgentAssert 行为回归') {
 |------|--------|
 | `baseline` | 从录制数据给每个调用点提取指纹、盖章建档（幂等）；`--force` 判定语义升级后重建 |
 | `baseline export` | 导出验收基线包（`--task` 缩域；`--include-samples` 附强制脱敏样本） |
-| `status` | 调用点清单与基线状态巡检；`--diff` 看待裁决差异 |
+| `status` | 调用点清单与基线状态巡检；`--diff` 看待裁决差异；`--invocation` 缩域 |
 | `replay` | 全项目模板漂移检测与任务对齐（缺省零 LLM 调用）；`--task`/`--invocation` 复合缩域；`--re-drive` 受控复核 |
 | `approve` / `reject` | 裁决候选指纹（转正 / 丢弃）。bare = 全部待裁决候选；`--invocation <目标>` 缩域 |
 | `rollback` | 把基线回滚到归档版本（`--invocation` `--version` 均必填） |

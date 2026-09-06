@@ -20,7 +20,7 @@ schema、退出码契约、help 终态。
 
 | 命令 | bare 语义 | 主要参数 |
 |---|---|---|
-| `status` | 全部画像巡检 | `--diff`（候选差异+模板原文渲染）、`--json`、`--db` |
+| `status` | 全部画像巡检 | `--diff`（候选差异+模板原文渲染）、`--invocation` 缩域（人读视图专属，`--json` 恒全量）、`--json`、`--db` |
 | `baseline` | 全部调用点建档（幂等） | `--force`（判定语义重建恢复路径）、`--invocation` 缩域、`--json` |
 | `replay` | 全项目漂移检测+逐任务对齐（零 LLM 调用） | `--task`/`--invocation` 复合缩域、`--ci`、`--re-drive`、`--full-chain`、`--max-total-calls`/`--max-total-tokens`、`--dry-run`、`--json` |
 | `approve` / `reject` | 裁决全部待裁决候选 | `--invocation` 缩域、`--json` |
@@ -33,7 +33,9 @@ schema、退出码契约、help 终态。
 
 **选择器两档标准**：目标选择器（approve/reject 的 --invocation、rollback/verify 的宾语）=
 完整键精确 > 业务标签唯一 > 显示短形 > 唯一前缀，多命中报错列候选；缩域选择器（replay 的
---task/--invocation）= 前缀过滤，两档处理完全对称、不分叉。
+--task/--invocation、status 的 --invocation）= 前缀过滤，两档处理完全对称、不分叉。status 的
+--invocation 经目标选择器换算器解析为业务标签后过滤**人读视图**（一标签多模板桶并排显示，
+零声明键按键前缀兜底），`--json` 通道恒全量。
 
 ## 契约
 
@@ -50,6 +52,9 @@ schema、退出码契约、help 终态。
 4. **裁决面**：bare approve/reject = 裁决全部待裁决候选（无候选显式说明出 2）；拍板前渲染
    候选与基线逐维差异。【测试钉】`CommandSmokeTest.adjudicate_bare_reportsNoCandidates` +
    `ReplayFlowTest.BareAdjudicate`
+5. **verify 范围外链分级呈现**：缩域（--task）运行只出计数（前缀外不判定属预期，附一行说明），
+   全量运行逐条列出、封顶 20 条后以计数收尾；退出码与 JSON 契约不受影响（范围外恒为
+   informational）。【测试钉】`VerifyExportTest` 缩域抑制与全量封顶两钉
 5. **报告 schema**：status=agentassert4j.status/1（画像含 templateDrift 三态）；replay=
    agentassert4j.task-report/1（mode: drift-detection / task-align / task-dry-run /
    drift-disposition / task-re-drive）；裁决=agentassert4j.adjudication/1；验收=

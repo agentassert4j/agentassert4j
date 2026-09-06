@@ -482,4 +482,57 @@ class VerifyExportTest {
         String markdown = new String(Files.readAllBytes(reportPath), StandardCharsets.UTF_8);
         assertTrue(markdown.contains("not embedded in pack (dimensions 3/4 skipped)"), "降级必须注记: " + markdown);
     }
+
+    @Test
+    @DisplayName("verify 缩域运行：范围外链只出计数，不逐条列举")
+    void verify_narrowedRun_suppressesOutOfScopeList() throws Exception {
+        saveRecord("r1", "s1", 1000L, "V1", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        establishBaselines();
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+
+        SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer.db").toString());
+        customerDb.initialize();
+        try {
+            saveRecord("c0", customerDb, 8900L, "V1", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            saveRecord("c1", customerDb, 9000L, "W1", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            saveRecord("c2", customerDb, 9100L, "W2", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            Path reportPath = tempDir.resolve("narrow-report.md");
+            VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+            int exit = runner.run(json, "digest", "V1", reportPath.toString(), false);
+            assertEquals(0, exit, "缩域内无偏差: " + output);
+            String markdown = new String(Files.readAllBytes(reportPath), StandardCharsets.UTF_8);
+            assertTrue(markdown.contains("expected in a narrowed run, not listed"), "缩域运行必须注记预期性: " + markdown);
+            assertFalse(markdown.contains("W1"), "缩域运行不得逐条列举范围外链: " + markdown);
+        } finally {
+            customerDb.close();
+        }
+    }
+
+    @Test
+    @DisplayName("verify 全量运行：范围外明细封顶 20 条后计数收尾")
+    void verify_fullRun_capsOutOfScopeList() throws Exception {
+        saveRecord("r1", "s1", 1000L, "V1", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        establishBaselines();
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+
+        SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer.db").toString());
+        customerDb.initialize();
+        try {
+            saveRecord("c0", customerDb, 8900L, "V1", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            for (int i = 1; i <= 25; i++) {
+                saveRecord("c" + i, customerDb, 9000L + i, "W" + i, "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            }
+            Path reportPath = tempDir.resolve("full-report.md");
+            VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+            int exit = runner.run(json, "digest", null, reportPath.toString(), false);
+            assertEquals(0, exit, "范围外不影响退出码: " + output);
+            assertTrue(output.toString().contains("out-of-scope chains 25"), "stdout 汇总计数必须完整: " + output);
+            String markdown = new String(Files.readAllBytes(reportPath), StandardCharsets.UTF_8);
+            assertTrue(markdown.contains("; ... and 5 more"), "超出上限必须计数收尾: " + markdown);
+            assertTrue(markdown.contains("W20"), "上限内的明细必须在场: " + markdown);
+            assertFalse(markdown.contains("W21"), "上限外的明细不得出现: " + markdown);
+        } finally {
+            customerDb.close();
+        }
+    }
 }

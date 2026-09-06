@@ -2,6 +2,7 @@ package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.DriftDetector;
 import io.github.agentassert4j.algorithm.InMemoryDependencyGraph;
+import io.github.agentassert4j.algorithm.TaskAligner;
 import io.github.agentassert4j.model.ArchivedTemplateVersion;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.result.DriftReport;
@@ -37,6 +38,9 @@ public class StatusCommand implements Callable<Integer> {
     @Option(names = {"--diff"}, description = "Render per-dimension candidate vs baseline diffs for invocations holding candidate fingerprints")
     boolean diff;
 
+    @Option(names = {"--invocation"}, description = "Narrow the human view to one invocation: business label, invocationKey prefix, or the status display form (one label shows all its template-version buckets; the --json report is always full)")
+    String invocation;
+
     @Option(names = {"--json"}, description = "Print a single-line JSON inspection report to stdout (agentassert4j.status/1)")
     boolean jsonOutput;
 
@@ -46,9 +50,21 @@ public class StatusCommand implements Callable<Integer> {
         try {
             // --json 模式 stdout 只产出报告本体：配置披露改走 stderr，人类巡检表不输出
             repository = CliSupport.openRepository(db, jsonOutput ? err : out);
-            List<InvocationProfile> profiles = repository.findAllInvocations();
+            List<InvocationProfile> allProfiles = repository.findAllInvocations();
+            List<InvocationProfile> profiles = allProfiles;
             Map<String, String> labelsByInvocationKey = businessLabelsByInvocationKey(repository);
-            Map<String, String> driftByInvocationKey = templateDriftByInvocationKey(repository, profiles);
+            Map<String, String> driftByInvocationKey = templateDriftByInvocationKey(repository, allProfiles);
+            // 缩域是人读巡检特性：--json 通道恒全量（机器消费方自行过滤），换算只在人读路径发生
+            String labelFilter = jsonOutput ? null : CliSupport.resolveInvocationFilter(repository, invocation, out);
+            int totalCount = allProfiles.size();
+            if (labelFilter != null) {
+                profiles = new ArrayList<>();
+                for (InvocationProfile profile : allProfiles) {
+                    if (matchesFilter(profile, labelFilter)) {
+                        profiles.add(profile);
+                    }
+                }
+            }
 
             if (jsonOutput) {
                 StringBuilder invocations = new StringBuilder();
@@ -81,12 +97,22 @@ public class StatusCommand implements Callable<Integer> {
                 }
             }
 
+            if (labelFilter != null && profiles.isEmpty()) {
+                out.println("No invocation matches '" + CliSupport.visibleText(labelFilter) + "'. Drop --invocation for the full list.");
+            }
             List<String> uncovered = uncoveredBusinessTags(repository, profiles);
             for (String tag : uncovered) {
+                if (labelFilter != null && !labelFilter.equals(tag)) {
+                    continue;
+                }
                 out.println("  " + tag + ": recorded but no baseline (run `agentassert4j baseline` first)");
             }
-            printUnestablished(repository, profiles);
-            out.println("Total: " + CliSupport.plural(profiles.size(), "invocation profile") + ".");
+            printUnestablished(repository, labelFilter);
+            if (labelFilter != null) {
+                out.println("Total: " + profiles.size() + " of " + totalCount + " invocation profiles (narrowed by --invocation).");
+            } else {
+                out.println("Total: " + CliSupport.plural(profiles.size(), "invocation profile") + ".");
+            }
             printGraphSnapshot(repository);
             return 0;
         } catch (RuntimeException e) {
@@ -97,6 +123,15 @@ public class StatusCommand implements Callable<Integer> {
                 repository.close();
             }
         }
+    }
+
+    /**
+     * 缩域过滤谓词：声明标签从键内解析（一标签覆盖其全部模板桶），键前缀兜底
+     * （零声明键无标签可依）。解析层已把显示短形/键前缀换算为业务标签，这里只做最终匹配。
+     */
+    private static boolean matchesFilter(InvocationProfile profile, String labelFilter) {
+        String key = profile.getInvocationKey();
+        return labelFilter.equals(TaskAligner.declaredLabelOfKey(key)) || key.startsWith(labelFilter);
     }
 
     /**
@@ -242,8 +277,18 @@ public class StatusCommand implements Callable<Integer> {
      * 已录制但尚无基线画像的调用点段：新版本键与零声明键在建档前在此可见，
      * 否则它们只会在对齐报告的缺/新增步骤里被动暴露。
      */
-    private void printUnestablished(StorageRepository repository, List<InvocationProfile> profiles) {
-        List<CliSupport.InvocationFootprint> unestablished = unestablishedFootprints(repository, profiles);
+    private void printUnestablished(StorageRepository repository, String labelFilter) {
+        // established 判定必须用全量画像（缩域后的子集会把已建档键误判为未建档）
+        List<CliSupport.InvocationFootprint> unestablished = unestablishedFootprints(repository, repository.findAllInvocations());
+        if (labelFilter != null) {
+            List<CliSupport.InvocationFootprint> filtered = new ArrayList<>();
+            for (CliSupport.InvocationFootprint footprint : unestablished) {
+                if (labelFilter.equals(TaskAligner.declaredLabelOfKey(footprint.invocationKey)) || footprint.invocationKey.startsWith(labelFilter)) {
+                    filtered.add(footprint);
+                }
+            }
+            unestablished = filtered;
+        }
         if (unestablished.isEmpty()) {
             out.println("Unestablished invocations: none.");
             return;
