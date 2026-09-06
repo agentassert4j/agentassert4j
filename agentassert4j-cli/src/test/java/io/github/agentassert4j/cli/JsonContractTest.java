@@ -105,7 +105,7 @@ class JsonContractTest {
 
     private void seedCandidate(String invocationKey, InteractionRecord record) {
         InvocationProfile profile = repository.findInvocationByKey(invocationKey);
-        profile.setCandidateFingerprint(FingerprintExtractor.extract(record));
+        profile.setCandidateFingerprint(FingerprintExtractor.extract(record, null, null));
         repository.saveInvocationProfile(profile);
     }
 

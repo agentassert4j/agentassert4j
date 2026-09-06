@@ -152,11 +152,21 @@ public class RegressionTestExecutor {
         // 多模态原样复用
         request.setMultimodalInput(baseline.isMultimodalInput());
 
+        applyReplayControls(request, baseline, config);
+        return request;
+    }
+
+    /**
+     * 重放请求的控制变量装配：历史轮注入（system 帧归模板域跳过）、采样温度/模型
+     * 与录制工具定义原样复用。单发重放与链式半重放共用本装配——两侧口径分叉
+     * 即构成假差异。
+     */
+    private void applyReplayControls(LlmRequest request, InteractionRecord baseline, TestExecutionConfig config) {
         // 多轮对话：注入前序轮次（完整复制——tool 角色的 toolCallId/toolName
         // 是重放请求与原对话对齐的关联键，丢弃会导致服务端拒绝整个请求）。
         // 判据只看前序轮次是否非空：无 user 消息收尾的会话（典型：tool 结果轮）
         // turnIndex 为 0，但历史轮次同样必须参与重放
-        if (baseline.getPreviousTurns() != null && !baseline.getPreviousTurns().isEmpty()) {
+        if (baseline.getPreviousTurns() != null) {
             for (TurnContext turn : baseline.getPreviousTurns()) {
                 // system 帧不注入：系统提示属模板域由 systemPrompt 承载，
                 // 重复入列会产生第二条 system 消息（渲染侧已有同款跳过，此处补纵深）
@@ -179,8 +189,6 @@ public class RegressionTestExecutor {
         if (!toolDefinitions.isEmpty()) {
             request.setToolDefinitions(toolDefinitions);
         }
-
-        return request;
     }
 
     /**
@@ -301,26 +309,14 @@ public class RegressionTestExecutor {
             List<TurnContext> synthesized = new ArrayList<>();
             int cursor = 0;
             int round = 0;
-            long totalInput = 0;
-            long totalOutput = 0;
-            Integer cacheRead = null;
-            Integer cacheWrite = null;
-            Integer reasoning = null;
-            String servedModel = null;
+            ChainUsage usage = new ChainUsage();
             LlmResponse response = null;
 
             // 决策轮：每轮响应的 tool_calls 必须与基线编排的下一片段逐项一致
             while (cursor < orchestration.size()) {
                 round++;
                 response = chainChat(baseline, newSystemPrompt, round == 1 ? effectiveInput : null, synthesized, config);
-                totalInput += response.getInputTokens();
-                totalOutput += response.getOutputTokens();
-                if (response.getServedModel() != null) {
-                    servedModel = response.getServedModel();
-                }
-                cacheRead = sumNullable(cacheRead, response.getCacheReadTokens());
-                cacheWrite = sumNullable(cacheWrite, response.getCacheWriteTokens());
-                reasoning = sumNullable(reasoning, response.getReasoningTokens());
+                usage.accumulate(response);
                 List<ToolCallResult> decisions = response.getToolCalls() == null ? Collections.<ToolCallResult>emptyList() : response.getToolCalls();
                 if (decisions.isEmpty() || cursor + decisions.size() > orchestration.size() || !matchesSlice(orchestration, cursor, decisions)) {
                     return chainDivergence(baseline, round, cursor, decisions);
@@ -338,14 +334,7 @@ public class RegressionTestExecutor {
             // 末轮收口：编排全部复现后模型给出最终答复——四维比对对象
             round++;
             response = chainChat(baseline, newSystemPrompt, null, synthesized, config);
-            totalInput += response.getInputTokens();
-            totalOutput += response.getOutputTokens();
-            if (response.getServedModel() != null) {
-                servedModel = response.getServedModel();
-            }
-            cacheRead = sumNullable(cacheRead, response.getCacheReadTokens());
-            cacheWrite = sumNullable(cacheWrite, response.getCacheWriteTokens());
-            reasoning = sumNullable(reasoning, response.getReasoningTokens());
+            usage.accumulate(response);
             if (response.getToolCalls() != null && !response.getToolCalls().isEmpty()) {
                 // 编排比基线多出工具调用——行为变化，分歧即停
                 return chainDivergence(baseline, round, cursor, response.getToolCalls());
@@ -391,12 +380,12 @@ public class RegressionTestExecutor {
                     LOG.log(Level.SEVERE, "Failed to persist candidate fingerprint for " + baseline.getRecordId(), e);
                 }
             }
-            result.setServedModel(servedModel);
-            result.setInputTokens((int) totalInput);
-            result.setOutputTokens((int) totalOutput);
-            result.setCacheReadTokens(cacheRead);
-            result.setCacheWriteTokens(cacheWrite);
-            result.setReasoningTokens(reasoning);
+            result.setServedModel(usage.servedModel);
+            result.setInputTokens((int) usage.input);
+            result.setOutputTokens((int) usage.output);
+            result.setCacheReadTokens(usage.cacheRead);
+            result.setCacheWriteTokens(usage.cacheWrite);
+            result.setReasoningTokens(usage.reasoning);
             result.setReplayOutput(response.getContent());
             return result;
         } catch (LlmTimeoutException e) {
@@ -419,25 +408,9 @@ public class RegressionTestExecutor {
         request.setSystemPrompt(newSystemPrompt);
         request.setUserInput(userInput);
         request.setMultimodalInput(baseline.isMultimodalInput());
-        if (baseline.getPreviousTurns() != null) {
-            for (TurnContext turn : baseline.getPreviousTurns()) {
-                // system 帧不注入：系统提示属模板域由 systemPrompt 承载
-                if ("system".equalsIgnoreCase(turn.getRole())) {
-                    continue;
-                }
-                request.addTurn(copyTurn(turn));
-            }
-        }
+        applyReplayControls(request, baseline, config);
         for (TurnContext turn : synthesized) {
             request.addTurn(turn);
-        }
-        request.setTemperature(config.getTemperature());
-        if (config.getModel() != null) {
-            request.setModel(config.getModel());
-        }
-        List<String> toolDefinitions = splitToolDefinitions(baseline.getToolsDefinition());
-        if (!toolDefinitions.isEmpty()) {
-            request.setToolDefinitions(toolDefinitions);
         }
         return llmClient.chat(request, config.getTimeoutMs());
     }
@@ -525,6 +498,30 @@ public class RegressionTestExecutor {
             return first;
         }
         return first + second;
+    }
+
+    /**
+     * 链式半重放多轮调用的用量合计 — token 求和，served 模型取任一非空报告值；
+     * 供应商未报告的分项保持 null（未知不得记 0）。
+     */
+    private static final class ChainUsage {
+        long input;
+        long output;
+        Integer cacheRead;
+        Integer cacheWrite;
+        Integer reasoning;
+        String servedModel;
+
+        void accumulate(LlmResponse response) {
+            input += response.getInputTokens();
+            output += response.getOutputTokens();
+            if (response.getServedModel() != null) {
+                servedModel = response.getServedModel();
+            }
+            cacheRead = sumNullable(cacheRead, response.getCacheReadTokens());
+            cacheWrite = sumNullable(cacheWrite, response.getCacheWriteTokens());
+            reasoning = sumNullable(reasoning, response.getReasoningTokens());
+        }
     }
 
 }

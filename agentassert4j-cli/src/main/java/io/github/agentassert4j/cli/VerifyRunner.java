@@ -85,7 +85,7 @@ public class VerifyRunner {
             return 2;
         }
         if (pack.getMeta() == null || !JudgmentSemantics.VERSION.equals(pack.getMeta().getJudgmentSemantics())) {
-            diagnostic("Version guard: pack judgment semantics is " + (pack.getMeta() == null ? "unmarked" : pack.getMeta().getJudgmentSemantics()) + ", current engine is " + JudgmentSemantics.VERSION + ". Refusing to judge to avoid silent re-interpretation.");
+            diagnostic("Version guard: pack judgment semantics is " + (pack.getMeta() == null ? "unmarked" : pack.getMeta().getJudgmentSemantics()) + ", current engine is " + JudgmentSemantics.VERSION + ". Refusing to judge to avoid silent reinterpretation.");
             return 2;
         }
 
@@ -279,8 +279,6 @@ public class VerifyRunner {
         return !localModels.isEmpty() && !String.join(",", localModels).equals(packServedModel);
     }
 
-    // ---------- 报告渲染 ----------
-
     private String renderTask(AcceptancePack.PackTask task, TaskAlignment alignment, boolean crossModel) {
         StringBuilder sb = new StringBuilder();
         sb.append("### Task \"").append(task.getTaskKey()).append("\"\n\n");
@@ -394,8 +392,6 @@ public class VerifyRunner {
     private static String shortHash(String hash) {
         return hash == null || hash.length() <= 8 ? hash : hash.substring(0, 8);
     }
-
-    // ---------- JSON（agentassert4j.verify-report/1，单行） ----------
 
     private String verifyJson(AcceptancePack pack, String digest, int pass, int changed, int missing, int added, int uncovered, int unmatchedLocal, boolean crossModel, List<String> taskJsons, List<String> uncoveredKeys, List<String> hints) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.verify-report/1\",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');

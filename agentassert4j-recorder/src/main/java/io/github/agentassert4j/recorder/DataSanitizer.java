@@ -521,6 +521,7 @@ public class DataSanitizer {
                 TurnContext turnCopy = new TurnContext(turn.getRole(), turn.getContent());
                 turnCopy.setToolCallId(turn.getToolCallId());
                 turnCopy.setToolName(turn.getToolName());
+                turnCopy.setToolArguments(turn.getToolArguments());
                 turnsCopy.add(turnCopy);
             }
             copy.setPreviousTurns(turnsCopy);

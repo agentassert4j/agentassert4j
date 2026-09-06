@@ -9,9 +9,7 @@ import io.github.agentassert4j.spi.StorageRepository;
 import java.io.File;
 import java.sql.*;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -103,7 +101,7 @@ public class SqliteStorageRepository implements StorageRepository {
                 }
                 connection = null;
             }
-            LOG.log(Level.SEVERE, "SQLite 初始化失败: " + dbPath, e);
+            LOG.log(Level.SEVERE, "SQLite initialization failed: " + dbPath, e);
             throw new StorageException("initialize: " + dbPath, e);
         }
     }

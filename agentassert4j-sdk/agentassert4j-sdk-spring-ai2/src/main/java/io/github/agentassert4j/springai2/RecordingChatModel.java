@@ -92,7 +92,7 @@ public final class RecordingChatModel implements ChatModel {
             InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, response, latencyMs, ttftMs, context, observer.snapshot());
             recorder.intercept(record);
         } catch (Exception e) {
-            log.warn("旁路录制失败（不影响业务调用）: {}", e.getMessage());
+            log.warn("Side-channel recording failed (business call unaffected): {}", e.getMessage());
         }
     }
 }

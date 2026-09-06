@@ -376,8 +376,6 @@ public final class RecursiveJsonParser {
             }
         }
 
-        // ------ object ------
-
         Map<String, Object> parseObject() {
             expect('{');
             Map<String, Object> map = new LinkedHashMap<>();
@@ -405,8 +403,6 @@ public final class RecursiveJsonParser {
             return map;
         }
 
-        // ------ array ------
-
         List<Object> parseArray() {
             expect('[');
             List<Object> list = new ArrayList<>();
@@ -428,8 +424,6 @@ public final class RecursiveJsonParser {
             expect(']');
             return list;
         }
-
-        // ------ string ------
 
         String parseString() {
             expect('"');
@@ -487,8 +481,6 @@ public final class RecursiveJsonParser {
             throw new ParseException("Unterminated string");
         }
 
-        // ------ number ------
-
         Number parseNumber() {
             int start = pos;
             // 可选负号
@@ -525,8 +517,6 @@ public final class RecursiveJsonParser {
             }
         }
 
-        // ------ boolean ------
-
         Boolean parseBoolean() {
             if (input.startsWith("true", pos)) {
                 pos += 4;
@@ -539,8 +529,6 @@ public final class RecursiveJsonParser {
             throw new ParseException("Invalid boolean at pos " + pos);
         }
 
-        // ------ null ------
-
         Object parseNull() {
             if (input.startsWith("null", pos)) {
                 pos += 4;
@@ -548,8 +536,6 @@ public final class RecursiveJsonParser {
             }
             throw new ParseException("Invalid null at pos " + pos);
         }
-
-        // ------ helpers ------
 
         void skipWhitespace() {
             while (pos < len) {

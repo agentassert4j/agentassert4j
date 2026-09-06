@@ -160,31 +160,12 @@ final class JsonMapper {
         return m;
     }
 
-    private static List<RegexPattern> regexPatternsFromDb(Object value) {
-        List<RegexPattern> result = new ArrayList<>();
-        if (!(value instanceof List)) {
-            return result;
-        }
-        for (Object item : (List<?>) value) {
-            if (!(item instanceof Map)) {
-                continue;
-            }
-            Map<?, ?> m = (Map<?, ?>) item;
-            result.add(new RegexPattern(asString(m.get("pattern")), asString(m.get("description"))));
-        }
-        return result;
-    }
-
     private static String asString(Object v) {
         return v != null ? String.valueOf(v) : null;
     }
 
     private static boolean asBool(Object v) {
         return Boolean.TRUE.equals(v);
-    }
-
-    private static int asInt(Object v) {
-        return v instanceof Number ? ((Number) v).intValue() : 0;
     }
 
     private static Map<String, Object> asObjectMap(Object v) {

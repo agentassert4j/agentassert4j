@@ -190,7 +190,6 @@ public class AgentAssert4jConfig {
          */
         private int flushIntervalMs = 5000;
 
-        @SuppressWarnings("unchecked")
         static RecorderConfig fromJson(Map<String, Object> map, RecorderConfig defaults) {
             if (map == null) return defaults;
             RecorderConfig c = new RecorderConfig();
@@ -225,7 +224,6 @@ public class AgentAssert4jConfig {
          */
         private List<String> ignorableFields = new ArrayList<>();
 
-        @SuppressWarnings("unchecked")
         static RegressionConfig fromJson(Map<String, Object> map, RegressionConfig defaults) {
             if (map == null) return defaults;
             RegressionConfig c = new RegressionConfig();
@@ -274,7 +272,6 @@ public class AgentAssert4jConfig {
          */
         private String extraBody;
 
-        @SuppressWarnings("unchecked")
         static LlmConfig fromJson(Map<String, Object> map, LlmConfig defaults) {
             if (map == null) return defaults;
             LlmConfig c = new LlmConfig();
@@ -351,7 +348,6 @@ public class AgentAssert4jConfig {
          */
         private List<String> excludeFromGraph = new ArrayList<>();
 
-        @SuppressWarnings("unchecked")
         static ToolsConfig fromJson(Map<String, Object> map, ToolsConfig defaults) {
             if (map == null) return defaults;
             ToolsConfig c = new ToolsConfig();

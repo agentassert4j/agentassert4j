@@ -212,7 +212,7 @@ public class InvocationRulesConfig {
         private final List<RegexPattern> regexPatterns;
         private final Set<String> behaviors;
 
-        public InvocationRule() {
+        private InvocationRule() {
             this(Collections.<String>emptySet(), Collections.<String>emptySet(), Collections.<RegexPattern>emptyList(), Collections.<String>emptySet());
         }
 
@@ -223,7 +223,6 @@ public class InvocationRulesConfig {
             this.behaviors = behaviors;
         }
 
-        @SuppressWarnings("unchecked")
         static InvocationRule fromJson(Map<String, Object> map) {
             if (map == null) return EMPTY;
 

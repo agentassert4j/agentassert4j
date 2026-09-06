@@ -78,7 +78,7 @@ public class DoctorCommand implements Callable<Integer> {
             }
         }
         if (recordsBySkeleton.isEmpty()) {
-            out.println("  No skeleton-declared records; for dynamic templates consider declaring templateSkeleton at the recording exit (see the minimal recording contract in OPERATIONS).");
+            out.println("  No skeleton-declared records; for dynamic templates consider declaring templateSkeleton when recording (see the minimal recording contract in OPERATIONS).");
         } else {
             for (Map.Entry<String, Integer> entry : recordsBySkeleton.entrySet()) {
                 Set<String> variants = variantsBySkeleton.getOrDefault(entry.getKey(), new LinkedHashSet<>());
@@ -162,7 +162,7 @@ public class DoctorCommand implements Callable<Integer> {
                 missingTemplateHash++;
             }
         }
-        out.println("  Records missing template_hash: " + missingTemplateHash + (missingTemplateHash > 0 ? "; these records lack full-text archives and template-gate credentials (re-recording fixes this)." : "."));
+        out.println("  Records missing template_hash: " + missingTemplateHash + (missingTemplateHash > 0 ? "; these records have no full-text archive and no template hash, so drift detection cannot check them (re-recording fixes this)." : "."));
     }
 
     /**
@@ -186,7 +186,7 @@ public class DoctorCommand implements Callable<Integer> {
         if (mismatched.isEmpty()) {
             out.println("  tasks expectation mismatches: none" + (rules.getDeclaredTaskKeys().isEmpty() ? " (no tasks rules configured)." : "."));
         } else {
-            out.println("  " + CliSupport.plural(mismatched.size(), "tasks expectation mismatch") + " (rule declared but the declared chain never appeared in the library; check key spelling or recording scope):");
+            out.println("  " + CliSupport.plural(mismatched.size(), "tasks expectation mismatch") + " (taskKey declared but no recorded chain ever matched it; check key spelling or recording scope):");
             for (String key : samples(mismatched)) {
                 out.println("    " + key);
             }

@@ -207,7 +207,7 @@ public class OpenAiCompatibleClient implements LlmClient {
         while ((read = stream.read(chunk)) != -1) {
             if (buffer.size() + read > MAX_RESPONSE_BYTES) {
                 // 异常端点可能返回任意大小的响应体，无上限会拖垮客户端内存
-                throw new IOException("LLM response body exceeds the " + MAX_RESPONSE_BYTES + " byte limit; aborted reading");
+                throw new IOException("LLM response body exceeds the " + MAX_RESPONSE_BYTES + "-byte limit; read aborted");
             }
             buffer.write(chunk, 0, read);
         }

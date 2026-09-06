@@ -243,14 +243,13 @@ final class CliSupport {
         return invocationIds;
     }
 
-
     /**
      * 从交互记录现场重建依赖图（只读，不落盘）。
      * 图是派生数据，重建永远反映最新录制状态；全量扫描在 v1 规模（数千条）
      * 毫秒级，轻量列裁剪与增量构建按既定决策延迟。
      */
     static InMemoryDependencyGraph rebuildGraph(StorageRepository repository) {
-        ParameterValueTracer tracer = new ParameterValueTracer();
+        ParameterValueTracer tracer = new ParameterValueTracer(new InMemoryDependencyGraph());
         tracer.rebuildGraph(repository);
         return tracer.getGraph();
     }
@@ -435,15 +434,15 @@ final class CliSupport {
     /**
      * 全库任务链（跨会话，按链首时间升序）——任务域命令的统一派生入口。
      */
+    static List<TaskChain> taskChains(StorageRepository repository) {
+        return TaskChainView.resolveAll(repository);
+    }
+
     /**
      * 计数名词的原生单复数形态（"1 record" / "2 records"；零取复数是英文惯例）。
      */
     static String plural(long n, String noun) {
         return n + " " + noun + (n == 1 ? "" : "s");
-    }
-
-    static List<TaskChain> taskChains(StorageRepository repository) {
-        return TaskChainView.resolveAll(repository);
     }
 
     /**
@@ -514,10 +513,10 @@ final class CliSupport {
     /**
      * 单条规则声明的未知 behavior 告警——owner 标明声明来源（调用点标签）。
      */
-    static void warnUnknownBehaviors(String owner, InvocationRule rule, PrintStream out) {
+    private static void warnUnknownBehaviors(String owner, InvocationRule rule, PrintStream out) {
         Set<String> unknown = unknownBehaviors(rule);
         if (!unknown.isEmpty()) {
-            out.println("Warning: " + owner + " declares unknown behaviors: " + String.join(", ", unknown) + " (the rule will be ignored). Valid behavior names: " + String.join(", ", new TreeSet<>(BehaviorChecker.getBuiltinBehaviorNames())));
+            out.println("Warning: " + owner + " declares unknown behaviors: " + String.join(", ", unknown) + " (unknown names have no effect; they are treated as passing). Valid behavior names: " + String.join(", ", new TreeSet<>(BehaviorChecker.getBuiltinBehaviorNames())));
         }
     }
 

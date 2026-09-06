@@ -6,7 +6,9 @@ import io.github.agentassert4j.algorithm.JudgmentSemantics;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.*;
+import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
+import io.github.agentassert4j.spi.LlmTimeoutException;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
@@ -51,10 +53,6 @@ class TaskReplayRunnerTest {
 
     private TaskReplayRunner newRunner(boolean jsonMode) {
         return new TaskReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), jsonMode);
-    }
-
-    private InteractionRecord saveRecord(String recordId, String sessionId, long ts, String response) {
-        return saveRecord(recordId, sessionId, ts, "查订单", "order", "hash-a", response, null);
     }
 
     /**
@@ -134,8 +132,8 @@ class TaskReplayRunnerTest {
      * 两个同名任务链（两条 session），逐步记录相同响应 → 对齐应全 PASS。
      */
     private void seedIdenticalChains(String response) {
-        saveRecord("a-1", "session-a", 1000L, response);
-        saveRecord("b-1", "session-b", 2000L, response);
+        saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", response, null);
+        saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", response, null);
     }
 
     @Nested
@@ -192,7 +190,7 @@ class TaskReplayRunnerTest {
         @Test
         @DisplayName("仅一条链 → 自建基线，退出码 0")
         void singleChain_selfEstablish() {
-            saveRecord("a-1", "session-a", 1000L, "{\"result\":\"ok\"}");
+            saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
 
             assertEquals(0, runner.run(null, null, false, false, false, false, null, null));
             assertTrue(output.toString().contains("first recording becomes the baseline"));
@@ -201,9 +199,9 @@ class TaskReplayRunnerTest {
         @Test
         @DisplayName("同文本多链取最新 vs 次新，多轮执行不触发歧义")
         void multipleChains_sameTask_pairsLatestTwo() {
-            saveRecord("a-1", "session-a", 1000L, "{\"v\":1}");
-            saveRecord("b-1", "session-b", 2000L, "{\"v\":1}");
-            saveRecord("c-1", "session-c", 3000L, "{\"v\":1}");
+            saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+            saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+            saveRecord("c-1", "session-c", 3000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
 
             assertEquals(0, runner.run(null, null, false, false, false, false, null, null));
         }
@@ -267,9 +265,9 @@ class TaskReplayRunnerTest {
         @Test
         @DisplayName("--invocation 缩域到含该键的任务链，域外任务不对齐")
         void invocationNarrowing_filtersChains() {
-            saveRecord("a-1", "session-a", 1000L, "查订单");
-            saveRecord("x-1", "session-x", 1500L, "写诗");
-            saveRecord("b-1", "session-b", 2000L, "查订单");
+            saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "查订单", null);
+            saveRecord("x-1", "session-x", 1500L, "查订单", "order", "hash-a", "写诗", null);
+            saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "查订单", null);
 
             assertEquals(0, runner.run(null, "invocation:order:hash-a", false, false, false, false, null, null));
             assertFalse(output.toString().contains("写诗"), "缩域外任务不应进入对齐输出: " + output);
@@ -278,8 +276,8 @@ class TaskReplayRunnerTest {
         @Test
         @DisplayName("--task 与 --invocation 复合 AND：交集为空退出码 2")
         void compositeAnd_emptyIntersection_exits2() {
-            saveRecord("a-1", "session-a", 1000L, "查订单");
-            saveRecord("x-1", "session-x", 1500L, "写诗");
+            saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "查订单", null);
+            saveRecord("x-1", "session-x", 1500L, "查订单", "order", "hash-a", "写诗", null);
 
             assertEquals(2, runner.run("查订单", "invocation:order:hash-b", false, false, false, false, null, null));
         }
@@ -548,7 +546,7 @@ class TaskReplayRunnerTest {
         @DisplayName("重驱全败（无任何比对结果）→ 退出码 2 而非误报回归")
         void reDrive_allFailed() {
             seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
-            stubClient.failWith(new io.github.agentassert4j.spi.LlmApiException("simulated outage"));
+            stubClient.failWith(new LlmApiException("simulated outage"));
 
             assertEquals(2, runner.run(null, null, false, false, true, false, null, null));
             assertTrue(output.toString().contains("All re-drive calls failed"));
@@ -677,24 +675,24 @@ class TaskReplayRunnerTest {
      */
     static class StubLlmClient implements LlmClient {
         private String scriptedContent = "{\"result\":\"ok\"}";
-        private io.github.agentassert4j.spi.LlmApiException failure;
+        private LlmApiException failure;
         int calls;
 
         void setScriptedContent(String content) {
             this.scriptedContent = content;
         }
 
-        void failWith(io.github.agentassert4j.spi.LlmApiException failure) {
+        void failWith(LlmApiException failure) {
             this.failure = failure;
         }
 
         @Override
-        public io.github.agentassert4j.model.LlmResponse chat(io.github.agentassert4j.model.LlmRequest request, long timeoutMs) throws io.github.agentassert4j.spi.LlmTimeoutException, io.github.agentassert4j.spi.LlmApiException {
+        public LlmResponse chat(LlmRequest request, long timeoutMs) throws LlmTimeoutException, LlmApiException {
             calls++;
             if (failure != null) {
                 throw failure;
             }
-            io.github.agentassert4j.model.LlmResponse response = new io.github.agentassert4j.model.LlmResponse();
+            LlmResponse response = new LlmResponse();
             response.setContent(scriptedContent);
             response.setInputTokens(10);
             response.setOutputTokens(5);

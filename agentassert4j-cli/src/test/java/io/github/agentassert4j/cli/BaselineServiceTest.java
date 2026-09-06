@@ -55,7 +55,7 @@ class BaselineServiceTest {
         InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"requiredKeywords\":[\"订单号\"]}}}");
         PrintStream out = new PrintStream(output, true);
 
-        int established = new BaselineService(repository).establishMissing(out, "tester", false, null, rules);
+        int established = new BaselineService(repository).establishMissing(out, "tester", false, null, rules, null);
 
         assertEquals(1, established, "规则违例不阻断建档");
         String report = output.toString();
@@ -73,7 +73,7 @@ class BaselineServiceTest {
         InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"requiredKeywords\":[\"订单号\"]}}}");
         PrintStream out = new PrintStream(output, true);
 
-        new BaselineService(repository).establishMissing(out, "tester", false, null, rules);
+        new BaselineService(repository).establishMissing(out, "tester", false, null, rules, null);
 
         assertFalse(output.toString().contains("violates the declared rules"), "合规种子不得误报: " + output);
     }
@@ -85,7 +85,7 @@ class BaselineServiceTest {
         InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"requiredKeywords\":[\"订单号\"]," + "\"forbiddenKeywords\":[\"抱歉\"]," + "\"regexPatterns\":[{\"pattern\":\"状态[:：]\\\\w+\",\"description\":\"状态行\"}]}}}");
         PrintStream out = new PrintStream(output, true);
 
-        new BaselineService(repository).establishMissing(out, "tester", false, null, rules);
+        new BaselineService(repository).establishMissing(out, "tester", false, null, rules, null);
 
         String report = output.toString();
         assertTrue(report.contains("forbidden keyword '抱歉' present"), "禁用关键词违例可见: " + report);
@@ -101,12 +101,12 @@ class BaselineServiceTest {
         repository.saveInteraction(early);
         PrintStream out = new PrintStream(output, true);
 
-        new BaselineService(repository).establishMissing(out, "tester", false, null, null);
+        new BaselineService(repository).establishMissing(out, "tester", false, null, null, null);
 
         InvocationProfile profile = repository.findInvocationByKey(invocationKeyOf("skill-1"));
         assertNotNull(profile, "基线已建立");
-        assertEquals(FingerprintExtractor.extract(early), profile.getFingerprint(), "种子指纹必须来自规范序最早记录");
-        assertNotEquals(FingerprintExtractor.extract(late), profile.getFingerprint(), "晚于种子的记录不得成为基线");
+        assertEquals(FingerprintExtractor.extract(early, null, null), profile.getFingerprint(), "种子指纹必须来自规范序最早记录");
+        assertNotEquals(FingerprintExtractor.extract(late, null, null), profile.getFingerprint(), "晚于种子的记录不得成为基线");
     }
 
     private InteractionRecord makeRecord(String recordId, String invocationId, long timestamp, String response) {

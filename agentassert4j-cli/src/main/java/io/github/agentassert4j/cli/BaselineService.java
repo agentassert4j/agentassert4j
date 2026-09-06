@@ -41,15 +41,9 @@ public class BaselineService {
      * @param invocationFilter 仅处理该业务 invocationId 或分组键前缀（null = 全部；调用方经
      *                         CliSupport 预解析，invocationKey 前缀已在解析层换算成业务标签）
      * @param rules            规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
+     * @param outcomes         逐调用点结果收集（null = 不收集；人类结果行已就地打印，
+     *                         明细供 --json 报告组装）
      * @return 本次新建/重建基线的分组数
-     */
-    public int establishMissing(PrintStream out, String actor, boolean force, String invocationFilter, InvocationRulesConfig rules) {
-        return establishMissing(out, actor, force, invocationFilter, rules, null);
-    }
-
-    /**
-     * 同上，另把逐调用点结果收集进 outcomes（null = 不收集）——
-     * 人类结果行已就地打印，明细供 --json 报告组装。
      */
     public int establishMissing(PrintStream out, String actor, boolean force, String invocationFilter, InvocationRulesConfig rules, List<BaselineOutcome> outcomes) {
         BaselineManager manager = new BaselineManager(repository);
@@ -91,13 +85,20 @@ public class BaselineService {
                 }
             }
 
+            // 落库回验：建档路径吞掉单条存储故障（不中断整批），但全失败时
+            // 画像不存在——此时不得上报「已建立」的假成功、不得计入计数
+            InvocationProfile created = repository.findInvocationByKey(invocationKey);
+            if (created == null || created.getFingerprint() == null) {
+                out.println("  " + displayLabel(records) + invocationKey + ": baseline establishment failed (storage error; see storage logs)");
+                if (outcomes != null) {
+                    outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "failed", null));
+                }
+                continue;
+            }
             established++;
             // 首条记录建立画像时 totalRecords=1，回填该分组的真实记录数
-            InvocationProfile created = repository.findInvocationByKey(invocationKey);
-            if (created != null) {
-                created.setTotalRecords(records.size());
-                repository.saveInvocationProfile(created);
-            }
+            created.setTotalRecords(records.size());
+            repository.saveInvocationProfile(created);
             out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "baseline re-established under the current judgment semantics (" + created.getVersionTag() + ")" : "baseline established"));
             if (outcomes != null) {
                 outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), hadBaseline ? "reestablished" : "created", created != null ? created.getVersionTag() : null));

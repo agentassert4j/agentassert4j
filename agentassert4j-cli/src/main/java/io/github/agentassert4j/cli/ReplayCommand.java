@@ -82,7 +82,7 @@ public class ReplayCommand implements Callable<Integer> {
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db, jsonOutput ? System.err : System.out);
+            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
 
             String resolvedInvocation = null;
             if (invocation != null) {
@@ -96,8 +96,8 @@ public class ReplayCommand implements Callable<Integer> {
             }
             TestExecutionConfig executionConfig = new TestExecutionConfig().timeoutMs(config.getLlm().getTimeoutMs()).temperature(config.getLlm().getTemperature());
             InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
-            CliSupport.warnUnknownBehaviors(rules, jsonOutput ? System.err : System.out);
-            CliSupport.warnMalformedTaskRules(rules, jsonOutput ? System.err : System.out);
+            CliSupport.warnUnknownBehaviors(rules, jsonOutput ? err : out);
+            CliSupport.warnMalformedTaskRules(rules, jsonOutput ? err : out);
 
             return new TaskReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(task, resolvedInvocation, ciMode, dryRun, reDrive, fullChain, maxTotalCalls, maxTotalTokens);
         } catch (RuntimeException e) {

@@ -63,7 +63,7 @@ public class VerifyCommand implements Callable<Integer> {
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db, jsonOutput ? System.err : System.out);
+            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
             DeterministicComparator comparator = CliSupport.createComparator(config);
             return new VerifyRunner(repository, comparator, out, err, jsonOutput).run(packContent, digest, task, reportPath, dryRun);
         } catch (RuntimeException e) {

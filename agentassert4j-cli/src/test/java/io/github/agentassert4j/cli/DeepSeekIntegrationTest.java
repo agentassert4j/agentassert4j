@@ -69,13 +69,6 @@ class DeepSeekIntegrationTest {
     }
 
     /**
-     * 从 LlmResponse 构建纯文本 InteractionRecord
-     */
-    private InteractionRecord responseToRecord(LlmResponse response) {
-        return responseToRecord(response, null);
-    }
-
-    /**
      * 从 LlmResponse 构建 InteractionRecord（支持工具调用）
      */
     private InteractionRecord responseToRecord(LlmResponse response, LlmRequest request) {
@@ -317,9 +310,9 @@ class DeepSeekIntegrationTest {
         @DisplayName("3.1 纯文本响应指纹")
         void testTextFingerprint() throws Exception {
             LlmResponse response = callLlm("你是一个数学助手。", "1+1等于几？");
-            InteractionRecord record = responseToRecord(response);
+            InteractionRecord record = responseToRecord(response, null);
 
-            DeterministicFingerprint fp = FingerprintExtractor.extract(record);
+            DeterministicFingerprint fp = FingerprintExtractor.extract(record, null, null);
 
             // 维度 1：无工具调用
             assertTrue(fp.getToolCallSet().isEmpty());
@@ -339,9 +332,9 @@ class DeepSeekIntegrationTest {
         @DisplayName("3.2 JSON 输出指纹")
         void testJsonFingerprint() throws Exception {
             LlmResponse response = callLlm("你是数据助手，只返回JSON。不要任何其他文字。", "返回一个JSON：{\"name\":\"张三\",\"age\":25}");
-            InteractionRecord record = responseToRecord(response);
+            InteractionRecord record = responseToRecord(response, null);
 
-            DeterministicFingerprint fp = FingerprintExtractor.extract(record);
+            DeterministicFingerprint fp = FingerprintExtractor.extract(record, null, null);
 
             // JSON 检测
             if ("application/json".equals(fp.getOutputContentType())) {
@@ -366,7 +359,7 @@ class DeepSeekIntegrationTest {
             LlmResponse response = client.chat(request, 30000);
             InteractionRecord record = responseToRecord(response, request);
 
-            DeterministicFingerprint fp = FingerprintExtractor.extract(record);
+            DeterministicFingerprint fp = FingerprintExtractor.extract(record, null, null);
 
             // 维度 1：有工具调用
             assertFalse(fp.getToolCallSet().isEmpty(), "应有 toolCallSet");
@@ -389,13 +382,13 @@ class DeepSeekIntegrationTest {
             LlmResponse resp1 = callLlm(prompt, input);
             LlmResponse resp2 = callLlm(prompt, input);
 
-            InteractionRecord rec1 = responseToRecord(resp1);
+            InteractionRecord rec1 = responseToRecord(resp1, null);
             rec1.setTemplateHash(HashUtil.sha256(prompt));
-            InteractionRecord rec2 = responseToRecord(resp2);
+            InteractionRecord rec2 = responseToRecord(resp2, null);
             rec2.setTemplateHash(HashUtil.sha256(prompt));
 
-            DeterministicFingerprint fp1 = FingerprintExtractor.extract(rec1);
-            DeterministicFingerprint fp2 = FingerprintExtractor.extract(rec2);
+            DeterministicFingerprint fp1 = FingerprintExtractor.extract(rec1, null, null);
+            DeterministicFingerprint fp2 = FingerprintExtractor.extract(rec2, null, null);
 
             DeterministicComparator comparator = new DeterministicComparator(ComparatorConfig.defaults());
             ComparisonResult result = comparator.compare(fp1, fp2, resp2.getContent());
@@ -411,7 +404,7 @@ class DeepSeekIntegrationTest {
         void testTextVsToolCallComparison() throws Exception {
             // 基线：纯文本
             LlmResponse textResp = callLlm("你是一个助手。", "1+1等于几？");
-            InteractionRecord textRec = responseToRecord(textResp);
+            InteractionRecord textRec = responseToRecord(textResp, null);
 
             // 当前：工具调用
             LlmRequest toolReq = new LlmRequest();
@@ -422,8 +415,8 @@ class DeepSeekIntegrationTest {
             LlmResponse toolResp = client.chat(toolReq, 30000);
             InteractionRecord toolRec = responseToRecord(toolResp, toolReq);
 
-            DeterministicFingerprint textFp = FingerprintExtractor.extract(textRec);
-            DeterministicFingerprint toolFp = FingerprintExtractor.extract(toolRec);
+            DeterministicFingerprint textFp = FingerprintExtractor.extract(textRec, null, null);
+            DeterministicFingerprint toolFp = FingerprintExtractor.extract(toolRec, null, null);
 
             DeterministicComparator comparator = new DeterministicComparator(ComparatorConfig.defaults());
             ComparisonResult result = comparator.compare(textFp, toolFp, toolResp.getContent());
@@ -443,8 +436,8 @@ class DeepSeekIntegrationTest {
         @DisplayName("5.1 mustUseChinese — 中文回答")
         void testMustUseChinese() throws Exception {
             LlmResponse resp = callLlm("你是一个助手，用中文回答。", "什么是Java？用中文介绍。");
-            InteractionRecord rec = responseToRecord(resp);
-            DeterministicFingerprint fp = FingerprintExtractor.extract(rec);
+            InteractionRecord rec = responseToRecord(resp, null);
+            DeterministicFingerprint fp = FingerprintExtractor.extract(rec, null, null);
 
             boolean result = BehaviorChecker.check("mustUseChinese", fp, resp.getContent());
             System.out.println("[5.1] mustUseChinese=" + result + ", content=" + resp.getContent().substring(0, Math.min(80, resp.getContent().length())));
@@ -459,8 +452,8 @@ class DeepSeekIntegrationTest {
         @DisplayName("5.2 nonEmptyOutput — 非空输出")
         void testNonEmptyOutput() throws Exception {
             LlmResponse resp = callLlm("你是助手。", "你好");
-            InteractionRecord rec = responseToRecord(resp);
-            DeterministicFingerprint fp = FingerprintExtractor.extract(rec);
+            InteractionRecord rec = responseToRecord(resp, null);
+            DeterministicFingerprint fp = FingerprintExtractor.extract(rec, null, null);
 
             assertTrue(BehaviorChecker.check("nonEmptyOutput", fp, resp.getContent()));
             assertTrue(BehaviorChecker.check("containsCjk", fp, resp.getContent()));
@@ -470,8 +463,8 @@ class DeepSeekIntegrationTest {
         @DisplayName("5.3 jsonOutput — JSON 输出检测")
         void testJsonOutput() throws Exception {
             LlmResponse resp = callLlm("你是数据助手。只返回JSON格式数据，不要其他文字。", "返回 {\"status\":\"ok\",\"count\":5}");
-            InteractionRecord rec = responseToRecord(resp);
-            DeterministicFingerprint fp = FingerprintExtractor.extract(rec);
+            InteractionRecord rec = responseToRecord(resp, null);
+            DeterministicFingerprint fp = FingerprintExtractor.extract(rec, null, null);
 
             boolean isJson = BehaviorChecker.check("jsonOutput", fp, resp.getContent());
             System.out.println("[5.3] jsonOutput=" + isJson + ", content=" + resp.getContent().substring(0, Math.min(80, resp.getContent().length())));
@@ -600,7 +593,7 @@ class DeepSeekIntegrationTest {
             String userInput = "15+27等于几？";
 
             LlmResponse baselineResp = callLlm(originalPrompt, userInput);
-            InteractionRecord baseline = responseToRecord(baselineResp);
+            InteractionRecord baseline = responseToRecord(baselineResp, null);
             baseline.setRecordId("lifecycle-text-1");
             baseline.setInvocationId("math-skill");
             baseline.setTemplateHash(HashUtil.sha256(originalPrompt));
@@ -608,7 +601,7 @@ class DeepSeekIntegrationTest {
             System.out.println("[9.1] 基线响应: " + baselineResp.getContent());
 
             // 2. 提取基线指纹
-            DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline);
+            DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline, null, null);
             System.out.println("[9.1] 基线指纹: toolCallSet=" + baselineFp.getToolCallSet() + ", outputType=" + baselineFp.getOutputContentType() + ", textMagnitude=" + baselineFp.getTextLengthMagnitude());
 
             // 3. Prompt 变更
@@ -657,7 +650,7 @@ class DeepSeekIntegrationTest {
                 System.out.println("[9.2] 基线工具: " + tc.getToolName() + " args=" + tc.getArguments());
 
                 // 2. 基线指纹
-                DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline);
+                DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline, null, null);
                 assertTrue(baselineFp.getToolCallSet().contains("get_weather"));
 
                 // 3. 用新 prompt 重放（tools 定义随基线记录原样携带）

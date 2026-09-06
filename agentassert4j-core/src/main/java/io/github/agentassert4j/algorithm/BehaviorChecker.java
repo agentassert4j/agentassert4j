@@ -11,10 +11,9 @@ import java.util.function.BiFunction;
 /**
  * 内置行为校验库 — 维度 4 中用户声明的 behavior 校验。
  *
- * <p>内置常用 behavior 8 个，覆盖 80% 场景。
- * 未知 behavior 默认通过（不误报比漏报好）。</p>
+ * <p>未知 behavior 默认通过（不误报比漏报好）。</p>
  *
- * <p>设计决策：内置库用 Map 而非 SPI，10 个常用 behavior 不值得做成插件机制。
+ * <p>设计决策：内置库用 Map 而非 SPI——十来个常用 behavior 不值得做成插件机制。
  * 需要新 behavior 时提 PR 或 issue 加到内置库。</p>
  *
  * @author axy-yxa
@@ -22,7 +21,6 @@ import java.util.function.BiFunction;
  */
 public final class BehaviorChecker {
 
-    // 内置常用 behavior
     private static final Map<String, BiFunction<DeterministicFingerprint, String, Boolean>> BUILTINS;
 
     static {

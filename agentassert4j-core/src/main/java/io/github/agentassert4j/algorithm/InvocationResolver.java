@@ -97,7 +97,7 @@ public final class InvocationResolver {
         profile.setInvocationName(invocationName);
         profile.setInvocationType(hasToolCalls ? InvocationType.TOOL : InvocationType.PURE_CHAT);
         profile.setTemplateHash(hasTemplate ? templateHash : null);
-        profile.setParamSignature(hasToolCalls ? paramPairs(record, false).sorted().collect(Collectors.joining(",")) : "");
+        profile.setParamSignature(hasToolCalls ? paramPairs(record).sorted().collect(Collectors.joining(",")) : "");
         return profile;
     }
 
@@ -164,20 +164,15 @@ public final class InvocationResolver {
     }
 
     /**
-     * 参数类型的「键:值」对流（视图列）。显示形态（encode=false）保留原文可读；
-     * 键形态（encode=true）逐组件编码。归一化 toLowerCase()：SDK 提供 "String"、
-     * JSON Schema 提供 "string"、其他栈可能提供 "STRING" → 统一小写；
+     * 参数类型的「键:值」对流（视图列），原文可读。归一化 toLowerCase()：
+     * SDK 提供 "String"、JSON Schema 提供 "string"、其他栈可能提供 "STRING" → 统一小写；
      * 值可能为 null（存储层反序列化的开放面）：按 "null" 归一，杜绝 NPE 击穿 resolve
      */
-    private static Stream<String> paramPairs(InteractionRecord record, boolean encode) {
+    private static Stream<String> paramPairs(InteractionRecord record) {
         if (record.getToolCalls() == null) return Stream.empty();
         return record.getToolCalls().stream().flatMap(tc -> {
             if (tc.getArgTypes() == null) return Stream.empty();
-            return tc.getArgTypes().entrySet().stream().map(e -> {
-                String key = e.getKey().toLowerCase(Locale.ROOT);
-                String value = String.valueOf(e.getValue()).toLowerCase(Locale.ROOT);
-                return encode ? encodeComponent(key) + ":" + encodeComponent(value) : key + ":" + value;
-            });
+            return tc.getArgTypes().entrySet().stream().map(e -> e.getKey().toLowerCase(Locale.ROOT) + ":" + String.valueOf(e.getValue()).toLowerCase(Locale.ROOT));
         });
     }
 }

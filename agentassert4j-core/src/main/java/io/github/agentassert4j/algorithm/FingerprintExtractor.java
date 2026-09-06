@@ -24,55 +24,38 @@ public final class FingerprintExtractor {
     }
 
     /**
-     * 从交互记录中提取确定性行为指纹。
-     *
-     * @param record 交互记录
-     * @return 四维度确定性指纹（规则维度 3-4 为空集口径）
-     */
-    public static DeterministicFingerprint extract(InteractionRecord record) {
-        DeterministicFingerprint fp = new DeterministicFingerprint();
-
-        // ====== 维度 1：工具调用（全自动，可靠）======
-        extractDimension1(record, fp);
-
-        // ====== 维度 2：输出结构（全自动，使用 RecursiveJsonParser）======
-        extractDimension2(record, fp);
-
-        // ====== 维度 3：内容规则（从 rules 配置加载，非自动提取）======
-        // 无参 extract() 不传入规则配置，维度 3-4 保持空
-        fp.setRequiredKeywords(Collections.emptySet());
-        fp.setForbiddenKeywords(Collections.emptySet());
-        fp.setRegexPatterns(Collections.emptyList());
-
-        // ====== 维度 4：约束行为（从 rules 配置加载）======
-        fp.setDeclaredBehaviors(Collections.emptySet());
-        fp.setHasError(record.getToolCalls() != null && record.getToolCalls().stream().anyMatch(tc -> !tc.isSuccess()));
-
-        return fp;
-    }
-
-    /**
-     * 带规则配置的指纹提取 — 建档与重放判定路径共用，
-     * 从 InvocationRulesConfig 获取维度 3-4 的声明式规则。
+     * 从交互记录提取确定性行为指纹，并从 InvocationRulesConfig 注入维度 3-4 的
+     * 声明式规则。
      *
      * <p>规则查找键是记录上的业务标签；未声明调用点（无标签）统一落到空键——
-     * 调用方可用空键为未声明调用点统一注入断言。</p>
+     * 调用方可用空键为未声明调用点统一注入断言。rules 传 null 时维度 3-4
+     * 保持空集口径（无规则声明即无该维断言）。</p>
      *
      * @param record       交互记录
-     * @param rules        规则配置（null 时维度 3-4 保持空）
+     * @param rules        规则配置（null 时维度 3-4 为空集）
      * @param invocationId 声明标签（可为 null，视同空键）
      * @return 四维度确定性指纹
      */
     public static DeterministicFingerprint extract(InteractionRecord record, InvocationRulesConfig rules, String invocationId) {
-        DeterministicFingerprint fp = extract(record);
+        DeterministicFingerprint fp = new DeterministicFingerprint();
+
+        extractDimension1(record, fp);
+        extractDimension2(record, fp);
+
         if (rules == null) {
-            return fp;
+            fp.setRequiredKeywords(Collections.emptySet());
+            fp.setForbiddenKeywords(Collections.emptySet());
+            fp.setRegexPatterns(Collections.emptyList());
+            fp.setDeclaredBehaviors(Collections.emptySet());
+        } else {
+            InvocationRulesConfig.InvocationRule rule = rules.getRulesForInvocation(invocationId != null ? invocationId : "");
+            fp.setRequiredKeywords(rule.getRequiredKeywords());
+            fp.setForbiddenKeywords(rule.getForbiddenKeywords());
+            fp.setRegexPatterns(rule.getRegexPatterns());
+            fp.setDeclaredBehaviors(rule.getBehaviors());
         }
-        InvocationRulesConfig.InvocationRule rule = rules.getRulesForInvocation(invocationId != null ? invocationId : "");
-        fp.setRequiredKeywords(rule.getRequiredKeywords());
-        fp.setForbiddenKeywords(rule.getForbiddenKeywords());
-        fp.setRegexPatterns(rule.getRegexPatterns());
-        fp.setDeclaredBehaviors(rule.getBehaviors());
+
+        fp.setHasError(record.getToolCalls() != null && record.getToolCalls().stream().anyMatch(tc -> !tc.isSuccess()));
         return fp;
     }
 

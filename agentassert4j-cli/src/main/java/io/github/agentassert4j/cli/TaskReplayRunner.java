@@ -106,7 +106,7 @@ public class TaskReplayRunner {
 
         List<TaskChain> chains = CliSupport.taskChains(repository);
         if (chains.isEmpty()) {
-            diagnostic("No recorded interactions found. Run your agent first to build up recordings.");
+            diagnostic("No recorded interactions found. Run your agent first to record some interactions.");
             return 2;
         }
 
@@ -156,7 +156,7 @@ public class TaskReplayRunner {
             }
         } else {
             // 自动建档（开发态自动化，报告可见）：裂键新档与全新键在此收编
-            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), false, null, rules);
+            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), false, null, rules, null);
         }
 
         // 判定语义守卫：任何画像由其他版本（含未标记历史行）批准即拒绝判定——
@@ -363,12 +363,7 @@ public class TaskReplayRunner {
     }
 
     private static String servedNote(RegressionTestResult result, InteractionRecord baseline) {
-        String served = result.getServedModel();
-        String recorded = baseline.getServedModel();
-        if (served == null || recorded == null || served.equals(recorded)) {
-            return "";
-        }
-        return "  (served: " + served + ", recorded: " + recorded + ")";
+        return servedModelNote(result.getServedModel(), baseline.getServedModel(), "recorded");
     }
 
     private static String reDriveStepJson(InteractionRecord record, String key, RegressionTestResult result) {
@@ -481,7 +476,9 @@ public class TaskReplayRunner {
                 worstOutcome(outcomes, step.getInvocationKey(), StepOutcome.GAP);
             } else {
                 String versionPrefix = step.isVersionSwitch() ? "cross-version pair: " : "";
-                String served = servedModelNote(baselineRecords.get(step.getBaselineRecordId()), newRecords.get(step.getNewRecordId()));
+                InteractionRecord newStepRecord = newRecords.get(step.getNewRecordId());
+                InteractionRecord baselineStepRecord = baselineRecords.get(step.getBaselineRecordId());
+                String served = servedModelNote(newStepRecord == null ? null : newStepRecord.getServedModel(), baselineStepRecord == null ? null : baselineStepRecord.getServedModel(), "baseline");
                 if (step.getVerdict() == Verdict.CHANGED) {
                     changed++;
                     info(stepLine(index, step.getInvocationKey(), versionPrefix + step.getComparison().getSummary()) + served);
@@ -598,7 +595,7 @@ public class TaskReplayRunner {
         } else if (outcome == StepOutcome.GAP) {
             totals.hung++;
             action = "hung";
-            info("Hung: " + shown + " (alignment evidence gap; no collect, no candidate; a real re-run resolves it into another exit)");
+            info("Hung: " + shown + " (alignment evidence gap; no collect, no candidate; a real re-run moves it to another outcome)");
         } else if (ciMode) {
             // --ci 模式：PASS 也不落治理写——收敛动作留给开发态 replay 或 approve
             totals.uncollected++;
@@ -627,7 +624,7 @@ public class TaskReplayRunner {
         try {
             for (InvocationProfile profile : repository.findAllInvocations()) {
                 if (profile.getAlgoVersion() == null || !JudgmentSemantics.VERSION.equals(profile.getAlgoVersion())) {
-                    problems.add("Judgment semantics version mismatch: " + profile.getInvocationKey() + " baseline was approved by " + (profile.getAlgoVersion() == null ? "an unmarked version" : profile.getAlgoVersion()) + ", current engine is " + JudgmentSemantics.VERSION + ". Refusing to judge to avoid silently re-interpreting historical baselines. Run `agentassert4j baseline --force` to re-establish baselines under the current semantics.");
+                    problems.add("Judgment semantics version mismatch: " + profile.getInvocationKey() + " baseline was approved by " + (profile.getAlgoVersion() == null ? "an unmarked version" : profile.getAlgoVersion()) + ", current engine is " + JudgmentSemantics.VERSION + ". Refusing to judge to avoid silently reinterpreting historical baselines. Run `agentassert4j baseline --force` to re-establish baselines under the current semantics.");
                 }
             }
         } catch (RuntimeException e) {
@@ -654,7 +651,7 @@ public class TaskReplayRunner {
             }
         }
         if (ungroupable > 0) {
-            diagnostic("Warning: " + CliSupport.plural(ungroupable, "record") + " failed key grouping and were excluded from this judgment set: " + String.join(", ", samples) + (ungroupable > samples.size() ? ", and more" : ""));
+            diagnostic("Warning: " + CliSupport.plural(ungroupable, "record") + " could not be resolved to an invocation key and were excluded from this judgment set: " + String.join(", ", samples) + (ungroupable > samples.size() ? ", and more" : ""));
         }
     }
 
@@ -737,19 +734,15 @@ public class TaskReplayRunner {
     }
 
     /**
-     * 逐步判定行的 served 模型标注：两侧记录的 served 模型不一致即就地标注，
-     * 与单点重放同口径——答卷人不同，判定可解释性留给使用者裁量。
+     * 逐步判定行的 served 模型标注：两侧记录的 served 模型不一致即就地标注
+     * （答卷人不同，判定可解释性留给使用者裁量）；对齐报告与重驱单点共用本渲染，
+     * 仅第二侧称谓不同（对齐称 baseline，重驱称 recorded）。
      */
-    private static String servedModelNote(InteractionRecord baselineRecord, InteractionRecord newRecord) {
-        if (baselineRecord == null || newRecord == null) {
+    private static String servedModelNote(String served, String other, String otherLabel) {
+        if (served == null || other == null || served.equals(other)) {
             return "";
         }
-        String served = newRecord.getServedModel();
-        String recorded = baselineRecord.getServedModel();
-        if (served == null || recorded == null || served.equals(recorded)) {
-            return "";
-        }
-        return "  (served: " + served + ", baseline: " + recorded + ")";
+        return "  (served: " + served + ", " + otherLabel + ": " + other + ")";
     }
 
     private static Map<String, InteractionRecord> recordsById(TaskChain chain) {
@@ -966,11 +959,6 @@ public class TaskReplayRunner {
         return "  [" + index + "] " + CliSupport.displayKey(key) + "  " + detail;
     }
 
-
-    private static String abbreviate(String text, int budget) {
-        return CliSupport.abbreviateText(text, budget);
-    }
-
     /**
      * 非 PASS 对齐步的文本差异证据（低置信呈现）：结构指纹说明「哪里不同」，
      * 此注记补充「说了什么不同的话」。任一原文缺席或结构一致时静默省略。
@@ -1003,8 +991,6 @@ public class TaskReplayRunner {
     private static String dryRunAlignJson(String request, String baselineSession, Integer baselineSteps, String newSession, int newSteps) {
         return "{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-dry-run\",\"alignPlan\":{\"request\":\"" + RecursiveJsonParser.escape(request) + "\",\"baselineSession\":" + (baselineSession != null ? "\"" + RecursiveJsonParser.escape(baselineSession) + "\"" : "null") + ",\"baselineSteps\":" + (baselineSteps != null ? baselineSteps.toString() : "null") + ",\"newSession\":\"" + RecursiveJsonParser.escape(newSession) + "\"" + ",\"newSteps\":" + newSteps + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}";
     }
-
-    // ---------- JSON（agentassert4j.task-report/1，单行，null 缺省即契约） ----------
 
     private static String taskJson(String mode, String request, String sessionId, int total, int pass, int changed, int inherited, int postDivergence, int skipped, int missing, int added, int crossVersion, List<String> steps, long baselineTime, Long newChainTime, boolean prefixDependent, Integer ruleViolationCount, List<String> ruleViolationJsons, String costJson) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"").append(mode).append('"');

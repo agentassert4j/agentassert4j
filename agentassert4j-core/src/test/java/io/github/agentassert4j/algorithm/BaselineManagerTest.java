@@ -562,7 +562,7 @@ class BaselineManagerTest {
             assertEquals(JudgmentSemantics.VERSION, reestablished.getAlgoVersion());
             assertNotEquals(firstVersion, reestablished.getVersionTag());
             // 重建必须以当前算法重新提取指纹：与对同一记录的现算结果逐维一致
-            DeterministicFingerprint expected = FingerprintExtractor.extract(record);
+            DeterministicFingerprint expected = FingerprintExtractor.extract(record, null, null);
             assertEquals(expected.getToolCallSet(), reestablished.getFingerprint().getToolCallSet());
             assertEquals(expected.getOutputContentType(), reestablished.getFingerprint().getOutputContentType());
             assertEquals(expected.getOutputFieldPaths(), reestablished.getFingerprint().getOutputFieldPaths());

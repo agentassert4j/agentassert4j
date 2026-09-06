@@ -3,10 +3,7 @@ package io.github.agentassert4j.cli;
 import io.github.agentassert4j.algorithm.*;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
-import io.github.agentassert4j.model.BaselineStatus;
-import io.github.agentassert4j.model.DeterministicFingerprint;
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.InvocationProfile;
+import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 import org.junit.jupiter.api.*;
@@ -70,7 +67,7 @@ class ReplayFlowTest {
     }
 
     private void establishAll() {
-        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", false, null, null);
+        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", false, null, null, null);
     }
 
     @Nested
@@ -202,7 +199,7 @@ class ReplayFlowTest {
             assertEquals(2, runner().run(null, null, false, false, false, false, null, null));
             assertTrue(output.toString().contains("Judgment semantics version mismatch"));
 
-            new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", true, null, null);
+            new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", true, null, null, null);
             assertEquals(JudgmentSemantics.VERSION, repository.findInvocationByKey(key).getAlgoVersion());
             assertEquals(0, runner().run(null, null, false, false, false, false, null, null));
         }
@@ -247,7 +244,7 @@ class ReplayFlowTest {
 
     static class StubLlmClient implements LlmClient {
         @Override
-        public io.github.agentassert4j.model.LlmResponse chat(io.github.agentassert4j.model.LlmRequest request, long timeoutMs) {
+        public LlmResponse chat(LlmRequest request, long timeoutMs) {
             throw new UnsupportedOperationException("统一引擎缺省路径零 LLM 调用");
         }
 

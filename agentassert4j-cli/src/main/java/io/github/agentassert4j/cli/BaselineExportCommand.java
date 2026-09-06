@@ -79,7 +79,7 @@ public class BaselineExportCommand implements Callable<Integer> {
             meta.setExportedBy(CliSupport.currentActor());
             meta.setJudgmentSemantics(JudgmentSemantics.VERSION);
             meta.setStorageSchemaVersion(1);
-            meta.setFrameworkVersion("1.0.0-SNAPSHOT");
+            meta.setFrameworkVersion(AgentAssert4jCli.FRAMEWORK_VERSION);
             pack.setMeta(meta);
 
             List<String> excluded = new ArrayList<>();
@@ -164,17 +164,20 @@ public class BaselineExportCommand implements Callable<Integer> {
             out.println("  " + CliSupport.plural(pack.getTasks().size(), "task chain") + " / " + CliSupport.plural(stepCount, "step") + (includeSamples ? " (masked samples included)" : " (no samples)"));
             out.println("  SHA-256: " + HashUtil.sha256(json) + " (reconcile with the accepting party)");
             List<String> ruleViolated = new ArrayList<>();
+            List<String> unestablishedOnly = new ArrayList<>();
             for (String reason : excluded) {
                 if (reason.contains("(baseline violates its own content rules)")) {
                     ruleViolated.add(reason);
+                } else {
+                    unestablishedOnly.add(reason);
                 }
             }
             if (!ruleViolated.isEmpty()) {
                 err.println("  Warning: task chains whose baselines violate their own declared content rules were excluded: " + String.join("; ", ruleViolated));
                 err.println("  Fix the baseline (re-record under the current template) or the rules declaration, then re-export.");
             }
-            if (!excluded.isEmpty()) {
-                out.println("  Warning: task chains with unestablished steps were excluded: " + String.join("; ", excluded));
+            if (!unestablishedOnly.isEmpty()) {
+                out.println("  Warning: task chains with unestablished steps were excluded: " + String.join("; ", unestablishedOnly));
             }
             return 0;
         } catch (RuntimeException e) {

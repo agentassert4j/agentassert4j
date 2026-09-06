@@ -130,26 +130,25 @@ public class InMemoryDependencyGraph {
     }
 
     /**
-     * 环检测 — DFS 三色染色法 + 显式递归栈。
+     * 环检测 — DFS 染色法 + 显式递归栈：白色未访问、灰色在当前递归栈中。
      * 返回所有参与环的节点集合（空集表示无环）；环外尾部祖先不在环上，
      * 只有栈中回边目标到栈顶的区段才是环。
      */
     public Set<String> detectCycles() {
         Set<String> white = new HashSet<>(getAllNodes());
         Set<String> gray = new HashSet<>();
-        Set<String> black = new HashSet<>();
         Set<String> cycleNodes = new LinkedHashSet<>();
         Deque<String> stack = new ArrayDeque<>();
 
         for (String node : getAllNodes()) {
             if (white.contains(node)) {
-                dfsCycle(node, white, gray, black, cycleNodes, stack);
+                dfsCycle(node, white, gray, cycleNodes, stack);
             }
         }
         return cycleNodes;
     }
 
-    private void dfsCycle(String node, Set<String> white, Set<String> gray, Set<String> black, Set<String> cycleNodes, Deque<String> stack) {
+    private void dfsCycle(String node, Set<String> white, Set<String> gray, Set<String> cycleNodes, Deque<String> stack) {
         white.remove(node);
         gray.add(node);
         stack.push(node);
@@ -167,14 +166,13 @@ public class InMemoryDependencyGraph {
                         }
                     }
                 } else if (white.contains(next)) {
-                    dfsCycle(next, white, gray, black, cycleNodes, stack);
+                    dfsCycle(next, white, gray, cycleNodes, stack);
                 }
             }
         }
 
         stack.pop();
         gray.remove(node);
-        black.add(node);
     }
 
     /**
@@ -194,7 +192,7 @@ public class InMemoryDependencyGraph {
     }
 
     /**
-     * 获取所有节点（插入序，快照与展示可复现）。
+     * 获取所有节点
      */
     public Set<String> getAllNodes() {
         Set<String> nodes = new LinkedHashSet<>(outEdges.keySet());
@@ -240,7 +238,6 @@ public class InMemoryDependencyGraph {
         root.put("nodeCount", nodeCount());
         root.put("edgeCount", edgeCount());
 
-        // 序列化边
         List<Object> edgeList = new ArrayList<>();
         for (GraphEdge e : getAllEdges()) {
             Map<String, Object> edgeMap = new LinkedHashMap<>();

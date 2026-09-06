@@ -62,10 +62,6 @@ class VerifyExportTest {
         }
     }
 
-    private void saveRecord(String recordId, String sessionId, long timestamp, String userInput, String invocationKey, String label, String response, String servedModel) {
-        saveRecord(recordId, sessionId, timestamp, userInput, invocationKey, label, "h-" + label, response, servedModel);
-    }
-
     private void saveRecord(String recordId, String sessionId, long timestamp, String userInput, String invocationKey, String label, String templateHash, String response, String servedModel) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(recordId);
@@ -80,10 +76,6 @@ class VerifyExportTest {
         r.setModelResponse(response);
         r.setServedModel(servedModel);
         repository.saveInteraction(r);
-    }
-
-    private void saveRecord(String recordId, StorageRepository repo, long timestamp, String userInput, String invocationKey, String label, String response, String servedModel) {
-        saveRecord(recordId, repo, timestamp, userInput, invocationKey, label, "h-" + label, response, servedModel);
     }
 
     private void saveRecord(String recordId, StorageRepository repo, long timestamp, String userInput, String invocationKey, String label, String templateHash, String response, String servedModel) {
@@ -114,13 +106,13 @@ class VerifyExportTest {
     }
 
     private void establishBaselines() {
-        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null);
+        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null, null);
     }
 
     @Test
     @DisplayName("包 JSON 的 schema/meta/step 键集与字面形态固定")
     void goldenPackFormat() throws Exception {
-        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
 
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
@@ -143,7 +135,7 @@ class VerifyExportTest {
     @Test
     @DisplayName("export→verify 同环境往返：全 PASS 退出码 0")
     void roundtrip_sameEnvironment_pass() throws Exception {
-        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
         String digest = HashUtil.sha256(json);
@@ -158,7 +150,7 @@ class VerifyExportTest {
     @Test
     @DisplayName("verify --dry-run：只读预演配对情况，零判定零写入")
     void dryRun_readOnly() throws Exception {
-        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
         String digest = HashUtil.sha256(json);
@@ -209,7 +201,7 @@ class VerifyExportTest {
     @Test
     @DisplayName("配对精确相等：前缀同名的本地链不得冒充包任务证据")
     void pairing_exactMatchOnly() throws Exception {
-        saveRecord("r1", "s1", 1000L, "V1", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("r1", "s1", 1000L, "V1", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
 
@@ -217,7 +209,7 @@ class VerifyExportTest {
         customerDb.initialize();
         try {
             // 客户侧只执行了 "V10"（前缀同名任务）——它不是 "V1" 的证据
-            saveRecord("c1", customerDb, 9000L, "V10", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            saveRecord("c1", customerDb, 9000L, "V10", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "cust-model");
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
 
             int exit = runner.run(json, "digest", null, null, false);
@@ -234,17 +226,17 @@ class VerifyExportTest {
     @Test
     @DisplayName("范围外链给因果提示：新录制未建档/未入包的常见成因就地指路")
     void verifyHint_unmatchedLocal() throws Exception {
-        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
 
         SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer.db").toString());
         customerDb.initialize();
         try {
-            saveRecord("c1", customerDb, 9000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            saveRecord("c1", customerDb, 9000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "cust-model");
             // 包导出之后又录了新任务：范围外链的典型成因
-            saveRecord("c2", customerDb, 9500L, "查物流", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
-            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null);
+            saveRecord("c2", customerDb, 9500L, "查物流", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null, null);
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
 
             int exit = runner.run(json, "digest", null, null, false);
@@ -266,15 +258,15 @@ class VerifyExportTest {
     @Test
     @DisplayName("跨模型验收：结构同 servedModel 异 → PASS 且标注跨模型")
     void crossModel_structureSame_pass() throws Exception {
-        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
 
         SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer.db").toString());
         customerDb.initialize();
         try {
-            saveRecord("c1", customerDb, 9000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "customer-local-model");
-            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null);
+            saveRecord("c1", customerDb, 9000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "customer-local-model");
+            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null, null);
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
 
             int exit = runner.run(json, "digest", null, null, false);
@@ -289,7 +281,7 @@ class VerifyExportTest {
     @Test
     @DisplayName("版本守卫：包判定语义与当前引擎不一致 → exit 2 拒绝判定")
     void versionGuard_rejects() throws Exception {
-        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
         String tampered = json.replace("\"judgmentSemantics\":\"det-v1\"", "\"judgmentSemantics\":\"det-v0\"");
@@ -303,7 +295,7 @@ class VerifyExportTest {
     @Test
     @DisplayName("覆盖缺口：包任务未在本地执行 → exit 2")
     void uncoveredTask_exit2() throws Exception {
-        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
 
@@ -320,7 +312,7 @@ class VerifyExportTest {
     @Test
     @DisplayName("include-samples：样本强制脱敏为掩码")
     void includeSamples_forcedMasked() throws Exception {
-        saveRecord("r1", "s1", 1000L, "我的密码是 secret123", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("r1", "s1", 1000L, "我的密码是 secret123", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
 
         String json = exportPack(tempDir.resolve("verify.db").toString(), true);
@@ -333,9 +325,9 @@ class VerifyExportTest {
     @Test
     @DisplayName("参照等价：包内指纹与库内记录路径喂同一对齐核，各自语义下判定正确")
     void referenceEquivalence() throws Exception {
-        saveRecord("b1", "s-old", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("b1", "s-old", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
-        saveRecord("n1", "s-new", 9000L, "查订单", "invocation:verdict:h-verdict", "verdict", "{\"status\":\"FAILED\"}", "dev-model");
+        saveRecord("n1", "s-new", 9000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"status\":\"FAILED\"}", "dev-model");
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
 
         // 包路径：包=最新链的行为证据（折叠+逐记录指纹），本地同链现场重提 → 自洽 PASS
@@ -364,7 +356,7 @@ class VerifyExportTest {
         try {
             // 客户侧同调用点换了模板版本（细分哈希不同）、行为一致——配对按标签而非版本
             saveRecord("c1", customerDb, 9000L, "查订单", "invocation:verdict:h-new", "verdict", "h-new", "{\"verdict\":\"DONE\"}", "cust-model");
-            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null);
+            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null, null);
 
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
             Path reportPath = tempDir.resolve("verify-report.md");
@@ -400,7 +392,7 @@ class VerifyExportTest {
         customerDb.initialize();
         try {
             saveRecord("c1", customerDb, 9000L, "查订单", "invocation:verdict:h-new", "verdict", "h-new", "{\"status\":\"FAILED\"}", "cust-model");
-            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null);
+            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null, null);
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
             Path reportPath = tempDir.resolve("verify-report-changed.md");
             int exit = runner.run(json, "digest", null, reportPath.toString(), false);
@@ -421,8 +413,8 @@ class VerifyExportTest {
         Files.write(rulesFile, "{\"invocations\":{\"refund\":{\"requiredKeywords\":[\"order\"]}}}".getBytes(StandardCharsets.UTF_8));
         System.setProperty(ConfigLoader.RULES_PATH_PROPERTY, rulesFile.toString());
         try {
-            saveRecord("r1", "s1", 1000L, "clean request", "invocation:order:h-order", "order", "your order 123 shipped", "dev-model");
-            saveRecord("r2", "s2", 2000L, "refund request", "invocation:refund:h-refund", "refund", "done", "dev-model");
+            saveRecord("r1", "s1", 1000L, "clean request", "invocation:order:h-order", "order", "h-order", "your order 123 shipped", "dev-model");
+            saveRecord("r2", "s2", 2000L, "refund request", "invocation:refund:h-refund", "refund", "h-refund", "done", "dev-model");
             establishBaselines();
             String json = exportPack(tempDir.resolve("verify.db").toString(), false);
             assertTrue(json.contains("\"rules\""), "声明规则段必须随包出境: " + json);
@@ -445,14 +437,14 @@ class VerifyExportTest {
         Files.write(rulesFile, "{\"invocations\":{\"refund\":{\"requiredKeywords\":[\"order\"]}}}".getBytes(StandardCharsets.UTF_8));
         System.setProperty(ConfigLoader.RULES_PATH_PROPERTY, rulesFile.toString());
         try {
-            saveRecord("r1", "s1", 1000L, "refund request", "invocation:refund:h-refund", "refund", "your order 123 shipped", "dev-model");
+            saveRecord("r1", "s1", 1000L, "refund request", "invocation:refund:h-refund", "refund", "h-refund", "your order 123 shipped", "dev-model");
             establishBaselines();
             String json = exportPack(tempDir.resolve("verify.db").toString(), false);
 
             SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer.db").toString());
             customerDb.initialize();
             try {
-                saveRecord("c1", customerDb, 9000L, "refund request", "invocation:refund:h-refund", "refund", "done", "cust-model");
+                saveRecord("c1", customerDb, 9000L, "refund request", "invocation:refund:h-refund", "refund", "h-refund", "done", "cust-model");
                 VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
                 Path reportPath = tempDir.resolve("detect-report.md");
                 int exit = runner.run(json, "digest", null, reportPath.toString(), false);
@@ -470,7 +462,7 @@ class VerifyExportTest {
     @Test
     @DisplayName("降级：无规则段的包跳过维度 3/4 并在报告注记")
     void verify_withoutRulesSection_degradesWithNote() throws Exception {
-        saveRecord("r1", "s1", 1000L, "refund request", "invocation:refund:h-refund", "refund", "your order 123 shipped", "dev-model");
+        saveRecord("r1", "s1", 1000L, "refund request", "invocation:refund:h-refund", "refund", "h-refund", "your order 123 shipped", "dev-model");
         establishBaselines();
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
         assertFalse(json.contains("\"rules\""), "无声明时不得入规则段: " + json);
@@ -486,16 +478,16 @@ class VerifyExportTest {
     @Test
     @DisplayName("verify 缩域运行：范围外链只出计数，不逐条列举")
     void verify_narrowedRun_suppressesOutOfScopeList() throws Exception {
-        saveRecord("r1", "s1", 1000L, "V1", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("r1", "s1", 1000L, "V1", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
 
         SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer.db").toString());
         customerDb.initialize();
         try {
-            saveRecord("c0", customerDb, 8900L, "V1", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
-            saveRecord("c1", customerDb, 9000L, "W1", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
-            saveRecord("c2", customerDb, 9100L, "W2", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            saveRecord("c0", customerDb, 8900L, "V1", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            saveRecord("c1", customerDb, 9000L, "W1", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            saveRecord("c2", customerDb, 9100L, "W2", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "cust-model");
             Path reportPath = tempDir.resolve("narrow-report.md");
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
             int exit = runner.run(json, "digest", "V1", reportPath.toString(), false);
@@ -511,16 +503,16 @@ class VerifyExportTest {
     @Test
     @DisplayName("verify 全量运行：范围外明细封顶 20 条后计数收尾")
     void verify_fullRun_capsOutOfScopeList() throws Exception {
-        saveRecord("r1", "s1", 1000L, "V1", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("r1", "s1", 1000L, "V1", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
 
         SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer.db").toString());
         customerDb.initialize();
         try {
-            saveRecord("c0", customerDb, 8900L, "V1", "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+            saveRecord("c0", customerDb, 8900L, "V1", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "cust-model");
             for (int i = 1; i <= 25; i++) {
-                saveRecord("c" + i, customerDb, 9000L + i, "W" + i, "invocation:verdict:h-verdict", "verdict", "{\"verdict\":\"DONE\"}", "cust-model");
+                saveRecord("c" + i, customerDb, 9000L + i, "W" + i, "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "cust-model");
             }
             Path reportPath = tempDir.resolve("full-report.md");
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);

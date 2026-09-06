@@ -20,8 +20,14 @@ import picocli.CommandLine.Command;
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "agentassert4j", version = "AgentAssert4j 1.0.0-SNAPSHOT", description = {"AI Agent behavior regression testing framework — side-channel recording, deterministic baselines, change detection with real alignment, human adjudication.", "", "Bare commands are the full-project default (replay makes zero LLM calls by default); flags only narrow scope or toggle behavior.", "Typical loop: replay for project-wide change detection → CHANGED/drift lands candidates → approve/reject to adjudicate → rollback to recover."}, exitCodeList = {"0", "no behavioral regression (in --ci mode, uncollected drift still exits 0 with a warning)", "1", "behavioral difference or evidence gap: alignment CHANGED/missing steps/added steps/rule violations/hung drifts (evidence incomplete; re-run for real or re-drive to complete)", "2", "usage, data or environment problem: selector errors, guard refusals, budget exhausted, all re-drives failed (truncated or broken environment)"}, subcommands = {BaselineCommand.class, StatusCommand.class, ReplayCommand.class, ApproveCommand.class, RejectCommand.class, RollbackCommand.class, RulesCommand.class, GraphCommand.class, VerifyCommand.class, DoctorCommand.class, CompletionCommand.class}, mixinStandardHelpOptions = true)
+@Command(name = "agentassert4j", version = "AgentAssert4j " + AgentAssert4jCli.FRAMEWORK_VERSION, description = {"AI Agent behavior regression testing framework — side-channel recording, deterministic baselines, change detection with real alignment, human adjudication.", "", "Bare commands are the full-project default (replay makes zero LLM calls by default); flags only narrow scope or toggle behavior.", "Typical loop: replay for project-wide change detection → CHANGED/drift lands candidates → approve/reject to adjudicate → rollback to recover."}, exitCodeList = {"0", "no behavioral regression (in --ci mode, uncollected drift still exits 0 with a warning)", "1", "behavioral difference or evidence gap: alignment CHANGED/missing steps/added steps/rule violations/hung drifts (evidence incomplete; re-run for real or re-drive to complete)", "2", "usage, data or environment problem: selector errors, guard refusals, budget exhausted, all re-drives failed (truncated or broken environment)"}, subcommands = {BaselineCommand.class, StatusCommand.class, ReplayCommand.class, ApproveCommand.class, RejectCommand.class, RollbackCommand.class, RulesCommand.class, GraphCommand.class, VerifyCommand.class, DoctorCommand.class, CompletionCommand.class}, mixinStandardHelpOptions = true)
 public class AgentAssert4jCli {
+
+    /**
+     * 框架版本单一来源：--version 输出与验收包 meta.frameworkVersion 共用本常量，
+     * 版本翻转时只改这一处
+     */
+    public static final String FRAMEWORK_VERSION = "1.0.0-SNAPSHOT";
 
     public static void main(String[] args) {
         CliSupport.installUtf8Console();

@@ -46,10 +46,6 @@ class CommandSmokeTest {
         }
     }
 
-    private void seedOneRecord() {
-        seedOneRecord("session-1", 1000L, "hash-old");
-    }
-
     private void seedOneRecord(String sessionId, long timestamp, String templateHash) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId("rec-" + timestamp);
@@ -70,7 +66,7 @@ class CommandSmokeTest {
     @Test
     @DisplayName("baseline 命令建基线且幂等")
     void baseline_idempotent() {
-        seedOneRecord();
+        seedOneRecord("session-1", 1000L, "hash-old");
 
         ByteArrayOutputStream out = redirectStdout();
         int first = new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
@@ -86,7 +82,7 @@ class CommandSmokeTest {
     @Test
     @DisplayName("status 命令列出 skill 与基线状态")
     void status_listsSkill() {
-        seedOneRecord();
+        seedOneRecord("session-1", 1000L, "hash-old");
         new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
 
         ByteArrayOutputStream out = redirectStdout();
@@ -103,7 +99,7 @@ class CommandSmokeTest {
     @Test
     @DisplayName("status 未建档段：建档后新录制版本在 status 可见")
     void status_unestablishedSection() {
-        seedOneRecord();
+        seedOneRecord("session-1", 1000L, "hash-old");
         new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
         seedOneRecord("s-2", 2000L, "hash-new");
 
@@ -128,7 +124,7 @@ class CommandSmokeTest {
     @Test
     @DisplayName("replay --dry-run 经完整 Picocli 链路预演对齐计划")
     void replayDryRun_fullCommandLine() throws Exception {
-        seedOneRecord();
+        seedOneRecord("session-1", 1000L, "hash-old");
 
         ByteArrayOutputStream out = redirectStdout();
         int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--dry-run");
@@ -175,7 +171,7 @@ class CommandSmokeTest {
     @Test
     @DisplayName("status 展示归档版本列与业务标签列")
     void status_showsArchiveAndBusinessColumns() {
-        seedOneRecord();
+        seedOneRecord("session-1", 1000L, "hash-old");
         new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
 
         ByteArrayOutputStream out = redirectStdout();
@@ -199,7 +195,6 @@ class CommandSmokeTest {
         assertTrue(errOut.toString().contains("No candidates pending adjudication"), "bare 无候选必须显式说明而非误报成功: " + errOut);
     }
 
-
     @Test
     @DisplayName("replay help 终态：三层模型参数面，拆除参数不复活")
     void replayHelp_finalParamSurface() {
@@ -219,7 +214,7 @@ class CommandSmokeTest {
     @Test
     @DisplayName("命令短别名与完整名并存可达")
     void commandAliases_shortAndFullForms() {
-        seedOneRecord();
+        seedOneRecord("session-1", 1000L, "hash-old");
         assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("s", "--db", dbPath));
         assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath));
         assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("rp", "--help"));
@@ -230,7 +225,7 @@ class CommandSmokeTest {
     @Test
     @DisplayName("status --invocation 缩域：人读视图按标签过滤，--json 恒全量")
     void status_narrowedByInvocation() {
-        seedOneRecord();
+        seedOneRecord("session-1", 1000L, "hash-old");
         // 第二个标签的画像，用于断言被过滤掉
         InteractionRecord other = new InteractionRecord();
         other.setRecordId("rec-verdict");
@@ -261,7 +256,7 @@ class CommandSmokeTest {
         repository.saveInteraction(other2);
         repository.saveInteraction(other);
         repository.saveTemplateText("hash-old", "baseline template body for queryOrder");
-        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null);
+        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null, null);
 
         ByteArrayOutputStream out = redirectStdout();
         int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--invocation", "queryOrder", "--db", dbPath);
@@ -318,7 +313,7 @@ class CommandSmokeTest {
     @Test
     @DisplayName("replay --json --dry-run 逐行输出检测与对齐计划报告")
     void replayJsonDryRun_stageReports() throws Exception {
-        seedOneRecord();
+        seedOneRecord("session-1", 1000L, "hash-old");
 
         PrintStream originalOut = System.out;
         PrintStream originalErr = System.err;

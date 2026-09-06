@@ -21,10 +21,10 @@ class ParameterValueTracerTest {
 
     @BeforeEach
     void setUp() {
-        tracer = new ParameterValueTracer();
+        tracer = new ParameterValueTracer(new InMemoryDependencyGraph());
     }
 
-    private InteractionRecord record(String invocationId, String modelResponse, List<ToolCall> toolCalls) {
+    private InteractionRecord record(String invocationId, String modelResponse, List<ToolCall> toolCalls, long timestamp) {
         InteractionRecord r = new InteractionRecord();
         r.setInvocationId(invocationId);
         r.setInvocationKey("invocation:" + invocationId + ":hash");
@@ -32,11 +32,6 @@ class ParameterValueTracerTest {
         r.setToolCalls(toolCalls);
         r.setHasToolCalls(toolCalls != null && !toolCalls.isEmpty());
         r.setTemplateHash("hash");
-        return r;
-    }
-
-    private InteractionRecord record(String invocationId, String modelResponse, List<ToolCall> toolCalls, long timestamp) {
-        InteractionRecord r = record(invocationId, modelResponse, toolCalls);
         r.setTimestamp(timestamp);
         return r;
     }
@@ -116,7 +111,7 @@ class ParameterValueTracerTest {
 
     @Test
     void extractFieldValues_jsonObject() {
-        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-001\",\"amount\":99.9}", null);
+        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-001\",\"amount\":99.9}", null, 0L);
         Set<String> values = tracer.extractFieldValues(r);
 
         assertTrue(values.contains("ORD-001"));
@@ -126,7 +121,7 @@ class ParameterValueTracerTest {
 
     @Test
     void extractFieldValues_nestedJson() {
-        InteractionRecord r = record("s1", "{\"user\":{\"name\":\"Bob\",\"address\":{\"city\":\"NYC\"}}}", null);
+        InteractionRecord r = record("s1", "{\"user\":{\"name\":\"Bob\",\"address\":{\"city\":\"NYC\"}}}", null, 0L);
         Set<String> values = tracer.extractFieldValues(r);
 
         assertTrue(values.contains("Bob"));
@@ -135,14 +130,14 @@ class ParameterValueTracerTest {
 
     @Test
     void extractFieldValues_nullResponse() {
-        InteractionRecord r = record("s1", null, null);
+        InteractionRecord r = record("s1", null, null, 0L);
         assertTrue(tracer.extractFieldValues(r).isEmpty());
     }
 
     @Test
     void extractFieldValues_plainText() {
         // 非 JSON 文本，RecursiveJsonParser.parse() 返回 null
-        InteractionRecord r = record("s1", "Hello World", null);
+        InteractionRecord r = record("s1", "Hello World", null, 0L);
         // "Hello World" 不是 JSON，parse 返回 null
         Set<String> values = tracer.extractFieldValues(r);
         assertTrue(values.isEmpty());
@@ -150,7 +145,7 @@ class ParameterValueTracerTest {
 
     @Test
     void extractFieldValues_jsonArray() {
-        InteractionRecord r = record("s1", "[{\"id\":\"A1\"},{\"id\":\"B2\"}]", null);
+        InteractionRecord r = record("s1", "[{\"id\":\"A1\"},{\"id\":\"B2\"}]", null, 0L);
         Set<String> values = tracer.extractFieldValues(r);
 
         assertTrue(values.contains("A1"));
@@ -167,7 +162,7 @@ class ParameterValueTracerTest {
         // 字段值真源=录制的工具返回；模型回复文本在结果可用时不得混入
         ToolCall call = tc("query", null);
         call.setResult("{\"orderId\":\"ORD-9\"}");
-        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-1\"}", Collections.singletonList(call));
+        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-1\"}", Collections.singletonList(call), 0L);
 
         Set<String> values = tracer.extractFieldValues(r);
 
@@ -181,7 +176,7 @@ class ParameterValueTracerTest {
         first.setResult("{\"orderId\":\"ORD-1\"}");
         ToolCall second = tc("b", null);
         second.setResult("{\"shipId\":\"SHIP-2\"}");
-        InteractionRecord r = record("s1", "已处理", Arrays.asList(first, second));
+        InteractionRecord r = record("s1", "已处理", Arrays.asList(first, second), 0L);
 
         Set<String> values = tracer.extractFieldValues(r);
 
@@ -194,7 +189,7 @@ class ParameterValueTracerTest {
         // 值源按记录形状二选一：带录制结果的记录即使解析不出叶子值，也不改挖回复文本
         ToolCall call = tc("query", null);
         call.setResult("订单已发货，请注意查收");
-        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-1\"}", Collections.singletonList(call));
+        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-1\"}", Collections.singletonList(call), 0L);
 
         assertTrue(tracer.extractFieldValues(r).isEmpty());
     }
@@ -202,7 +197,7 @@ class ParameterValueTracerTest {
     @Test
     void extractFieldValues_toolResultNull_usesModelResponse() {
         // 未捕获工具结果的记录：值源=模型回复文本
-        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-1\"}", Collections.singletonList(tc("query", null)));
+        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-1\"}", Collections.singletonList(tc("query", null)), 0L);
 
         assertTrue(tracer.extractFieldValues(r).contains("ORD-1"));
     }
@@ -211,7 +206,7 @@ class ParameterValueTracerTest {
     void extractFieldNames_prefersToolResult_overModelResponse() {
         ToolCall call = tc("query", null);
         call.setResult("{\"orderId\":\"ORD-9\"}");
-        InteractionRecord r = record("s1", "{\"legacyField\":\"x\"}", Collections.singletonList(call));
+        InteractionRecord r = record("s1", "{\"legacyField\":\"x\"}", Collections.singletonList(call), 0L);
 
         Set<String> names = tracer.extractFieldNames(r);
 
@@ -221,7 +216,7 @@ class ParameterValueTracerTest {
 
     @Test
     void extractArgValues_withArguments() {
-        InteractionRecord r = record("s1", null, Arrays.asList(tc("tool", objectMap("orderId", "ORD-001", "limit", 10))));
+        InteractionRecord r = record("s1", null, Arrays.asList(tc("tool", objectMap("orderId", "ORD-001", "limit", 10))), 0L);
 
         Set<String> values = tracer.extractArgValues(r);
         assertTrue(values.contains("ORD-001"));
@@ -230,7 +225,7 @@ class ParameterValueTracerTest {
 
     @Test
     void extractArgValues_noToolCalls() {
-        InteractionRecord r = record("s1", null, null);
+        InteractionRecord r = record("s1", null, null, 0L);
         assertTrue(tracer.extractArgValues(r).isEmpty());
     }
 
@@ -239,13 +234,13 @@ class ParameterValueTracerTest {
         ToolCall tc = new ToolCall();
         tc.setToolName("tool");
         tc.setArguments(null);
-        InteractionRecord r = record("s1", null, Collections.singletonList(tc));
+        InteractionRecord r = record("s1", null, Collections.singletonList(tc), 0L);
         assertTrue(tracer.extractArgValues(r).isEmpty());
     }
 
     @Test
     void extractFieldNames_jsonObject() {
-        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-001\",\"amount\":100}", null);
+        InteractionRecord r = record("s1", "{\"orderId\":\"ORD-001\",\"amount\":100}", null, 0L);
         Set<String> names = tracer.extractFieldNames(r);
 
         assertTrue(names.contains("orderId"));
@@ -254,7 +249,7 @@ class ParameterValueTracerTest {
 
     @Test
     void extractFieldNames_nestedJson() {
-        InteractionRecord r = record("s1", "{\"user\":{\"name\":\"Bob\"}}", null);
+        InteractionRecord r = record("s1", "{\"user\":{\"name\":\"Bob\"}}", null, 0L);
         Set<String> names = tracer.extractFieldNames(r);
 
         assertTrue(names.contains("user"));
@@ -263,13 +258,13 @@ class ParameterValueTracerTest {
 
     @Test
     void extractFieldNames_nullResponse() {
-        InteractionRecord r = record("s1", null, null);
+        InteractionRecord r = record("s1", null, null, 0L);
         assertTrue(tracer.extractFieldNames(r).isEmpty());
     }
 
     @Test
     void extractArgNames_withArguments() {
-        InteractionRecord r = record("s1", null, Arrays.asList(tc("tool", objectMap("orderId", "x", "limit", 10))));
+        InteractionRecord r = record("s1", null, Arrays.asList(tc("tool", objectMap("orderId", "x", "limit", 10))), 0L);
 
         Set<String> names = tracer.extractArgNames(r);
         assertTrue(names.contains("orderId"));
@@ -278,7 +273,7 @@ class ParameterValueTracerTest {
 
     @Test
     void extractArgNames_noToolCalls() {
-        InteractionRecord r = record("s1", null, null);
+        InteractionRecord r = record("s1", null, null, 0L);
         assertTrue(tracer.extractArgNames(r).isEmpty());
     }
 
@@ -504,16 +499,16 @@ class ParameterValueTracerTest {
         }
 
         @Override
-        public void archiveTemplateVersion(io.github.agentassert4j.model.ArchivedTemplateVersion archived) {
+        public void archiveTemplateVersion(ArchivedTemplateVersion archived) {
         }
 
         @Override
-        public io.github.agentassert4j.model.ArchivedTemplateVersion findArchivedVersion(String invocationKey, String versionTag) {
+        public ArchivedTemplateVersion findArchivedVersion(String invocationKey, String versionTag) {
             return null;
         }
 
         @Override
-        public List<io.github.agentassert4j.model.ArchivedTemplateVersion> findArchivedVersions(String invocationKey) {
+        public List<ArchivedTemplateVersion> findArchivedVersions(String invocationKey) {
             return Collections.emptyList();
         }
 

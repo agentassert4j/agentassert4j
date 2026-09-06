@@ -31,10 +31,9 @@ public class ParameterValueTracer {
 
     private final InMemoryDependencyGraph graph;
 
-    public ParameterValueTracer() {
-        this.graph = new InMemoryDependencyGraph();
-    }
-
+    /**
+     * @param graph 边的落点（调用方显式持有，可与其他追踪共享同一张图）
+     */
     public ParameterValueTracer(InMemoryDependencyGraph graph) {
         this.graph = graph;
     }
