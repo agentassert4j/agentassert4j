@@ -35,7 +35,7 @@ AgentAssert4j 解决的就是这个「心里没底」。它的思路用人话说
 结构化的「行为照片」描述它当前长什么样，把认可的照片定为标准（照片叫**指纹**，标准叫**基线**）；以后
 每次改提示词，把当时的调用原样再来一遍（这叫**重放**），和基线逐项比对；改完再真实执行一遍时，框架
 按调用点自动把新链和基线链配对对齐，出一张逐步差异报告。哪里变了精确列出来；变化是不是你想要的，
-由人裁决。它刻意不评判「更好还是更坏」——「一样不一样」是程序可以确定回答的问题，「好不好」留给人。这套闭环的全貌一张图（后面十一幕就是把图上每个环节讲透）：
+由人裁决。它刻意不评判「更好还是更坏」——「一样不一样」是程序可以确定回答的问题，「好不好」留给人。这套闭环的全貌一张图（后面十二幕就是把图上每个环节讲透）：
 
 <img src="../assets/hero-loop.zh.png" alt="核心闭环：Agent 旁路录制进单文件 SQLite，baseline 建档，改提示词后 replay --task 出逐步差异报告，approve / reject 裁决，export → verify 交付验收" width="860"/>
 
@@ -45,9 +45,9 @@ AgentAssert4j 解决的就是这个「心里没底」。它的思路用人话说
 参数哪些必填哪些可省；Part I 末尾还附了一张「故事命令速查表」，读的时候忘了随时翻回去。
 
 整个过程对业务代码零侵入：框架自己出了问题宁可少记数据，也绝不拖慢业务请求。还有一条贯穿全部设计
-的铁律提前立在此处：**能框架内部消化的，绝不外溢为使用者的动作**——录制、归类、建档、选例、影响集、
-任务链派生，框架能自己算的自己算；使用者只在两个地方出现：改提示词（本来就要做）和裁决方向（只有人
-能做）。
+的铁律提前立在此处：**能框架内部消化的，绝不外溢为使用者的动作**——录制、归类、建档、变更检测、
+对齐、任务链派生，框架能自己算的自己算；使用者只在两个地方出现：改提示词（本来就要做）和裁决方向
+（只有人能做）。
 
 下面从小王接入框架的那天讲起。
 
@@ -130,6 +130,32 @@ agent 框架（skill 触发时，宿主把指令文本注入对话、把附带�
 
 > **伏笔去向**：身份锚点与键文法 → 第 5 章；指纹怎么提取 → 第 6 章；基线的盖章/存档/回滚 → 第 7 章。
 
+## 第 2.5 幕 · 体检表与合规声明
+
+第一次真实改提示词之前，小王做了两件预备。第一件是**体检**：
+
+```
+$ agentassert4j doctor
+```
+
+`doctor` 是库体检命令：一次性输出三段确定性事实——**身份段**（骨架族的形态与全文变体数、带多步却
+没声明标签的链、跨会话重复出现的请求文本族）、**覆盖段**（已录制未建档的调用点、缺 template_hash
+的记录数）、**规则段**（规则文件里的畸形声明、配了键但库里从未出现过的期望错位）。它只陈述事实、
+不判定不建档（正常执行退出码恒 0，不承载门禁语义）——零声明接入的团队该在哪几个调用点补声明，
+首次建档前库干不干净，看它就够。特别是「重复请求文本族」一栏：同一个问题在多个会话反复出现，就是补任务键声明的最佳候选
+（`withMetadata("taskKey", <场景id>)`，配对更稳）。
+
+第二件是**合规声明**。指纹的前两维框架全自动，后两维（内容规则、约束行为）来自团队的声明——
+写在 `agentassert4j-rules.json` 里：每个调用点标签下一组 `requiredKeywords`（必须出现的关键词）、
+`forbiddenKeywords`（禁止出现的词）、`regexPatterns`（要命中的正则）、`behaviors`（内置行为约束，
+比如 `jsonOutput` 输出必须是 JSON、`mustUseChinese` 必须中文回答，共 8 个，`agentassert4j rules`
+一条命令列出全部内置行为和写法样例）。声明随基线指纹一起存档，以后每次判定都是「基线声明、
+当前答卷」——声明的是「这个调用点的任何合法响应都必须满足」的普适约束，不是某一次的分支形态。
+两条纪律提前立好：写错的 behavior 名会在加载时被显式点名（笔误不再静默放行，合法名单随告警给出）；
+非法正则按「不匹配」处理——坏规则在每条结果里都是可见的失败信号，而不是悄悄通过。
+
+> **伏笔去向**：维度 3/4 的判定方向 → 第 6 章；任务纪律（tasks 段） → 第 11 章。
+
 ## 第 3 幕 · 改提示词的勇气
 
 运营小林提需求：「退款话术太生硬，柔和一点。」小王改完系统提示词，先**真实跑了一遍**退款流程——
@@ -145,7 +171,7 @@ $ agentassert4j replay --invocation refund
 整条命令**零 LLM 调用**：框架把库里这个调用点的两条真实链——改前的和改后的——按步骤配对，逐步
 比对四维指纹，汇成一行汇总：
 
-`PASS 5 | CHANGED 2`
+`Alignment summary: PASS 5 | CHANGED 2 | missing 0 | added 0`
 
 判定只有两个词：**PASS**（与基线无差异）、**CHANGED**（与基线有差异）。框架刻意不说「严重」——工具
 A 换成工具 B 是变好还是变坏，程序无从判断，宣称「回归」就是越权。
@@ -165,9 +191,6 @@ $ agentassert4j approve
 
 整条链路没有出现一句「这段回答更好/更差」。框架只陈述事实：哪里一样，哪里不一样，差异在第几维、哪个
 字段。方向判断是小王做的。
-
-> **伏笔去向**：重放请求怎么组装 → 第 9 章；判定规则 → 第 8 章；差异怎么渲染给人看 → 第 8 章；
-> approve 之后数据怎么流转 → 第 7 章。
 
 > **伏笔去向**：重放请求怎么组装 → 第 9 章；判定规则 → 第 8 章；差异怎么渲染给人看 → 第 8 章；
 > approve 之后数据怎么流转 → 第 7 章。
@@ -206,9 +229,6 @@ $ agentassert4j replay
 > **伏笔去向**：任务链怎么从录制数据推导 → 第 11 章；对齐与缺/新增判定 → 第 11 章；
 > 受控重驱与漂移处置 → 第 11 章。
 
-> **伏笔去向**：任务链怎么从录制数据推导 → 第 11 章；对齐与缺/新增判定 → 第 11 章；
-> 冻结重放的受影响裁剪 → 第 11 章。
-
 ## 第 5 幕 · 这次改动波及谁
 
 下一次改动不再是退款技能的局部话术，而是**所有技能共用的开场白**。这次小王改完开场白、真实跑一遍，
@@ -224,13 +244,13 @@ $ agentassert4j replay
 的任务逐条对齐，差异逐条点名，该落候选的落候选，行为没变的漂移点自动收编。
 
 值得强调的是：这张图不是某个独立组件精心维护的资产——它是录制数据的**派生品**，每次重放前从录制数据
-现场重建，写一份快照。永远和录制数据一致，永不撒谎。想让复核便宜一点的话，`--task`/`--invocation`
+现场重建，写一份快照。永远和录制数据一致，永不撒谎。想直接看这张图，`agentassert4j graph show` 从
+录制数据现场重建并渲染节点、边（HIGH/LOW 置信度与穿透经过的中间节点）和环检测——只读不落盘；
+`status` 末尾展示的则是最近一次 replay 留档的快照。想让复核便宜一点的话，`--task`/`--invocation`
 随时把处置缩到关心的范围——检测报告仍然全项目可见，只是处置（收编/落候选）只作用于缩域命中
 的部分。
 
 > **伏笔去向**：边从哪来 → 第 10 章；图的生命周期（谁读谁写） → 第 10 章；漂移检测的三分形态 → 第 10 章。
-
-> **伏笔去向**：边从哪来 → 第 10 章；图的生命周期（谁读谁写） → 第 10 章；采样策略 → 第 10 章。
 
 ## 第 6 幕 · 后悔药
 
@@ -266,13 +286,17 @@ $ agentassert4j replay --ci --json
 改走错误输出——程序和人各看各的，互不干扰。这两个参数都可以不填：不填就是人看的默认形态。
 
 退出码替他说真话：**0** 无差异，**1** 存在差异（人去裁决），**2** 用法或基础设施故障——比如全部用例
-超时，那是环境问题不是行为回归，不能让 CI 误读成红灯。任务域的两个模式共用同一契约，并且多一条：
+超时，那是环境问题不是行为回归，不能让 CI 误读成红灯。对齐与受控重驱共用同一契约，并且多一条：
 缺步骤、新增步骤也算差异（exit 1）；只跑了半截（预算耗尽、有跳过）时证据不完整，算 2——**跳过的
 部分不允许冒充绿灯**。
 
 某天同事的 PR 让 CI 亮了 2，原因一栏写着：「调用点 X 有录制交互但无基线，`--ci` 模式拒绝判定。」这是
 专门防一种经典事故的：CI 里自动给没基线的调用点建档、自建自比，产出一堆**无人审过的绿灯**。基线必须
 经过人，门禁才可信。
+
+顺手记两件工具箱里的小事：`agentassert4j completion > agentassert4j.bash` 生成 bash 补全脚本（zsh 经
+bashcompinit 兼容），每个子命令都有短别名（`s`/`b`/`a`/`g`/`v`/`d`/`c` 与 `rp`/`rj`/`rb`/`ru`——完整名
+永远保留，`--help` 里看得到）；`agentassert4j --version` 报出框架版本。
 
 > **伏笔去向**：退出码契约 → 第 9 章；`--json` 通道契约 → 第 9 章；任务域报告 → 第 11 章。
 
@@ -305,7 +329,7 @@ $ agentassert4j baseline export --out acceptance-pack.json
 
 `baseline export` 把当前全部基线打包成一个 JSON：每个任务链、链上每一步的调用点键和**结构指纹**——
 工具名、参数类型、输出字段路径与类型、规则关键词。注意这个包**天然不带敏感内容**：没有用户输入输出
-原文、没有模板原文、没有规则文件——结构指纹本身就是脱敏后的「行为形状」。包里同时带上了开发侧用的
+原文、没有模板原文；声明规则段随包出境（规则是断言不是提示词）——结构指纹加声明段构成脱敏后的「行为形状」。包里同时带上了开发侧用的
 模型名、判定语义版本和文件指纹（SHA-256），双方对账用的是后者。想附上人读的样本也行——`--include-samples`
 会附加每步的输入输出样例，且**强制**套上最严的脱敏（敏感字段一律 `***`），判定不消费样本，它们只是
 给验收人翻看的。流水线里导出加 `--json`：stdout 给一行 `agentassert4j.export-report/1` 元数据报告
@@ -313,13 +337,15 @@ $ agentassert4j baseline export --out acceptance-pack.json
 
 <img src="../assets/acceptance-flow.zh.png" alt="交付验收流程：开发侧导出验收包 → SHA-256 对账搬运 → 验收侧真实执行 → verify 出报告" width="860"/>
 
-验收方拿到包，在客户环境真实执行一遍验收请求（这是验收人自己操作的——框架不驱动产品入口），然后：
+验收方拿到包，在客户环境真实执行一遍验收请求（这是验收人自己操作的——框架不驱动产品入口）。拿不准
+本机链和包对不对得上时，可以先 `verify --dry-run`：只装载包、列出每个任务与本地链的配对情况和跨模型
+注记，零判定零写入。然后：
 
 ```
 $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 ```
 
-`verify` 是第 9 个顶层命令，只读——导入包、比对、出报告，不往本地库写任何东西。比对逻辑和第 4 幕的
+`verify` 是顶层命令之一，只读——导入包、比对、出报告，不往本地库写任何东西。比对逻辑和第 4 幕的
 真实对比是同一台机器：包里的指纹当基线侧，本机刚录制的任务链现场提取指纹当当前侧，按调用点逐步对齐。
 报告直说三件事：每步一致还是偏差（结构类偏差是真问题）；开发侧与本地模型不同时，标注**跨模型验收**
 ——文本措辞差异属预期内，结构判定依然有效；包里有而本地没执行的任务，列成**覆盖缺口**（证据不完整，
@@ -347,12 +373,12 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
   末轮答复     四维比对 PASS
 ```
 
-分歧时报告直接指到轮：**「第 2 轮工具决策分歧：基线为 get_logistics(SO-1)，实际为 cancel_order(SO-1)」**
-——回归定位从「某个调用点变了」细化到「编排的第几步、原本要做什么、现在改做了什么」。第 4 幕任务域
-的「分歧即停、下游标条件态」，正是这条规则在整链尺度上的推广。
+分歧时报告直接指到轮：**"Tool decision diverged at round 2 …; baseline: get_logistics(SO-1), actual: cancel_order(SO-1)"**
+——回归定位从「某个调用点变了」细化到「编排的第几步、原本要做什么、现在改做了什么」。任务域的对应
+能力是逐任务全量对齐与漂移处置三出口（第 11 章）：每个任务的差异完整点名，不做链级截断。
 
-> **伏笔去向**：观察装饰的落地形态（两代 SDK 的接入面差异） → 第 2 章；链式半重放的轮次装配与
-> 分歧语义 → 第 9 章；梯 1 × 梯 2 两种姿势的取舍 → OPERATIONS.md（运维手册）。
+> **伏笔去向**：观察装饰的落地形态与两代 SDK 的工具回路姿势差异 → 第 2 章；链式半重放的轮次装配与
+> 分歧语义 → 第 9 章。
 
 ## Part I 命令速查
 
@@ -363,13 +389,16 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 |------|--------|----------------|-----------|
 | `agentassert4j baseline` | 给每个调用点提取指纹、盖章建立基线 | `--approver <名字>`：审批留痕 | 审批人取操作系统用户名；已建档的调用点不覆盖 |
 | `agentassert4j baseline --force` | 按当前比对算法重建基线（旧基线自动存档） | 同上 | 不加 `--force` 时绝不覆盖已有基线 |
-| `agentassert4j baseline export` | 导出验收基线包（交付证据载体） | `--task <前缀>`（缩域）；`--include-samples`（脱敏样本）；`--out <文件>`（默认 `./acceptance-pack.json`）；`--json`（export-report/1：out/taskCount/stepCount/sha256/excluded 元数据报告） | 内容天然脱敏（结构指纹+键）；打印 SHA-256 供对账；存在未建档步骤的链排除并警告 |
+| `agentassert4j baseline export` | 导出验收基线包（交付证据载体） | `--task <前缀>`（缩域）；`--include-samples`（脱敏样本）；`--out <文件>`（默认 `./acceptance-pack.json`）；`--json`（export-report/1：out/taskCount/stepCount/sha256/excluded 元数据报告） | 内容天然脱敏（结构指纹+键+声明规则段）；打印 SHA-256 供对账；未建档步骤或基线自违声明规则的链排除并警告 |
 | `agentassert4j status` | 查看调用点清单与基线状态 | `--diff`：展示待裁决的差异；`--json`（status/1） | 只看清单本体；已录制未建档的调用点在「Unestablished invocations」段列出 |
-| `agentassert4j doctor` | 库体检：身份/覆盖/规则三段确定性事实（骨架族、多步零标签链、未声明任务的重复请求族、未建档、规则期望错位），给声明建议 | 无必填参数 | 只读不判定不建档，退出码恒 0 |
+| `agentassert4j doctor` | 库体检：身份/覆盖/规则三段确定性事实（骨架族、多步零标签链、未声明任务的重复请求族、未建档、规则期望错位），给声明建议 | 无必填参数 | 只读不判定不建档；退出码不承载门禁语义（正常恒 0，库打不开才 2） |
 | `agentassert4j replay` | 全项目漂移检测 + 逐任务对齐（缺省零 LLM 调用） | `--task <前缀>` / `--invocation <目标>`（复合缩域）；`--ci`（不为无基线调用点建档、漂移不收编）；`--re-drive`（逐漂移点归档模板受控复核，花调用）+ `--full-chain`（扩为缩域内全部记录）+ `--max-total-calls/--max-total-tokens`（重驱预算池）；`--dry-run`（漂移集+对齐计划+重驱报价）；`--json`（task-report/1 逐行分段） | 缩域未命中/歧义出 2；`--ci` 缺档出 2；漂移 PASS 出 0 附未收编警告 |
-| `agentassert4j approve` / `reject` | bare 裁决全部待裁决候选（渲染候选差异 → 转正/丢弃） | `--invocation <目标>` 缩域；`--approver <名字>`（缺省取系统用户） | 无候选出 2 |
+| `agentassert4j approve` / `reject` | bare 裁决全部待裁决候选（渲染候选差异 → 转正/丢弃） | `--invocation <目标>` 缩域；`--approver <名字>`（approve 专用，缺省取系统用户） | 无候选出 2 |
 | `agentassert4j rollback` | 把基线回滚到指定历史版本 | `--invocation <目标>` 与 `--version <版本号>`（**均必填**） | 缺任一参数直接报错 |
-| `agentassert4j verify` | 交付验收：验收包核对本机真实执行链（只读不落库） | `--pack <文件>`（**必填**）；`--task <前缀>`；`--report <md>`（交付证据）；`--json`（verify-report/1） | 版本守卫拒绝异语义包；覆盖缺口 exit 2；跨模型标注结构判定有效 |
+| `agentassert4j verify` | 交付验收：验收包核对本机真实执行链（只读不落库） | `--pack <文件>`（**必填**）；`--task <前缀>`（缩域）；`--dry-run`（配对预演，零判定）；`--report <md>`（交付证据）；`--json`（verify-report/1） | 版本守卫拒绝异语义包；覆盖缺口 exit 2；跨模型标注结构判定有效；规则段随包生效、缺席降级注记 |
+| `agentassert4j rules` | 展示内置约束行为目录与规则文件写法样例 | `--json`（rules/1 目录报告） | 无 |
+| `agentassert4j graph show` | 从录制数据现场重建依赖图并渲染（节点/边/置信度/穿透/环） | `--json`（graph/1） | 无边时给空图提示（录制缺多轮会话数据，非故障） |
+| `agentassert4j completion` | 生成 shell 补全脚本（bash 风格，zsh 经 bashcompinit 兼容；含全部短别名） | 无 | — |
 
 ---
 ---
@@ -390,13 +419,13 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 
 ## 第 1 章 全景鸟瞰
 
-**本幕回顾**：Part I 全部十一幕。本章是地图——先建立整体，再进细节。
+**本幕回顾**：Part I 全部十二幕。本章是地图——先建立整体，再进细节。
 
 **设计问题**：在一个 AI 应用里，系统提示词是变更最频繁的「代码」，却没有一套回归纪律护着它——改一句话术，可能让模型在该调工具时不调了、在结构化输出里丢字段、忘说必须说的话。传统单元测试覆盖不了这个问题，因为被测对象是模型的概率行为；人工回归覆盖得了但不可持续。框架的答案：**把「行为」变成可确定比对的结构化对象（指纹），把「变更」变成一次真实调用的重放，把「一条用户任务」变成可对齐的回放单元，把「裁决权」留给人，把「记录权」交给旁路。**
 
 **概念与术语（是什么 / 刻意不是什么）**：
 
-- **是**：JVM 原生的 AI Agent 行为回归测试框架。旁路录制真实 LLM 交互 → 确定性四维指纹与基线 → prompt 变更按依赖图裁剪影响集 → 真实调用重放判定差异 → 按调用点对齐任务链 → 人工裁决；基线可导出为验收包做跨环境交付验收。
+- **是**：JVM 原生的 AI Agent 行为回归测试框架。旁路录制真实 LLM 交互 → 确定性四维指纹与基线 → prompt 变更的全项目变更检测与逐任务真实对齐（缺省零 LLM 调用）→ 受控重驱逐点复核（显式开启）→ 人工裁决；基线可导出为验收包做跨环境交付验收。
 - **刻意不是**：①不是监控/观测平台（落库是为了回归，不是为了看板）；②不是提示词管理器（不管理 prompt 内容，只管行为）；③不评判好坏——只陈述「与基线有无差异」，方向判断留给人；④判定链路 100% 确定性，永不引入 LLM-as-judge；⑤不是代理/网关——业务流量从不过它转发；⑥不驱动产品执行——录制靠旁路、验收靠验收人真实操作。
 
 **代码地图与数据主链路（维护基准已移交 spec）**：模块分层、core 包结构、五表总览与数据主链路的现状基准由 `guide/spec/OVERVIEW.md`（骨架总览）承载——本章保留叙事职责，不再双写事实图；叙事与 spec 冲突时以 spec 为准并修订败方。各域细节随分域规格成文（`guide/spec/`），对应章逐步瘦身为指向 spec 的地图。
@@ -469,7 +498,7 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
   - `SanitizeStrategy` 三策略：`MASK`（默认，替换为 `***`）、`HASH`（SHA-256，保持唯一性不可逆）、`DROP`（整键删除）。
 - `RecorderConfig`（不可变，builder 构建）：`enabled=true`（总开关）、`ringBufferSize=16384`（向上取 2 的幂，上限 2^30）、`batchSize=100`、`flushIntervalMs=5000`、`maxBufferSize=500`（下限均钳 1）、`defaultInvocationId`（应用级默认声明）、采集门开关、脱敏四项（`sensitiveFields` 默认空、`sanitizeStrategy=MASK`、`sanitizeUserInput=false`、`sanitizeModelResponse=false`）。`batchSize` 大于 `maxBufferSize` 时钳位自愈（错配不丢数据）。
 
-**表结构（写侧与 NOT NULL 的契约）**：`interactions` 六个 NOT NULL 列各有兜底链——`record_id`→UUID 兜底、`session_id`→recordId 兜底、`invocation_id`（声明位，可空串）→捕获侧落列、`invocation_key`→enrich 派生兜底、`tool_calls`/`has_tool_calls` 恒写（空表 JSON 与 0）。兜底的意义：任何一条记录都不会因为上游缺字段而炸掉整批 INSERT。
+**表结构（写侧与 NOT NULL 的契约）**：`interactions` 的 7 处 NOT NULL 约束（`record_id` 为 PRIMARY KEY）各有兜底或恒写链——`record_id`→UUID 兜底、`session_id`→recordId 兜底、`timestamp`→捕获侧恒写、`invocation_id`（声明位）→空串兜底、`invocation_key`→enrich 派生兜底、`tool_calls`/`has_tool_calls`→恒写（空表 JSON 与 0）。兜底的意义：任何一条记录都不会因为上游缺字段而炸掉整批 INSERT。
 
 **生命周期与并发契约——计数闭合公式**：
 
@@ -502,7 +531,7 @@ recorded（到达即计数） = written（批量写成功）
 | 接口 | 方法 | 数 |
 |------|------|----|
 | `InteractionWriteStore` | `saveInteraction` / `saveInteractions` | 2 |
-| `InteractionQueryStore` | `findByInvocationId` / `findByInvocationKey` / `findByTemplateHash` / `findInvocationKeysByTemplateHash` / `findBySessionId` / `findAllSessionIds` | 6 |
+| `InteractionQueryStore` | `findByInvocationId` / `findByInvocationKey` / `findByTemplateHash` / `findBySessionId` / `findAllSessionIds` | 5 |
 | `InvocationStore` | `saveInvocationProfile` / `findInvocationByKey` / `findAllInvocations` | 3 |
 | `TemplateTextStore` | `saveTemplateText` / `findTemplateText` | 2 |
 | `GraphStore` | `saveGraph(json)` / `loadGraph()` | 2 |
@@ -515,7 +544,7 @@ recorded（到达即计数） = written（批量写成功）
   - `initialize()`：建父目录 → `DriverManager.getConnection("jdbc:sqlite:"+dbPath)` → `setAutoCommit(true)` → `SchemaMigrator.migrate()`；失败时清理已开连接并抛 `StorageException`（starter 装配下即中断启动，见第 2 章的有意决策）。
   - `saveInteractions(list)`（录制管道主入口）：事务序列 = 关 autocommit → 逐条 INSERT → commit；异常时**先 `rollback` 再恢复 autocommit**——顺序不能反，因为对 sqlite-jdbc 的未决事务执行 `setAutoCommit(true)` 是一次隐式 COMMIT，会把半批脏数据悄悄落库。
   - `saveInteraction(单条)`：语义化单条入口，顺带 `persistTemplateTextQuietly`——把系统提示词原文写进 `prompt_texts`（`INSERT OR IGNORE` 首写为准；hash 不可逆，原文不落即永久丢失）。
-  - 查询：全部 `ORDER BY timestamp, seq, record_id`（确定性排序键，平局可决胜）；`findInvocationKeysByTemplateHash` 支撑影响分析的「谁在用旧提示词」反查（返回调用点键），任务域冻结重放的受影响裁剪同用此查询。
+  - 查询：全部 `ORDER BY timestamp, seq, record_id`（确定性排序键，平局可决胜）；「谁在用这份提示词」的反查由 `findByTemplateHash` 承载（任务域与验收侧的链派生走 `findBySessionId`/`findAllSessionIds` 通道，缺省全量对齐后不再有按图裁剪的选链查询）。
 - `JsonMapper`（同包包私有类）：`toolCalls/turns/fingerprint/invocationProfile/archivedTemplateVersion` 与 JSON 的双向映射，构建在 `RecursiveJsonParser`（全框架唯一 JSON 真源）之上，容器一律 `LinkedHashMap/LinkedHashSet` 保插入序——**序列化字节可复现、可 diff**。指纹的 `fingerprint` 列 NOT NULL，空指纹与 null 的约定是 `"{}"`↔null 对写读对称。
 - `SchemaMigrator`（三段式）：库版本 **高于** 支持值 → 拒开（旧代码不得静默误读新语义）；**等于** → 直接返回；**低于** → 执行 `Schema.ALL_DDL` 建表并 `PRAGMA user_version = 1`。当前契约版本固定为 1：预发布阶段零兼容——schema 变更 = 删库重建，不存在任何「旧版迁移」代码。
 
@@ -573,7 +602,7 @@ recorded（到达即计数） = written（批量写成功）
 
 ## 第 6 章 四维指纹
 
-**本幕回顾**：第 2 幕的四维概念介绍、第 3 幕 CHANGED 的「工具集变了」、第 8 幕规则正则钉住工具选择。
+**本幕回顾**：第 2 幕的四维概念介绍、第 2.5 幕的规则声明、第 3 幕 CHANGED 的「工具集变了」、第 8 幕规则正则钉住工具选择。
 
 **设计问题**：LLM 输出是概率性的，两个「语义相同」的回答逐字必然不同——怎么让「行为有没有变」成为一个程序可以确定回答的问题？框架的答案：不比内容，比**结构**——把一次交互投影为四个维度的结构化摘要，投影规则是纯函数，同样输入永远得到同样指纹（R9）。
 
@@ -581,7 +610,7 @@ recorded（到达即计数） = written（批量写成功）
 
 **代码地图**：
 
-- `FingerprintExtractor`（静态纯函数）两个入口：`extract(record)`（维度 3/4 空集口径）与 `extract(record, rules, invocationId)`（注入声明规则——建档与重放判定**必须**走同一入口，规则口径才同源）。逐维提取算法：
+- `FingerprintExtractor`（静态纯函数）唯一入口：`extract(record, rules, invocationId)`——`rules` 传 null 时维度 3/4 保持空集口径（无规则声明即无该维断言）；建档与重放判定**必须**走同一入口，规则口径才同源。逐维提取算法：
   - **维度 1 工具调用**：`toolCallSet`（Set，忽略调用顺序）；`toolParamTypes`（多次调用的参数类型合并，键与值统一小写——与归一化策略对齐）。
   - **维度 2 输出结构**：响应为空 → `text/plain` + 空集 + 数量级 0；能解析为 JSON（Map/List）→ `application/json` + 字段路径集 + 字段类型映射（`RecursiveJsonParser.extractFieldPaths/extractFieldTypeMap`）；纯文本 → 退化为长度数量级 `log10(len)+1`（1–9 字→1、10–99→2、100–999→3）——纯文本的逐字对比必然假红，数量级只抓「量级跳变」。
   - **维度 3/4**：从 `InvocationRulesConfig` 按调用点标签加载（`requiredKeywords`/`forbiddenKeywords`/`regexPatterns`/`behaviors`），外加 `hasError`（工具调用存在 `success=false` 时为真）。
@@ -590,7 +619,7 @@ recorded（到达即计数） = written（批量写成功）
 - `RegexPattern.matches`：`Pattern.compile(pattern).find()`；**非法正则按不匹配处理**（fail-closed）——坏规则在每条重放里都表现为可见的不匹配信号，而不是静默放行或崩溃。
 - `BehaviorChecker`：内置 8 个行为校验（`mustUseChinese`/`mustUseEnglish`/`returnsEmptyOnError`/`returnsErrorCode`/`noError`/`jsonOutput`/`nonEmptyOutput`/`containsCjk`），语言类判定用码点扫描而非正则（`.` 默认不匹配换行，多行中文输出会被正则误判）。**未知 behavior 默认通过**（不误报比漏报好），但 CLI 加载规则时对未知行为名显式告警并列出合法名单——笔误不再静默放行。
 
-**关键语义——维度 3/4 的判定方向**：声明的规则**随基线指纹存档**，判定时取出基线声明的规则、对**当前输出的文本**做校验（关键词 `contains`、禁词、正则 `find`）。也就是说维度 3/4 是「基线声明、当前答卷」，不是两侧集合比对。第 12 章的验收包不携带规则文件，正是靠这个非对称语义：包内指纹自带声明集，验收侧无需 rules.json 也能校验维度 3/4。
+**关键语义——维度 3/4 的判定方向**：声明的规则**随基线指纹存档**，判定时取出基线声明的规则、对**当前输出的文本**做校验（关键词 `contains`、禁词、正则 `find`）。也就是说维度 3/4 是「基线声明、当前答卷」，不是两侧集合比对。第 12 章的验收包在此基础上把声明规则段**内嵌随包出境**（规则是断言而非提示词）：验收侧无需 rules.json 文件——维度 3/4 由包内指纹自带的声明集对本地输出校验，任务纪律由包内规则段评估；无规则段的包降级跳过并在报告注记。
 
 **为什么模板不在四维里**：模板（系统提示词）与注入的 skill 文案是**输入变量**——回归测试里被替换、被修改的正是它，拿它参与比对等于「比谁改过」，永远不同、没有信息量。框架测量的是行为后果：还调不调同样的工具、输出结构变没变、声明规则守不守。模板的真实角色有两个：身份锚点（同一份提示词归同一组，见第 5 章）与请求重建素材（重放时原样带回历史上下文，见第 9 章）。由此有个推论：MCP 工具的 name / description / schema 就是它的「提示词工程面」——修改工具描述与修改提示词是同一性质的变化，都会经由行为维度的变化被检出（能力来源无关性的故事版见第 2 幕收尾）。
 
@@ -707,11 +736,7 @@ recorded（到达即计数） = written（批量写成功）
 
 **生命周期与并发契约——退出码契约**（CI gating 的全部语义）：
 
-| 退出码 | 语义 | 触发条件 |
-|--------|------|---------|
-| 0 | 全部无差异（或 dry-run 完成） | 所有用例 PASS |
-| 1 | 存在行为差异或证据不完整 | 有 CHANGED/TIMEOUT/API_ERROR/ERROR——证据不完整同样不允许绿 |
-| 2 | 用法或基础设施故障 | 无用例、`--ci` 无基线拒绝、语义版本不一致、影响分析失败、**全部用例失败且无比对结果**（超时风暴/凭据失效——环境问题不是回归） |
+单条 `execute()` 把一切失败折叠为结果状态（TIMEOUT/API_ERROR/ERROR），批量侧永不中断；**进程级退出码由统一引擎复合**（权威表见第 11 章）：`0` 无差异或 dry-run 完成；`1` 存在行为差异或证据缺口（对齐 CHANGED/缺步骤/新增步骤/任务规则违规/漂移挂起/重驱 CHANGED）；`2` 用法或基础设施故障（无用例、`--ci` 无基线拒绝、语义版本不一致、重驱预算耗尽、**重驱全部失败且无一次比对结果**——超时风暴/凭据失效是环境问题不是回归）。
 
 **测试怎么钉住它**：`ReplayFlowTest`（临时库 + 桩客户端走通建档→重放→候选→approve/reject 全链，含 CI 拒绝/dry-run 只读/全失败 exit 2、previousTurns 字段级保真）；客户端协议契约测试（500→200 重试成功、429 耗尽上抛、400 单次不重试、超时不重试、合成 assistant 帧、tool_call_id 携带、历史 system 轮跳过）；`DeepSeekIntegrationTest`（真机，密钥环境变量门控跳过）。
 
@@ -731,9 +756,9 @@ recorded（到达即计数） = written（批量写成功）
   - 第 1 层：前序记录的值来源（**工具返回优先**——遍历 `ToolCall.result` 经 JSON 解析收叶子值；无工具结果时降级 `modelResponse`，它是无工具调用记录的唯一值源）与当前记录工具参数值**精确 equals → HIGH**（叶子值深度限 3、总量限 500、长度 2–1000；有意义值过滤：长度 <3、布尔字面量、纯数字排除——几乎所有工具链都流经 true/false，不排就是假依赖）；
   - 第 2 层：字段名前缀匹配（驼峰/下划线/连字符取首段，最短 3 字符——`orderId`→`order`）→ **LOW**。
   - 调用点身份：记录已富化用存储 invocationKey，否则解析器现算。
-- `InMemoryDependencyGraph`——图本身：正向邻接表（`LinkedHashMap`，**插入序保证快照字节可复现**）+ 反向邻接表。`addEdge` 四参：同边重复添加保最高置信度、合并 throughNodes；`traverseDownstream` BFS（visited 防环）；`detectCycles` DFS 三色染色 + 显式栈——只有「回边目标到栈顶」的区段才算环，环外尾部祖先不算；`fromJson` **fail-closed**——source/target 缺失或 confidence 非法的边整条跳过（派生数据宁缺勿错，不造幽灵拓扑污染影响集）。
+- `InMemoryDependencyGraph`——图本身：正向邻接表（`LinkedHashMap`，**插入序保证快照字节可复现**）+ 反向邻接表。`addEdge` 四参：同边重复添加保最高置信度、合并 throughNodes；`traverseDownstream` BFS（visited 防环）；`detectCycles` DFS 染色（白=未访问、灰=在递归栈中）+ 显式栈——只有「回边目标到栈顶」的区段才算环，环外尾部祖先不算；`fromJson` **fail-closed**——source/target 缺失或 confidence 非法的边整条跳过（派生数据宁缺勿错，不造幽灵拓扑污染影响集）。
 - `DriftDetector`（core，纯只读巡检）——逐画像键比对「最新可分组记录的模板哈希 vs 画像模板哈希」（凭据=存储键与现算键双一致的记录，损坏记录倒序回退），漂移点按键锚点分三分形态：骨架锚点**同键漂移**（全文变体共存）、声明无骨架**标签裂键**（未建档新键与既有画像标签相同）、template:/adhoc: 全新键（无画像对照，不进漂移集）；漂移键经 `traverseDownstream` 扩散为下游波及集；零模板点排除出检测集并计数，单键查询失败跳过并计数（退化可见不中断）。检测、治理身份前移与重驱取点共用同一 `latestIdentityRecord` 口径。
-- **图的生命周期（谁读谁写，全部已接线）**：`replay` = 唯一写者（每次现场重建，快照 `saveGraphQuietly` 留档供巡检，写失败只告警，dry-run 不落盘）；`graph show` = 只读现场重建（永远最新，不落盘）；`status` = 读快照展示（标注「最近一次 replay 生成」）；录制管道**永不**建图。图的消费方只剩两个：检测报告的下游波及叙事，与 `--re-drive` 的目标裁剪——缺省全量对齐零调用后，为省调用而做的选链传播已无存在理由（统一引擎批的旧假设重审结论）。
+- **图的生命周期（谁读谁写，全部已接线）**：`replay` = 唯一写者（每次现场重建，快照 `saveGraphQuietly` 留档供巡检，写失败只告警，dry-run 不落盘）；`graph show` = 只读现场重建（永远最新，不落盘）；`status` = 读快照展示（标注「最近一次 replay 生成」）；录制管道**永不**建图。图的消费方只剩检测报告的下游波及叙事——受控重驱的目标集取「漂移点 × 缩域键集」的交集，不经图；`status` 只是读快照留档做展示，`graph show` 是只读的现场重建，二者都不消费图做判定。
 
 **表结构**：`graph_snapshot`（id='current' 单行，`graph_json` 含 nodeCount/edgeCount/edges[source,target,confidence,throughNodes]）——快照只是巡检留档，分析永远用重建后的内存图。
 
@@ -757,7 +782,7 @@ recorded（到达即计数） = written（批量写成功）
   - `resolveAll(repository)`：所有会话的链合并，按链首时间升序——跨会话配对与「取最新链」共用本口径。
 - `TaskAligner`（core `algorithm/`，纯比较，零 LLM 调用）：
   - `align(baseline, newChain, comparator, rules)`：两侧各按 invocation_key 分组（组内规范序），三方分类——matched（两侧都有）/ missing（基线有新链无 = 缺步骤）/ added（新链有基线无 = 新增步骤）。matched 组内 1:1 规范序配对（按较少侧配对，**富余计数进报告不判差异**）；每对**两侧指纹现场重提**（同 rules 口径）→ 既有 `DeterministicComparator` 判定；步骤 verdict 取首个 CHANGED 配对（差异明细随之，停止后续配对）。缺步骤/新增步骤与配对 CHANGED 同归入链级 CHANGED。
-  - **对齐收尾评任务规则**（rules.tasks，只对声明 taskKey 的任务、按新链侧）：规则键 = 声明值精确相等；对新链的声明标签序列（规范序、无标签步骤不参与）评三类约束——`requiredSteps`（必备步骤）/ `requiredOrder`（有序子序列，含存在性）/ `steps.min/max`（绝对次数，直接判定富余环节不判差异补不上纪律）——违规挂入结果的 `ruleViolations`（呈现序 = 规则声明序）并折叠为链级 CHANGED，不新增 verdict 值。verify 传入 rules=null 天然不评；自建基线（单链）不进对齐核。分组键本身：声明标签优先（跨模板版本
+  - **对齐收尾评任务规则**（rules.tasks，只对声明 taskKey 的任务、按新链侧）：规则键 = 声明值精确相等；对新链的声明标签序列（规范序、无标签步骤不参与）评三类约束——`requiredSteps`（必备步骤）/ `requiredOrder`（有序子序列，含存在性）/ `steps.min/max`（绝对次数，直接判定富余环节不判差异补不上纪律）——违规挂入结果的 `ruleViolations`（呈现序 = 规则声明序）并折叠为链级 CHANGED，不新增 verdict 值。自建基线（单链）不进对齐核；verify 在包内嵌声明规则段时以同一收尾评估任务纪律（无规则段的包降级不评）。分组键本身：声明标签优先（跨模板版本
 配对，`versionSwitch` 注记 + `crossVersion` 计数，判定照常——混杂变量由报告提示披露），无标签步骤按
 完整 invocationKey（版本即身份，跨版本不配对）。
   - `align(baselineSteps, newChain, comparator, rules)`：基线侧改由调用方给定 `Map<invocationKey, List<BaselineStep>>`（指纹步骤）——交付验收（第 12 章）用同一对齐核消费包内指纹，不做第二台差分引擎。
@@ -793,14 +818,14 @@ recorded（到达即计数） = written（批量写成功）
 - `BaselineExportCommand`（cli，`baseline` 的子命令）：
   - 选择器：缺省全量（`TaskChainView.resolveAll` 的已建档任务链，**同任务键只保留链首时间最新的链**——与 verify 侧「取最新为对照」对称），`--task <前缀>` 缩域；`--out` 默认 `./acceptance-pack.json`。
   - 每步指纹**逐记录现场提取**（与 verify 重提侧、库内任务对齐同口径——画像指纹是建档种子记录的单份快照，同键多记录时冒充其他步骤必然假差异）；调用点无画像或无指纹 → 该链**排除并警告列出**（导出前置纪律：先把基线建好）；全部被排除 → exit 2。
-  - 常驻内容天然脱敏：只有结构指纹与调用点键——不带用户输入输出、不带 rules.json、不带模板原文（维度 3/4 声明集已随指纹序列化，「基线声明、当前答卷」的非对称语义让验收侧无需规则文件，见第 6 章）。
+  - 常驻内容天然脱敏：只有结构指纹、调用点键与声明规则段——不带用户输入输出、不带模板原文（维度 3/4 声明集随指纹序列化，包级规则段内嵌出境；「基线声明、当前答卷」的非对称语义让验收侧无需规则文件，见第 6 章）。
   - `--include-samples`：附加每步样本，用**强制脱敏器**（`DataSanitizer` + MASK 策略 + 输入/输出双侧开启，不受导出环境 recorder 配置影响——写入包内前完成脱敏）；样本仅供人读，判定不消费。
   - 导出打印文件 SHA-256（对账凭据）与任务链/步骤计数。
   - **任务键即请求原文**（配对语义的根基）会随包出境——敏感业务的任务应在录制时声明 `taskKey`（如场景 id）作为任务键，避免原文入包。
-- `VerifyCommand` / `VerifyRunner`（cli，第 9 个顶层命令）：
+- `VerifyCommand` / `VerifyRunner`（cli 顶层命令之一）：
   - 读取包文件并**重算 SHA-256**（digest 随报告回显供双方对账）；`PackCodec.fromJson` 失败 → exit 2；**版本守卫**：包无 meta 或 `judgmentSemantics` ≠ 当前引擎 → exit 2 拒绝判定（防静默重解释）。
   - 匹配：本地任务链（`TaskChainView.resolveAll` 派生）按「本地 requestText 与**包 taskKey 精确相等**」匹配，多链取最新；`--task` 缩域核对范围。前缀同名的本地链不是证据（防误配对）——包任务无精确链=覆盖缺口，本地多余链=范围外，两侧对称列出。
-  - 对齐：包内指纹分组为基线侧步骤 → `TaskAligner.align(baselineSteps, localChain, ...)`——本地链指纹现场重提且 **rules 传 null**（验收侧无需规则文件；维度 3/4 由包内指纹携带的声明集对本地输出校验）。
+  - 对齐：包内指纹分组为基线侧步骤 → `TaskAligner.align(baselineSteps, localChain, ...)`——本地链指纹现场重提，**规则口径 = 包内嵌声明规则段**（导出侧随包写入；维度 3/4 由包内指纹声明集对本地输出校验，任务纪律由包内规则段评估；无规则段的旧包降级——维度 3/4 跳过、报告 Content rules 行注记 skipped）。
   - 任务级与全局级双处跨模型判定：本地链 servedModel 集合 ≠ 包 servedModel → 标注「跨模型验收：结构判定有效，文本差异属措辞预期内」。
   - 汇总与两类缺口：包任务无本地链 = **覆盖缺口**（uncovered）；本地链不匹配任何包任务 = **范围外链**（unmatchedLocal，只列出）。退出码：任一 CHANGED/缺步骤/新增步骤 → 1；否则覆盖缺口 → 2；否则 0（偏差是最强信号，优先于覆盖缺口）。
   - 报告：`--report <path>` 产出 markdown 交付证据（包头信息表：包 schema/SHA-256/判定语义/两侧 servedModel/跨模型标注；判定汇总；覆盖缺口与范围外清单；逐任务逐步骤明细，文本差异标低置信与跨模型预期）；`--json` 输出单行 `agentassert4j.verify-report/1`（pack{digest,servedModel}、summary{tasks,pass,changed,missing,added,uncovered,unmatchedLocal,crossModel}、tasks[]、uncoveredTaskKeys[]、hints[]——范围外链非空时的因果提示（新录制未建档/未入包，先 baseline 补档重导））。
@@ -816,7 +841,7 @@ recorded（到达即计数） = written（批量写成功）
 
 ## 第 13 章 CLI 与配置
 
-**本幕回顾**：全部十一幕里出现过的每一次命令行交互。
+**本幕回顾**：全部十二幕里出现过的每一次命令行交互。
 
 **设计问题**：CLI 是框架的**组合根**（把 core+recorder+storage 装配成可独立运行的工具）和**裁决工作台**（status 巡检、approve/reject 裁决、rollback 兜底）。命令输出的本质是产品界面而非日志（git/mvn 同款定位），可注入的 PrintStream 是它的测试通道。
 
@@ -830,8 +855,8 @@ recorded（到达即计数） = written（批量写成功）
   - `installUtf8Console`：主入口统一 UTF-8 直写标准流（绕过 Windows 控制台默认编码，中文报告不乱码）。
   - `openRepository`：加载配置后**先打印配置来源一行**（命中路径或「未找到用默认」——错误目录下的旧配置静默生效是最难查的排障黑洞），`~` 前缀展开后建库初始化。
   - `recordedInvocationIds`：走「session 全量 → 逐记录提取」通道收集业务标签（TreeSet 字典序稳定）。
-  - `resolveInvocationFilter`（选例类命令 replay/baseline 用）：与业务 invocationId 精确相等按原义；否则 invocationKey **唯一**前缀匹配并换算回业务标签（歧义前缀显式报错；对应调用点覆盖多个业务标签也报错并列出）。
-  - `resolveInvocationKeyTarget`（画像操作类 approve/reject/rollback 用，返回唯一 invocationKey）：完整调用点键精确命中（即使它是别的 key 的前缀）> 业务标签（覆盖多调用点时点名报错）> 显示短形（对画像键现算显示形全等比对，哈希段大小写不敏感，`resolveByDisplayForm`）> 唯一前缀；无命中/多命中抛 `IllegalStateException`，命令层转译为退出码 2。
+  - `resolveInvocationFilter`（status 人读缩域与 baseline 建档缩域用，标签命中其全部模板桶）：与业务 invocationId 精确相等按原义；否则显示短形反解或 invocationKey **唯一**前缀匹配并换算回业务标签（歧义前缀显式报错；对应调用点覆盖多个业务标签也报错并列出）。
+  - `resolveInvocationKeyTarget`（replay 缩域与画像操作类 approve/reject/rollback 用，返回唯一 invocationKey）：完整调用点键精确命中（即使它是别的 key 的前缀）> 业务标签（覆盖多调用点时点名报错）> 显示短形（对画像键现算显示形全等比对，哈希段大小写不敏感，`resolveByDisplayForm`）> 唯一前缀；无命中/多命中抛 `IllegalStateException`，命令层转译为退出码 2。
   - `taskChains` / `invocationKeyOfRecord`：任务链派生与记录键解析的共用入口。
   - `currentActor`：`user.name` → 缺失记 `unknown`（不留无主审批记录）。
 - `ConfigLoader`（core）——查找链五级（主配置与规则配置各一套，键分别为 `agentassert4j.config.path`/`agentassert4j.rules.path`，文件名 `agentassert4j.json`/`agentassert4j-rules.json`）：
@@ -943,7 +968,7 @@ baseline export                               TaskChainView.resolveAll（本地�
 acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
                                                │  版本守卫（语义不一致 exit 2）
                                                │  本地 requestText 与包 taskKey 精确相等取最新
-                                               │  TaskAligner：包指纹 × 本地现场重提（rules=null）
+                                               │  TaskAligner：包指纹 × 本地现场重提（规则=包内嵌声明段）
                                                ▼
                                          markdown 报告（交付证据）
                                          + verify-report/1
@@ -960,21 +985,21 @@ acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
 |------|------|---------|
 | 数据没落库 / recorded 与 written 对不上 | 第 3 章 | 计数闭合公式三分：dropped（缓冲满/发布异常）、failed（批量写失败看 ERROR 日志）、还是在缓冲/管道里（等 5 秒 flush） |
 | 落库了但 status 看不到画像 | 第 7/13 章 | 画像按 invocationKey 建档，记录不可解析会被守卫剔除——看命令告警行 |
-| 调用点归组不符合预期 / 出现代号组 | 第 5 章 | 锚点优先级：声明 > 模板哈希 > adhoc 请求锚点；没声明的调用点领 `template:`/`adhoc:` 代号键是正常形态，`--invocation` 三写法都能选到 |
+| 调用点归组不符合预期 / 出现代号组 | 第 5 章 | 锚点优先级：声明 > 骨架 > 模板哈希 > adhoc 请求锚点；没声明的调用点领 `template:`/`adhoc:` 代号键是正常形态，`--invocation` 三写法都能选到 |
 | 指纹差异看起来是误报 | 第 6/8 章 | 先看 summary 定位维度：参数类型→词表两侧是否同源；内容规则→规则是否随基线存档；文本不同≠差异（判定只看结构指纹） |
 | 重放请求被端点 400 | 第 9 章 | tool 帧缺 callId（会跳过并告警）、历史 system 帧混入（已跳过）、o 系模型 temperature（方言表裁剪+WARN）、extraBody 片段非法 |
 | 每次重放全红 | 第 9 章 | served 模型 ≠ 录制模型注记、判定语义版本不一致（exit 2 有指引）、换模型实验（有告警） |
-| 影响集为空 | 第 10 章 | 冷启动两种文案区分：库空 vs hash 不匹配（新 prompt 无录制） |
-| 任务链没有配对上 / 配对错链 | 第 11 章 | 配对键=请求文本 trim 精确前缀（不做模糊归一）；改了问法请录制时声明 metadata.taskKey；同键多链取最新为对照 |
+| 漂移检测为空但预期有漂移 | 第 10 章 | 检测只覆盖有画像对照的键：未建档的全新键不进漂移集（由建档与巡检承接）；零模板点（无模板身份）不可检测——doctor 覆盖段会点名 |
+| 任务链没有配对上 / 配对错链 | 第 11 章 | 配对键=请求文本精确相等（replay 对未命中给唯一前缀回退，verify 纯精确相等无回退；均不做模糊归一）；改了问法请录制时声明 metadata.taskKey；同键多链取最新为对照 |
 | `--task` 报「未找到任务链」 | 第 11 章 | 前缀不匹配（注意空白）；或该会话开头无请求文本的记录不属任何链 |
-| 验收覆盖缺口（exit 2） | 第 12 章 | 包内任务在本地没执行——验收人先跑齐验收请求；或本地问法与包 taskKey 不构成前缀关系 |
+| 验收覆盖缺口（exit 2） | 第 12 章 | 包内任务在本地没执行——验收人先跑齐验收请求；或本地问法与包 taskKey 非逐字一致（验收配对是纯精确相等，前缀同名不冒充证据） |
 | CI 全是 exit 2 | 第 9 章 | --ci 无基线拒绝（先本地 baseline）、语义版本守卫、全失败=基础设施故障 |
 
 **第二层：三层审计视角**（定位到层后按序自问）：
 
 1. **单元正确性**——这段代码本身对不对？（并发、边界、异常、资源）
 2. **跨组件契约**——数据流经的每一跳字段对齐了吗？（捕获写入列 ↔ schema 列 ↔ 读侧反序列化键；配置键 ↔ 配置字段；两侧词表；包内指纹序列化 ↔ 验收侧重提口径）本框架的历史缺陷大多死在这一层（假阳性回归 = 词表漂移；整批失败 = NOT NULL 与兜底链断裂）；
-3. **端到端意图**——设计意图真的落地了吗？（「重放不带工具必然假阳性」「冻结重放下游节点无验证信号」这类需求级断言逐条对照）。
+3. **端到端意图**——设计意图真的落地了吗？（「重放不带工具必然假阳性」「验收配对纯精确相等、前缀同名不冒充证据」这类需求级断言逐条对照）。
 
 **第三层：工具箱**：`status --diff`（画像与候选差异）、`replay --dry-run`（选例与成本，只读）、`--json`（机器可读证据）、`graph show`（依赖视图）、SQLite 工具直查五表、recorder 四计数器闭合审计。
 
@@ -1019,16 +1044,16 @@ acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
 | 统一重放引擎 / 受控重驱 | replay bare = 漂移检测 + 逐任务对齐（零调用）；`--re-drive` 逐漂移点以归档模板重放历史输入受控复核（花调用，预算池封顶） | 第 11 章 |
 | 缺步骤 / 新增步骤 | 对齐键 invocationKey 三方分类中的 missing/added，与 CHANGED 同属行为差异 | 第 11 章 |
 | 模板骨架 / 骨架哈希 | 动态段替换为稳定占位符的模板形态（出口声明）/ 其 SHA-256——同骨架异全文同键，动态模板下身份不再漂移裂键 | 第 5/9 章 |
-| 任务纪律（tasks 段） | 声明任务键上的链级约束：必备步骤 / 有序子序列 / 步骤次数范围，违规折叠进二值判定（只对声明任务、真实对比模式评） | 第 11 章 |
+| 任务纪律（tasks 段） | 声明任务键上的链级约束：必备步骤 / 有序子序列 / 步骤次数范围，违规折叠进二值判定（对齐收尾评估：replay 对齐与内嵌规则段的验收比对，只对声明任务） | 第 11 章 |
 | 成本对照 | 真实对比报告附两侧 token/费用合计；token 恒显，费用同基准重算、无价省略 | 第 11 章 |
-| 分歧即停 | 真重放遇 CHANGED 停止后续（轮级与任务级同则），下游标条件态 | 第 9/11 章 |
+| 分歧即停 | 链式半重放某轮决策与基线编排不一致时当场停止并定位到轮（旧结果配新决策是虚构演进） | 第 9 章 |
 | 预算池 | --max-total-calls/--max-total-tokens 对本次运行全部真重放合计封顶 | 第 11 章 |
 | 验收包 | `agentassert4j.acceptance-pack/1`：结构指纹+调用点键的单 JSON 交付载体，SHA-256 对账 | 第 12 章 |
 | 覆盖缺口 | 包内任务未在验收侧执行——证据缺口，exit 2 | 第 12 章 |
 | 跨模型验收 | 开发侧与本地 servedModel 不一致——结构判定有效，文本差异属措辞预期内 | 第 12 章 |
 | 退出码契约 | 0 无差异 / 1 有差异或证据不完整 / 2 用法或基础设施故障 | 第 9/11 章 |
-| 证据报告 | `--json` 的单行机器可读输出（replay-report/1、task-report/1、verify-report/1） | 第 9/11/12 章 |
-| 四写法等价 | 业务标签 = 完整 invocationKey = 唯一前缀 = 显示短形 标签@8位，CLI 统一解析 | 第 13 章 |
+| 证据报告 | `--json` 的单行机器可读输出（replay 为 task-report/1 逐行分段；status/1、baseline-report/1、export-report/1、adjudication/1、rollback/1、verify-report/1、graph/1、rules/1 各命令一一对应） | 第 9/11/12/13 章 |
+| 四写法等价 | 业务标签 = 完整 invocationKey = 唯一前缀 = 显示短形 标签@8位（replay/approve/reject/rollback 四写法全收；status/baseline 缩域用其中标签、显示短形、前缀三写法） | 第 13 章 |
 | 计数闭合 | recorded = written + dropped + failed，filtered 另列（总到达 = recorded + filtered） | 第 3 章 |
 | 采集门 | 默认全量录制；recordUndeclaredChat=false 时未声明且无可见工具调用的交互被过滤（filtered 与 dropped 分列，首条与每满 100 条告警） | 第 3 章 |
 | 判定二值化 | 判定只有 PASS/CHANGED 两值，权重与直判规则退役出判定链路 | 第 8 章 |

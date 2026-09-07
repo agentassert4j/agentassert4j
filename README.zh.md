@@ -38,7 +38,7 @@ approve / reject 一键裁决。** 业务代码零改动，core 零外部依赖�
 
 | 环节 | 命令 | 发生了什么 |
 |------|------|-----------|
-| **录制即基线** | （自动） | 框架旁路拦截每次真实 LLM 调用，首录自动建档，零仪式 |
+| **录制即基线** | （自动） | 框架旁路拦截每次真实 LLM 调用；一条 `baseline` 命令即完成盖章建档（幂等），replay 开发态也会为新出现的调用点自动建档 |
 | **变更检测与对齐** | `replay` | 全项目漂移检测 + 逐任务按调用点对齐：缺步骤 / 新增步骤 / 逐步结构 diff，零 LLM 调用 |
 | **受控重驱（可选）** | `replay --re-drive` | 逐漂移点以最新归档模板重放历史输入做受控复核，花真实调用、预算池封顶 |
 | **裁决门禁** | `approve` / `reject` | bare 裁决全部待裁决候选；预期改进转正（旧基线归档可回滚），回归丢弃；退出码 0/1/2 直接 gating |
@@ -91,16 +91,16 @@ agentassert4j baseline --approver wang
 agentassert4j replay
 ```
 
-输出为英文单语（2026-09-05 裁决，中文受众读英文输出）：
+命令输出为英文单语：
 
 ```text
 Dependency graph: 3 nodes / 2 edges
 Drift: 1 same-key, 0 label splits, 0 downstream (0 zero-template invocations undetectable)
-  ▲ 查询物流@skl1e37f (查询物流) template ab12cd34 → 9e37f2c1
+  ▲ 查询物流@9f13e77f (查询物流) template ab12cd34 → 9e37f2c1
 Task "订单 1234 的物流太慢": baseline chain (session 20260831-a3f2) → new chain (session 20260902-b7e1)
   [1] 查询订单  PASS
-  [2] 查询物流@skl1e37f  score=0.76 verdict=CHANGED | added fields: [delivery.promise]
-Candidate registered: 查询物流@skl1e37f (behavior change awaiting adjudication; approve promotes to baseline, reject discards).
+  [2] 查询物流@9f13e77f  score=0.76 verdict=CHANGED | added fields: [delivery.promise]
+Candidate registered: 查询物流@9f13e77f (behavior change awaiting adjudication; approve promotes to baseline, reject discards).
   [3] 提交退款  PASS
 Alignment summary: PASS 2 | CHANGED 1 | missing 0 | added 0
 ```
@@ -120,7 +120,7 @@ agentassert4j reject --invocation 查询物流   # 回归：缩域丢弃该候�
 agentassert4j replay
 ```
 
-真实对齐报告长这样（虚构演示数据的真实输出——缺一步、新增一步、一个结构变化，逐条点名，exit 1）：
+真实对齐报告长这样（虚构演示库的真实输出——缺一步、新增一步、一个结构变化，逐条点名，exit 1；截图为英文单语切换前的历史形态，待重截）：
 
 <img src="assets/cli-align-report.png" alt="replay --task 真实对齐报告：PASS 3 | CHANGED 1 | 缺步骤 1 | 新增步骤 1" width="880"/>
 
@@ -155,9 +155,9 @@ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 ```groovy
 stage('AgentAssert 行为回归') {
   steps {
-    sh 'java -jar agentassert4j-cli-standalone-1.0.0.jar replay --ci --json'
+    sh 'java -jar agentassert4j-cli-standalone-1.0.0.jar replay --ci --json > agentassert-replay.json'
   }
-  post { always { archiveArtifacts 'agentassert4j.db, *.report.json' } }
+  post { always { archiveArtifacts 'agentassert4j.db, agentassert-replay.json' } }
 }
 ```
 
@@ -192,13 +192,16 @@ stage('AgentAssert 行为回归') {
 | `replay` | 全项目模板漂移检测与任务对齐（缺省零 LLM 调用）；`--task`/`--invocation` 复合缩域；`--re-drive` 受控复核 |
 | `approve` / `reject` | 裁决候选指纹（转正 / 丢弃）。bare = 全部待裁决候选；`--invocation <目标>` 缩域 |
 | `rollback` | 把基线回滚到归档版本（`--invocation` `--version` 均必填） |
-| `verify` | 交付验收：验收包 × 本机真实执行链（只读） |
+| `verify` | 交付验收：验收包 × 本机真实执行链（只读）；`--dry-run` 配对预演，`--report` 产出 markdown 交付证据 |
 | `rules` | 查看内置约束行为目录与规则文件写法 |
 | `graph show` | 依赖图谱只读视图（从录制数据现场重建） |
-| `doctor` | 全库体检：配置来源、计数闭合、候选状态审计 |
+| `doctor` | 只读库体检，三段确定性事实：身份（骨架族、多步零标签链、值得声明任务键的重复请求族）、覆盖（未建档调用点、缺 template_hash 的记录）、规则（畸形声明、期望错位）；仅陈述事实，正常执行恒出 0（不承载门禁语义） |
 | `completion` | 生成 shell 补全脚本（bash 风格） |
 
-巡检界面长这样（演示库真实输出——每行一个调用点：身份、基线状态、版本、候选、归档、业务标签）：
+每个命令另有短别名（`s`、`b`、`a`、`g`、`v`、`d`、`c`、`rp`、`rj`、`rb`、`ru`——完整名永远保留，
+`--help` 可见）；`completion` 生成脚本会一并注册到 shell。
+
+巡检界面长这样（演示库真实输出——每行一个调用点：身份、基线状态、版本、候选、归档、业务标签；截图为英文单语切换前的历史形态，待重截）：
 
 <img src="assets/cli-status.png" alt="status 输出：调用点清单与基线状态" width="820"/>
 

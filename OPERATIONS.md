@@ -22,7 +22,8 @@
 
 <img src="assets/deployment.zh.png" alt="部署形态：录制侧（应用进程内旁路运行）旁路写入 agentassert4j.db，分析侧独立 CLI 进程读写同一文件" width="760"/>
 
-数据库默认路径 `~/.agentassert4j/agentassert4j.db`，建议在主配置里显式指到应用的持久化目录。
+数据库默认路径分侧：CLI 分析侧 `~/.agentassert4j/agentassert4j.db`，starter 录制侧为应用工作目录下的
+`agentassert4j.db`——建议在主配置/starter 属性里显式指到应用的持久化目录，两侧保持一致。
 
 ### 1.1 分析侧 CLI 获取
 
@@ -32,7 +33,9 @@
 | Maven 依赖引用 | 平台工程统一管理工具链 | pom 引入 `agentassert4j-cli`，传递依赖自动就位 |
 | 源码构建 | 开发调试 | 见 [README.zh.md](README.zh.md)「模块结构」折叠节 |
 
-单机常驻使用建议设别名（示例以 Bash 为例；Windows 直接用完整命令）：
+每个子命令内置短别名（`s`/`b`/`a`/`g`/`v`/`d`/`c`/`rp`/`rj`/`rb`/`ru`，完整名永远保留，`--help` 可见；
+`completion` 生成脚本会一并注册），`agentassert4j --version` 报出框架版本。单机常驻使用建议设别名
+（示例以 Bash 为例；Windows 直接用完整命令）：
 
 ```bash
 alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
@@ -46,7 +49,7 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 文件名固定 `agentassert4j.json` / `agentassert4j-rules.json`）：
 
 1. 系统属性显式路径（不可读直接报错，不静默换源）→ 2. 当前工作目录 → 3. `~/.agentassert4j/` →
-4. classpath → 5. 安全默认值。每次 CLI 命令开头会打印实际命中的配置来源。`${ENV_VAR}` 引用统一替换。
+4. classpath → 5. 安全默认值。打开库的命令开头会打印实际命中的配置来源（`rules`/`completion` 不开库不打印）。`${ENV_VAR}` 引用统一替换，未设置的变量替换为空串。
 
 全部字段（都有安全默认值，可只写需要的段）：
 
@@ -78,11 +81,11 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 
 | 段 | 键 | 默认 | 说明 |
 |----|----|------|------|
-| storage.url | — | `~/.agentassert4j/agentassert4j.db` | SQLite 文件路径，`~` 自动展开；CLI 各命令的 `--db` 可逐次覆盖 |
+| storage.url | — | `~/.agentassert4j/agentassert4j.db` | SQLite 文件路径，`~` 自动展开；开库命令（status/baseline/replay/approve/reject/rollback/verify/doctor/graph show/export）的 `--db` 可逐次覆盖 |
 | recorder.batchSize | — | 100 | 批量落库批大小 |
 | recorder.flushIntervalMs | — | 5000 | 定时冲刷间隔（毫秒） |
 | regression.ignorableFields | — | 空列表 | 已知噪声字段白名单（归一化后仍不同才构成差异） |
-| llm.apiKey | — | 空 | 重放用；支持 `${ENV}` 引用；缺失时 replay 打印警告 |
+| llm.apiKey | — | 空 | 重放用；支持 `${ENV}` 引用；缺失时 `--re-drive` 打印警告（bare 对齐零调用，不检查 Key） |
 | llm.endpoint | — | `https://api.openai.com` | OpenAI 兼容端点（DeepSeek/通义等同协议端点均可） |
 | llm.model | — | `gpt-4o` | 重放请求的模型；与录制模型不一致时命令行告警 |
 | llm.timeoutMs | — | 30000 | **单次尝试**预算（下限钳 1000）；超时不重试 |
@@ -114,9 +117,9 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
   },
   "tasks": {
     "refund-flow": {
-      "requiredSteps": ["视觉检查", "终检"],
+      "requiredSteps": ["提交退款"],
       "requiredOrder": ["意图识别", "查询订单", "提交退款"],
-      "steps": { "视觉检查": { "min": 1, "max": 3 } }
+      "steps": { "查询订单": { "min": 1, "max": 3 } }
     }
   }
 }
@@ -132,9 +135,12 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
   步骤指称是调用点声明标签。三类约束——`requiredSteps`（必备步骤，出现即可、顺序不约束）、
   `requiredOrder`（有序子序列，含存在性：任一标签未出现同样判违规）、`steps.min/max`
   （绝对次数范围，对新链出现计数直接判定）——违规折叠进链级 CHANGED → exit 1。
-- `tasks` 只在 `replay --task` **真实对比模式**评估：自建基线（仅一条链）不评——首录先立档，
-  约束从有对照的第二轮起生效；冻结重放与 `verify` 验收不评。配置了 tasks 但被评链未声明
-  taskKey 时报告出诊断行（不涉判定），防「配了规则没生效」；畸形声明（类型错值、非对象条目、min/max 双缺、min>max）解析时安全忽略或标注无约束力，CLI 加载时逐条告警。
+- `tasks` 在 replay 的逐任务对齐收尾评估（bare 全项目或 `--task`/`--invocation` 缩域均可——约束对
+  已声明 taskKey 的链生效；自建基线即仅一条链的任务不评，首录先立档，从有对照的第二轮起生效）。
+  **交付验收同样评估**：包内嵌声明规则段时，验收侧以包内规则对本机执行链评任务纪律（跨模型验收时
+  编排波动会被如实报告）；无规则段的包降级跳过。配置了 tasks 但被评链未声明 taskKey 时报告出
+  诊断行（不涉判定），防「配了规则没生效」；畸形声明（类型错值、非对象条目、min/max 双缺、min>max）
+  解析时安全忽略或标注无约束力，CLI 加载时逐条告警。
 
 ## 3. 库文件运维
 
@@ -201,6 +207,8 @@ CLI 分析侧不受影响，仍可对既有库做巡检/验收。
 
 1. 确认基线干净：`agentassert4j status`——全部调用点 BASELINE、无未裁决候选（候选先 approve/reject 清场）；
 2. 导出：`agentassert4j baseline export --out acceptance-pack.json` → 记录打印的 **SHA-256** 与任务链/步骤数；
+   被排除的链在输出与 `--json` 报告的 `excluded` 数组中列出并给出原因（存在未建档步骤 / 基线违反自身
+   声明规则）——排除属导出守卫，先把该链的基线建干净或修正规则声明再重导；
 3. 需要附样本供人读时加 `--include-samples`（样本强制 MASK 脱敏，判定不消费）；
 4. 敏感任务：确认录制时已用 `withMetadata("taskKey", <场景id>)` 声明任务键——**任务键=请求原文**会随包出境。
 
@@ -214,6 +222,7 @@ requiredSteps/order/counts 的包，编排纪律同样参与判定——跨模�
 
 1. 部署被测应用（可 `enabled=false` 不录制），**真实执行**全部验收请求——框架不驱动产品入口，执行由验收人发起；
 2. 核对：`agentassert4j verify --pack acceptance-pack.json --report verify-report.md`
+   （拿不准本机链与包的配对情况时，可先加 `--dry-run` 预演——只列配对与跨模型注记，零判定零写入）。
 3. 判读：
    - 结构偏差（工具集/参数类型/输出结构）= **真问题**，转开发侧；
    - 跨模型标注（开发侧/本地 servedModel 不同）= 文本措辞差异属预期内，结构判定依然有效；
@@ -254,6 +263,7 @@ requiredSteps/order/counts 的包，编排纪律同样参与判定——跨模�
 
 | 症状 | 处置 |
 |------|------|
+| `--invocation` 报 covers multiple invocations（replay/approve/reject/rollback） | 这些命令的目标解析要求定位到**单个**调用点，不接受覆盖多个模板桶的业务标签——改用 invocationKey 唯一前缀或 status 显示短形（`标签@8位`）；baseline/status 的缩域解析无此限制（标签命中其全部模板桶：`--force` 跨桶重建、status 一标签展示全部桶） |
 | `--task` 找不到链 | 输入须与录制请求文本精确相等（或给唯一前缀，命中多个不同任务会报错列候选）；或该会话开头无请求文本（纯工具起始）不构成任务链 |
 | `verify` 报覆盖缺口 | 包任务在本地没有**精确同名**任务链——验收人按交付的请求清单原文执行；前缀同名的链不冒充证据（列入范围外） |
 | 追问任务对不上 | 追问链携带会话前缀——真实再执行对照必须重演到该问为止的完整前缀，报告已标注提示 |
@@ -262,10 +272,12 @@ requiredSteps/order/counts 的包，编排纪律同样参与判定——跨模�
 | 报告出现「违反任务规则」 | `rules.tasks` 纪律违规（缺必备步骤/次数越界/顺序不符）——明细点名标签与声明范围；确认是真实回归则改回，是纪律本身变了则更新 rules 文件后重跑 |
 | 报告提示「任务规则不适用」 | 配置了 tasks 但该链录制时未声明 taskKey（规则只对声明任务生效）——补声明后重录，或确认无需纪律门禁 |
 | 「违反任务规则」首录就报 | 自建基线（仅一条链）不评规则；规则从有对照的第二轮起生效——本行只在已有两条链时出现 |
+| `baseline --force` 重建范围比预期大 | `--invocation` 的键前缀会先换算成业务标签，该标签下的**全部模板桶**一起重建（标签=业务身份，输出会透明列出）——只想重建单个模板桶时用完整 invocationKey 作目标 |
 | 报告出现「cross-version pair」 | 同一声明调用点两侧提示词版本不同——判定照常但含混杂变量；受控复核用 `replay --re-drive`（先 `--dry-run` 看报价）逐点以最新归档模板重放 |
 | 重驱报告「archived template text missing」 | 该漂移点在 `prompt_texts` 无全文可取（旧版录制或捕获侧漏设）——重新录制即可（管道现自动派生投影并归档） |
 | 首次 bare replay 报出大量漂移 | 建档种子取桶内最早记录——混合模板历史的库首跑会对「种子≠最新」的调用点各报一次，对齐 PASS 后逐点自动收编；属一次性收敛而非批量回归 |
 | 某任务每次 bare replay 都 exit 1（差异固定） | 库里有被 reject 的变异/测试工件链（只追加事实，对齐层如实陈述）——该任务再真实执行两轮即自然痊愈（最新 vs 次新回到干净对）；CI 不受影响（流水线库是新鲜录制） |
+| 标签裂键收编后任务仍 CHANGED | 收编只前移身份；对齐判定看的是最新两条**真实链**的现场重提比对，不消费任何治理档案——两条链结构本就不一致（模型非确定性或中间变异残留）就会持续 CHANGED。变绿路径只有一条：在当前模板下再真实执行，让最新两链结构一致（确定性输出即 PASS）后重放；`baseline --force`/`approve` 改的是画像基线与漂移身份，不改变链对链判定 |
 
 ## 8. 最小录制契约
 
@@ -307,7 +319,7 @@ try {
 | 档 | 字段 | 说明 |
 |----|------|------|
 | 强烈建议显式填 | `recordId`（缺省兜底 UUID）、`sessionId`（缺省退 recordId 独立会话）、`timestamp`+`seq`（确定性排序键）、`userInput`、`modelResponse`、`invocationId` 或 `templateHash`（身份锚，双缺走 adhoc 请求哈希兜底；只填 `templateText` 时 `templateHash` 由管道派生）、`apiProtocol`、`model` | 决定身份、配对与重放质量 |
-| 影响保真 | `templateText`（落 prompt_texts 原文库）、`templateSkeleton`（动态段替换为稳定占位符的模板骨架——声明后调用点身份按骨架定格，动态模板不再随组装漂移裂键；投影 `skeletonHash` 由管道回填）、`toolsDefinition`（JSON 数组原样——重放不带工具会假阳性）、`previousTurns`（多轮上下文，重放逐字复用）、`turnIndex`、`samplingParams`、`toolCalls[].arguments/result` | 决定冻结重放的保真度 |
+| 影响保真 | `templateText`（落 prompt_texts 原文库）、`templateSkeleton`（动态段替换为稳定占位符的模板骨架——声明后调用点身份按骨架定格，动态模板不再随组装漂移裂键；投影 `skeletonHash` 由管道回填）、`toolsDefinition`（JSON 数组原样——重放不带工具会假阳性）、`previousTurns`（多轮上下文，重放逐字复用）、`turnIndex`、`samplingParams`、`toolCalls[].arguments/result` | 决定重放（含链式半重放）与受控重驱的保真度 |
 | 遥测 | `inputTokens/outputTokens`（输入侧=总处理 token）、`cacheRead/WriteTokens`、`reasoningTokens`、`usageRaw`（供应商原始 usage 逐字）、`latencyMs/ttftMs`、`costUsd`（无价格快照则留 null 不编造）、`servedModel` | 报告与成本可见性；`servedModel` 是跨模型验收的判定依据 |
 
 其余字段（`invocationKey`、`templateHash`（缺省由 `templateText` 派生）与 `skeletonHash` 由管道 enrich 派生兜底；`endpoint`/`modelRequestRaw` 为预留位）
@@ -319,7 +331,7 @@ try {
 |------|--------|------|
 | 存储 schema（`PRAGMA user_version`） | 1 | 预发布固定不演进，schema 变更=删库重建；发布后只增不改 |
 | 判定语义 | `det-v1` | 改变「同样差异得出什么判定」的变更必须递增；发布前恒定 |
-| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`、`verify-report/1`、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`graph/1`、`rules/1`（每命令 `--json` 各对应其一） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
+| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`graph/1`、`rules/1`（每命令 `--json` 各对应其一；replay 的 mode 分段见 §4） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
 | Maven 版本 | `1.0.0-SNAPSHOT` | 发布时转正式版 |
 | CLI 可执行形态 | `agentassert4j-cli-standalone` | cli 模块的全依赖 shaded 产物（含 slf4j-nop 与 Main-Class），`java -jar` 直接运行 |
 

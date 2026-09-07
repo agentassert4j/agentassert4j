@@ -42,7 +42,7 @@ fully offline behind firewalls.
 
 | Stage | Command | What happens |
 |-------|---------|--------------|
-| **Recording is the baseline** | (automatic) | The framework intercepts every real LLM call out-of-band; first recording establishes baselines automatically |
+| **Recording is the baseline** | (automatic) | The framework intercepts every real LLM call out-of-band; one `baseline` run stamps the fingerprints (idempotent), and `replay` auto-establishes newly seen invocations in dev mode |
 | **Change detection & alignment** | `replay` | Whole-project drift detection + per-task invocation alignment: missing steps / added steps / per-step structure diff, zero LLM calls |
 | **Controlled re-drive (optional)** | `replay --re-drive` | Replays recorded inputs per drifted point against its latest archived template, real calls capped by a budget pool |
 | **Adjudicate & gate** | `approve` / `reject` | Intended change gets promoted (old baseline archived, rollback-able); regression gets discarded; exit codes 0/1/2 gate CI directly |
@@ -101,11 +101,11 @@ agentassert4j replay
 ```text
 Dependency graph: 3 nodes / 2 edges
 Drift: 1 same-key, 0 label splits, 0 downstream (0 zero-template invocations undetectable)
-  ▲ query-logistics@skl1e37f (query-logistics) template ab12cd34 → 9e37f2c1
+  ▲ query-logistics@9f13e77f (query-logistics) template ab12cd34 → 9e37f2c1
 Task "Order 1234 arrived late, refund it": baseline chain (session 20260831-a3f2) → new chain (session 20260902-b7e1)
   [1] query-order  PASS
-  [2] query-logistics@skl1e37f  score=0.76 verdict=CHANGED | added fields: [delivery.promise]
-Candidate registered: query-logistics@skl1e37f (behavior change awaiting adjudication; approve promotes to baseline, reject discards).
+  [2] query-logistics@9f13e77f  score=0.76 verdict=CHANGED | added fields: [delivery.promise]
+Candidate registered: query-logistics@9f13e77f (behavior change awaiting adjudication; approve promotes to baseline, reject discards).
   [3] submit-refund  PASS
 Alignment summary: PASS 2 | CHANGED 1 | missing 0 | added 0
 ```
@@ -127,8 +127,9 @@ agentassert4j reject --invocation query-logistics   # regression: discard that c
 agentassert4j replay
 ```
 
-A real alignment report (genuine CLI output on fictional demo data — one missing step, one added
-step, one structural change, each named; exit 1; CLI output is localized in Chinese):
+A real alignment report (genuine CLI output on the fictional demo database — one missing step, one
+added step, one structural change, each named; exit 1. Screenshots show the pre-English build and
+will be re-captured; the current CLI speaks English):
 
 <img src="assets/cli-align-report.png" alt="replay --task alignment report: PASS 3 | CHANGED 1 | missing 1 | added 1" width="880"/>
 
@@ -168,9 +169,9 @@ no API key:
 ```groovy
 stage('AgentAssert behavior regression') {
   steps {
-    sh 'java -jar agentassert4j-cli-standalone-1.0.0.jar replay --ci --json'
+    sh 'java -jar agentassert4j-cli-standalone-1.0.0.jar replay --ci --json > agentassert-replay.json'
   }
-  post { always { archiveArtifacts 'agentassert4j.db, *.report.json' } }
+  post { always { archiveArtifacts 'agentassert4j.db, agentassert-replay.json' } }
 }
 ```
 
@@ -208,14 +209,18 @@ verdict — see [OPERATIONS §2.3](OPERATIONS.md).
 | `replay` | Whole-project template-drift detection and task alignment (zero LLM calls by default); `--task`/`--invocation` narrowing; `--re-drive` controlled review |
 | `approve` / `reject` | Adjudicate candidate fingerprints (promote / discard). bare = every pending candidate; `--invocation <target>` narrows |
 | `rollback` | Restore a baseline from the archive (`--invocation` and `--version` both required) |
-| `verify` | Delivery acceptance: pack × locally recorded chains (read-only) |
+| `verify` | Delivery acceptance: pack × locally recorded chains (read-only); `--dry-run` previews the pairing, `--report` writes the markdown evidence |
 | `rules` | List built-in behavior checks and rules-file syntax |
 | `graph show` | Read-only dependency graph (rebuilt from recordings on the spot) |
-| `doctor` | Whole-database health check: config source, counter closure, candidate audit |
+| `doctor` | Read-only health check in three deterministic sections: identity (skeleton families, unlabeled multi-step chains, repeated request-text families worth declaring), coverage (unestablished invocations, records missing template_hash), rules (malformed declarations, expectation mismatches); advisory only (exit 0 in normal operation; not a gate) |
 | `completion` | Emit a shell completion script (bash style) |
 
-The inspection surface looks like this (genuine CLI output on the demo data — one row per invocation:
-identity, baseline status, version, candidate, archived versions, business label; output in Chinese):
+Every command also has a short alias (`s`, `b`, `a`, `g`, `v`, `d`, `c`, `rp`, `rj`, `rb`, `ru` — full names
+always kept, visible in `--help`); the `completion` script registers them in your shell.
+
+The inspection surface looks like this (genuine CLI output on the demo database — one row per invocation:
+identity, baseline status, version, candidate, archived versions, business label; screenshots show the
+pre-English build):
 
 <img src="assets/cli-status.png" alt="status output: invocation list and baseline status" width="820"/>
 
