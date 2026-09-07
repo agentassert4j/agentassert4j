@@ -89,6 +89,8 @@ alias aa='agentassert4j'
 agentassert4j baseline --approver wang
 ```
 
+<img src="assets/cli-baseline.png" alt="first baseline run: one `baseline established` line per invocation" width="880"/>
+
 **4. Change the prompt, really run it once, then align the whole project**
 
 After editing a prompt, **really execute it once** (smoke or e2e — the new chain is recorded
@@ -98,16 +100,22 @@ automatically), then one command with zero arguments and zero LLM calls:
 agentassert4j replay
 ```
 
+The output is English-only (excerpt from the fictional demo database, genuine CLI output):
+
 ```text
-Dependency graph: 3 nodes / 2 edges
-Drift: 1 same-key, 0 label splits, 0 downstream (0 zero-template invocations undetectable)
-  ▲ query-logistics@9f13e77f (query-logistics) template ab12cd34 → 9e37f2c1
-Task "Order 1234 arrived late, refund it": baseline chain (session 20260831-a3f2) → new chain (session 20260902-b7e1)
-  [1] query-order  PASS
-  [2] query-logistics@9f13e77f  score=0.76 verdict=CHANGED | added fields: [delivery.promise]
-Candidate registered: query-logistics@9f13e77f (behavior change awaiting adjudication; approve promotes to baseline, reject discards).
-  [3] submit-refund  PASS
-Alignment summary: PASS 2 | CHANGED 1 | missing 0 | added 0
+Dependency graph: 5 nodes / 4 edges
+Drift: 2 same-key, 0 label splits, 2 downstream (0 zero-template invocations undetectable)
+  ▲ 查询物流@8d9dbac2 (查询物流) template 6feac2e8 → d15016ac
+  ▲ 查询订单@b3e4b38c (查询订单) template ba3e3bc4 → c30f63a2
+Task "订单 1234 的物流太慢，我要退款": baseline chain (session demo-session-0801) → new chain (session demo-session-0901)
+  [1] 意图识别@854e05b8  PASS
+  [2] 查询订单@b3e4b38c  PASS
+  [3] 查询物流@8d9dbac2  score=0.80 verdict=CHANGED | tool calls match | added fields: [delivery.promise]
+Candidate registered: 查询物流@8d9dbac2 (behavior change awaiting adjudication; approve promotes to baseline, reject discards).
+  [4] 提交退款@b47b21ea  missing step: baseline invoked '提交退款@b47b21ea', new chain did not
+  [5] 组织答复@8fd8be58  PASS
+  [6] 理赔查询@3e4c2031  added step: new chain invoked '理赔查询@3e4c2031', baseline did not
+Alignment summary: PASS 3 | CHANGED 1 | missing 1 | added 1
 ```
 The detection layer names **which invocations changed template identity** (drift points fan out over
 the dependency graph); the alignment layer pairs the two real chains of every task by invocation —
@@ -121,15 +129,14 @@ controlled review, add `--re-drive` (real calls; preview with `--dry-run`, cap w
 
 ```bash
 agentassert4j approve   # bare = adjudicate every pending candidate; intended: promote, old baseline archived
-agentassert4j reject --invocation query-logistics   # regression: discard that candidate; prompt rollback is git's job
+agentassert4j reject --invocation 查询物流   # regression: discard that candidate; prompt rollback is git's job
 
 # After the next real execution, run bare replay again: the new chain pairs automatically
 agentassert4j replay
 ```
 
 A real alignment report (genuine CLI output on the fictional demo database — one missing step, one
-added step, one structural change, each named; exit 1. Screenshots show the pre-English build and
-will be re-captured; the current CLI speaks English):
+added step, one structural change, each named; exit 1):
 
 <img src="assets/cli-align-report.png" alt="replay --task alignment report: PASS 3 | CHANGED 1 | missing 1 | added 1" width="880"/>
 
@@ -157,6 +164,13 @@ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
   masquerades as a pass;
 - `verify` is read-only and repeatable; the markdown report is the delivery evidence itself.
 
+After the acceptance side really executes, preview the pairing with `--dry-run`, then verify
+(genuine demo output; cross-model marked automatically):
+
+<img src="assets/cli-verify-dry-run.png" alt="verify --dry-run: pack tasks × local chain pairing preview with cross-model notes, no verdicts" width="880"/>
+
+<img src="assets/cli-verify.png" alt="verify summary: PASS 2 | CHANGED 0, cross-model acceptance mark, SHA-256 reconciliation, markdown report written" width="880"/>
+
 > The task key is the verbatim request text and travels inside the pack. For sensitive tasks, declare a
 > task key at recording time via `RecordingContext.withMetadata("taskKey", <scene-id>)`.
 
@@ -174,6 +188,11 @@ stage('AgentAssert behavior regression') {
   post { always { archiveArtifacts 'agentassert4j.db, agentassert-replay.json' } }
 }
 ```
+
+The gate in action (genuine demo output: a real behavioral deviation → exit 1, the `task-report/1`
+machine report lands line by line on stdout):
+
+<img src="assets/cli-replay-ci.png" alt="replay --ci --json: line-by-line task-report/1 machine report, exit 1 gate red" width="880"/>
 
 `--ci` never auto-baselines unbaselined invocations (new points are confirmed locally via `baseline`
 first; a missing baseline exits 2) and never collects drift identity inside the pipeline (governance
@@ -219,8 +238,7 @@ Every command also has a short alias (`s`, `b`, `a`, `g`, `v`, `d`, `c`, `rp`, `
 always kept, visible in `--help`); the `completion` script registers them in your shell.
 
 The inspection surface looks like this (genuine CLI output on the demo database — one row per invocation:
-identity, baseline status, version, candidate, archived versions, business label; screenshots show the
-pre-English build):
+identity, baseline status, version, candidate, archived versions, business label):
 
 <img src="assets/cli-status.png" alt="status output: invocation list and baseline status" width="820"/>
 

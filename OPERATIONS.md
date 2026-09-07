@@ -142,6 +142,10 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
   诊断行（不涉判定），防「配了规则没生效」；畸形声明（类型错值、非对象条目、min/max 双缺、min>max）
   解析时安全忽略或标注无约束力，CLI 加载时逐条告警。
 
+`rules` 命令随时列出全部内置行为名与规则文件写法（演示库真实输出）：
+
+<img src="assets/cli-rules.png" alt="rules 命令：内置约束行为目录与 agentassert4j-rules.json 示例" width="880"/>
+
 ## 3. 库文件运维
 
 - **单文件即全部状态**：备份 = 复制文件（建议停写窗口或接受只追加语义下的时间点快照）。
@@ -157,6 +161,8 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 - **库体检**：`doctor` 命令一次性输出身份/覆盖/规则三段确定性事实（骨架族形态、多步零标签链、
   未声明任务的重复请求文本任务族、未建档调用点、template_hash 缺失、规则期望错位）——零声明接入
   补声明、首次建档前自查都用它；只读不判定不建档。
+
+<img src="assets/cli-doctor.png" alt="doctor：身份/覆盖/规则三段确定性体检（只读，不判定不建档）" width="880"/>
 
 ## 4. CI 门禁配方
 
@@ -177,12 +183,17 @@ agentassert4j replay --ci --json
   drift-detection / task-align / drift-disposition / task-re-drive / task-dry-run），
   诊断与进度走 stderr；按退出码分流消费——0/1 解析 stdout，2 只读 stderr。
   同一通道契约覆盖全部命令（schema 清单见 §9），失败路径 stdout 零产出。
+
+<img src="assets/cli-replay-ci.png" alt="replay --ci --json 实跑：task-report/1 逐行分段报告，exit 1 门禁红灯" width="880"/>
+
 - **预算池**（`--re-drive` 下生效）：`--max-total-calls/--max-total-tokens` 对本次运行全部真重驱
   合计封顶；耗尽后剩余点标 skipped，整体 exit 2（证据不完整不允许冒充绿）。
 - **干跑**：`replay --dry-run` 输出漂移集、对齐计划与重驱成本预估——零调用、零落库、零建档、
   零处置；重驱前先 `--dry-run` 看报价是推荐惯例。
 
-<img src="assets/cli-dry-run.png" alt="replay --task --dry-run：逐步执行计划与成本预估，未调用 LLM、未建档" width="720"/>
+<img src="assets/cli-dry-run.png" alt="replay --task --dry-run：漂移集与对齐计划预演，未调用 LLM、未建档、未处置" width="720"/>
+
+<img src="assets/cli-re-drive-dry-run.png" alt="replay --task --re-drive --dry-run：重驱计划与成本报价；示例环境未配 Key，警告行如实可见" width="720"/>
 
 ## 5. 生产打包形态
 
@@ -209,6 +220,9 @@ CLI 分析侧不受影响，仍可对既有库做巡检/验收。
 2. 导出：`agentassert4j baseline export --out acceptance-pack.json` → 记录打印的 **SHA-256** 与任务链/步骤数；
    被排除的链在输出与 `--json` 报告的 `excluded` 数组中列出并给出原因（存在未建档步骤 / 基线违反自身
    声明规则）——排除属导出守卫，先把该链的基线建干净或修正规则声明再重导；
+
+<img src="assets/cli-export.png" alt="baseline export：验收包落盘，附 SHA-256 与任务链/步骤数" width="880"/>
+
 3. 需要附样本供人读时加 `--include-samples`（样本强制 MASK 脱敏，判定不消费）；
 4. 敏感任务：确认录制时已用 `withMetadata("taskKey", <场景id>)` 声明任务键——**任务键=请求原文**会随包出境。
 
@@ -223,12 +237,17 @@ requiredSteps/order/counts 的包，编排纪律同样参与判定——跨模�
 1. 部署被测应用（可 `enabled=false` 不录制），**真实执行**全部验收请求——框架不驱动产品入口，执行由验收人发起；
 2. 核对：`agentassert4j verify --pack acceptance-pack.json --report verify-report.md`
    （拿不准本机链与包的配对情况时，可先加 `--dry-run` 预演——只列配对与跨模型注记，零判定零写入）。
+
+<img src="assets/cli-verify-dry-run.png" alt="verify --dry-run：包任务 × 本机链配对预演（跨模型注记），零判定零写入" width="880"/>
+
 3. 判读：
    - 结构偏差（工具集/参数类型/输出结构）= **真问题**，转开发侧；
    - 跨模型标注（开发侧/本地 servedModel 不同）= 文本措辞差异属预期内，结构判定依然有效；
    - **覆盖缺口**（包内任务未执行，exit 2）= 补执行后重跑，缺口不允许冒充通过；
    - 范围外链（本地多出的任务）= 只列出，不判定。
 4. `verify` 全程只读（不落库、不改本地基线），可反复执行；markdown 报告即交付证据，归档时附包文件的 SHA-256。
+
+<img src="assets/cli-verify.png" alt="verify 汇总：结构判定 + 跨模型标注 + SHA-256 对账，markdown 报告落盘" width="880"/>
 
 **退出码**：`0` 全部结构一致 ｜ `1` 存在结构偏差（含缺步骤/新增步骤）｜ `2` 版本守卫拒绝/覆盖缺口/用法错误。
 

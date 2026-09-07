@@ -83,6 +83,8 @@ alias aa='agentassert4j'
 agentassert4j baseline --approver wang
 ```
 
+<img src="assets/cli-baseline.png" alt="baseline 首跑建档：每个调用点逐行 baseline established" width="880"/>
+
 **4. 改提示词，真实跑一遍，然后全项目对齐**
 
 提示词改完先**真实执行一遍**（冒烟或 e2e——新链自动入库），然后一条命令，零参数、零 LLM 调用：
@@ -91,18 +93,22 @@ agentassert4j baseline --approver wang
 agentassert4j replay
 ```
 
-命令输出为英文单语：
+命令输出为英文单语（下面是演示库真实输出的节选）：
 
 ```text
-Dependency graph: 3 nodes / 2 edges
-Drift: 1 same-key, 0 label splits, 0 downstream (0 zero-template invocations undetectable)
-  ▲ 查询物流@9f13e77f (查询物流) template ab12cd34 → 9e37f2c1
-Task "订单 1234 的物流太慢": baseline chain (session 20260831-a3f2) → new chain (session 20260902-b7e1)
-  [1] 查询订单  PASS
-  [2] 查询物流@9f13e77f  score=0.76 verdict=CHANGED | added fields: [delivery.promise]
-Candidate registered: 查询物流@9f13e77f (behavior change awaiting adjudication; approve promotes to baseline, reject discards).
-  [3] 提交退款  PASS
-Alignment summary: PASS 2 | CHANGED 1 | missing 0 | added 0
+Dependency graph: 5 nodes / 4 edges
+Drift: 2 same-key, 0 label splits, 2 downstream (0 zero-template invocations undetectable)
+  ▲ 查询物流@8d9dbac2 (查询物流) template 6feac2e8 → d15016ac
+  ▲ 查询订单@b3e4b38c (查询订单) template ba3e3bc4 → c30f63a2
+Task "订单 1234 的物流太慢，我要退款": baseline chain (session demo-session-0801) → new chain (session demo-session-0901)
+  [1] 意图识别@854e05b8  PASS
+  [2] 查询订单@b3e4b38c  PASS
+  [3] 查询物流@8d9dbac2  score=0.80 verdict=CHANGED | tool calls match | added fields: [delivery.promise]
+Candidate registered: 查询物流@8d9dbac2 (behavior change awaiting adjudication; approve promotes to baseline, reject discards).
+  [4] 提交退款@b47b21ea  missing step: baseline invoked '提交退款@b47b21ea', new chain did not
+  [5] 组织答复@8fd8be58  PASS
+  [6] 理赔查询@3e4c2031  added step: new chain invoked '理赔查询@3e4c2031', baseline did not
+Alignment summary: PASS 3 | CHANGED 1 | missing 1 | added 1
 ```
 
 检测层先点名**哪些调用点的模板身份变了**（漂移点经依赖图扩散出下游波及面）；对齐层把每个任务的
@@ -120,9 +126,9 @@ agentassert4j reject --invocation 查询物流   # 回归：缩域丢弃该候�
 agentassert4j replay
 ```
 
-真实对齐报告长这样（虚构演示库的真实输出——缺一步、新增一步、一个结构变化，逐条点名，exit 1；截图为英文单语切换前的历史形态，待重截）：
+真实对齐报告长这样（虚构演示库的真实输出——缺一步、新增一步、一个结构变化，逐条点名，exit 1）：
 
-<img src="assets/cli-align-report.png" alt="replay --task 真实对齐报告：PASS 3 | CHANGED 1 | 缺步骤 1 | 新增步骤 1" width="880"/>
+<img src="assets/cli-align-report.png" alt="replay --task 真实对齐报告：PASS 3 | CHANGED 1 | missing 1 | added 1" width="880"/>
 
 ## 交付验收（第二个工作流）
 
@@ -144,6 +150,12 @@ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 - 包内有而本地未执行的任务 = **覆盖缺口**（exit 2）——证据不完整不允许冒充通过；
 - `verify` 全程只读不落库，可反复执行；markdown 报告即交付证据。
 
+验收侧真实执行后，先 `--dry-run` 预演配对，再正式核对（演示库真实输出）：
+
+<img src="assets/cli-verify-dry-run.png" alt="verify --dry-run：包任务 × 本机链配对预演，跨模型注记，零判定零写入" width="880"/>
+
+<img src="assets/cli-verify.png" alt="verify 汇总：PASS 2 | CHANGED 0，跨模型验收标注，SHA-256 对账，markdown 报告落盘" width="880"/>
+
 > 任务键 = 请求原文，随包出境。敏感任务请在录制时用
 > `RecordingContext.withMetadata("taskKey", <场景id>)` 声明任务键，原文不入包。
 
@@ -160,6 +172,10 @@ stage('AgentAssert 行为回归') {
   post { always { archiveArtifacts 'agentassert4j.db, agentassert-replay.json' } }
 }
 ```
+
+门禁实跑长这样（演示库真实输出：存在真实行为差异 → exit 1，`task-report/1` 机器报告逐行落 stdout）：
+
+<img src="assets/cli-replay-ci.png" alt="replay --ci --json：逐行 task-report/1 机器报告，exit 1 门禁红灯" width="880"/>
 
 `--ci` 不为无基线调用点自动建档（新调用点先在本地 `baseline` 人工确认，缺档直接出 2），
 漂移身份不在流水线里收编（治理写不进 CI，出 0 附警告行）。`--re-drive` 属人工复核动作，
@@ -201,7 +217,7 @@ stage('AgentAssert 行为回归') {
 每个命令另有短别名（`s`、`b`、`a`、`g`、`v`、`d`、`c`、`rp`、`rj`、`rb`、`ru`——完整名永远保留，
 `--help` 可见）；`completion` 生成脚本会一并注册到 shell。
 
-巡检界面长这样（演示库真实输出——每行一个调用点：身份、基线状态、版本、候选、归档、业务标签；截图为英文单语切换前的历史形态，待重截）：
+巡检界面长这样（演示库真实输出——每行一个调用点：身份、基线状态、版本、候选、归档、业务标签）：
 
 <img src="assets/cli-status.png" alt="status 输出：调用点清单与基线状态" width="820"/>
 
