@@ -247,6 +247,43 @@ class JsonContractTest {
         }
 
         @Test
+        @DisplayName("approve 以 agent: 身份申报 → audit 列出该治理写")
+        void approveAgentMarked_listedInAudit() throws Exception {
+            InteractionRecord record = seedOneRecord();
+            execute("baseline", "--db", dbPath);
+            seedCandidate("invocation:queryOrder:hash-old", record);
+
+            int exit = execute("approve", "--db", dbPath, "--invocation", "queryOrder", "--approver", "agent:codex", "--ref", "def5678", "--json");
+
+            assertEquals(0, exit);
+
+            assertEquals(0, execute("audit", "--db", dbPath));
+            String audit = stdout();
+            assertTrue(audit.contains("[active]"), audit);
+            assertTrue(audit.contains("agent:codex"), audit);
+            assertTrue(audit.contains("(ref def5678)"), audit);
+
+            assertEquals(0, execute("audit", "--db", dbPath, "--json"));
+            String json = singleLineReport();
+            assertTrue(json.startsWith("{\"schema\":\"agentassert4j.audit/1\""), json);
+            assertTrue(json.contains("\"state\":\"active\""), json);
+            assertTrue(json.contains("\"approvedBy\":\"agent:codex\""), json);
+        }
+
+        @Test
+        @DisplayName("audit 空清单：无 agent 治理写时报 no writes")
+        void audit_empty() throws Exception {
+            seedOneRecord();
+            execute("baseline", "--db", dbPath);
+
+            assertEquals(0, execute("audit", "--db", dbPath, "--json"));
+            assertEquals("{\"schema\":\"agentassert4j.audit/1\",\"writes\":[]}", singleLineReport());
+
+            assertEquals(0, execute("audit", "--db", dbPath));
+            assertTrue(stdout().contains("No agent-driven governance writes found."), stdout());
+        }
+
+        @Test
         @DisplayName("reject --json：丢弃候选保留旧基线，action=reject、版本不变")
         void rejectJson_keepsBaseline() throws Exception {
             InteractionRecord record = seedOneRecord();

@@ -253,6 +253,21 @@ requiredSteps/order/counts 的包，编排纪律同样参与判定——跨模�
 
 **退出码**：`0` 全部结构一致 ｜ `1` 存在结构偏差（含缺步骤/新增步骤）｜ `2` 版本守卫拒绝/覆盖缺口/用法错误。
 
+## 6.1 agent 治理写回溯
+
+框架是纯能力提供方，agent 能调用什么由 harness 权限系统决定；框架承担透明与事后审计。
+约定：agent 驱动治理写时以 `--approver agent:<名称>` 申报机器身份（自由字符串，人类用
+默认 OS 身份）。全部 agent 申报的治理写（活跃画像 + 归档行）用一条命令回溯：
+
+```bash
+agentassert4j audit              # 人类清单：[active]/[archived] + 代码锚
+agentassert4j audit --json       # agentassert4j.audit/1 机器报告（writes 数组）
+```
+
+边界如实：rollback 恢复历史行不产生新审批痕迹、reject 不盖章，均不进 audit 清单；
+MCP 工具清单的 description 声明各变异动词的使用要求（如 accept 应在人类指示后调用），
+授权确认由 harness 权限系统执行。
+
 ## 7. 故障排查
 
 **7.1 数据面**
@@ -374,7 +389,7 @@ try {
 |------|--------|------|
 | 存储 schema（`PRAGMA user_version`） | 1 | 预发布固定不演进，schema 变更=删库重建；发布后只增不改 |
 | 判定语义 | `det-v1` | 改变「同样差异得出什么判定」的变更必须递增；发布前恒定 |
-| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`graph/1`、`rules/1`、`doctor/1`（每命令 `--json` 各对应其一；replay 的 mode 分段见 §4）、`error/1`（`--json` 失败包络：errorCode 四族 + hints + nextAction） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
+| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`graph/1`、`rules/1`、`doctor/1`、`audit/1`（每命令 `--json` 各对应其一；replay 的 mode 分段见 §4）、`error/1`（`--json` 失败包络：errorCode 四族 + hints + nextAction） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
 | Maven 版本 | `1.0.0-SNAPSHOT` | 发布时转正式版 |
 | CLI 可执行形态 | `agentassert4j-cli-standalone` | cli 模块的全依赖 shaded 产物（含 slf4j-nop 与 Main-Class），`java -jar` 直接运行 |
 

@@ -28,6 +28,7 @@ schema、退出码契约、help 终态。
 | `rollback` | 无缺省（--version 是操作宾语） | `--invocation`、`--version` |
 | `verify` | 无缺省（--pack 是操作宾语） | `--pack`、`--task` 前缀、`--dry-run`、`--report`、`--json` |
 | `rules` | 列内置行为目录与规则文件加载结果 | — |
+| `audit` | 列出 agent 驱动的治理写（审批人 `agent:` 前缀申报；活跃+归档，含代码锚） | `--json` |
 | `graph show` | 现场重建依赖图 | — |
 | `doctor` | 全库体检 | `--json` |
 | `completion` | 生成 bash 补全脚本 | `--shell`（仅 bash 风格；动态值补全不做——既定裁决） |
@@ -66,7 +67,9 @@ schema、退出码契约、help 终态。
    报告携带 `health` 对象同 status，dry-run 预演报告不携带）；导出=acceptance-pack/1（内嵌声明规则段：
    invocations/tasks 断言原文随包出境，verify 以包内规则对本地记录**对称**评估维度 3/4 与
    任务纪律——补齐参照源抽象的双路径同语义（库内路径用本地规则，包路径用包内规则）；
-   无规则段的包降级跳过维度 3/4 并在报告注记）；doctor=agentassert4j.doctor/1（三段体检：
+   无规则段的包降级跳过维度 3/4 并在报告注记）；audit=agentassert4j.audit/1（agent 治理写
+   清单：state=active/archived、invocationKey、versionTag、approvedBy、approvedAt 恒在，
+   codeRef 缺省省略；读动词恒 exit 0，空清单 writes=[]）；doctor=agentassert4j.doctor/1（三段体检：
    身份/覆盖/规则，计数全量 + 样本封顶 3 条，样本请求文本与人类输出同款缩略）；失败=
    agentassert4j.error/1（契约 7）。报告与包元数据回显申报制代码锚 codeRef
    （baseline-report 逐调用点、adjudication/1、rollback/1、status/1、export-report/1、
