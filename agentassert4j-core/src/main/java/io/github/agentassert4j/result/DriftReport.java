@@ -17,12 +17,11 @@ public class DriftReport {
 
     private final List<DriftPoint> sameKeyDrifts = new ArrayList<>();
     private final List<DriftPoint> labelSplits = new ArrayList<>();
-    private final List<String> downstreamKeys = new ArrayList<>();
     private final List<String> zeroTemplateKeys = new ArrayList<>();
     private int skippedQueries;
 
     /**
-     * 是否存在任何需要处置的漂移点（下游波及键不构成漂移本身）
+     * 是否存在任何需要处置的漂移点
      */
     public boolean hasDrift() {
         return !sameKeyDrifts.isEmpty() || !labelSplits.isEmpty();
@@ -34,13 +33,6 @@ public class DriftReport {
 
     public List<DriftPoint> getLabelSplits() {
         return labelSplits;
-    }
-
-    /**
-     * 漂移键经依赖图下游扩散波及的调用点键（不含漂移键自身），升序
-     */
-    public List<String> getDownstreamKeys() {
-        return downstreamKeys;
     }
 
     /**

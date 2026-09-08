@@ -84,7 +84,7 @@ class DriftDetectorTest {
             repo.saveInteraction(skeletonRecord("r-new", "order-flow", "skl-1", "h2", 2000L));
             repo.saveInteraction(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
 
-            DriftReport report = DriftDetector.detect(repo, emptyGraph());
+            DriftReport report = DriftDetector.detect(repo);
 
             assertEquals(1, report.getSameKeyDrifts().size());
             DriftReport.DriftPoint point = report.getSameKeyDrifts().get(0);
@@ -101,7 +101,7 @@ class DriftDetectorTest {
             repo.saveInvocationProfile(profile(key, "order-flow", null));
             repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
 
-            DriftReport report = DriftDetector.detect(repo, emptyGraph());
+            DriftReport report = DriftDetector.detect(repo);
 
             assertEquals(1, report.getSameKeyDrifts().size());
             assertNull(report.getSameKeyDrifts().get(0).getProfileTemplateHash());
@@ -115,7 +115,7 @@ class DriftDetectorTest {
             repo.saveInvocationProfile(profile(key, "order-flow", "h1"));
             repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
 
-            DriftReport report = DriftDetector.detect(repo, emptyGraph());
+            DriftReport report = DriftDetector.detect(repo);
 
             assertFalse(report.hasDrift());
             assertTrue(report.getSameKeyDrifts().isEmpty());
@@ -129,7 +129,7 @@ class DriftDetectorTest {
             repo.saveInteraction(skeletonRecord("r-new", "order-flow", "skl-1", null, 2000L));
             repo.saveInteraction(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
 
-            DriftReport report = DriftDetector.detect(repo, emptyGraph());
+            DriftReport report = DriftDetector.detect(repo);
 
             assertFalse(report.hasDrift());
             assertEquals(1, report.getZeroTemplateProfiles());
@@ -148,7 +148,7 @@ class DriftDetectorTest {
             repo.saveInteraction(fullTextRecord("r-old", "order-flow", "h1", 1000L));
             repo.saveInteraction(fullTextRecord("r-new", "order-flow", "h2", 2000L));
 
-            DriftReport report = DriftDetector.detect(repo, emptyGraph());
+            DriftReport report = DriftDetector.detect(repo);
 
             assertEquals(1, report.getLabelSplits().size());
             DriftReport.DriftPoint point = report.getLabelSplits().get(0);
@@ -165,7 +165,7 @@ class DriftDetectorTest {
             repo.saveInvocationProfile(existing);
             repo.saveInteraction(fullTextRecord("r-1", "order-flow", "h1", 1000L));
 
-            DriftReport report = DriftDetector.detect(repo, emptyGraph());
+            DriftReport report = DriftDetector.detect(repo);
 
             assertFalse(report.hasDrift());
             assertTrue(report.getLabelSplits().isEmpty());
@@ -176,30 +176,15 @@ class DriftDetectorTest {
         void unknownLabel_notDrift() {
             repo.saveInteraction(fullTextRecord("r-1", "brand-new", "h9", 1000L));
 
-            DriftReport report = DriftDetector.detect(repo, emptyGraph());
+            DriftReport report = DriftDetector.detect(repo);
 
             assertFalse(report.hasDrift());
         }
     }
 
     @Nested
-    @DisplayName("下游扩散与退化行为")
+    @DisplayName("退化行为")
     class PropagationAndDegradation {
-
-        @Test
-        @DisplayName("漂移键经依赖图扩散为下游波及集，不含漂移键自身")
-        void downstreamPropagated() {
-            String driftedKey = "invocation:order-flow:skl-1";
-            repo.saveInvocationProfile(profile(driftedKey, "order-flow", "h1"));
-            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
-
-            InMemoryDependencyGraph graph = new InMemoryDependencyGraph();
-            graph.addEdge(driftedKey, "invocation:downstream:skl-9", Confidence.HIGH, null);
-
-            DriftReport report = DriftDetector.detect(repo, graph);
-
-            assertEquals(Collections.singletonList("invocation:downstream:skl-9"), report.getDownstreamKeys());
-        }
 
         @Test
         @DisplayName("单条损坏记录倒序回退到次新可分组记录")
@@ -219,7 +204,7 @@ class DriftDetectorTest {
             repo.saveInteraction(corrupt);
             repo.saveInteraction(skeletonRecord("r-older", "order-flow", "skl-1", "h2", 1000L));
 
-            DriftReport report = DriftDetector.detect(repo, emptyGraph());
+            DriftReport report = DriftDetector.detect(repo);
 
             assertEquals(1, report.getSameKeyDrifts().size());
             assertEquals("h2", report.getSameKeyDrifts().get(0).getLatestTemplateHash());
@@ -235,7 +220,7 @@ class DriftDetectorTest {
             mismatched.setInvocationKey(key);
             repo.saveInteraction(mismatched);
 
-            DriftReport report = DriftDetector.detect(repo, emptyGraph());
+            DriftReport report = DriftDetector.detect(repo);
 
             assertFalse(report.hasDrift());
             assertEquals(1, report.getZeroTemplateProfiles());
@@ -251,7 +236,7 @@ class DriftDetectorTest {
                 }
             };
 
-            DriftReport report = DriftDetector.detect(failingRepo, emptyGraph());
+            DriftReport report = DriftDetector.detect(failingRepo);
 
             assertFalse(report.hasDrift());
             assertEquals(1, report.getSkippedQueries());
@@ -278,7 +263,7 @@ class DriftDetectorTest {
             partialRepo.interactions.addAll(repo.interactions);
             partialRepo.invocationProfiles.putAll(repo.invocationProfiles);
 
-            DriftReport report = DriftDetector.detect(partialRepo, emptyGraph());
+            DriftReport report = DriftDetector.detect(partialRepo);
 
             assertEquals(1, report.getSkippedQueries());
             assertEquals(1, report.getSameKeyDrifts().size());

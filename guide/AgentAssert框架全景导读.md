@@ -217,7 +217,7 @@ $ agentassert4j replay
 ```
 
 不带任何参数，框架对**全项目**做两件事。第一件**漂移检测**：逐个调用点比对「基线批准时的模板身份」
-和「最新录制记录的模板身份」，谁的提示词变了当场点名，漂移点经依赖图扩散出下游波及面。第二件**逐任务
+和「最新录制记录的模板身份」，谁的提示词变了当场点名，漂移点当场点名。第二件**逐任务
 对齐**：每个任务的最新链和次新链按调用点配对——基线执行过而新链没有的步骤，标「missing step」；新链多出来
 的，标「added step」；两边都有的逐对比指纹。配对主体是**调用点**（声明标签）——同一调用点两侧提示词
 版本不同照常配对判定，行首注记「cross-version pair」（版本切换的行为对照含混杂变量，受控复核用 `--re-drive`
@@ -253,15 +253,15 @@ $ agentassert4j replay
 ```
 
 漂移检测直接把波及面摆在明面上：**谁在用改过的提示词**，逐个调用点点名（模板身份变了就是变了），
-再经**依赖图**把波及扩散出去——哪些调用点在同一个会话里发生过工具接力（查完订单接着退款的，行为是
+波及面由逐任务对齐实测呈现——哪些调用点在同一个会话里发生过工具接力（查完订单接着退款的，行为是
 连带的），一目了然。缺省对齐是全量的、零调用的，所以「波及谁」不再需要任何采样或裁剪技巧：受影响
 的任务逐条对齐，差异逐条点名，该落候选的落候选，行为没变的漂移点自动收编。全项目真实输出长这样（演示库）：
 
-<img src="../assets/cli-replay.png" alt="bare replay 全项目输出：漂移点与下游波及、逐任务对齐、候选登记与自动收编（演示库真实输出）" width="880"/>
+<img src="../assets/cli-replay.png" alt="bare replay 全项目输出：漂移点与逐任务对齐、候选登记与自动收编（演示库真实输出）" width="880"/>
 
 值得强调的是：这张图不是某个独立组件精心维护的资产——它是录制数据的**派生品**，每次重放前从录制数据
 现场重建，写一份快照。永远和录制数据一致，永不撒谎。想直接看这张图，`agentassert4j graph show` 从
-录制数据现场重建并渲染节点、边（HIGH/LOW 置信度与穿透经过的中间节点）和环检测——只读不落盘；
+录制数据现场重建并渲染节点、边（HIGH/LOW 置信度）和环检测——只读不落盘；
 `status` 末尾展示的则是最近一次 replay 留档的快照。`graph show` 的真实输出（演示库）：
 
 <img src="../assets/cli-graph.png" alt="graph show：从录制数据现场重建的依赖图——节点、HIGH 置信边与环检测（演示库真实输出）" width="880"/>想让复核便宜一点的话，`--task`/`--invocation`
@@ -429,7 +429,7 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 | `agentassert4j rollback` | 把基线回滚到指定历史版本 | `--invocation <目标>` 与 `--version <版本号>`（**均必填**） | 缺任一参数直接报错 |
 | `agentassert4j verify` | 交付验收：验收包核对本机真实执行链（只读不落库） | `--pack <文件>`（**必填**）；`--task <前缀>`（缩域）；`--dry-run`（配对预演，零判定）；`--report <md>`（交付证据）；`--json`（verify-report/1） | 版本守卫拒绝异语义包；覆盖缺口 exit 2；跨模型标注结构判定有效；规则段随包生效、缺席降级注记 |
 | `agentassert4j rules` | 展示内置约束行为目录与规则文件写法样例 | `--json`（rules/1 目录报告） | 无 |
-| `agentassert4j graph show` | 从录制数据现场重建依赖图并渲染（节点/边/置信度/穿透/环） | `--json`（graph/1） | 无边时给空图提示（录制缺多轮会话数据，非故障） |
+| `agentassert4j graph show` | 从录制数据现场重建依赖图并渲染（节点/边/置信度/环）——开发期勘察仪表 | `--json`（graph/1） | 无边时给空图提示（录制缺多轮会话数据，非故障） |
 | `agentassert4j completion` | 生成 shell 补全脚本（bash 风格，zsh 经 bashcompinit 兼容；含全部短别名） | 无 | — |
 
 ---
@@ -460,7 +460,7 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 - **是**：JVM 原生的 AI Agent 行为回归测试框架。旁路录制真实 LLM 交互 → 确定性四维指纹与基线 → prompt 变更的全项目变更检测与逐任务真实对齐（缺省零 LLM 调用）→ 受控重驱逐点复核（显式开启）→ 人工裁决；基线可导出为验收包做跨环境交付验收。
 - **刻意不是**：①不是监控/观测平台（落库是为了回归，不是为了看板）；②不是提示词管理器（不管理 prompt 内容，只管行为）；③不评判好坏——只陈述「与基线有无差异」，方向判断留给人；④判定链路 100% 确定性，永不引入 LLM-as-judge；⑤不是代理/网关——业务流量从不过它转发；⑥不驱动产品执行——录制靠旁路、验收靠验收人真实操作。
 
-**代码地图与数据主链路（维护基准已移交 spec）**：模块分层、core 包结构、五表总览与数据主链路的现状基准由 `guide/spec/OVERVIEW.md`（骨架总览）承载——本章保留叙事职责，不再双写事实图；叙事与 spec 冲突时以 spec 为准并修订败方。各域细节随分域规格成文（`guide/spec/`），对应章逐步瘦身为指向 spec 的地图。
+**代码地图与数据主链路（维护基准已移交 spec）**：模块分层、core 包结构、四表总览与数据主链路的现状基准由 `guide/spec/OVERVIEW.md`（骨架总览）承载——本章保留叙事职责，不再双写事实图；叙事与 spec 冲突时以 spec 为准并修订败方。各域细节随分域规格成文（`guide/spec/`），对应章逐步瘦身为指向 spec 的地图。
 
 **测试怎么钉住它**：全量回归覆盖 core / recorder / storage / cli（含私有 e2e 门控用例）/ 两代 SDK / 两 starter，仓库根 `mvn -B test` 必须全绿。测试文化三条：测契约不测实现（跨组件边界逐字段对齐）、确定性契约必测（排序稳定、转义往返、计数闭合）、错误路径必测（专用异常精确断言）。
 
@@ -552,9 +552,9 @@ recorded（到达即计数） = written（批量写成功）
 
 **本幕回顾**：第 1 幕（落库）、第 2 幕（画像与建档）、第 6 幕（归档与回滚）。
 
-**设计问题**：一个单文件 SQLite 要同时扮演四个角色——只追加的录制账本、治理档案（现役基线+候选+审批留痕）、历史库（归档回滚）、派生数据缓存（图快照、提示词原文）——而且要跨进程（录制在应用进程、裁决在 CLI 进程）、跨语言可读。v1 的既定决策：**SQLite 是唯一存储后端**（零基础设施部署叙事），mysql/pg 是双向门延迟项。
+**设计问题**：一个单文件 SQLite 要同时扮演三个角色——只追加的录制账本、治理档案（现役基线+候选+审批留痕）、历史库（归档回滚）、派生数据缓存（提示词原文）——而且要跨进程（录制在应用进程、裁决在 CLI 进程）、跨语言可读。v1 的既定决策：**SQLite 是唯一存储后端**（零基础设施部署叙事），mysql/pg 是双向门延迟项。
 
-**概念与术语**：SPI 六域拆分（写/查/调用点/模板原文/图/归档，按读写职责分接口）；契约版本（`PRAGMA user_version`）；三层列结构（概念层=跨协议稳定的概念数据 / 原文层=`*_raw` 逐字保留 / 吸收层=metadata JSON 承接未预见扩展）。
+**概念与术语**：SPI 五域拆分（写/查/调用点/模板原文/归档，按读写职责分接口）；契约版本（`PRAGMA user_version`）；三层列结构（概念层=跨协议稳定的概念数据 / 原文层=`*_raw` 逐字保留 / 吸收层=metadata JSON 承接未预见扩展）。
 
 **代码地图**：
 
@@ -566,10 +566,9 @@ recorded（到达即计数） = written（批量写成功）
 | `InteractionQueryStore` | `findByInvocationId` / `findByInvocationKey` / `findByTemplateHash` / `findBySessionId` / `findAllSessionIds` | 5 |
 | `InvocationStore` | `saveInvocationProfile` / `findInvocationByKey` / `findAllInvocations` | 3 |
 | `TemplateTextStore` | `saveTemplateText` / `findTemplateText` | 2 |
-| `GraphStore` | `saveGraph(json)` / `loadGraph()` | 2 |
 | `TemplateVersionArchiveStore` | `archiveTemplateVersion` / `findArchivedVersion(invocationKey, versionTag)` / `findArchivedVersions(invocationKey)` | 3 |
 
-  `StorageRepository` 是聚合门面：`type()` / `initialize()` / `close()` 加上继承全部六域。录制管道只依赖 `InteractionWriteStore`（最小知识面）。插件平等：任何实现这六个接口的存储都可接入（R3），优先级链路里没有 `if (type=="sqlite")` 之类的硬编码（R4）。
+  `StorageRepository` 是聚合门面：`type()` / `initialize()` / `close()` 加上继承全部五域。录制管道只依赖 `InteractionWriteStore`（最小知识面）。插件平等：任何实现这五个接口的存储都可接入（R3），优先级链路里没有 `if (type=="sqlite")` 之类的硬编码（R4）。
 
 - `SqliteStorageRepository`（包 `io.github.agentassert4j.storage.sqlite`）：
   - **除只读的 `type()` 外全部公开方法 `synchronized`**：单连接策略下，多个 flush 源（批量/定时/手动/stop）并发进入会在事务层面互相交织吞批次——串行化是正确性前提，SQLite 本地写也无并发收益。
@@ -580,7 +579,7 @@ recorded（到达即计数） = written（批量写成功）
 - `JsonMapper`（同包包私有类）：`toolCalls/turns/fingerprint/invocationProfile/archivedTemplateVersion` 与 JSON 的双向映射，构建在 `RecursiveJsonParser`（全框架唯一 JSON 真源）之上：toolCalls/turns 等序列用 `LinkedHashMap` 保插入序，指纹的集合/映射字段经 core 的 `FingerprintJson` 以 `TreeSet`/`TreeMap` 自然序归序——**序列化字节可复现、可 diff**。指纹的 `fingerprint` 列 NOT NULL，空指纹与 null 的约定是 `"{}"`↔null 对写读对称。
 - `SchemaMigrator`（三段式）：库版本 **高于** 支持值 → 拒开（旧代码不得静默误读新语义）；**等于** → 直接返回；**低于** → 执行 `Schema.ALL_DDL` 建表并 `PRAGMA user_version = 1`。当前契约版本固定为 1：预发布阶段零兼容——schema 变更 = 删库重建，不存在任何「旧版迁移」代码。
 
-**表结构（五表逐列）**：
+**表结构（四表逐列）**：
 
 - `interactions`（38 列，只追加）——按组读：
   - **身份**：`record_id`(PK)、`session_id`、`timestamp`、`seq`（进程内单调，与 timestamp 组成确定性排序键）、`invocation_id`（声明标签位，可空串）/`invocation_key`（调用点键，NOT NULL，enrich 兜底）；
@@ -594,7 +593,6 @@ recorded（到达即计数） = written（批量写成功）
 - `invocations`（15 列）：`invocation_key`(PK)、`label`（声明标签，可空）、`template_hash`（建档时模板哈希）、`invocation_name`/`invocation_type`（`TOOL`/`PURE_CHAT` 视图分类，均 NOT NULL 由建档派生回填）、`fingerprint`(NOT NULL 现役基线)、`candidate_fingerprint`（可空候选）、`baseline_status`（默认 `BASELINE`）、`version_tag`、`algo_version`、`param_signature`、`approved_by`/`approved_at`（治理留痕）、`total_records`（默认 0）、`updated_at`（NOT NULL，写入侧恒写）。
 - `invocation_template_versions`（9 列）：自增 `id`（同调用点同 tag 重复归档时「最近归档者胜」的 tiebreaker）+ `invocation_key`、`template_hash`（版本↔模板文本经 prompt_texts 可反查）+ 指纹与治理三列快照 + `archived_at`；索引 `idx_archived_invocation`。
 - `prompt_texts`（3 列）：`prompt_hash`(PK)/`prompt_text`/`created_at`，首写为准。
-- `graph_snapshot`（3 列）：`id`(DEFAULT `'current'`，整图单行)/`graph_json`/`updated_at`——图是派生数据，快照仅为巡检，可随时重建。
 
 **生命周期与并发契约**：库的一生 = `initialize`（建表/迁移）→ 读写（全程单连接串行）→ `close`。关停顺序由持有方保证（starter 的 destroy 链、CLI 的 finally）。事务只出现在 `saveInteractions`；单条写走 autocommit。
 
@@ -622,7 +620,7 @@ recorded（到达即计数） = written（批量写成功）
   - **invocationKey 永不进指纹**：指纹维度保持输出侧，输入侧（键、变量、历史）不参与判定——判定正确性与声明质量解耦，零声明应用（agent loop 主形态）是一等公民路径。
   - **双哈希各司其职**：全文哈希（`template_hash` 列）答「这条记录是用哪份完整文本组装的」——受控重驱模板取回的依据；骨架哈希（文本现算优先、`skeleton_hash` 投影列兜底）答「这条记录属于哪个调用点」。骨架不参与模板取回，重驱取归档全文。
 - `InvocationProfile`（调用点画像，对应 `invocations` 行）：身份列（invocationKey 主键、label、templateHash）+ 视图列（invocationName、invocationType、paramSignature）+ 治理列（fingerprint 现役基线、candidateFingerprint 候选、baselineStatus、versionTag、algoVersion、approvedBy/approvedAt、totalRecords）。
-- **统一身份空间**：声明与否共用同一派生文法、同一存储列（`invocation_key`）、同一图节点空间——影响分析、依赖图、治理三命令不再区分「声明/派生」双轨。标签只是视图：一个标签可覆盖多个调用点键（同标签多模板步骤），CLI 的 `--invocation` 四写法（业务标签 / 完整调用点键 / 唯一前缀 / status 显示短形如 `标签@8位`）等价解析。画像属于可从 interactions 全量重建的派生数据（BaselineService 重复执行安全）。
+- **统一身份空间**：声明与否共用同一派生文法、同一存储列（`invocation_key`）、同一图节点空间（graph show 勘察视图按此建节点）——治理命令不再区分「声明/派生」双轨。标签只是视图：一个标签可覆盖多个调用点键（同标签多模板步骤），CLI 的 `--invocation` 四写法（业务标签 / 完整调用点键 / 唯一前缀 / status 显示短形如 `标签@8位`）等价解析。画像属于可从 interactions 全量重建的派生数据（BaselineService 重复执行安全）。
 
 **表结构**：`invocations` 15 列见第 4 章；`interactions` 的 `invocation_id`（声明位）与 `invocation_key`（派生键，NOT NULL，enrich 兜底）两列是身份落库点。
 
@@ -778,9 +776,9 @@ recorded（到达即计数） = written（批量写成功）
 
 **本幕回顾**：第 5 幕（这次改动波及谁）。
 
-**设计问题**：全量重放又贵又慢，而「改了共享提示词会波及谁」是一个**数据问题**——答案在录制数据里，不在任何声明文件里。框架的解法：提示词指纹（templateHash）反查谁在用它 + 调用点依赖图补上传递波及。图用纯内存邻接表（既定结论：图数据库永久不引入——本框架规模是数十调用点/数百边，与图数据库的门槛差几个数量级，BFS 遍历微秒级、快照 JSON 小于 5KB）。
+**设计问题**：全量重放又贵又慢，而「改了共享提示词会波及谁」是一个**数据问题**——答案在录制数据里，不在任何声明文件里。框架的解法：提示词指纹（templateHash）反查谁在用它 + 波及面由全量对齐实测呈现。图保留为纯内存勘察视图（既定结论：图数据库永久不引入——本框架规模是数十调用点/数百边，与图数据库的门槛差几个数量级，BFS 遍历微秒级、快照 JSON 小于 5KB）。
 
-**概念与术语**：漂移点（identity 域三分形态：同键漂移/标签裂键/未建档全新键）与传递波及（图下游 BFS）；HIGH/LOW 置信度边。统一引擎缺省全量对齐后，「改了会波及谁」由检测报告陈述、由处置与重驱消费，不再承担选链省钱职责。
+**概念与术语**：漂移点（identity 域三分形态：同键漂移/标签裂键/未建档全新键）；HIGH/LOW 置信度边。统一引擎缺省全量对齐后，「改了会波及谁」由全量对齐实测回答；图退为开发期勘察仪表，不再进入回归工作流。
 
 **代码地图**：
 
@@ -789,10 +787,9 @@ recorded（到达即计数） = written（批量写成功）
   - 第 2 层：字段名前缀匹配（驼峰/下划线/连字符取首段，最短 3 字符——`orderId`→`order`）→ **LOW**。
   - 调用点身份：记录已富化用存储 invocationKey，否则解析器现算。
 - `InMemoryDependencyGraph`——图本身：正向邻接表（`LinkedHashMap`，**插入序保证快照字节可复现**）+ 反向邻接表。`addEdge` 四参：同边重复添加保最高置信度、合并 throughNodes；`traverseDownstream` BFS（visited 防环）；`detectCycles` DFS 染色（白=未访问、灰=在递归栈中）+ 显式栈——只有「回边目标到栈顶」的区段才算环，环外尾部祖先不算；`fromJson` **fail-closed**——source/target 缺失或 confidence 非法的边整条跳过（派生数据宁缺勿错，不造幽灵拓扑污染影响集）。
-- `DriftDetector`（core，纯只读巡检）——逐画像键比对「最新可分组记录的模板哈希 vs 画像模板哈希」（凭据=存储键与现算键双一致的记录，损坏记录倒序回退），漂移点按键锚点分三分形态：骨架锚点**同键漂移**（全文变体共存）、声明无骨架**标签裂键**（未建档新键与既有画像标签相同）、template:/adhoc: 全新键（无画像对照，不进漂移集）；漂移键经 `traverseDownstream` 扩散为下游波及集；零模板点排除出检测集并计数，单键查询失败跳过并计数（退化可见不中断）。检测、治理身份前移与重驱取点共用同一 `latestIdentityRecord` 口径。
-- **图的生命周期（谁读谁写，全部已接线）**：`replay` = 唯一写者（每次现场重建，快照 `saveGraphQuietly` 留档供巡检，写失败只告警，dry-run 不落盘）；`graph show` = 只读现场重建（永远最新，不落盘）；`status` = 读快照展示（标注「最近一次 replay 生成」）；录制管道**永不**建图。图的消费方只剩检测报告的下游波及叙事——受控重驱的目标集取「漂移点 × 缩域键集」的交集，不经图；`status` 只是读快照留档做展示，`graph show` 是只读的现场重建，二者都不消费图做判定。
+- `DriftDetector`（core，纯只读巡检）——逐画像键比对「最新可分组记录的模板哈希 vs 画像模板哈希」（凭据=存储键与现算键双一致的记录，损坏记录倒序回退），漂移点按键锚点分三分形态：骨架锚点**同键漂移**（全文变体共存）、声明无骨架**标签裂键**（未建档新键与既有画像标签相同）、template:/adhoc: 全新键（无画像对照，不进漂移集）；零模板点排除出检测集并计数，单键查询失败跳过并计数（退化可见不中断）。检测、治理身份前移与重驱取点共用同一 `latestIdentityRecord` 口径。
+- **图的生命周期（降级后）**：replay 工作流**零图引用**——检测只点名漂移点，波及面由对齐实测；`graph show` = 按需现场重建的勘察仪表（不落盘、不进判定），人与 AI 皆可读；录制管道**永不**建图。图的消费面只剩勘察——受控重驱的目标集取「漂移点 × 缩域键集」的交集，不经图；`status` 只是读快照留档做展示，`graph show` 是只读的现场重建，二者都不消费图做判定。
 
-**表结构**：`graph_snapshot`（id='current' 单行，`graph_json` 含 nodeCount/edgeCount/edges[source,target,confidence,throughNodes]）——快照只是巡检留档，分析永远用重建后的内存图。
 
 **测试怎么钉住它**：损坏边跳过、带尾巴的环只报环段、快照字节复现（同数据重建 JSON 完全一致）、图往返保序、多轮会话产 HIGH 边的端到端渲染、空图提示（无边即无节点）、工具结果优先的值提取（含降级路径）。
 
@@ -939,7 +936,7 @@ interactions 表（只追加历史）──────────────�
                                                ├──→ baseline 建档（指纹提取）  第 6/7 章
                                                ├──→ replay 选例重放           第 9 章
                                                ├──→ 任务链派生（读侧，不落库）  第 11 章
-                                               └──→ 依赖图重建                第 10 章
+                                               └──→ graph show 勘察重建                第 10 章
 ```
 
 **图二：一个基线的一生**
@@ -975,7 +972,7 @@ TaskChainView.resolveSession                   ← 第 11 章 派生视图（读
  │  metadata.taskKey 声明优先；会话开头无请求不入链
  ▼
 replay（bare = 全项目）──┬── 第 1 层 身份检测（DriftDetector，零调用）
- │                       │    画像模板身份 vs 最新记录 → 漂移点 → 图下游波及
+ │                       │    画像模板身份 vs 最新记录 → 漂移点逐一点名
  │                       ├── 第 2 层 真实对齐（TaskAligner，零调用，缩域内逐任务）
  │                       │    matched 逐对现场重提对比 / missing / added
  │                       └── 漂移处置状态机：PASS → 收编（--ci 不收编）│
@@ -1033,7 +1030,7 @@ acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
 2. **跨组件契约**——数据流经的每一跳字段对齐了吗？（捕获写入列 ↔ schema 列 ↔ 读侧反序列化键；配置键 ↔ 配置字段；两侧词表；包内指纹序列化 ↔ 验收侧重提口径）本框架的历史缺陷大多死在这一层（假阳性回归 = 词表漂移；整批失败 = NOT NULL 与兜底链断裂）；
 3. **端到端意图**——设计意图真的落地了吗？（「重放不带工具必然假阳性」「验收配对纯精确相等、前缀同名不冒充证据」这类需求级断言逐条对照）。
 
-**第三层：工具箱**：`status --diff`（画像与候选差异）、`replay --dry-run`（选例与成本，只读）、`--json`（机器可读证据）、`graph show`（依赖视图）、SQLite 工具直查五表、recorder 四计数器闭合审计。
+**第三层：工具箱**：`status --diff`（画像与候选差异）、`replay --dry-run`（选例与成本，只读）、`--json`（机器可读证据）、`graph show`（依赖视图）、SQLite 工具直查四表、recorder 四计数器闭合审计。
 
 ## 第 16 章 改动检查单与术语表
 
@@ -1070,7 +1067,7 @@ acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
 | 重放 | 新 prompt + 历史上下文的控制变量实验 | 第 9 章 |
 | 链式半重放 | 拿基线录制的工具结果当道具逐轮重建上下文重问模型，决策分歧即停并定位到轮 | 第 9 章 |
 | 判定语义版本 | 裁决矩阵的版本戳（当前 `det-v1`），不一致拒判 | 第 8 章 |
-| 漂移检测 | 画像模板身份 vs 最新记录逐键比对，漂移点经依赖图扩散出波及面 | 第 10 章 |
+| 漂移检测 | 画像模板身份 vs 最新记录逐键比对，漂移点当场点名（波及面由全量对齐实测） | 第 10 章 |
 | 任务链 | 会话内一次用户请求触发的全部记录；派生视图零 schema，键=(会话, 请求文本) | 第 11 章 |
 | 声明任务键 | metadata 的 `taskKey` 字段，声明优先于派生——改问法仍可配对 | 第 11 章 |
 | 统一重放引擎 / 受控重驱 | replay bare = 漂移检测 + 逐任务对齐（零调用）；`--re-drive` 逐漂移点以归档模板重放历史输入受控复核（花调用，预算池封顶） | 第 11 章 |

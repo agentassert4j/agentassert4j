@@ -22,8 +22,7 @@ import java.util.Map;
  *   "recorder": { "batchSize": 100, "flushIntervalMs": 5000 },
  *   "regression": { "ignorableFields": ["debugInfo", "timestamp"] },
  *   "llm": { "apiKey": "${AGENTASSERT_API_KEY}", "endpoint": "...", "model": "gpt-4o",
- *            "extraBody": "\"thinking\":{\"type\":\"disabled\"}" },
- *   "tools": { "excludeFromGraph": ["read_file", "edit_file", "bash"] }
+ *            "extraBody": "\"thinking\":{\"type\":\"disabled\"}" }
  * }
  * </pre>
  *
@@ -36,14 +35,12 @@ public class AgentAssert4jConfig {
     private RecorderConfig recorder;
     private RegressionConfig regression;
     private LlmConfig llm;
-    private ToolsConfig tools;
 
     public AgentAssert4jConfig() {
         this.storage = new StorageConfig();
         this.recorder = new RecorderConfig();
         this.regression = new RegressionConfig();
         this.llm = new LlmConfig();
-        this.tools = new ToolsConfig();
     }
 
     /**
@@ -72,7 +69,6 @@ public class AgentAssert4jConfig {
         config.recorder = RecorderConfig.fromJson(getMap(root, "recorder"), config.recorder);
         config.regression = RegressionConfig.fromJson(getMap(root, "regression"), config.regression);
         config.llm = LlmConfig.fromJson(getMap(root, "llm"), config.llm);
-        config.tools = ToolsConfig.fromJson(getMap(root, "tools"), config.tools);
 
         return config;
     }
@@ -142,14 +138,6 @@ public class AgentAssert4jConfig {
 
     public void setLlm(LlmConfig llm) {
         this.llm = llm;
-    }
-
-    public ToolsConfig getTools() {
-        return tools;
-    }
-
-    public void setTools(ToolsConfig tools) {
-        this.tools = tools;
     }
 
     /**
@@ -339,28 +327,4 @@ public class AgentAssert4jConfig {
         }
     }
 
-    /**
-     * 工具配置。
-     */
-    public static class ToolsConfig {
-        /**
-         * 排除出依赖图谱的基础设施工具（穿透压缩）
-         */
-        private List<String> excludeFromGraph = new ArrayList<>();
-
-        static ToolsConfig fromJson(Map<String, Object> map, ToolsConfig defaults) {
-            if (map == null) return defaults;
-            ToolsConfig c = new ToolsConfig();
-            c.excludeFromGraph = getStringList(map, "excludeFromGraph", defaults.excludeFromGraph);
-            return c;
-        }
-
-        public List<String> getExcludeFromGraph() {
-            return excludeFromGraph;
-        }
-
-        public void setExcludeFromGraph(List<String> excludeFromGraph) {
-            this.excludeFromGraph = excludeFromGraph != null ? excludeFromGraph : Collections.emptyList();
-        }
-    }
 }

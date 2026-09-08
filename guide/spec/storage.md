@@ -7,7 +7,7 @@
 ## 职责与边界
 
 **管**：SQLite 单文件持久化的全部契约——五表 schema 与三层列结构、事务与并发纪律、写读往返
-保真、模板原文归档、基线归档、图快照、schema 契约版本纪律、SPI 六域接口面。
+保真、模板原文归档、基线归档、schema 契约版本纪律、SPI 五域接口面。
 
 **不管**：画像字段的治理语义（谁在什么条件下改 fingerprint/候选/状态——governance）；
 invocationKey 的派生文法（identity）；查询结果的业务消费（各消费域）。
@@ -20,7 +20,6 @@ invocationKey 的派生文法（identity）；查询结果的业务消费（各�
 | `prompt_texts`（3 列） | 模板原文唯一反查点（hash 不可逆，原文不落即永久丢失） | 不可重建 |
 | `invocations`（15 列） | 治理档案 = 派生 + 治理写混合体 | 身份/视图列可从 interactions 重建；治理列（指纹/候选/审批）以治理写为准 |
 | `invocation_template_versions`（9 列） | 只追加归档历史（rollback 数据源） | 不可重建 |
-| `graph_snapshot`（1 行 JSON） | 派生缓存 | 可随时从 interactions 全量重建 |
 
 **三层列结构**（interactions）：概念层（跨协议稳定的概念数据）/ 原文层（`*_raw` 逐字保留，
 后续新增概念列的回填来源）/ 吸收层（`metadata` JSON 承接未预见扩展）。
@@ -68,9 +67,8 @@ close(): 关连接置 null；与写路径共用实例监视器——flush 进行
    findArchivedTemplateVersion_duplicateTag_latestArchiveWins / findArchivedVersions_listsByInvocationLatestFirst
 10. **失败语义显式**：存储故障抛专用 `StorageException` 不吞不换型；初始化失败清理已开连接。
     【测试钉】storageFailure_throwsStorageException_neverSwallowed
-11. **图快照单行**：`id='current'` 整图 JSON `INSERT OR REPLACE`，无快照返回 null。
     【测试钉】saveAndLoadGraph / loadGraph_empty
-12. **SPI 六域面**：写（2 方法）/ 查（6 方法）/ 调用点（3）/ 模板原文（2）/ 图（2）/ 归档（3），
+12. **SPI 五域面**：写（2 方法）/ 查（6 方法）/ 调用点（3）/ 模板原文（2）/ 归档（3），
     `StorageRepository` 聚合门面加 type/initialize/close。查询域现有 6 方法超出「每接口 ≤5」
     的接口隔离目标——既有阶段债，随命令面瘦身批删除 `findInvocationKeysByTemplateHash` 后
     回到 5。【人工对账】债务跟踪

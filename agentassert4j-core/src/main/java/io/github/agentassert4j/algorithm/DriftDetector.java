@@ -29,13 +29,12 @@ public final class DriftDetector {
     }
 
     /**
-     * 巡检全库画像漂移，并经依赖图把漂移键扩散为下游波及集。
+     * 巡检全库画像漂移。
      *
      * @param repository 存储仓库（只读消费）
-     * @param graph      依赖图（调用方负责其新鲜度；为 null 或图为空时下游波及集为空）
-     * @return 结构化漂移报告（漂移点按键升序，下游波及键升序且不含漂移键自身）
+     * @return 结构化漂移报告（漂移点按键升序）
      */
-    public static DriftReport detect(StorageRepository repository, InMemoryDependencyGraph graph) {
+    public static DriftReport detect(StorageRepository repository) {
         DriftReport report = new DriftReport();
 
         List<InvocationProfile> profiles;
@@ -57,7 +56,6 @@ public final class DriftDetector {
             }
         }
 
-        Set<String> driftedKeys = new LinkedHashSet<>();
         for (InvocationProfile profile : profiles) {
             String key = profile.getInvocationKey();
             if (key == null) {
@@ -82,7 +80,6 @@ public final class DriftDetector {
                 point.setProfileTemplateHash(profile.getTemplateHash());
                 point.setLatestTemplateHash(anchor.getTemplateHash());
                 report.getSameKeyDrifts().add(point);
-                driftedKeys.add(key);
             }
         }
 
@@ -112,19 +109,6 @@ public final class DriftDetector {
                 report.getLabelSplits().add(point);
             }
         }
-
-        Set<String> downstream = new TreeSet<>();
-        if (graph != null) {
-            for (String key : driftedKeys) {
-                try {
-                    downstream.addAll(graph.traverseDownstream(key));
-                } catch (RuntimeException e) {
-                    report.setSkippedQueries(report.getSkippedQueries() + 1);
-                }
-            }
-        }
-        downstream.removeAll(driftedKeys);
-        report.getDownstreamKeys().addAll(downstream);
 
         report.getSameKeyDrifts().sort(Comparator.comparing(DriftReport.DriftPoint::getInvocationKey));
         report.getLabelSplits().sort(Comparator.comparing(DriftReport.DriftPoint::getInvocationKey));

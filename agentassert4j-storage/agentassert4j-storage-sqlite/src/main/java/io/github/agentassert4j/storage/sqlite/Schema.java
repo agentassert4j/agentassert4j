@@ -122,13 +122,6 @@ final class Schema {
 
             "CREATE INDEX IF NOT EXISTS idx_archived_invocation ON invocation_template_versions(invocation_key)",
 
-            // 依赖图快照（整图 JSON；图是派生数据，可随时重建）
-            "CREATE TABLE IF NOT EXISTS graph_snapshot (" +
-                    "  id           TEXT PRIMARY KEY DEFAULT 'current'," +
-                    "  graph_json   TEXT NOT NULL," +
-                    "  updated_at   INTEGER NOT NULL" +
-                    ")",
-
     };
 
     private Schema() {

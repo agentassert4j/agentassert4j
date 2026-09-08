@@ -80,7 +80,7 @@ public class ParameterValueTracer {
             boolean valueMatched = false;
             for (String prevVal : prevFieldValues) {
                 if (isMeaningfulValue(prevVal) && currArgValues.contains(prevVal)) {
-                    graph.addEdge(prevInvocation, currInvocation, Confidence.HIGH, null);
+                    graph.addEdge(prevInvocation, currInvocation, Confidence.HIGH);
                     valueMatched = true;
                     break; // 一条精确匹配就够了
                 }
@@ -100,7 +100,7 @@ public class ParameterValueTracer {
                         String cPrefix = extractPrefix(cName);
                         if (pPrefix.equals(cPrefix)) {
                             // 前缀匹配，建 LOW 边
-                            graph.addEdge(prevInvocation, currInvocation, Confidence.LOW, null);
+                            graph.addEdge(prevInvocation, currInvocation, Confidence.LOW);
                             prefixMatched = true;
                             break; // 当前对只需建一条 LOW 边
                         }

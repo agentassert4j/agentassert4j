@@ -91,7 +91,6 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 | llm.timeoutMs | — | 30000 | **单次尝试**预算（下限钳 1000）；超时不重试 |
 | llm.temperature | — | 0.0 | 钳位 0–2；推理模型方言下不携带（见故障排查 §7.3） |
 | llm.extraBody | — | 空 | 追加到请求体顶层的原样 JSON 片段（厂商方言逃生舱，如 `"thinking":{"type":"disabled"}`） |
-| tools.excludeFromGraph | — | 空列表 | 不参与依赖图建边的工具名 |
 
 ### 2.2 starter 属性（`application.yml`，前缀 `agentassert4j`）
 

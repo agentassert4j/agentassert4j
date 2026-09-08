@@ -112,16 +112,8 @@ public class TaskReplayRunner {
 
         warnIfModelDiffers();
 
-        // 图是派生数据：每次重放现场重建；快照留档供 status 巡检（dry-run 只读不落盘）。
-        // 任务域对齐本身零图引用，图服务漂移检测的下游扩散与快照新鲜度
-        InMemoryDependencyGraph graph = CliSupport.rebuildGraph(repository);
-        if (!dryRun) {
-            saveGraphQuietly(graph);
-        }
-        info("Dependency graph: " + graph.nodeCount() + " nodes / " + graph.edgeCount() + " edges" + (graph.edgeCount() == 0 ? " (empty without multi-turn session data; no downstream propagation)" : ""));
-
         // 第 1 层 身份检测（全项目，零调用）
-        DriftReport drift = DriftDetector.detect(repository, graph);
+        DriftReport drift = DriftDetector.detect(repository);
         printDriftReport(drift);
         if (jsonMode) {
             out.println(driftJson(drift));
@@ -700,17 +692,6 @@ public class TaskReplayRunner {
     }
 
     /**
-     * 快照是分析视图留档（供 status 巡检），写失败只告警不阻断。
-     */
-    private void saveGraphQuietly(InMemoryDependencyGraph graph) {
-        try {
-            repository.saveGraph(graph.toJson());
-        } catch (RuntimeException e) {
-            diagnostic("Warning: dependency graph snapshot write failed (analysis unaffected): " + e.getMessage());
-        }
-    }
-
-    /**
      * 逐任务组的模型身份对偶检测：基线链与新链的 served 模型族不相交即报告——
      * 同模板跨执行的行为漂移主因是换模型/换部署，数据全在记录上，零新增存储。
      */
@@ -895,7 +876,7 @@ public class TaskReplayRunner {
     }
 
     /**
-     * 漂移检测报告（人类面）：同键漂移、标签裂键、下游波及与不可检测计数。
+     * 漂移检测报告（人类面）：同键漂移、标签裂键与不可检测计数。
      * 批量漂移多为「建档种子≠最新模板」的一次性收敛——首次全量对账后逐点收编，
      * 不一定是批量回归，文案显式引导该认知。
      */
@@ -904,15 +885,12 @@ public class TaskReplayRunner {
             info("Drift: all invocation template identities consistent (" + CliSupport.plural(drift.getZeroTemplateProfiles(), "zero-template invocation") + " undetectable).");
             return;
         }
-        info("Drift: " + drift.getSameKeyDrifts().size() + " same-key, " + CliSupport.plural(drift.getLabelSplits().size(), "label split") + ", " + drift.getDownstreamKeys().size() + " downstream (" + CliSupport.plural(drift.getZeroTemplateProfiles(), "zero-template invocation") + " undetectable)");
+        info("Drift: " + drift.getSameKeyDrifts().size() + " same-key, " + CliSupport.plural(drift.getLabelSplits().size(), "label split") + " (" + CliSupport.plural(drift.getZeroTemplateProfiles(), "zero-template invocation") + " undetectable)");
         for (DriftReport.DriftPoint point : drift.getSameKeyDrifts()) {
             info("  ▲ " + CliSupport.displayKey(point.getInvocationKey()) + (point.getLabel() != null ? " (" + point.getLabel() + ")" : "") + " template " + shortHash(point.getProfileTemplateHash()) + " → " + shortHash(point.getLatestTemplateHash()));
         }
         for (DriftReport.DriftPoint point : drift.getLabelSplits()) {
             info("  ▲+ " + CliSupport.displayKey(point.getInvocationKey()) + " (" + point.getLabel() + ") label split, new profile on template " + shortHash(point.getLatestTemplateHash()));
-        }
-        if (!drift.getDownstreamKeys().isEmpty()) {
-            info("  ↳ downstream: " + String.join(", ", drift.getDownstreamKeys()));
         }
         if (drift.getSkippedQueries() > 0) {
             info("  Warning: " + CliSupport.plural(drift.getSkippedQueries(), "detection query") + " failed and were skipped (see storage logs).");
@@ -923,7 +901,7 @@ public class TaskReplayRunner {
     private static String driftJson(DriftReport drift) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"drift-detection\"");
         sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
-        sb.append(",\"summary\":{\"sameKey\":").append(drift.getSameKeyDrifts().size()).append(",\"labelSplits\":").append(drift.getLabelSplits().size()).append(",\"downstream\":").append(drift.getDownstreamKeys().size()).append(",\"zeroTemplate\":").append(drift.getZeroTemplateProfiles()).append(",\"skippedQueries\":").append(drift.getSkippedQueries()).append("}");
+        sb.append(",\"summary\":{\"sameKey\":").append(drift.getSameKeyDrifts().size()).append(",\"labelSplits\":").append(drift.getLabelSplits().size()).append(",\"zeroTemplate\":").append(drift.getZeroTemplateProfiles()).append(",\"skippedQueries\":").append(drift.getSkippedQueries()).append("}");
         sb.append(",\"drifts\":[");
         List<String> points = new ArrayList<>();
         for (DriftReport.DriftPoint point : drift.getSameKeyDrifts()) {
@@ -932,13 +910,7 @@ public class TaskReplayRunner {
         for (DriftReport.DriftPoint point : drift.getLabelSplits()) {
             points.add(driftPointJson(point, "label-split"));
         }
-        sb.append(String.join(",", points)).append("]");
-        sb.append(",\"downstreamKeys\":[");
-        List<String> keys = new ArrayList<>();
-        for (String key : drift.getDownstreamKeys()) {
-            keys.add("\"" + RecursiveJsonParser.escape(key) + "\"");
-        }
-        return sb.append(String.join(",", keys)).append("]}").toString();
+        return sb.append(String.join(",", points)).append("]}").toString();
     }
 
     private static String driftPointJson(DriftReport.DriftPoint point, String kind) {

@@ -752,7 +752,7 @@ class BaselineManagerTest {
             assertEquals("h2", updated.getTemplateHash(), "画像身份必须前移到最新记录哈希");
             assertEquals("h1", repo.archivedBaselines.get(0).getTemplateHash(), "归档行必须先于前移快照旧哈希，回滚才有恢复源");
             // 收敛闭环：approve 后检测不再命中
-            assertFalse(DriftDetector.detect(repo, new InMemoryDependencyGraph()).hasDrift());
+            assertFalse(DriftDetector.detect(repo).hasDrift());
         }
 
         @Test
@@ -764,7 +764,7 @@ class BaselineManagerTest {
             manager.approve(KEY, "tester");
 
             assertEquals("h2", repo.findInvocationByKey(KEY).getTemplateHash());
-            assertFalse(DriftDetector.detect(repo, new InMemoryDependencyGraph()).hasDrift());
+            assertFalse(DriftDetector.detect(repo).hasDrift());
         }
 
         @Test
@@ -776,7 +776,7 @@ class BaselineManagerTest {
             manager.reject(KEY);
 
             assertEquals("h1", repo.findInvocationByKey(KEY).getTemplateHash());
-            assertTrue(DriftDetector.detect(repo, new InMemoryDependencyGraph()).hasDrift());
+            assertTrue(DriftDetector.detect(repo).hasDrift());
         }
 
         @Test
@@ -792,7 +792,7 @@ class BaselineManagerTest {
 
             assertEquals("h1", repo.findInvocationByKey(KEY).getTemplateHash(), "回滚必须把身份一并退回旧模板");
             // 身份回拨后与新模板记录重新构成漂移——状态机下轮再收编，属预期可见行为
-            assertTrue(DriftDetector.detect(repo, new InMemoryDependencyGraph()).hasDrift());
+            assertTrue(DriftDetector.detect(repo).hasDrift());
         }
 
         @Test

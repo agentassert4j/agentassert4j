@@ -108,15 +108,6 @@ class InMemoryStorageRepository implements StorageRepository {
     }
 
     @Override
-    public void saveGraph(String graphJson) {
-    }
-
-    @Override
-    public String loadGraph() {
-        return null;
-    }
-
-    @Override
     public void archiveTemplateVersion(ArchivedTemplateVersion archived) {
     }
 

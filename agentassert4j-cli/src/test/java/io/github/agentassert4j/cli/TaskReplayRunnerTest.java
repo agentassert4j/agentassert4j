@@ -485,7 +485,6 @@ class TaskReplayRunnerTest {
             assertEquals(0, runner.run(null, null, false, true, false, false, null, null));
 
             assertNull(repository.findInvocationByKey("invocation:order:hash-a"), "dry-run 不得建档");
-            assertNull(repository.loadGraph(), "dry-run 不得落图快照");
             assertTrue(output.toString().contains("Alignment plan"));
         }
     }

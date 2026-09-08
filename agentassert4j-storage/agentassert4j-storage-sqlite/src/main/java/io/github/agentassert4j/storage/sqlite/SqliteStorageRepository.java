@@ -352,31 +352,6 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
-    public synchronized void saveGraph(String graphJson) {
-        String sql = "INSERT OR REPLACE INTO graph_snapshot (id, graph_json, updated_at) VALUES ('current',?,?)";
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            ps.setString(1, graphJson);
-            ps.setLong(2, System.currentTimeMillis());
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            LOG.log(Level.SEVERE, "saveGraph failed", e);
-            throw new StorageException("saveGraph", e);
-        }
-    }
-
-    @Override
-    public synchronized String loadGraph() {
-        String sql = "SELECT graph_json FROM graph_snapshot WHERE id = 'current'";
-        try (Statement stmt = connection.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
-            if (rs.next()) return rs.getString("graph_json");
-        } catch (SQLException e) {
-            LOG.log(Level.SEVERE, "loadGraph failed", e);
-            throw new StorageException("loadGraph", e);
-        }
-        return null;
-    }
-
-    @Override
     public synchronized void archiveTemplateVersion(ArchivedTemplateVersion archived) {
         String sql = "INSERT INTO invocation_template_versions (invocation_key, template_hash, fingerprint, version_tag, algo_version, approved_by, approved_at, archived_at) VALUES (?,?,?,?,?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {

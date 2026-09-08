@@ -14,11 +14,7 @@ public enum Confidence {
     /**
      * 字段名前缀匹配
      */
-    LOW(1),
-    /**
-     * 穿透压缩产生的透传边
-     */
-    TRANSPARENT(2);
+    LOW(1);
 
     private final int rank;
 

@@ -217,19 +217,6 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
-    void saveAndLoadGraph() {
-        String graphJson = "{\"nodes\":{\"sk1\":{\"outbound\":1}},\"edges\":{\"sk1\":[\"sk2\"]}}";
-        repo.saveGraph(graphJson);
-        String loaded = repo.loadGraph();
-        assertEquals(graphJson, loaded);
-    }
-
-    @Test
-    void loadGraph_empty() {
-        assertNull(repo.loadGraph());
-    }
-
-    @Test
     void archiveAndFindBaseline() {
         DeterministicFingerprint fp = new DeterministicFingerprint();
         Set<String> tools = new HashSet<>();
@@ -635,7 +622,6 @@ class SqliteStorageRepositoryTest {
         assertThrows(StorageException.class, () -> repo.findAllSessionIds());
         assertThrows(StorageException.class, () -> repo.findAllInvocations());
         assertThrows(StorageException.class, () -> repo.saveInvocationProfile(new InvocationProfile()));
-        assertThrows(StorageException.class, () -> repo.loadGraph());
 
         // tearDown 会对已关连接再 close，保持幂等
     }

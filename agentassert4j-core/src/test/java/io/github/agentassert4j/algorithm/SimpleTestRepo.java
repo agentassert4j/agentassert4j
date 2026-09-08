@@ -21,7 +21,6 @@ class SimpleTestRepo implements StorageRepository {
     final Map<String, InvocationProfile> invocationProfiles = new HashMap<>();
     final Map<String, String> promptTexts = new HashMap<>();
     final List<ArchivedTemplateVersion> archivedBaselines = new ArrayList<>();
-    String graphJson;
 
     @Override
     public String type() {
@@ -94,16 +93,6 @@ class SimpleTestRepo implements StorageRepository {
     @Override
     public String findTemplateText(String hash) {
         return promptTexts.get(hash);
-    }
-
-    @Override
-    public void saveGraph(String graphJson) {
-        this.graphJson = graphJson;
-    }
-
-    @Override
-    public String loadGraph() {
-        return graphJson;
     }
 
     @Override

@@ -50,7 +50,7 @@ core 内出现任何 `com.*`/`org.*`（非 JDK）import 都是缺陷。core 内�
 ```
 
 派生事实不建实体表是全库统一哲学：任务链从 `interactions` 现场派生（TaskChainView），
-依赖图是 `graph_snapshot` 单行 JSON 快照（随时可从交互全量重建），验收包是一个 JSON 文件。
+依赖图不经任何实体表——`graph show` 每次从交互数据现场重建，验收包是一个 JSON 文件。
 
 【人工对账】主链路各环节的分域规格见下方域索引；录制/存储/判定/治理各域的真源链在其 spec 内钉死。
 

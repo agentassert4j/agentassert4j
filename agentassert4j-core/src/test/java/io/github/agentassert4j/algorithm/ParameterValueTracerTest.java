@@ -285,8 +285,8 @@ class ParameterValueTracerTest {
 
         tracer.traceDependency(Arrays.asList(prev, curr));
 
-        assertTrue(tracer.getGraph().getSuccessors("invocation:" + "skillA" + ":hash").contains("invocation:" + "skillB" + ":hash"));
-        assertEquals(1, tracer.getGraph().edgeCount());
+        assertTrue(hasEdge(tracer.getGraph(), "invocation:" + "skillA" + ":hash", "invocation:" + "skillB" + ":hash"));
+        assertEquals(1, tracer.getGraph().getAllEdges().size());
         assertEquals(Confidence.HIGH, tracer.getGraph().getAllEdges().get(0).getConfidence());
     }
 
@@ -300,7 +300,7 @@ class ParameterValueTracerTest {
 
         tracer.traceDependency(Arrays.asList(prev, curr));
 
-        assertTrue(tracer.getGraph().getSuccessors("invocation:" + "skillA" + ":hash").contains("invocation:" + "skillB" + ":hash"));
+        assertTrue(hasEdge(tracer.getGraph(), "invocation:" + "skillA" + ":hash", "invocation:" + "skillB" + ":hash"));
         assertEquals(Confidence.HIGH, tracer.getGraph().getAllEdges().get(0).getConfidence());
     }
 
@@ -313,7 +313,7 @@ class ParameterValueTracerTest {
 
         tracer.traceDependency(Arrays.asList(prev, curr));
 
-        assertTrue(tracer.getGraph().getSuccessors("invocation:" + "skillA" + ":hash").contains("invocation:" + "skillB" + ":hash"));
+        assertTrue(hasEdge(tracer.getGraph(), "invocation:" + "skillA" + ":hash", "invocation:" + "skillB" + ":hash"));
         assertEquals(Confidence.LOW, tracer.getGraph().getAllEdges().get(0).getConfidence());
     }
 
@@ -326,7 +326,7 @@ class ParameterValueTracerTest {
 
         tracer.traceDependency(Arrays.asList(prev, curr));
 
-        assertEquals(0, tracer.getGraph().edgeCount());
+        assertEquals(0, tracer.getGraph().getAllEdges().size());
     }
 
     @Test
@@ -336,7 +336,7 @@ class ParameterValueTracerTest {
 
         tracer.traceDependency(Arrays.asList(r1, r2));
 
-        assertEquals(0, tracer.getGraph().edgeCount());
+        assertEquals(0, tracer.getGraph().getAllEdges().size());
     }
 
     @Test
@@ -365,9 +365,9 @@ class ParameterValueTracerTest {
         tracer.traceDependency(Arrays.asList(rA, rB, rC));
 
         // A → B, B → C
-        assertEquals(2, tracer.getGraph().edgeCount());
-        assertTrue(tracer.getGraph().getSuccessors("invocation:" + "skillA" + ":hash").contains("invocation:" + "skillB" + ":hash"));
-        assertTrue(tracer.getGraph().getSuccessors("invocation:" + "skillB" + ":hash").contains("invocation:" + "skillC" + ":hash"));
+        assertEquals(2, tracer.getGraph().getAllEdges().size());
+        assertTrue(hasEdge(tracer.getGraph(), "invocation:" + "skillA" + ":hash", "invocation:" + "skillB" + ":hash"));
+        assertTrue(hasEdge(tracer.getGraph(), "invocation:" + "skillB" + ":hash", "invocation:" + "skillC" + ":hash"));
     }
 
     @Test
@@ -377,7 +377,7 @@ class ParameterValueTracerTest {
 
         tracer.rebuildGraph(repo);
 
-        assertTrue(tracer.getGraph().getSuccessors("invocation:" + "skillA" + ":hash").contains("invocation:" + "skillB" + ":hash"));
+        assertTrue(hasEdge(tracer.getGraph(), "invocation:" + "skillA" + ":hash", "invocation:" + "skillB" + ":hash"));
     }
 
     @Test
@@ -400,7 +400,7 @@ class ParameterValueTracerTest {
 
         tracer.rebuildGraph(repo);
 
-        assertTrue(tracer.getGraph().getSuccessors("invocation:" + "skillA" + ":hash").contains("invocation:" + "skillB" + ":hash"), "同 timestamp 时必须按 recordId 平局决胜，保证依赖边方向确定");
+        assertTrue(hasEdge(tracer.getGraph(), "invocation:" + "skillA" + ":hash", "invocation:" + "skillB" + ":hash"), "同 timestamp 时必须按 recordId 平局决胜，保证依赖边方向确定");
     }
 
     private static Map<String, Object> objectMap(Object... kv) {
@@ -490,15 +490,6 @@ class ParameterValueTracerTest {
         }
 
         @Override
-        public void saveGraph(String graphJson) {
-        }
-
-        @Override
-        public String loadGraph() {
-            return null;
-        }
-
-        @Override
         public void archiveTemplateVersion(ArchivedTemplateVersion archived) {
         }
 
@@ -512,5 +503,11 @@ class ParameterValueTracerTest {
             return Collections.emptyList();
         }
 
+    }
+    /**
+     * 边存在性断言助手：精简后的图 API 以边枚举为唯一读面
+     */
+    private static boolean hasEdge(InMemoryDependencyGraph g, String src, String tgt) {
+        return g.getAllEdges().stream().anyMatch(e -> e.getSource().equals(src) && e.getTarget().equals(tgt));
     }
 }

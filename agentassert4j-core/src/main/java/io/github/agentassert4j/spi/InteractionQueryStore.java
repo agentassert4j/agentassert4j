@@ -37,7 +37,7 @@ public interface InteractionQueryStore {
     List<InteractionRecord> findBySessionId(String sessionId);
 
     /**
-     * 获取所有 session ID（rebuildGraph 使用）
+     * 获取所有 session ID（任务链派生与分桶枚举使用）
      */
     List<String> findAllSessionIds();
 }

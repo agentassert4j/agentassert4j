@@ -111,7 +111,7 @@ Candidate registered: 查询物流@8d9dbac2 (behavior change awaiting adjudicati
 Alignment summary: PASS 3 | CHANGED 1 | missing 1 | added 1
 ```
 
-检测层先点名**哪些调用点的模板身份变了**（漂移点经依赖图扩散出下游波及面）；对齐层把每个任务的
+检测层先点名**哪些调用点的模板身份变了**；对齐层把每个任务的
 两条真实链按调用点配对——缺步骤 / 新增步骤 / 逐步结构 diff，文本措辞差异以低置信呈现给人看，
 **判定只看结构指纹**。整条命令零 API Key。想让框架用各点的新模板重放历史输入做受控复核，加
 `--re-drive`（花真实调用，先加 `--dry-run` 看报价，`--max-total-calls/--max-total-tokens` 预算池封顶）。

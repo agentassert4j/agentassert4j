@@ -54,14 +54,7 @@ public class GraphShowCommand implements Callable<Integer> {
                 StringBuilder edgeJson = new StringBuilder();
                 for (GraphEdge edge : edges) {
                     if (edgeJson.length() > 0) edgeJson.append(",");
-                    StringBuilder through = new StringBuilder();
-                    if (edge.getThroughNodes() != null) {
-                        for (String node : edge.getThroughNodes()) {
-                            if (through.length() > 0) through.append(",");
-                            through.append("\"").append(RecursiveJsonParser.escape(node)).append("\"");
-                        }
-                    }
-                    edgeJson.append("{\"source\":\"").append(RecursiveJsonParser.escape(edge.getSource())).append("\",\"target\":\"").append(RecursiveJsonParser.escape(edge.getTarget())).append("\",\"confidence\":\"").append(edge.getConfidence()).append("\",\"throughNodes\":[").append(through).append("]}");
+                    edgeJson.append("{\"source\":\"").append(RecursiveJsonParser.escape(edge.getSource())).append("\",\"target\":\"").append(RecursiveJsonParser.escape(edge.getTarget())).append("\",\"confidence\":\"").append(edge.getConfidence()).append("\"}");
                 }
                 StringBuilder cyclesJson = new StringBuilder();
                 for (String node : new TreeSet<>(graph.detectCycles())) {
@@ -75,8 +68,7 @@ public class GraphShowCommand implements Callable<Integer> {
             out.println("Nodes (" + nodes.size() + "): " + String.join(", ", nodes));
             out.println("Edges (" + edges.size() + "):");
             for (GraphEdge edge : edges) {
-                String through = edge.getThroughNodes() != null && !edge.getThroughNodes().isEmpty() ? " (through: " + String.join(",", edge.getThroughNodes()) + ")" : "";
-                out.println("  " + edge.getSource() + " -> " + edge.getTarget() + "  " + edge.getConfidence() + through);
+                out.println("  " + edge.getSource() + " -> " + edge.getTarget() + "  " + edge.getConfidence());
             }
             Set<String> cycles = graph.detectCycles();
             if (cycles.isEmpty()) {

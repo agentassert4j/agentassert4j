@@ -2,23 +2,14 @@ package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.model.Confidence;
 import io.github.agentassert4j.model.GraphEdge;
-import io.github.agentassert4j.util.RecursiveJsonParser;
-import io.github.agentassert4j.util.TextUtil;
 
 import java.util.*;
 
 /**
- * 内存依赖图谱 — 纯内存邻接表 + JSON 持久化。
+ * 内存依赖图谱 — 纯内存邻接表，从交互记录现场重建的勘察视图。
  *
  * <p>规模（10-50 节点，10-200 边）远低于需要图数据库的门槛。
- * BFS 下游遍历微秒级，JSON 序列化 &lt; 5KB。</p>
- *
- * <p>数据结构：
- * <ul>
- *   <li>正向邻接表 outEdges：src → (tgt → GraphEdge)</li>
- *   <li>反向邻接表 inEdges：tgt → Set&lt;src&gt;</li>
- * </ul>
- * 穿透压缩依赖反向邻接表做向上搜索。</p>
+ * 正向邻接表 LinkedHashMap 插入序保证同数据重建的边序可复现。</p>
  *
  * @author axy-yxa
  * @since 2026-08-26
@@ -26,69 +17,14 @@ import java.util.*;
 public class InMemoryDependencyGraph {
 
     /**
-     * 正向邻接表：source → (target → edge)。
-     * 插入序集合保证快照字节可复现——同数据全量重建产出完全相同的 JSON。
+     * 正向邻接表：source → (target → edge)
      */
     private final Map<String, Map<String, GraphEdge>> outEdges = new LinkedHashMap<>();
-    /**
-     * 反向邻接表：target → Set<source>
-     */
-    private final Map<String, Set<String>> inEdges = new LinkedHashMap<>();
 
     /**
-     * 从 JSON 字符串反序列化图谱。
-     * 破坏的边（source/target 缺失或空白、confidence 非法）整条跳过——
-     * 快照是派生数据，坏数据宁可不建边也不能造出幽灵拓扑污染影响集。
+     * 添加一条边。同一条边多次添加时保留高置信度（秩小者优先）。
      */
-    @SuppressWarnings("unchecked")
-    public static InMemoryDependencyGraph fromJson(String json) {
-        InMemoryDependencyGraph graph = new InMemoryDependencyGraph();
-        if (TextUtil.isBlank(json)) return graph;
-
-        Object parsed = RecursiveJsonParser.parse(json);
-        if (!(parsed instanceof Map)) return graph;
-
-        Map<String, Object> root = (Map<String, Object>) parsed;
-        Object edgesObj = root.get("edges");
-        if (!(edgesObj instanceof List)) return graph;
-
-        List<Object> edgesList = (List<Object>) edgesObj;
-        for (Object edgeObj : edgesList) {
-            if (!(edgeObj instanceof Map)) continue;
-            Map<String, Object> edgeMap = (Map<String, Object>) edgeObj;
-            String src = asNonBlank(edgeMap.get("source"));
-            String tgt = asNonBlank(edgeMap.get("target"));
-            Confidence conf;
-            try {
-                conf = Confidence.valueOf(String.valueOf(edgeMap.get("confidence")));
-            } catch (IllegalArgumentException e) {
-                continue;
-            }
-            if (src == null || tgt == null) {
-                continue;
-            }
-            List<String> through = new ArrayList<>();
-            Object throughObj = edgeMap.get("throughNodes");
-            if (throughObj instanceof List) {
-                for (Object t : (List<?>) throughObj) {
-                    if (t != null) through.add(String.valueOf(t));
-                }
-            }
-            graph.addEdge(src, tgt, conf, through);
-        }
-        return graph;
-    }
-
-    private static String asNonBlank(Object value) {
-        if (value == null) return null;
-        String text = String.valueOf(value).trim();
-        return text.isEmpty() ? null : text;
-    }
-
-    /**
-     * 添加一条边。同一条边多次添加时保留最高置信度，throughNodes 合并。
-     */
-    public void addEdge(String src, String tgt, Confidence confidence, List<String> throughNodes) {
+    public void addEdge(String src, String tgt, Confidence confidence) {
         Map<String, GraphEdge> targets = outEdges.computeIfAbsent(src, k -> new LinkedHashMap<>());
         GraphEdge existing = targets.get(tgt);
         if (existing != null) {
@@ -96,37 +32,9 @@ public class InMemoryDependencyGraph {
             if (existing.getConfidence().rank() > confidence.rank()) {
                 existing.setConfidence(confidence);
             }
-            // 合并 throughNodes
-            if (throughNodes != null && !throughNodes.isEmpty()) {
-                Set<String> merged = new LinkedHashSet<>(existing.getThroughNodes());
-                merged.addAll(throughNodes);
-                existing.setThroughNodes(new ArrayList<>(merged));
-            }
         } else {
-            targets.put(tgt, new GraphEdge(src, tgt, confidence, throughNodes));
+            targets.put(tgt, new GraphEdge(src, tgt, confidence));
         }
-        // 维护反向邻接表
-        inEdges.computeIfAbsent(tgt, k -> new LinkedHashSet<>()).add(src);
-    }
-
-    /**
-     * BFS 下游遍历（微秒级），从 start 出发的所有可达节点（不含自身）。
-     * 环检测：visited 集合防止死循环。
-     */
-    public Set<String> traverseDownstream(String start) {
-        Set<String> visited = new LinkedHashSet<>();
-        Deque<String> queue = new ArrayDeque<>();
-        queue.add(start);
-        while (!queue.isEmpty()) {
-            String curr = queue.poll();
-            if (!visited.add(curr)) continue; // 环检测
-            Map<String, GraphEdge> succs = outEdges.get(curr);
-            if (succs != null) {
-                queue.addAll(succs.keySet());
-            }
-        }
-        visited.remove(start);
-        return visited;
     }
 
     /**
@@ -176,36 +84,18 @@ public class InMemoryDependencyGraph {
     }
 
     /**
-     * 获取直接后继节点
-     */
-    public Set<String> getSuccessors(String node) {
-        Map<String, GraphEdge> succs = outEdges.get(node);
-        return succs != null ? Collections.unmodifiableSet(succs.keySet()) : Collections.emptySet();
-    }
-
-    /**
-     * 获取直接前驱节点
-     */
-    public Set<String> getPredecessors(String node) {
-        Set<String> preds = inEdges.get(node);
-        return preds != null ? Collections.unmodifiableSet(preds) : Collections.emptySet();
-    }
-
-    /**
-     * 获取所有节点
+     * 获取所有节点（含只作为目标出现的汇点）
      */
     public Set<String> getAllNodes() {
         Set<String> nodes = new LinkedHashSet<>(outEdges.keySet());
         for (Map<String, GraphEdge> targets : outEdges.values()) {
             nodes.addAll(targets.keySet());
         }
-        // 也检查只有入边没有出边的节点
-        nodes.addAll(inEdges.keySet());
         return nodes;
     }
 
     /**
-     * 获取所有边
+     * 获取所有边（正向邻接序）
      */
     public List<GraphEdge> getAllEdges() {
         List<GraphEdge> edges = new ArrayList<>();
@@ -214,44 +104,4 @@ public class InMemoryDependencyGraph {
         }
         return edges;
     }
-
-    /**
-     * 获取节点数
-     */
-    public int nodeCount() {
-        return getAllNodes().size();
-    }
-
-    /**
-     * 获取边数
-     */
-    public int edgeCount() {
-        return getAllEdges().size();
-    }
-
-    /**
-     * 将图谱序列化为 JSON 字符串。
-     * 使用 RecursiveJsonParser.serialize() 辅助。
-     */
-    public String toJson() {
-        Map<String, Object> root = new LinkedHashMap<>();
-        root.put("nodeCount", nodeCount());
-        root.put("edgeCount", edgeCount());
-
-        List<Object> edgeList = new ArrayList<>();
-        for (GraphEdge e : getAllEdges()) {
-            Map<String, Object> edgeMap = new LinkedHashMap<>();
-            edgeMap.put("source", e.getSource());
-            edgeMap.put("target", e.getTarget());
-            edgeMap.put("confidence", e.getConfidence().name());
-            if (e.getThroughNodes() != null && !e.getThroughNodes().isEmpty()) {
-                edgeMap.put("throughNodes", e.getThroughNodes());
-            }
-            edgeList.add(edgeMap);
-        }
-        root.put("edges", edgeList);
-
-        return RecursiveJsonParser.serialize(root);
-    }
-
 }

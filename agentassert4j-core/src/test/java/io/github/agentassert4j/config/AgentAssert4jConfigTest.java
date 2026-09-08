@@ -27,7 +27,6 @@ class AgentAssert4jConfigTest {
             assertNotNull(config.getRecorder());
             assertNotNull(config.getRegression());
             assertNotNull(config.getLlm());
-            assertNotNull(config.getTools());
         }
 
         @Test
@@ -76,13 +75,6 @@ class AgentAssert4jConfigTest {
             assertTrue(r.getIgnorableFields().isEmpty());
         }
 
-        @Test
-        @DisplayName("Tools 默认空排除列表")
-        void toolsDefaults() {
-            AgentAssert4jConfig.ToolsConfig t = AgentAssert4jConfig.defaults().getTools();
-            assertNotNull(t.getExcludeFromGraph());
-            assertTrue(t.getExcludeFromGraph().isEmpty());
-        }
     }
 
     @Nested
@@ -92,7 +84,7 @@ class AgentAssert4jConfigTest {
         @Test
         @DisplayName("完整 JSON 解析")
         void fullJson() {
-            String json = "{\n" + "  \"storage\": {\"url\": \"/data/agentassert4j.db\"},\n" + "  \"recorder\": {\"batchSize\": 200, \"flushIntervalMs\": 10000},\n" + "  \"regression\": {\"ignorableFields\": [\"debugInfo\", \"timestamp\"]},\n" + "  \"llm\": {\"apiKey\": \"sk-test\", \"endpoint\": \"https://api.deepseek.com\", \"model\": \"deepseek-chat\", \"timeoutMs\": 60000},\n" + "  \"tools\": {\"excludeFromGraph\": [\"read_file\", \"bash\"]}\n" + "}";
+            String json = "{\n" + "  \"storage\": {\"url\": \"/data/agentassert4j.db\"},\n" + "  \"recorder\": {\"batchSize\": 200, \"flushIntervalMs\": 10000},\n" + "  \"regression\": {\"ignorableFields\": [\"debugInfo\", \"timestamp\"]},\n" + "  \"llm\": {\"apiKey\": \"sk-test\", \"endpoint\": \"https://api.deepseek.com\", \"model\": \"deepseek-chat\", \"timeoutMs\": 60000}\n" + "}";
 
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
 
@@ -104,7 +96,6 @@ class AgentAssert4jConfigTest {
             assertEquals("https://api.deepseek.com", config.getLlm().getEndpoint());
             assertEquals("deepseek-chat", config.getLlm().getModel());
             assertEquals(60000, config.getLlm().getTimeoutMs());
-            assertEquals(2, config.getTools().getExcludeFromGraph().size());
         }
 
         @Test
@@ -171,14 +162,6 @@ class AgentAssert4jConfigTest {
             assertTrue(r.getIgnorableFields().isEmpty());
         }
 
-        @Test
-        @DisplayName("ToolsConfig.setExcludeFromGraph(null) → 空列表")
-        void excludeFromGraph_nullSafe() {
-            AgentAssert4jConfig.ToolsConfig t = new AgentAssert4jConfig.ToolsConfig();
-            t.setExcludeFromGraph(null);
-            assertNotNull(t.getExcludeFromGraph());
-            assertTrue(t.getExcludeFromGraph().isEmpty());
-        }
     }
 
     @Test

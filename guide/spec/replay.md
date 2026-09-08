@@ -50,15 +50,14 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
    报错列候选）× --invocation 目标解析（命中含该键记录的链）；检测报告全项目不受缩域影响，
    处置限缩域。【测试钉】`TaskReplayRunnerTest.Scoping`（精确优先/歧义/唯一前缀/无命中/
    键缩域/空交集）
-7. **JSON 报告 task-report/1**：逐行分段——drift-detection（漂移集/下游/零模板计数）→
+7. **JSON 报告 task-report/1**：逐行分段——drift-detection（漂移集/零模板计数）→
    task-align（逐步 action/verdict/dims/cost）或 selfEstablished → drift-disposition（逐漂移
    点 action: collected/candidate/hung/external/uncollected）；dry-run 为 task-dry-run。键名
    稳定、单行、null 缺省即契约；报告头钉判定语义版本。【测试钉】
    `TaskReplayRunnerTest.JsonContract`
-8. **守卫六项**：判定语义版本守卫（任一画像版本不符拒绝判定）；`--ci` 未建档拒绝判定
-   （缩域名单）+ 漂移 PASS 不收编；换模型告警（配置缺省时比对客户端实际生效模型）；依赖图
-   重建与快照落盘（dry-run 除外）；全败按基础设施故障退出（重驱层）；served 模型不一致
-   逐步标注。【测试钉】`TaskReplayRunnerTest.Guards` 全组
+8. **守卫五项**：判定语义版本守卫（任一画像版本不符拒绝判定）；`--ci` 未建档拒绝判定
+   （缩域名单）+ 漂移 PASS 不收编；换模型告警（配置缺省时比对客户端实际生效模型）；
+   全败按基础设施故障退出（重驱层）；served 模型不一致逐步标注。【测试钉】`TaskReplayRunnerTest.Guards` 全组
 9. **CHANGED 步落候选**：显式 replay 即测试行为——对齐首个 CHANGED 配对的新记录现场重提
    指纹落候选；自动建档先于候选登记（裂键新画像必须先存在）；`--ci` 已在建档守卫处拒判。
    【测试钉】`TaskReplayRunnerTest.Alignment.stepDiff_changed_exits1_andRegistersCandidate`
