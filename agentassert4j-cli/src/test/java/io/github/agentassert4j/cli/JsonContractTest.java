@@ -176,6 +176,7 @@ class JsonContractTest {
             assertTrue(report.contains("\"label\":\"queryOrder\""), report);
             assertTrue(report.contains("\"action\":\"created\""), report);
             assertTrue(report.contains("\"versionTag\":\"v1\""), report);
+            assertTrue(report.contains("\"codeRef\":\"abc1234\""), report);
             assertFalse(stdout().contains("baseline established"), "建档过程行是人类输出，不得污染 stdout: " + stdout());
             assertFalse(stdout().contains("Config: "), "配置披露在 --json 模式改走 stderr: " + stdout());
             assertTrue(stderr().contains("Config: "), "配置披露改走 stderr 供排障: " + stderr());
@@ -185,7 +186,7 @@ class JsonContractTest {
         @DisplayName("baseline --json 幂等重跑：established=0 且逐调用点 action=exists")
         void baselineJson_idempotentRerun() throws Exception {
             seedOneRecord();
-            execute("baseline", "--db", dbPath);
+            execute("baseline", "--db", dbPath, "--ref", "abc1234");
 
             int exit = execute("baseline", "--db", dbPath, "--json");
 
@@ -194,6 +195,7 @@ class JsonContractTest {
             assertTrue(report.contains("\"established\":0"), "重复执行不得重复建档: " + report);
             assertTrue(report.contains("\"action\":\"exists\""), report);
             assertTrue(report.contains("\"versionTag\":\"v1\""), report);
+            assertTrue(report.contains("\"codeRef\":\"abc1234\""), "exists 条目回显已落库的锚而非本次声明: " + report);
         }
 
         @Test
@@ -335,6 +337,26 @@ class JsonContractTest {
             assertTrue(envelope.contains("v\\\"9"), "引号必须以 \\\" 形态转义: " + envelope);
             RecursiveJsonParser.parse(envelope);
         }
+
+        @Test
+        @DisplayName("rollback 人读：审批事实按在场渲染，未经审批的基线不留 null 痕")
+        void rollbackHuman_factsRenderOnlyWhenPresent() throws Exception {
+            seedOneRecord();
+            // 经 core 以 null 操作者建档：CLI 路径审批人恒有 OS 用户兜底，
+            // approvedBy=null 只能来自 API 侧，属「未经审批链盖章」的合法形态
+            new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), null, "abc1234", false, null, null, null);
+            execute("baseline", "--db", dbPath, "--force", "--ref", "def5678");
+
+            assertEquals(0, execute("rollback", "--db", dbPath, "--invocation", "queryOrder", "--version", "v1"));
+            String restored = stdout();
+            assertTrue(restored.contains(" → v1 (ref abc1234)"), restored);
+            assertFalse(restored.contains("approver"), "null 审批人整段省略而非渲染 null: " + restored);
+            assertFalse(restored.contains("null"), restored);
+
+            assertEquals(0, execute("rollback", "--db", dbPath, "--invocation", "queryOrder", "--version", "v2"));
+            String both = stdout();
+            assertTrue(both.contains("(approver ") && both.contains(", ref def5678)"), both);
+        }
     }
 
     @Nested
@@ -358,6 +380,7 @@ class JsonContractTest {
             assertTrue(report.contains("\"hasCandidate\":false"), report);
             assertTrue(report.contains("\"archivedVersions\":\"\""), report);
             assertTrue(report.contains("\"codeRef\":\""), report);
+            assertTrue(report.contains("\"health\":{\"labelSplits\":0,\"selfEstablishedTasks\":1,\"multiStepUnlabeledChains\":0}"), report);
             assertTrue(report.contains("\"uncovered\":[]"), "建档后无覆盖缺口: " + report);
             assertFalse(stdout().contains("Total: "), "人类巡检汇总行不得污染 stdout: " + stdout());
         }
@@ -451,6 +474,7 @@ class JsonContractTest {
 
             assertEquals(2, exit);
             assertTrue(stdout().contains("agentassert4j.verify-report/1"), "验收报告先行产出: " + stdout());
+            assertTrue(stdout().contains("\"health\":{\"labelSplits\":0,\"selfEstablishedTasks\":0,\"multiStepUnlabeledChains\":0}"), "验收报告携带出口健康三计数: " + stdout());
             String envelope = lastStdoutLine();
             assertErrorEnvelope(envelope, "E-NO-DATA");
             assertTrue(envelope.contains("no local execution"), "包络点明缺口语义: " + envelope);

@@ -145,7 +145,7 @@ class TaskReplayRunnerTest {
         void identicalChains_pass() {
             seedIdenticalChains("{\"result\":\"ok\"}");
 
-            assertEquals(0, runner.run(null, null, false, false, false, false, null, null));
+            assertEquals(0, runner.run(null, null, false, false, false, false, false, null, null));
         }
 
         @Test
@@ -155,7 +155,7 @@ class TaskReplayRunnerTest {
             saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
             establishedProfile("invocation:order:hash-a", "order", "hash-a");
 
-            int exit = runner.run(null, null, false, false, false, false, null, null);
+            int exit = runner.run(null, null, false, false, false, false, false, null, null);
 
             assertEquals(1, exit);
             InvocationProfile profile = repository.findInvocationByKey("invocation:order:hash-a");
@@ -171,7 +171,7 @@ class TaskReplayRunnerTest {
             saveRecord("a-2", "session-a", 1100L, "查订单", "confirm", "hash-c", "{\"result\":\"ok\"}", null);
             saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
 
-            int exit = runner.run(null, null, false, false, false, false, null, null);
+            int exit = runner.run(null, null, false, false, false, false, false, null, null);
 
             assertEquals(1, exit);
             assertTrue(output.toString().contains("missing step"));
@@ -184,7 +184,7 @@ class TaskReplayRunnerTest {
             saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
             saveRecord("b-2", "session-b", 2100L, "查订单", "confirm", "hash-c", "{\"result\":\"ok\"}", null);
 
-            assertEquals(1, runner.run(null, null, false, false, false, false, null, null));
+            assertEquals(1, runner.run(null, null, false, false, false, false, false, null, null));
         }
 
         @Test
@@ -192,7 +192,7 @@ class TaskReplayRunnerTest {
         void singleChain_selfEstablish() {
             saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
 
-            assertEquals(0, runner.run(null, null, false, false, false, false, null, null));
+            assertEquals(0, runner.run(null, null, false, false, false, false, false, null, null));
             assertTrue(output.toString().contains("first recording becomes the baseline"));
         }
 
@@ -203,7 +203,7 @@ class TaskReplayRunnerTest {
             saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
             saveRecord("c-1", "session-c", 3000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
 
-            assertEquals(0, runner.run(null, null, false, false, false, false, null, null));
+            assertEquals(0, runner.run(null, null, false, false, false, false, false, null, null));
         }
 
         @Test
@@ -215,7 +215,7 @@ class TaskReplayRunnerTest {
             InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"tasks\":{\"查订单\":{\"requiredSteps\":[\"confirm\"]}}}");
             TaskReplayRunner ruledRunner = new TaskReplayRunner(repository, new StubLlmClient(), new DeterministicComparator(ComparatorConfig.defaults()), rules, TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), false);
 
-            assertEquals(1, ruledRunner.run(null, null, false, false, false, false, null, null));
+            assertEquals(1, ruledRunner.run(null, null, false, false, false, false, false, null, null));
             assertTrue(output.toString().contains("Task rule violation"));
         }
     }
@@ -232,7 +232,7 @@ class TaskReplayRunnerTest {
             saveRecord("b-1", "session-b", 2000L, "V1 请求扩展", "order", "hash-a", "{\"v\":1}", null);
             saveRecord("b-2", "session-b2", 2100L, "V1 请求扩展", "order", "hash-a", "{\"v\":1}", null);
 
-            assertEquals(0, runner.run("V1 请求", null, false, false, false, false, null, null));
+            assertEquals(0, runner.run("V1 请求", null, false, false, false, false, false, null, null));
             assertFalse(output.toString().contains("V1 请求扩展"), "精确命中不得扩选到前缀家族: " + output);
         }
 
@@ -242,7 +242,7 @@ class TaskReplayRunnerTest {
             saveRecord("a-1", "session-a", 1000L, "V1 请求", "order", "hash-a", "{\"v\":1}", null);
             saveRecord("b-1", "session-b", 2000L, "V2 请求", "order", "hash-a", "{\"v\":1}", null);
 
-            assertEquals(2, runner.run("V", null, false, false, false, false, null, null));
+            assertEquals(2, runner.run("V", null, false, false, false, false, false, null, null));
         }
 
         @Test
@@ -251,7 +251,7 @@ class TaskReplayRunnerTest {
             saveRecord("a-1", "session-a", 1000L, "V1 请求", "order", "hash-a", "{\"v\":1}", null);
             saveRecord("a-2", "session-a2", 1100L, "V1 请求", "order", "hash-a", "{\"v\":1}", null);
 
-            assertEquals(0, runner.run("V", null, false, false, false, false, null, null));
+            assertEquals(0, runner.run("V", null, false, false, false, false, false, null, null));
         }
 
         @Test
@@ -259,7 +259,7 @@ class TaskReplayRunnerTest {
         void noMatch_exits2() {
             saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
 
-            assertEquals(2, runner.run("不存在的任务", null, false, false, false, false, null, null));
+            assertEquals(2, runner.run("不存在的任务", null, false, false, false, false, false, null, null));
         }
 
         @Test
@@ -269,7 +269,7 @@ class TaskReplayRunnerTest {
             saveRecord("x-1", "session-x", 1500L, "查订单", "order", "hash-a", "写诗", null);
             saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "查订单", null);
 
-            assertEquals(0, runner.run(null, "invocation:order:hash-a", false, false, false, false, null, null));
+            assertEquals(0, runner.run(null, "invocation:order:hash-a", false, false, false, false, false, null, null));
             assertFalse(output.toString().contains("写诗"), "缩域外任务不应进入对齐输出: " + output);
         }
 
@@ -279,7 +279,7 @@ class TaskReplayRunnerTest {
             saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "查订单", null);
             saveRecord("x-1", "session-x", 1500L, "查订单", "order", "hash-a", "写诗", null);
 
-            assertEquals(2, runner.run("查订单", "invocation:order:hash-b", false, false, false, false, null, null));
+            assertEquals(2, runner.run("查订单", "invocation:order:hash-b", false, false, false, false, false, null, null));
         }
     }
 
@@ -301,11 +301,11 @@ class TaskReplayRunnerTest {
         void driftPass_dev_collects() {
             seedSkeletonDrift("{\"result\":\"ok\"}");
 
-            assertEquals(0, runner.run(null, null, false, false, false, false, null, null));
+            assertEquals(0, runner.run(null, null, false, false, false, false, false, null, null));
 
             assertEquals("hash-new", repository.findInvocationByKey("invocation:order:skl-1").getTemplateHash(), "画像身份必须前移到最新记录哈希");
             assertTrue(output.toString().contains("Collected:"));
-            runner.run(null, null, false, false, false, false, null, null);
+            runner.run(null, null, false, false, false, false, false, null, null);
             assertTrue(output.toString().contains("template identities consistent"), "收编后检测不应再命中");
         }
 
@@ -314,7 +314,7 @@ class TaskReplayRunnerTest {
         void driftPass_ci_keepsStale() {
             seedSkeletonDrift("{\"result\":\"ok\"}");
 
-            assertEquals(0, runner.run(null, null, true, false, false, false, null, null));
+            assertEquals(0, runner.run(null, null, true, false, false, false, false, null, null));
 
             assertEquals("hash-old", repository.findInvocationByKey("invocation:order:skl-1").getTemplateHash(), "CI 模式不得落治理写");
             assertTrue(output.toString().contains("Identity not collected"));
@@ -325,7 +325,7 @@ class TaskReplayRunnerTest {
         void driftChanged_registersCandidate() {
             seedSkeletonDrift("{\"changed\":true}");
 
-            assertEquals(1, runner.run(null, null, false, false, false, false, null, null));
+            assertEquals(1, runner.run(null, null, false, false, false, false, false, null, null));
 
             InvocationProfile profile = repository.findInvocationByKey("invocation:order:skl-1");
             assertNotNull(profile.getCandidateFingerprint(), "漂移 + CHANGED 必须落候选");
@@ -338,7 +338,7 @@ class TaskReplayRunnerTest {
             saveSkeletonRecord("a-1", "session-a", 1000L, "查订单", "order", "skl-1", "hash-new", "{\"result\":\"ok\"}");
             establishedProfile("invocation:order:skl-1", "order", "hash-old");
 
-            assertEquals(1, runner.run(null, null, false, false, false, false, null, null));
+            assertEquals(1, runner.run(null, null, false, false, false, false, false, null, null));
 
             InvocationProfile profile = repository.findInvocationByKey("invocation:order:skl-1");
             assertEquals("hash-old", profile.getTemplateHash());
@@ -352,7 +352,7 @@ class TaskReplayRunnerTest {
             establishedProfile("invocation:lonely:skl-1", "lonely", "hash-old");
             saveSkeletonRecord("l-1", "session-l", 1500L, "查订单", "lonely", "skl-1", "hash-new", "{\"result\":\"ok\"}");
 
-            assertEquals(1, runner.run(null, null, false, false, false, false, null, null));
+            assertEquals(1, runner.run(null, null, false, false, false, false, false, null, null));
             assertTrue(output.toString().contains("Hung:"));
         }
 
@@ -364,7 +364,7 @@ class TaskReplayRunnerTest {
             saveRecord("x-1", "session-x", 1000L, "写诗任务", "poem", "hash-p", "{\"result\":\"ok\"}", null);
             saveRecord("x-2", "session-x2", 2000L, "写诗任务", "poem", "hash-p", "{\"result\":\"ok\"}", null);
 
-            assertEquals(0, runner.run("写诗", null, false, false, false, false, null, null));
+            assertEquals(0, runner.run("写诗", null, false, false, false, false, false, null, null));
             assertTrue(output.toString().contains("Drift outside scope"));
         }
 
@@ -377,7 +377,7 @@ class TaskReplayRunnerTest {
             saveRecord("x-1", "session-x", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
             saveRecord("x-2", "session-x2", 2000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
 
-            assertEquals(1, runner.run(null, null, false, false, false, false, null, null));
+            assertEquals(1, runner.run(null, null, false, false, false, false, false, null, null));
             assertTrue(output.toString().contains("Hung:"));
             assertFalse(output.toString().contains("Drift outside scope"), "缩域内的键不得误标域外: " + output);
         }
@@ -389,7 +389,7 @@ class TaskReplayRunnerTest {
             saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-new", "{\"result\":\"ok\"}", null);
             establishedProfile("invocation:order:hash-old", "order", "hash-old");
 
-            assertEquals(0, runner.run(null, null, false, false, false, false, null, null));
+            assertEquals(0, runner.run(null, null, false, false, false, false, false, null, null));
 
             assertNotNull(repository.findInvocationByKey("invocation:order:hash-new"), "裂键新档必须已建立");
             assertTrue(output.toString().contains("new profile established"));
@@ -408,7 +408,7 @@ class TaskReplayRunnerTest {
             profile.setAlgoVersion("det-v0");
             repository.saveInvocationProfile(profile);
 
-            assertEquals(2, runner.run(null, null, false, false, false, false, null, null));
+            assertEquals(2, runner.run(null, null, false, false, false, false, false, null, null));
             assertTrue(output.toString().contains("Judgment semantics version mismatch"));
         }
 
@@ -420,7 +420,7 @@ class TaskReplayRunnerTest {
             profile.setAlgoVersion(null);
             repository.saveInvocationProfile(profile);
 
-            assertEquals(2, runner.run(null, null, false, false, false, false, null, null));
+            assertEquals(2, runner.run(null, null, false, false, false, false, false, null, null));
         }
 
         @Test
@@ -428,7 +428,7 @@ class TaskReplayRunnerTest {
         void ciRefusesUnbaselined() {
             saveIdenticalLabeledChains();
 
-            assertEquals(2, runner.run(null, null, true, false, false, false, null, null));
+            assertEquals(2, runner.run(null, null, true, false, false, false, false, null, null));
             assertTrue(output.toString().contains("Refusing to judge in --ci mode"));
         }
 
@@ -438,7 +438,7 @@ class TaskReplayRunnerTest {
             saveIdenticalLabeledChains();
             establishedProfile("invocation:order:hash-a", "order", "hash-a");
 
-            assertEquals(0, runner.run(null, null, true, false, false, false, null, null));
+            assertEquals(0, runner.run(null, null, true, false, false, false, false, null, null));
         }
 
         @Test
@@ -448,7 +448,7 @@ class TaskReplayRunnerTest {
             TestExecutionConfig withModel = new TestExecutionConfig().timeoutMs(1000).temperature(null).model("another-model");
             TaskReplayRunner modelRunner = new TaskReplayRunner(repository, new StubLlmClient(), new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), withModel, new PrintStream(output, true), new PrintStream(output, true), false);
 
-            modelRunner.run(null, null, false, false, false, false, null, null);
+            modelRunner.run(null, null, false, false, false, false, false, null, null);
 
             assertTrue(output.toString().contains("differs from recorded models"), "换模型必须告警: " + output);
         }
@@ -460,7 +460,7 @@ class TaskReplayRunnerTest {
             saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"v\":1}", "model-b");
             establishedProfile("invocation:order:hash-a", "order", "hash-a");
 
-            runner.run(null, null, false, false, false, false, null, null);
+            runner.run(null, null, false, false, false, false, false, null, null);
 
             assertTrue(output.toString().contains("model identity changed"));
         }
@@ -472,7 +472,7 @@ class TaskReplayRunnerTest {
             saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"v\":2}", "model-b");
             establishedProfile("invocation:order:hash-a", "order", "hash-a");
 
-            runner.run(null, null, false, false, false, false, null, null);
+            runner.run(null, null, false, false, false, false, false, null, null);
 
             assertTrue(output.toString().contains("(served: model-b, baseline: model-a)"));
         }
@@ -482,7 +482,7 @@ class TaskReplayRunnerTest {
         void dryRun_readOnly() {
             saveIdenticalLabeledChains();
 
-            assertEquals(0, runner.run(null, null, false, true, false, false, null, null));
+            assertEquals(0, runner.run(null, null, false, true, false, false, false, null, null));
 
             assertNull(repository.findInvocationByKey("invocation:order:hash-a"), "dry-run 不得建档");
             assertTrue(output.toString().contains("Alignment plan"));
@@ -511,7 +511,7 @@ class TaskReplayRunnerTest {
         void reDrive_pass() {
             seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
 
-            assertEquals(0, runner.run(null, null, false, false, true, false, null, null));
+            assertEquals(0, runner.run(null, null, false, false, false, true, false, null, null));
             assertEquals(1, stubClient.calls, "仅漂移点重驱，恰一次调用");
             assertTrue(output.toString().contains("Re-drive:"));
             assertTrue(output.toString().contains("re-drive PASS"));
@@ -523,7 +523,7 @@ class TaskReplayRunnerTest {
             seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
             stubClient.setScriptedContent("{\"verdict\":\"flipped\"}");
 
-            assertEquals(1, runner.run(null, null, false, false, true, false, null, null));
+            assertEquals(1, runner.run(null, null, false, false, false, true, false, null, null));
             assertNotNull(repository.findInvocationByKey("invocation:order:skl-1").getCandidateFingerprint(), "重驱 CHANGED 必须落候选");
         }
 
@@ -536,7 +536,7 @@ class TaskReplayRunnerTest {
             establishedProfile("invocation:other:skl-2", "other", "hash-old");
             repository.saveTemplateText("hash-o2", "另一模板全文");
 
-            assertEquals(2, runner.run(null, null, false, false, true, false, 1, null));
+            assertEquals(2, runner.run(null, null, false, false, false, true, false, 1, null));
             assertEquals(1, stubClient.calls);
             assertTrue(output.toString().contains("budget exhausted"));
         }
@@ -547,7 +547,7 @@ class TaskReplayRunnerTest {
             seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
             stubClient.failWith(new LlmApiException("simulated outage"));
 
-            assertEquals(2, runner.run(null, null, false, false, true, false, null, null));
+            assertEquals(2, runner.run(null, null, false, false, false, true, false, null, null));
             assertTrue(output.toString().contains("All re-drive calls failed"));
         }
 
@@ -558,7 +558,7 @@ class TaskReplayRunnerTest {
             saveSkeletonRecord("b-1", "session-b", 2000L, "查订单", "order", "skl-1", "hash-new", "{\"result\":\"ok\"}");
             establishedProfile("invocation:order:skl-1", "order", "hash-old");
 
-            assertEquals(2, runner.run(null, null, false, false, true, false, null, null));
+            assertEquals(2, runner.run(null, null, false, false, false, true, false, null, null));
             assertEquals(0, stubClient.calls);
             assertTrue(output.toString().contains("archived template text missing"));
         }
@@ -572,7 +572,7 @@ class TaskReplayRunnerTest {
             establishedProfile("invocation:plain:hash-p", "plain", "hash-p");
             repository.saveTemplateText("hash-p", "普通模板全文");
 
-            runner.run(null, null, false, false, true, true, null, null);
+            runner.run(null, null, false, false, false, true, true, null, null);
             assertTrue(stubClient.calls >= 2, "扩域后非漂移点也应重驱: " + stubClient.calls);
         }
 
@@ -583,7 +583,7 @@ class TaskReplayRunnerTest {
             repository.saveTemplateText("hash-a", "归档模板全文");
             stubClient.setScriptedContent("{\"v\":1}");
 
-            assertEquals(0, runner.run("查订单", null, false, false, true, false, null, null));
+            assertEquals(0, runner.run("查订单", null, false, false, false, true, false, null, null));
             assertEquals(1, stubClient.calls, "缩域内调用点应被重驱");
             assertTrue(output.toString().contains("(all invocations in scope)"), output.toString());
         }
@@ -593,7 +593,7 @@ class TaskReplayRunnerTest {
         void reDrive_bare_zeroDrift_zeroTargets() {
             saveIdenticalLabeledChains();
 
-            assertEquals(0, runner.run(null, null, false, false, true, false, null, null));
+            assertEquals(0, runner.run(null, null, false, false, false, true, false, null, null));
             assertEquals(0, stubClient.calls);
             assertTrue(output.toString().contains("(drift points only)"), output.toString());
         }
@@ -603,7 +603,7 @@ class TaskReplayRunnerTest {
         void reDrive_dryRun_estimateOnly() {
             seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
 
-            assertEquals(0, runner.run(null, null, false, true, true, false, null, null));
+            assertEquals(0, runner.run(null, null, false, true, false, true, false, null, null));
             assertEquals(0, stubClient.calls);
             assertTrue(output.toString().contains("Re-drive plan"));
         }
@@ -620,7 +620,7 @@ class TaskReplayRunnerTest {
             ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
             TaskReplayRunner jsonRunner = new TaskReplayRunner(repository, new StubLlmClient(), new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
 
-            assertEquals(0, jsonRunner.run(null, null, false, false, false, false, null, null));
+            assertEquals(0, jsonRunner.run(null, null, false, false, false, false, false, null, null));
 
             String[] lines = jsonOut.toString().trim().split("\n");
             assertEquals("agentassert4j.task-report/1", extractJsonField(lines[0], "schema").replace("\"", ""));
@@ -638,7 +638,7 @@ class TaskReplayRunnerTest {
             ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
             TaskReplayRunner jsonRunner = new TaskReplayRunner(repository, new StubLlmClient(), new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
 
-            assertEquals(0, jsonRunner.run(null, null, false, false, false, false, null, null));
+            assertEquals(0, jsonRunner.run(null, null, false, false, false, false, false, null, null));
 
             assertTrue(jsonOut.toString().contains("\"action\":\"collected\""), jsonOut.toString());
             assertTrue(jsonOut.toString().contains("\"mode\":\"drift-detection\""));
@@ -665,6 +665,197 @@ class TaskReplayRunnerTest {
                 }
             }
             return false;
+        }
+    }
+
+    private TaskReplayRunner jsonRunner(ByteArrayOutputStream jsonOut) {
+        return new TaskReplayRunner(repository, new StubLlmClient(), new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
+    }
+
+    private static boolean hasLineWithMode(String[] lines, String mode) {
+        for (String line : lines) {
+            if (line.contains("\"mode\":\"" + mode + "\"")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 无标签多步链载体：同会话两条同文本记录并链（链派生契约），两步均无声明标签。
+     */
+    private void seedUnlabeledMultiStepChain(String sessionId, long baseTs) {
+        InteractionRecord first = new InteractionRecord();
+        first.setRecordId(sessionId + "-1");
+        first.setSessionId(sessionId);
+        first.setTimestamp(baseTs);
+        first.setSeq(baseTs);
+        first.setUserInput("问一下库存");
+        first.setTemplateHash("hash-a");
+        first.setInvocationKey("invocation:stock:hash-a");
+        first.setModelResponse("{\"stock\":1}");
+        repository.saveInteraction(first);
+        InteractionRecord second = new InteractionRecord();
+        second.setRecordId(sessionId + "-2");
+        second.setSessionId(sessionId);
+        second.setTimestamp(baseTs + 1000);
+        second.setSeq(baseTs + 1000);
+        second.setUserInput("问一下库存");
+        second.setTemplateHash("hash-a");
+        second.setInvocationKey("invocation:stock:hash-a");
+        second.setModelResponse("{\"stock\":2}");
+        repository.saveInteraction(second);
+    }
+
+    @Nested
+    @DisplayName("成员判定：--member-check 样本窗")
+    class MemberCheck {
+
+        @Test
+        @DisplayName("新链匹配任一历史链即成员（默认配对下本应 CHANGED）→ 退出码 0")
+        void memberMatchesHistoricalChain_pass() {
+            saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+            saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"v\":2}", null);
+            saveRecord("c-1", "session-c", 3000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+
+            TaskReplayRunner memberRunner = new TaskReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), false);
+
+            assertEquals(0, memberRunner.run(null, null, false, false, true, false, false, null, null));
+            assertTrue(output.toString().contains("Member: behavior matches historical chain (session session-a)"), output.toString());
+        }
+
+        @Test
+        @DisplayName("全样本不匹配 → CHANGED，最接近样本平局取最早")
+        void noMemberMatch_closestTieTakesEarliest() {
+            saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+            saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+            saveRecord("c-1", "session-c", 3000L, "查订单", "order", "hash-a", "{\"v\":9,\"extra\":true}", null);
+
+            assertEquals(1, runner.run(null, null, false, false, true, false, false, null, null));
+            String report = output.toString();
+            assertTrue(report.contains("No member match: closest historical chain is session session-a"), report);
+        }
+
+        @Test
+        @DisplayName("全样本无可比对步骤（缺/新增）→ 最接近样本仍取最早，不 NPE")
+        void noComparableEvidence_closestStillDefined() {
+            saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+            saveRecord("b-1", "session-b", 2000L, "查订单", "other", "hash-b", "{\"v\":1}", null);
+
+            assertEquals(1, runner.run(null, null, false, false, true, false, false, null, null));
+            String report = output.toString();
+            assertTrue(report.contains("No member match: closest historical chain is session session-a"), report);
+        }
+
+        @Test
+        @DisplayName("样本窗封顶 5：7 条历史链只核最近 5 条，JSON 报告携带窗与成员字段")
+        void sampleWindowCappedAtFive_jsonReport() {
+            for (int i = 1; i <= 7; i++) {
+                saveRecord("r-" + i, "session-" + i, 1000L * i, "查订单", "order", "hash-a", "{\"v\":1}", null);
+            }
+
+            ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+            assertEquals(0, jsonRunner(jsonOut).run(null, null, false, false, true, false, false, null, null));
+
+            String[] lines = jsonOut.toString().trim().split("\n");
+            assertTrue(hasLineWithMode(lines, "member-check"), "必须有成员判定报告行");
+            String memberLine = "";
+            for (String line : lines) {
+                if (line.contains("\"mode\":\"member-check\"")) {
+                    memberLine = line;
+                }
+            }
+            assertTrue(memberLine.contains("\"checked\":5,\"window\":5"), memberLine);
+            assertTrue(memberLine.contains("\"isMember\":true"), memberLine);
+            assertTrue(memberLine.contains("\"matchedSession\":\"session-2\""), "样本窗为最近 5 条（session-2..6），升序迭代首个匹配即报告: " + memberLine);
+        }
+    }
+
+    @Nested
+    @DisplayName("首航批改与出口健康摘要")
+    class FirstVoyageAndExitHealth {
+
+        @Test
+        @DisplayName("首航即批改：单链任务违反声明任务规则 → 退出码 1 并报告违规")
+        void firstVoyage_taskRuleViolation_exits1() {
+            saveDeclaredTaskRecord("a-1", "session-a", 1000L, "{\"result\":\"ok\"}");
+            establishedProfile("invocation:order:hash-a", "order", "hash-a");
+            InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"tasks\":{\"查订单\":{\"requiredSteps\":[\"confirm\"]}}}");
+            TaskReplayRunner ruledRunner = new TaskReplayRunner(repository, new StubLlmClient(), new DeterministicComparator(ComparatorConfig.defaults()), rules, TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), false);
+
+            assertEquals(1, ruledRunner.run(null, null, false, false, false, false, false, null, null));
+            assertTrue(output.toString().contains("Task rule violation"), output.toString());
+            assertTrue(output.toString().contains("Task rules apply from the first recording"), output.toString());
+        }
+
+        @Test
+        @DisplayName("出口健康摘要：人读行携带自建与零标签计数，全零不打印")
+        void exitHealth_humanLine() {
+            seedUnlabeledMultiStepChain("session-a", 1000L);
+
+            assertEquals(0, runner.run(null, null, false, false, false, false, false, null, null));
+            String report = output.toString();
+            assertTrue(report.contains("Health: 0 label splits, 1 self-established task, 1 multi-step unlabeled chain"), report);
+        }
+
+        @Test
+        @DisplayName("出口健康摘要：--json 模式以 exit-health 报告行收尾")
+        void exitHealth_jsonLine() {
+            seedUnlabeledMultiStepChain("session-a", 1000L);
+
+            ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+            assertEquals(0, jsonRunner(jsonOut).run(null, null, false, false, false, false, false, null, null));
+
+            String[] lines = jsonOut.toString().trim().split("\n");
+            assertTrue(lines[lines.length - 1].contains("\"mode\":\"exit-health\""), lines[lines.length - 1]);
+            assertTrue(lines[lines.length - 1].contains("\"selfEstablishedTasks\":1"), lines[lines.length - 1]);
+        }
+    }
+
+    @Nested
+    @DisplayName("优化信号与稳定性注记")
+    class SignalAndStability {
+
+        /**
+         * 同键双记录：基线链两步同响应；新链首步结构变化、次步恢复。
+         */
+        private void seedPairChainWithEarlyStop() {
+            saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+            saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+            saveRecord("b-1", "session-b", 3000L, "查订单", "order", "hash-a", "{\"v\":2,\"w\":3}", null);
+            saveRecord("b-2", "session-b", 4000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+        }
+
+        @Test
+        @DisplayName("优化信号与配对计数：首个 CHANGED 早停后 comparedPairs=1、skippedPairs=1")
+        void signalAndPairCounts_json() {
+            seedPairChainWithEarlyStop();
+
+            ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+            assertEquals(1, jsonRunner(jsonOut).run(null, null, false, false, false, false, false, null, null));
+
+            String[] lines = jsonOut.toString().trim().split("\n");
+            String alignLine = "";
+            for (String line : lines) {
+                if (line.contains("\"mode\":\"task-align\"") && line.contains("\"steps\":[")) {
+                    alignLine = line;
+                }
+            }
+            assertFalse(alignLine.isEmpty(), "必须有 task-align 报告行");
+            assertTrue(alignLine.contains("\"comparedPairs\":1,\"skippedPairs\":1"), alignLine);
+            assertTrue(alignLine.contains("\"signal\":{\"score\":0."), alignLine);
+            assertTrue(alignLine.contains("\"steps\":1}"), alignLine);
+        }
+
+        @Test
+        @DisplayName("稳定性注记：跨历史波动的人读行提示不追噪音")
+        void stabilityNote_fluctuatingPoint() {
+            seedPairChainWithEarlyStop();
+
+            assertEquals(1, runner.run(null, null, false, false, false, false, false, null, null));
+            String report = output.toString();
+            assertTrue(report.contains("Stability: 2 executions, 1 of 1 invocation point fluctuated across history"), report);
+            assertTrue(report.contains("do not chase noise"), report);
         }
     }
 

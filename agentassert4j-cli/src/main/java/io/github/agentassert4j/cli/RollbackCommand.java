@@ -59,7 +59,19 @@ public class RollbackCommand implements Callable<Integer> {
             if (jsonOutput) {
                 out.println("{\"schema\":\"agentassert4j.rollback/1\",\"invocationKey\":\"" + RecursiveJsonParser.escape(invocationKey) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(version) + "\",\"status\":\"" + reloaded.getBaselineStatus() + "\",\"approvedBy\":\"" + RecursiveJsonParser.escape(reloaded.getApprovedBy() != null ? reloaded.getApprovedBy() : "") + "\",\"codeRef\":\"" + RecursiveJsonParser.escape(reloaded.getCodeRef() != null ? reloaded.getCodeRef() : "") + "\",\"ok\":true}");
             } else {
-                out.println("  " + invocationKey + " → " + version + " (approver " + reloaded.getApprovedBy() + (reloaded.getCodeRef() != null ? ", ref " + reloaded.getCodeRef() : "") + ")");
+                // 审批事实按在场渲染：approvedBy=null 是合法形态（未经审批链盖章），
+                // 人读输出不得出现 "null" 字样
+                StringBuilder facts = new StringBuilder();
+                if (reloaded.getApprovedBy() != null) {
+                    facts.append("approver ").append(reloaded.getApprovedBy());
+                }
+                if (reloaded.getCodeRef() != null) {
+                    if (facts.length() > 0) {
+                        facts.append(", ");
+                    }
+                    facts.append("ref ").append(reloaded.getCodeRef());
+                }
+                out.println("  " + invocationKey + " → " + version + (facts.length() > 0 ? " (" + facts + ")" : ""));
             }
             return 0;
         } catch (CliFailureException e) {

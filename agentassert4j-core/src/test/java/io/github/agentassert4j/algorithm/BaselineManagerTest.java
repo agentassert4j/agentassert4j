@@ -875,11 +875,11 @@ class BaselineManagerTest {
     }
 
     @Nested
-    @DisplayName("\u4ee3\u7801\u951a - \u7533\u62a5\u5236\u5ba1\u8ba1\u6807\u6ce8")
+    @DisplayName("代码锚 - 申报制审计标注")
     class CodeRef {
 
         @Test
-        @DisplayName("approve \u643a\u5e26\u7684\u951a\u5199\u5165\u6d3b\u8dc3\u753b\u50cf\uff0c\u5f52\u6863\u884c\u4fdd\u7559\u65e7\u57fa\u7ebf\u81ea\u8eab\u7684\u951a")
+        @DisplayName("approve 携带的锚写入活跃画像，归档行保留旧基线自身的锚")
         void approve_stampsActive_archiveKeepsOld() {
             InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
             profile.setCodeRef("abc1234");
@@ -890,12 +890,12 @@ class BaselineManagerTest {
             InvocationProfile updated = repo.findInvocationByKey("gk-1");
             assertEquals("def5678", updated.getCodeRef());
             assertEquals(1, repo.archivedBaselines.size());
-            // \u5f52\u6863\u884c\u662f\u65e7\u57fa\u7ebf\u7684\u5feb\u7167\uff0c\u951a\u4e5f\u662f\u65e7\u57fa\u7ebf\u81ea\u5df1\u7684
+            // 归档行是旧基线的快照，锚也是旧基线自己的
             assertEquals("abc1234", repo.archivedBaselines.get(0).getCodeRef());
         }
 
         @Test
-        @DisplayName("rollback \u8fde\u951a\u4e00\u8d77\u56de\u9000\uff0c\u6d3b\u8dc3\u884c\u7684\u951a\u5fc5\u987b\u63cf\u8ff0\u5f53\u524d\u57fa\u7ebf\u81ea\u8eab")
+        @DisplayName("rollback 连锚一起回退，活跃行的锚必须描述当前基线自身")
         void rollback_restoresArchivedRef() {
             InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
             profile.setCodeRef("abc1234");
@@ -910,7 +910,7 @@ class BaselineManagerTest {
         }
 
         @Test
-        @DisplayName("\u7a7a\u767d\u951a\u5f52\u4e00\u4e3a null\uff0c\u7a7a\u7f3a\u5408\u6cd5")
+        @DisplayName("空白锚归一为 null，空缺合法")
         void blank_refNormalizedToNull() {
             InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
             repo.saveInvocationProfile(profile);

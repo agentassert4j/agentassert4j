@@ -1,6 +1,5 @@
 package io.github.agentassert4j.algorithm;
 
-import io.github.agentassert4j.model.Confidence;
 import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
@@ -10,7 +9,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -169,6 +167,20 @@ class DriftDetectorTest {
 
             assertFalse(report.hasDrift());
             assertTrue(report.getLabelSplits().isEmpty());
+        }
+
+        @Test
+        @DisplayName("存储键为空白的同标签记录不构成裂键（无键可言）")
+        void blankStoredKey_notReported() {
+            InvocationProfile existing = profile("invocation:order-flow:h1", "order-flow", "h1");
+            repo.saveInvocationProfile(existing);
+            InteractionRecord blankKey = fullTextRecord("r-1", "order-flow", "h1", 1000L);
+            blankKey.setInvocationKey("");
+            repo.saveInteraction(blankKey);
+
+            DriftReport report = DriftDetector.detect(repo);
+
+            assertTrue(report.getLabelSplits().isEmpty(), "空串不是键，不得报进漂移集: " + report.getLabelSplits());
         }
 
         @Test

@@ -91,11 +91,13 @@ public final class DriftDetector {
                 report.setSkippedQueries(report.getSkippedQueries() + 1);
                 continue;
             }
-            // 同标签下未建档的键 = 全文变更裂出的新细分键；同键多条记录取最新为投影
+            // 同标签下未建档的键 = 全文变更裂出的新细分键；同键多条记录取最新为投影。
+            // 存储键为空白的记录没有键可言（直连建档路径不经录制 enrich 派生键），
+            // 不构成裂键——否则空串会被当成一个"键"报进漂移集
             Map<String, List<InteractionRecord>> unestablished = new LinkedHashMap<>();
             for (InteractionRecord record : records) {
                 String key = record.getInvocationKey();
-                if (key == null || profileKeys.contains(key)) {
+                if (key == null || key.isEmpty() || profileKeys.contains(key)) {
                     continue;
                 }
                 unestablished.computeIfAbsent(key, k -> new ArrayList<>()).add(record);

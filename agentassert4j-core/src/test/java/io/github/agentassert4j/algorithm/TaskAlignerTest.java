@@ -77,6 +77,19 @@ class TaskAlignerTest {
     }
 
     @Test
+    @DisplayName("配对计数：首个 CHANGED 早停后 comparedPairs=1、skippedPairs=1（同键双记录）")
+    void comparedSkippedPairs_earlyStopOnFirstChanged() {
+        TaskAlignment alignment = TaskAligner.align(chain(labeledRecord("b1", 1000L, "x", "h1", "{\"v\":1}"), labeledRecord("b2", 2000L, "x", "h1", "{\"v\":1}")), chain(labeledRecord("n1", 5000L, "x", "h1", "{\"v\":2,\"w\":3}"), labeledRecord("n2", 6000L, "x", "h1", "{\"v\":1}")), comparator, null);
+
+        StepAlignment step = alignment.getSteps().get(0);
+        assertEquals(StepKind.MATCHED, step.getKind());
+        assertEquals(Verdict.CHANGED, step.getVerdict());
+        assertEquals(1, step.getComparedPairs(), "首个 CHANGED 即停，只执行了第一对判定");
+        assertEquals(1, step.getSkippedPairs(), "计划两对，早停后第二对计为 skipped");
+        assertEquals(0, step.getSurplusCount());
+    }
+
+    @Test
     @DisplayName("缺步骤：基线有新链无 → CHANGED + MISSING")
     void missingStep_changed() {
         TaskAlignment alignment = TaskAligner.align(chain(record("b1", 1000L, "invocation:x:h1", "答A"), record("b2", 2000L, "invocation:y:h2", "答B")), chain(record("n1", 5000L, "invocation:x:h1", "答A")), comparator, null);

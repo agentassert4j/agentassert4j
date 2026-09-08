@@ -75,15 +75,42 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
     裂键，含挂起点补证）。预算池合计封顶、原文缺席跳过可见、全败出 2；dry-run 出成本报价。
     【测试钉】`TaskReplayRunnerTest.ReDrive`（PASS/CHANGED 落候选/预算/全败/原文缺席/
     fullChain/缩域即域/bare 零漂移零目标/dry-run 九场景）
+13. **成员判定（--member-check）**：每任务最新链对同任务最近 N 条历史链逐一核成员资格，
+    样本窗上限 5（常量钉死，防「匹配任何历史」稀释判定）；任一样本行为全匹配（步级全
+    MATCHED+PASS）即合法成员，报告 matchedSession；全不匹配取信号分最高者为最接近样本
+    （升序迭代+严格大于=平局取最早），差异报告与候选登记挂在证据对齐上。任务纪律为样本
+    不变量，从证据对齐取一次计一份，不跨样本累计。缺省配对语义不变（最新 vs 次新）。
+    mode=member-check。【测试钉】`TaskReplayRunnerTest.MemberCheck`（匹配成员/平局取最早/
+    样本窗封顶与 JSON 字段）
+14. **首航即批改**：单链任务首航自建基线时，已声明 taskKey 且配了任务规则即现场评纪律——
+    违规折叠 exit 1（与对齐模式同语义），selfEstablished 报告携带 ruleViolations；
+    「基线声明、当前答卷」从第一份答卷生效，不必等第二条链。【测试钉】
+    `TaskReplayRunnerTest.FirstVoyageAndExitHealth.firstVoyage_taskRuleViolation_exits1`
+15. **优化信号（非判定）**：task-align/member-check 报告的 summary 携带 comparedPairs/
+    skippedPairs（对齐在首个 CHANGED 配对即停，聚合只承认已比对配对，缺失分数不默认补值）；
+    signal 对象=已比对步骤信号分均值（无已比对步骤时整体省略）。明示非判定——判定始终
+    二值。【测试钉】`TaskAlignerTest.comparedSkippedPairs_earlyStopOnFirstChanged` +
+    `TaskReplayRunnerTest.SignalAndStability.signalAndPairCounts_json`
+16. **稳定性注记（纯读侧）**：逐任务对组内全链逐调用点提取指纹（与判定同源），报告
+    executions/points/fluctuating[]（形态数 >1 的点）；判定不受影响（缺省配对最新 vs 次新、
+    成员模式见契约 13）。人读一行明示 informational 并提示不追噪音。【测试钉】
+    `TaskReplayRunnerTest.SignalAndStability.stabilityNote_fluctuatingPoint`
+17. **出口健康摘要**：replay/status/verify 出口附裂键/自建任务/多步零标签链三计数一行
+    （与 doctor 同源口径，`CliSupport.isMultiStepUnlabeled` 单源谓词）；人读全零不打印；
+    机器通道=status/1 与 verify-report/1 的 `health` 对象、replay 的 exit-health 报告行
+    （mode 封闭词表见 cli 契约 6）。【测试钉】
+    `TaskReplayRunnerTest.FirstVoyageAndExitHealth`（人读行/JSON 行）
 
 ## 行为矩阵
 
 | 场景 | 结果 |
 |---|---|
 | bare、全库无录制 | exit 2 + 录制引导（stderr in --json；机器包络见 cli 契约 7） |
-| bare、全部任务单链 | 逐任务自建基线，exit 0 |
+| bare、全部任务单链 | 逐任务自建基线，exit 0；声明任务有规则违例时首航即批改 exit 1（契约 14） |
 | bare、任务两链同构 | 对齐 PASS；无漂移出 0；有漂移按处置出口 |
 | 任一对齐 CHANGED / 缺步骤 / 新增 / 规则违规 | exit 1（CHANGED 步落候选） |
+| --member-check、新链匹配任一最近链 | 成员 PASS，exit 0，报告 matchedSession（契约 13） |
+| --member-check、全样本不匹配 | exit 1，按最接近样本报差异并落候选（契约 13） |
 | 漂移 + 步骤 PASS（开发态 / --ci） | 收编前移身份 / 不收编附警告；均 exit 0 |
 | 漂移 + 缺步骤 / 无可对齐链（bare） | 挂起，exit 1 |
 | 漂移 + 键不在缩域对齐范围 | 仅检测报告，不处置，不贡献退出码 |
@@ -92,6 +119,7 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
 | 任一画像判定语义版本不符 | exit 2 + 重建指引 |
 | dry-run | 只读预演（检测 + 对齐计划），恒 exit 0 |
 | 换模型执行 | 告警行，判定照常（结果不可比性留给使用者） |
+| 任意判定完成出口（dry-run 预演与 fail 除外） | 出口健康摘要一行（人读全零静默；JSON 为 exit-health 行/health 对象，契约 17） |
 
 ## 域间边界
 
@@ -113,5 +141,6 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
 
 | 日期 | 方式 | 发现 |
 |---|---|---|
+| 2026-09-08 | 优化包批实施（同日）：成员判定/首航批改/优化信号/稳定性注记/出口健康 | 契约 13–17 新增；mode 词表增 member-check 与 exit-health；对齐渲染抽出 renderAlignment 共用（task-align/member-check 两模式同源）；D9（evaluateTaskRules 提升 public）与 D3（comparedPairs/skippedPairs）随批兑现；信号/稳定性明示非判定，缺省判定语义零变更 |
 | 2026-09-04 | 盲跑复盘批（同日）：D1 同指纹候选短路 + 缩域即重驱域落地 | 契约 9 增补登记前置（候选≠现役指纹，governance.md 同步）；契约 12 增缩域分支；契约 10 增工件自愈语义——三处均来自 dogfood 门 13 盲跑的实际摩擦（无信息候选界面/定向复核无入口/工件任务长期 exit 1） |
 | 2026-09-03 | S7 成文：统一引擎落地代码全量对账（TaskReplayRunner/TaskAligner/TaskChainView） | ①调用点域采样引擎（ReplayRunner/ImpactAnalyzer/AnalysisResult）已随统一引擎批拆除，replay-report/1 模式随之退役（task-report/1 承接）；②「同键富余不判差异」与「缺步骤」的边界经测试夹具纠偏后钉清——富余=同键记录数不齐，缺步骤=键整组缺席；③重驱层为下一批次唯一人工对账项 |

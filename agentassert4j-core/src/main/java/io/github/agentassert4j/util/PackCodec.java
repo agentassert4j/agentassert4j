@@ -34,6 +34,7 @@ public final class PackCodec {
         meta.put("storageSchemaVersion", m.getStorageSchemaVersion());
         meta.put("frameworkVersion", m.getFrameworkVersion());
         meta.put("servedModel", m.getServedModel());
+        meta.put("codeRef", m.getCodeRef());
         root.put("meta", meta);
         List<Object> tasks = new ArrayList<>();
         for (AcceptancePack.PackTask task : pack.getTasks()) {
@@ -92,6 +93,7 @@ public final class PackCodec {
             m.setStorageSchemaVersion(meta.get("storageSchemaVersion") instanceof Number ? ((Number) meta.get("storageSchemaVersion")).intValue() : 0);
             m.setFrameworkVersion(asString(meta.get("frameworkVersion")));
             m.setServedModel(asString(meta.get("servedModel")));
+            m.setCodeRef(asString(meta.get("codeRef")));
             pack.setMeta(m);
         }
         if (root.get("tasks") instanceof List) {

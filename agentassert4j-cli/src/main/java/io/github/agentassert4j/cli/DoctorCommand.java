@@ -98,14 +98,7 @@ public class DoctorCommand implements Callable<Integer> {
 
         List<TaskChain> unlabeledMultiStep = new ArrayList<>();
         for (TaskChain chain : chains) {
-            boolean anyLabel = false;
-            for (InteractionRecord record : chain.getRecords()) {
-                if (record.getInvocationId() != null && !record.getInvocationId().isEmpty()) {
-                    anyLabel = true;
-                    break;
-                }
-            }
-            if (!anyLabel && chain.getRecords().size() > 1) {
+            if (CliSupport.isMultiStepUnlabeled(chain)) {
                 unlabeledMultiStep.add(chain);
             }
         }

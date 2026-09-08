@@ -1,9 +1,6 @@
 package io.github.agentassert4j.cli;
 
-import io.github.agentassert4j.algorithm.DeterministicComparator;
-import io.github.agentassert4j.algorithm.JudgmentSemantics;
-import io.github.agentassert4j.algorithm.TaskAligner;
-import io.github.agentassert4j.algorithm.TaskChainView;
+import io.github.agentassert4j.algorithm.*;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.AcceptancePack;
 import io.github.agentassert4j.model.BaselineStep;
@@ -200,9 +197,14 @@ public class VerifyRunner {
         if (crossModel) {
             info("Cross-model acceptance: dev side " + pack.getMeta().getServedModel() + " / local " + String.join(",", localServedModels) + "; structural verdicts valid, text differences are expected wording variation.");
         }
+        CliSupport.ExitHealth health = new CliSupport.ExitHealth(DriftDetector.detect(repository), localChains);
+        String healthLine = health.humanLine();
+        if (healthLine != null) {
+            info(healthLine);
+        }
 
         if (jsonMode) {
-            out.println(verifyJson(pack, packDigest, pass, changed, missing, added, uncovered.size(), unmatchedLocal.size(), crossModel, taskJsons, uncovered, hints));
+            out.println(verifyJson(pack, packDigest, pass, changed, missing, added, uncovered.size(), unmatchedLocal.size(), crossModel, taskJsons, uncovered, hints, health.jsonFragment()));
         }
         if (reportPath != null) {
             writeMarkdownReport(reportPath, pack, packDigest, crossModel, rulesEmbedded, narrowedRun, localServedModels, reportSections, uncovered, unmatchedLocal, pass, changed, missing, added);
@@ -411,7 +413,7 @@ public class VerifyRunner {
         return hash == null || hash.length() <= 8 ? hash : hash.substring(0, 8);
     }
 
-    private String verifyJson(AcceptancePack pack, String digest, int pass, int changed, int missing, int added, int uncovered, int unmatchedLocal, boolean crossModel, List<String> taskJsons, List<String> uncoveredKeys, List<String> hints) {
+    private String verifyJson(AcceptancePack pack, String digest, int pass, int changed, int missing, int added, int uncovered, int unmatchedLocal, boolean crossModel, List<String> taskJsons, List<String> uncoveredKeys, List<String> hints, String healthFragment) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.verify-report/1\",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
         sb.append(",\"pack\":{\"digest\":\"").append(RecursiveJsonParser.escape(digest)).append("\",\"servedModel\":\"").append(RecursiveJsonParser.escape(pack.getMeta().getServedModel() != null ? pack.getMeta().getServedModel() : "")).append("\"}");
         sb.append(",\"summary\":{\"tasks\":").append(taskJsons.size()).append(",\"pass\":").append(pass).append(",\"changed\":").append(changed).append(",\"missing\":").append(missing).append(",\"added\":").append(added).append(",\"uncovered\":").append(uncovered).append(",\"unmatchedLocal\":").append(unmatchedLocal).append(",\"crossModel\":").append(crossModel).append("}");
@@ -421,6 +423,7 @@ public class VerifyRunner {
             quoted.add("\"" + RecursiveJsonParser.escape(key) + "\"");
         }
         sb.append(",\"uncoveredTaskKeys\":[").append(String.join(",", quoted)).append("]");
+        sb.append(",\"health\":").append(healthFragment);
         List<String> hintJsons = new ArrayList<>();
         for (String hint : hints) {
             hintJsons.add("\"" + RecursiveJsonParser.escape(hint) + "\"");

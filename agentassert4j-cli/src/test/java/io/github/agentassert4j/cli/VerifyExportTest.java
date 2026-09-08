@@ -13,6 +13,7 @@ import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 import io.github.agentassert4j.util.HashUtil;
+import io.github.agentassert4j.util.PackCodec;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -94,12 +95,17 @@ class VerifyExportTest {
     }
 
     private String exportPack(String dbPath, boolean includeSamples) throws Exception {
+        return exportPack(dbPath, includeSamples, null);
+    }
+
+    private String exportPack(String dbPath, boolean includeSamples, String codeRef) throws Exception {
         BaselineExportCommand command = new BaselineExportCommand();
         command.db = dbPath;
         command.out = new PrintStream(output, true);
         command.err = new PrintStream(output, true);
         command.includeSamples = includeSamples;
         command.outPath = tempDir.resolve("pack.json").toString();
+        command.codeRef = codeRef;
         Integer exit = command.call();
         assertEquals(0, exit, "导出应成功: " + output);
         return new String(Files.readAllBytes(Paths.get(command.outPath)), StandardCharsets.UTF_8);
@@ -130,6 +136,19 @@ class VerifyExportTest {
         Map<?, ?> fp = (Map<?, ?>) step.get("fingerprint");
         assertEquals(new HashSet<>(Arrays.asList("toolCallSet", "toolParamTypes", "outputContentType", "outputFieldPaths", "outputFieldTypeMap", "textLengthMagnitude", "requiredKeywords", "forbiddenKeywords", "regexPatterns", "declaredBehaviors", "hasError")), fp.keySet(), "指纹键集固定");
         assertTrue(json.contains("\"servedModel\":\"dev-model\""), json);
+        assertTrue(json.contains("\"codeRef\":null"), "未声明锚的包显式写 null 键: " + json);
+    }
+
+    @Test
+    @DisplayName("申报代码锚写入包本体：含引号的锚经 PackCodec 读回逐字保真")
+    void packCarriesCodeRef_quoteSafeRoundTrip() throws Exception {
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        establishBaselines();
+
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false, "ab\"12");
+
+        assertTrue(json.contains("\"codeRef\":"), "包本体必须携带 codeRef 键: " + json);
+        assertEquals("ab\"12", PackCodec.fromJson(json).getMeta().getCodeRef(), "锚经转义落盘，读回必须逐字保真");
     }
 
     @Test

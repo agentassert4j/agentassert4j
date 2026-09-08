@@ -59,7 +59,7 @@ public class BaselineService {
             InvocationProfile existing = repository.findInvocationByKey(invocationKey);
             boolean hadBaseline = existing != null && existing.getFingerprint() != null;
             if (hadBaseline && !force) {
-                out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + existing.getVersionTag() + ")");
+                out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + existing.getVersionTag() + ")" + refSuffix(existing.getCodeRef()));
                 if (outcomes != null) {
                     outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "exists", existing.getVersionTag(), existing.getCodeRef()));
                 }
@@ -69,7 +69,7 @@ public class BaselineService {
             if (force) {
                 if (hadBaseline) {
                     // 破坏性操作必须留痕：被覆盖的旧基线进入归档，rollback 可恢复
-                    out.println("  Warning: existing baseline " + existing.getVersionTag() + " (approved by " + existing.getApprovedBy() + ") of " + invocationKey + " will be rebuilt under the current semantics; the old baseline is archived and restorable via `rollback`.");
+                    out.println("  Warning: existing baseline " + existing.getVersionTag() + (existing.getApprovedBy() != null ? " (approved by " + existing.getApprovedBy() + ")" : "") + " of " + invocationKey + " will be rebuilt under the current semantics; the old baseline is archived and restorable via `rollback`.");
                 }
                 // 重建取桶内规范序首条可分组记录（分桶已剔除不可分组记录）；
                 // 逐条调用会让版本标签随记录数连跳
@@ -99,7 +99,7 @@ public class BaselineService {
             // 首条记录建立画像时 totalRecords=1，回填该分组的真实记录数
             created.setTotalRecords(records.size());
             repository.saveInvocationProfile(created);
-            out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "baseline re-established under the current judgment semantics (" + created.getVersionTag() + ")" : "baseline established"));
+            out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "baseline re-established under the current judgment semantics (" + created.getVersionTag() + ")" : "baseline established") + refSuffix(created.getCodeRef()));
             if (outcomes != null) {
                 outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), hadBaseline ? "reestablished" : "created", created.getVersionTag(), created.getCodeRef()));
             }
@@ -173,6 +173,14 @@ public class BaselineService {
             }
         }
         return "";
+    }
+
+    /**
+     * 人读行的申报锚后缀：只回显已落库的锚（真源在画像行），调用方声明值
+     * 未经空白归一前不进输出。
+     */
+    private static String refSuffix(String codeRef) {
+        return codeRef != null ? " (ref " + codeRef + ")" : "";
     }
 
     /**

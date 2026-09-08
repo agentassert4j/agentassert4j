@@ -81,13 +81,13 @@ class ReplayFlowTest {
             saveRecord("rec-2", "session-b", 2000L, "order", "hash-a", "same answer");
             establishAll();
 
-            assertEquals(0, runner().run(null, null, false, false, false, false, null, null));
+            assertEquals(0, runner().run(null, null, false, false, false, false, false, null, null));
         }
 
         @Test
         @DisplayName("空库冷启动 → 退出码 2 带录制引导")
         void coldStart_exit2() {
-            assertEquals(2, runner().run(null, null, false, false, false, false, null, null));
+            assertEquals(2, runner().run(null, null, false, false, false, false, false, null, null));
             assertTrue(output.toString().contains("No recorded interactions found"));
         }
     }
@@ -103,7 +103,7 @@ class ReplayFlowTest {
             saveRecord("rec-2", "session-b", 2000L, "order", "hash-a", "{\"result\":\"new\"}");
             establishAll();
 
-            assertEquals(1, runner().run(null, null, false, false, false, false, null, null));
+            assertEquals(1, runner().run(null, null, false, false, false, false, false, null, null));
             InvocationProfile profile = repository.findInvocationByKey("invocation:order:hash-a");
             assertEquals(BaselineStatus.CANDIDATE, profile.getBaselineStatus());
 
@@ -114,7 +114,7 @@ class ReplayFlowTest {
             assertNotNull(settled.getCandidateFingerprint() == null ? settled.getFingerprint() : null);
             assertEquals("v2", settled.getVersionTag());
             // 对齐层陈述的是「最近两次真实执行之间变了」——事实差异在新真实链入账前如实存续
-            assertEquals(1, runner().run(null, null, false, false, false, false, null, null));
+            assertEquals(1, runner().run(null, null, false, false, false, false, false, null, null));
             assertTrue(output.toString().contains("Alignment summary: PASS 0 | CHANGED 1"));
         }
 
@@ -124,14 +124,14 @@ class ReplayFlowTest {
             saveRecord("rec-1", "session-a", 1000L, "order", "hash-a", "{\"answer\":\"old\"}");
             saveRecord("rec-2", "session-b", 2000L, "order", "hash-a", "{\"result\":\"new\"}");
             establishAll();
-            runner().run(null, null, false, false, false, false, null, null);
+            runner().run(null, null, false, false, false, false, false, null, null);
 
             new BaselineManager(repository).reject("invocation:order:hash-a");
 
             InvocationProfile profile = repository.findInvocationByKey("invocation:order:hash-a");
             assertNull(profile.getCandidateFingerprint(), "reject 必须丢弃候选");
             assertEquals(BaselineStatus.BASELINE, profile.getBaselineStatus());
-            assertEquals(1, runner().run(null, null, false, false, false, false, null, null), "行为差异仍在，重放必须继续报告");
+            assertEquals(1, runner().run(null, null, false, false, false, false, false, null, null), "行为差异仍在，重放必须继续报告");
         }
 
         @Test
@@ -141,7 +141,7 @@ class ReplayFlowTest {
             saveRecord("rec-2", "session-b", 2000L, "order", "hash-a", "{\"result\":\"new\"}");
             establishAll();
             TaskReplayRunner engine = runner();
-            engine.run(null, null, false, false, false, false, null, null);
+            engine.run(null, null, false, false, false, false, false, null, null);
             DeterministicFingerprint oldBaseline = repository.findInvocationByKey("invocation:order:hash-a").getFingerprint();
 
             new BaselineManager(repository).approve("invocation:order:hash-a", "tester", null);
@@ -152,7 +152,7 @@ class ReplayFlowTest {
             InvocationProfile restored = repository.findInvocationByKey("invocation:order:hash-a");
             assertEquals(oldBaseline, restored.getFingerprint(), "回滚必须恢复旧基线指纹");
             assertEquals("hash-a", restored.getTemplateHash(), "回滚必须随归档恢复模板身份");
-            assertEquals(1, engine.run(null, null, false, false, false, false, null, null), "回滚后行为差异重新可见");
+            assertEquals(1, engine.run(null, null, false, false, false, false, false, null, null), "回滚后行为差异重新可见");
         }
     }
 
@@ -168,7 +168,7 @@ class ReplayFlowTest {
             saveRecord("rec-3", "session-c", 3000L, "poem", "hash-p", "{\"answer\":\"old\"}");
             saveRecord("rec-4", "session-d", 4000L, "poem", "hash-p", "{\"result\":\"new\"}");
             establishAll();
-            assertEquals(1, runner().run(null, null, false, false, false, false, null, null));
+            assertEquals(1, runner().run(null, null, false, false, false, false, false, null, null));
 
             ApproveCommand approve = new ApproveCommand();
             approve.db = tempDir.resolve("flow.db").toString();
@@ -196,12 +196,12 @@ class ReplayFlowTest {
             stale.setAlgoVersion("det-v0");
             repository.saveInvocationProfile(stale);
 
-            assertEquals(2, runner().run(null, null, false, false, false, false, null, null));
+            assertEquals(2, runner().run(null, null, false, false, false, false, false, null, null));
             assertTrue(output.toString().contains("Judgment semantics version mismatch"));
 
             new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", null, true, null, null, null);
             assertEquals(JudgmentSemantics.VERSION, repository.findInvocationByKey(key).getAlgoVersion());
-            assertEquals(0, runner().run(null, null, false, false, false, false, null, null));
+            assertEquals(0, runner().run(null, null, false, false, false, false, false, null, null));
         }
 
         @Test
@@ -226,7 +226,7 @@ class ReplayFlowTest {
             bare2.setModelResponse("{\"result\":\"ok\"}");
             repository.saveInteraction(bare2);
 
-            assertEquals(0, runner().run(null, null, false, false, false, false, null, null), "键派生列空缺由解析器现算兜底");
+            assertEquals(0, runner().run(null, null, false, false, false, false, false, null, null), "键派生列空缺由解析器现算兜底");
             assertEquals("invocation:order:hash-a", InvocationResolver.resolve(repository.findBySessionId("session-a").get(0)).getInvocationKey());
         }
 
@@ -237,7 +237,7 @@ class ReplayFlowTest {
             saveRecord("rec-2", "session-b", 2000L, null, "hash-a", "{\"result\":\"ok\"}");
             establishAll();
 
-            assertEquals(0, runner().run(null, null, false, false, false, false, null, null));
+            assertEquals(0, runner().run(null, null, false, false, false, false, false, null, null));
             assertNotNull(repository.findInvocationByKey("template:hash-a"), "未声明键必须建档");
         }
     }

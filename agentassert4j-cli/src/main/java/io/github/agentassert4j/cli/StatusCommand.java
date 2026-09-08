@@ -51,8 +51,9 @@ public class StatusCommand implements Callable<Integer> {
             repository = CliSupport.openRepository(db, jsonOutput ? err : out);
             List<InvocationProfile> allProfiles = repository.findAllInvocations();
             List<InvocationProfile> profiles = allProfiles;
+            DriftReport drift = DriftDetector.detect(repository);
+            Map<String, TemplateDriftState> driftByInvocationKey = templateDriftByInvocationKey(drift, allProfiles);
             Map<String, String> labelsByInvocationKey = businessLabelsByInvocationKey(repository);
-            Map<String, TemplateDriftState> driftByInvocationKey = templateDriftByInvocationKey(repository, allProfiles);
             // 缩域是人读巡检特性：--json 通道恒全量（机器消费方自行过滤），换算只在人读路径发生
             String labelFilter = jsonOutput ? null : CliSupport.resolveInvocationFilter(repository, invocation, out);
             int totalCount = allProfiles.size();
@@ -82,7 +83,7 @@ public class StatusCommand implements Callable<Integer> {
                     if (unestablishedJson.length() > 0) unestablishedJson.append(",");
                     unestablishedJson.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(footprint.invocationKey)).append("\",\"recordCount\":").append(footprint.recordCount).append("}");
                 }
-                out.println("{\"schema\":\"agentassert4j.status/1\",\"invocations\":[" + invocations + "],\"uncovered\":[" + uncoveredJson + "],\"unestablished\":[" + unestablishedJson + "]}");
+                out.println("{\"schema\":\"agentassert4j.status/1\",\"invocations\":[" + invocations + "],\"uncovered\":[" + uncoveredJson + "],\"unestablished\":[" + unestablishedJson + "],\"health\":" + new CliSupport.ExitHealth(drift, CliSupport.taskChains(repository)).jsonFragment() + "}");
                 return 0;
             }
 
@@ -111,6 +112,10 @@ public class StatusCommand implements Callable<Integer> {
                 out.println("Total: " + profiles.size() + " of " + totalCount + " invocation profiles (narrowed by --invocation).");
             } else {
                 out.println("Total: " + CliSupport.plural(profiles.size(), "invocation profile") + ".");
+            }
+            String healthLine = new CliSupport.ExitHealth(drift, CliSupport.taskChains(repository)).humanLine();
+            if (healthLine != null) {
+                out.println(healthLine);
             }
             return 0;
         } catch (CliFailureException e) {
@@ -192,8 +197,7 @@ public class StatusCommand implements Callable<Integer> {
      * 画像模板身份的漂移三态：与 replay 共用同一检测器单一真源，巡检不跑 replay
      * 就能看见「哪里漂了」。
      */
-    private static Map<String, TemplateDriftState> templateDriftByInvocationKey(StorageRepository repository, List<InvocationProfile> profiles) {
-        DriftReport drift = DriftDetector.detect(repository);
+    private static Map<String, TemplateDriftState> templateDriftByInvocationKey(DriftReport drift, List<InvocationProfile> profiles) {
         Map<String, TemplateDriftState> result = new HashMap<>();
         for (DriftReport.DriftPoint point : drift.getSameKeyDrifts()) {
             result.put(point.getInvocationKey(), TemplateDriftState.DRIFTED);

@@ -150,8 +150,11 @@ public final class TaskAligner {
      * 对齐收尾评任务规则（只对声明 taskKey 的任务生效，键 = 声明值精确相等）。
      * 计数与顺序都看新链的声明标签序列（规范序）；无标签步骤不参与。
      * 呈现顺序 = 规则声明序：requiredSteps → requiredOrder → steps。
+     *
+     * <p>public 供同引擎的多链消费方复用：成员判定在样本循环外对新链只评一次
+     * （结果不随基线样本变化），单链首航批改在无配对可用时直接评。</p>
      */
-    private static List<TaskRuleViolation> evaluateTaskRules(TaskChain newChain, InvocationRulesConfig rules) {
+    public static List<TaskRuleViolation> evaluateTaskRules(TaskChain newChain, InvocationRulesConfig rules) {
         if (rules == null || !rules.hasTaskRules() || !newChain.isDeclared()) {
             return Collections.emptyList();
         }
@@ -219,10 +222,12 @@ public final class TaskAligner {
         step.setVersionSwitch(baselineSubdivision != null && newSubdivision != null && !baselineSubdivision.equals(newSubdivision));
 
         ComparisonResult firstComparison = null;
+        int compared = 0;
         for (int i = 0; i < paired; i++) {
             BaselineStep b = baseSteps.get(i);
             InteractionRecord n = newRecords.get(i);
             ComparisonResult comparison = comparator.compare(b.getFingerprint(), FingerprintExtractor.extract(n, rules, n.getInvocationId()), n.getModelResponse());
+            compared++;
             if (firstComparison == null) {
                 firstComparison = comparison;
             }
@@ -234,11 +239,15 @@ public final class TaskAligner {
                 step.setNewModelResponse(n.getModelResponse());
                 step.setBaselineRecordId(b.getRecordId());
                 step.setNewRecordId(n.getRecordId());
+                step.setComparedPairs(compared);
+                step.setSkippedPairs(paired - compared);
                 return;
             }
         }
         step.setVerdict(Verdict.PASS);
         step.setComparison(firstComparison);
+        step.setComparedPairs(compared);
+        step.setSkippedPairs(0);
     }
 
     private static Map<String, List<InteractionRecord>> groupByInvocation(List<InteractionRecord> records) {

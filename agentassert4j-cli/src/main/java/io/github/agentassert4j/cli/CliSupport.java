@@ -9,6 +9,7 @@ import io.github.agentassert4j.config.InvocationRulesConfig.InvocationRule;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.model.TaskChain;
+import io.github.agentassert4j.result.DriftReport;
 import io.github.agentassert4j.spi.InteractionQueryStore;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
@@ -419,6 +420,72 @@ final class CliSupport {
      */
     static List<TaskChain> taskChains(StorageRepository repository) {
         return TaskChainView.resolveAll(repository);
+    }
+
+    /**
+     * 多步零标签链判定（doctor 身份段与出口健康摘要共用的单一口径）：
+     * 链内没有任何声明标签且步骤数 > 1——步骤可见性与任务规则都依赖标签。
+     */
+    static boolean isMultiStepUnlabeled(TaskChain chain) {
+        boolean anyLabel = false;
+        for (InteractionRecord record : chain.getRecords()) {
+            if (record.getInvocationId() != null && !record.getInvocationId().isEmpty()) {
+                anyLabel = true;
+                break;
+            }
+        }
+        return !anyLabel && chain.getRecords().size() > 1;
+    }
+
+    /**
+     * 出口健康摘要 — 裂键/自建任务/多步零标签链三计数，doctor 行动价值的
+     * 主流程出口压缩形态：计数来自与 doctor 同源的确定性事实，细节仍归 doctor。
+     */
+    static final class ExitHealth {
+        final int labelSplits;
+        final int selfEstablishedTasks;
+        final int multiStepUnlabeledChains;
+
+        ExitHealth(DriftReport drift, List<TaskChain> chains) {
+            this.labelSplits = drift.getLabelSplits().size();
+            Map<String, Integer> chainsByRequest = new LinkedHashMap<>();
+            for (TaskChain chain : chains) {
+                chainsByRequest.merge(chain.getRequestText(), 1, Integer::sum);
+            }
+            int selfEstablished = 0;
+            int unlabeled = 0;
+            for (TaskChain chain : chains) {
+                if (chainsByRequest.get(chain.getRequestText()) == 1) {
+                    selfEstablished++;
+                }
+                if (isMultiStepUnlabeled(chain)) {
+                    unlabeled++;
+                }
+            }
+            this.selfEstablishedTasks = selfEstablished;
+            this.multiStepUnlabeledChains = unlabeled;
+        }
+
+        boolean any() {
+            return labelSplits > 0 || selfEstablishedTasks > 0 || multiStepUnlabeledChains > 0;
+        }
+
+        /**
+         * 人读一行；全零返回 null（无行动价值就不占一行）。
+         */
+        String humanLine() {
+            if (!any()) {
+                return null;
+            }
+            return "Health: " + plural(labelSplits, "label split") + ", " + plural(selfEstablishedTasks, "self-established task") + ", " + plural(multiStepUnlabeledChains, "multi-step unlabeled chain") + " — `agentassert4j doctor` breaks these down.";
+        }
+
+        /**
+         * JSON 片段（含花括号），供 status/1、verify-report/1 与 exit-health 报告复用。
+         */
+        String jsonFragment() {
+            return "{\"labelSplits\":" + labelSplits + ",\"selfEstablishedTasks\":" + selfEstablishedTasks + ",\"multiStepUnlabeledChains\":" + multiStepUnlabeledChains + "}";
+        }
     }
 
     /**

@@ -23,7 +23,7 @@ schema、退出码契约、help 终态。
 |---|---|---|
 | `status` | 全部画像巡检 | `--diff`（候选差异+模板原文渲染）、`--invocation` 缩域（人读视图专属，`--json` 恒全量）、`--json`、`--db` |
 | `baseline` | 全部调用点建档（幂等） | `--force`（判定语义重建恢复路径）、`--invocation` 缩域、`--ref`（代码锚，申报制）、`--json` |
-| `replay` | 全项目漂移检测+逐任务对齐（零 LLM 调用） | `--task`/`--invocation` 复合缩域、`--ci`、`--re-drive`、`--full-chain`、`--max-total-calls`/`--max-total-tokens`、`--dry-run`、`--json` |
+| `replay` | 全项目漂移检测+逐任务对齐（零 LLM 调用） | `--task`/`--invocation` 复合缩域、`--ci`、`--re-drive`、`--member-check`（成员判定：最新链匹配任一最近链即通过）、`--full-chain`、`--max-total-calls`/`--max-total-tokens`、`--dry-run`、`--json` |
 | `approve` / `reject` | 裁决全部待裁决候选 | `--invocation` 缩域、`--json`；approve 另有 `--ref`（代码锚，申报制） |
 | `rollback` | 无缺省（--version 是操作宾语） | `--invocation`、`--version` |
 | `verify` | 无缺省（--pack 是操作宾语） | `--pack`、`--task` 前缀、`--dry-run`、`--report`、`--json` |
@@ -59,17 +59,25 @@ schema、退出码契约、help 终态。
 5. **verify 范围外链分级呈现**：缩域（--task）运行只出计数（前缀外不判定属预期，附一行说明），
    全量运行逐条列出、封顶 20 条后以计数收尾；退出码与 JSON 契约不受影响（范围外恒为
    informational）。【测试钉】`VerifyExportTest` 缩域抑制与全量封顶两钉
-6. **报告 schema**：status=agentassert4j.status/1（画像含 templateDrift 三态）；replay=
-   agentassert4j.task-report/1（mode: drift-detection / task-align / task-dry-run /
-   drift-disposition / task-re-drive）；裁决=agentassert4j.adjudication/1；验收=
-   agentassert4j.verify-report/1（含 dry-run mode）；导出=acceptance-pack/1（内嵌声明规则段：
+6. **报告 schema**：status=agentassert4j.status/1（画像含 templateDrift 三态；`health` 对象=
+   出口健康三计数）；replay=agentassert4j.task-report/1（mode: drift-detection / task-align /
+   task-dry-run / drift-disposition / task-re-drive / member-check / exit-health）；裁决=
+   agentassert4j.adjudication/1；验收=agentassert4j.verify-report/1（含 dry-run mode；判定
+   报告携带 `health` 对象同 status，dry-run 预演报告不携带）；导出=acceptance-pack/1（内嵌声明规则段：
    invocations/tasks 断言原文随包出境，verify 以包内规则对本地记录**对称**评估维度 3/4 与
    任务纪律——补齐参照源抽象的双路径同语义（库内路径用本地规则，包路径用包内规则）；
    无规则段的包降级跳过维度 3/4 并在报告注记）；doctor=agentassert4j.doctor/1（三段体检：
    身份/覆盖/规则，计数全量 + 样本封顶 3 条，样本请求文本与人类输出同款缩略）；失败=
    agentassert4j.error/1（契约 7）。报告与包元数据回显申报制代码锚 codeRef
    （baseline-report 逐调用点、adjudication/1、rollback/1、status/1、export-report/1、
-   acceptance-pack/1 的 meta；export 以 `--ref` 声明）。
+   acceptance-pack/1 的 meta；export 以 `--ref` 声明）；人读通道同词回显 `(ref X)`
+   （approve/rollback/baseline 建档与 exists 行/export 汇总行；审批事实按在场渲染，
+   approvedBy=null 的人读行不得出现 "null" 字样）。
+   task-align 与 member-check 报告的 summary 携带 `comparedPairs`/`skippedPairs`（首个
+   CHANGED 配对即停，聚合只承认已比对配对）；`signal` 对象（score=已比对步骤信号分均值、
+   steps=计数）为「优化信号」，明示非判定；`stability` 对象（executions/points/fluctuating[]
+   逐点历史形态数）为纯读侧波动注记。status/1、verify-report/1 的 `health` 对象与 replay
+   的 exit-health 报告行同源同词（裂键/自建任务/多步零标签链三计数；人读模式全零不打印）。
    开发期版本恒定，mode 扩展属开发期语义演进。【测试钉】`JsonContractTest` +
    `TaskReplayRunnerTest.JsonContract`（replay-report/1 已随统一引擎退役，禁止回归）
 7. **机器失败包络（agentassert4j.error/1）**：`--json` 模式下命令执行失败（exit 2）向 stdout

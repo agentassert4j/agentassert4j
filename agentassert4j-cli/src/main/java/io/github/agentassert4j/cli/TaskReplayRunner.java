@@ -3,10 +3,7 @@ package io.github.agentassert4j.cli;
 import io.github.agentassert4j.algorithm.*;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.InvocationProfile;
-import io.github.agentassert4j.model.RegressionTestResult;
-import io.github.agentassert4j.model.TaskChain;
+import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.result.*;
 import io.github.agentassert4j.result.TaskAlignment.StepKind;
 import io.github.agentassert4j.spi.LlmClient;
@@ -49,6 +46,12 @@ import java.util.*;
 public class TaskReplayRunner {
 
     private static final int TEXT_DIFF_BUDGET = 300;
+
+    /**
+     * 成员判定的样本窗上限——「任一历史链匹配即合法成员」的宽容度必须有界，
+     * 否则历史无限增长后新链总能匹配到某条旧链，判定被稀释成摆设。
+     */
+    private static final int MEMBER_SAMPLE_LIMIT = 5;
 
     private final StorageRepository repository;
     private final LlmClient llmClient;
@@ -117,14 +120,16 @@ public class TaskReplayRunner {
      * @param taskPrefix     任务文本前缀选择器（--task，与 --invocation 可复合 AND；null = 全部任务）
      * @param invocationKey  已解析的调用点键（--invocation，命中含该键记录的任务链；null = 不缩域）
      * @param ciMode         CI 模式：不自动建档，缩域内存在未建档调用点拒绝判定，漂移 PASS 不收编
-     * @param dryRun         只读预演：漂移集 + 对齐计划 + 重驱成本预估，不建档、不落图快照、不处置
+     * @param dryRun         只读预演：漂移集 + 对齐计划 + 重驱成本预估，不建档、不处置
+     * @param memberCheck    成员判定模式（--member-check）：最新链对同任务最近 N 条历史链
+     *                       逐一核成员资格，任一行为匹配即合法成员；缺省为最新 vs 次新配对
      * @param reDrive        受控重驱（第三层）：逐漂移点以最新归档模板真重驱录制输入，花 LLM 调用
      * @param fullChain      重驱扩域：取消「仅漂移点」裁剪，缩域内全部记录逐条重驱
      * @param maxTotalCalls  重驱预算池：本次运行真重驱调用次数上限（null = 不限）
      * @param maxTotalTokens 重驱预算池：本次运行真重驱 token 合计上限（null = 不限）
      * @return 进程退出码（0/1/2）
      */
-    public int run(String taskPrefix, String invocationKey, boolean ciMode, boolean dryRun, boolean reDrive, boolean fullChain, Integer maxTotalCalls, Integer maxTotalTokens) {
+    public int run(String taskPrefix, String invocationKey, boolean ciMode, boolean dryRun, boolean memberCheck, boolean reDrive, boolean fullChain, Integer maxTotalCalls, Integer maxTotalTokens) {
         executionConfig.validate();
 
         List<TaskChain> chains = CliSupport.taskChains(repository);
@@ -155,7 +160,7 @@ public class TaskReplayRunner {
         boolean narrowed = taskPrefix != null || invocationKey != null;
 
         if (dryRun) {
-            return dryRunPlan(scoped, reDrive, drift, narrowed);
+            return dryRunPlan(scoped, reDrive, drift, narrowed, memberCheck);
         }
 
         // --ci 未建档守卫：缩域内存在未建档调用点即拒绝判定——
@@ -194,10 +199,14 @@ public class TaskReplayRunner {
         List<List<TaskChain>> groups = groupByRequestText(scoped);
         for (List<TaskChain> group : groups) {
             if (group.size() == 1) {
-                printSelfEstablished(group.get(0));
+                printSelfEstablished(group.get(0), totals);
                 continue;
             }
-            alignTaskGroup(group.get(group.size() - 2), group.get(group.size() - 1), outcomes, totals, manager);
+            if (memberCheck) {
+                alignMemberGroup(group, outcomes, totals, manager);
+            } else {
+                alignTaskGroup(group, outcomes, totals, manager);
+            }
         }
 
         // 漂移处置状态机：每个缩域内的漂移点收敛到 收编/候选/挂起 之一
@@ -221,6 +230,17 @@ public class TaskReplayRunner {
         if (!jsonMode && totals.pendingCandidates > 0) {
             info("Pending adjudication: " + String.join(", ", pendingInvocationKeys()));
             info("Accept with `agentassert4j approve --invocation <prefix>`, or reject with `agentassert4j reject --invocation <prefix>`.");
+        }
+
+        // 出口健康摘要：doctor 行动价值的出口压缩形态，计数与 doctor 同源
+        CliSupport.ExitHealth health = new CliSupport.ExitHealth(drift, chains);
+        if (!jsonMode) {
+            String healthLine = health.humanLine();
+            if (healthLine != null) {
+                info(healthLine);
+            }
+        } else {
+            out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.EXIT_HEALTH.wireName() + "\",\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\",\"health\":" + health.jsonFragment() + "}");
         }
 
         // 退出码复合：行为差异或证据缺口（没跑够）→ 1；环境/预算截断 → 2；否则 0
@@ -458,7 +478,7 @@ public class TaskReplayRunner {
      * task-report/1 报告的 mode 封闭词表（wire 值冻结；与 guide/spec/cli.md 契约 6 同源）。
      */
     private enum TaskReportMode {
-        DRIFT_DETECTION("drift-detection"), TASK_ALIGN("task-align"), TASK_DRY_RUN("task-dry-run"), DRIFT_DISPOSITION("drift-disposition"), TASK_RE_DRIVE("task-re-drive");
+        DRIFT_DETECTION("drift-detection"), TASK_ALIGN("task-align"), TASK_DRY_RUN("task-dry-run"), DRIFT_DISPOSITION("drift-disposition"), TASK_RE_DRIVE("task-re-drive"), MEMBER_CHECK("member-check"), EXIT_HEALTH("exit-health");
 
         private final String wireName;
 
@@ -483,12 +503,114 @@ public class TaskReplayRunner {
     }
 
     /**
-     * 对齐一个任务组（基线链 → 新链），输出逐步报告并聚合键级结果；
+     * 对齐一个任务组（次新链 → 最新链），输出逐步报告并聚合键级结果；
      * CHANGED 步即测试行为，现场重提指纹落候选——候选不落库则 approve 在
      * 新进程中不可达（重放与裁决通常不同进程）。
      */
-    private void alignTaskGroup(TaskChain baseline, TaskChain newChain, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager) {
+    private void alignTaskGroup(List<TaskChain> group, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager) {
+        TaskChain baseline = group.get(group.size() - 2);
+        TaskChain newChain = group.get(group.size() - 1);
         TaskAlignment alignment = TaskAligner.align(baseline, newChain, comparator, rules);
+        Stability stability = stabilityOf(group);
+        info("Task \"" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "\": baseline chain (session " + baseline.getSessionId() + ") → new chain (session " + newChain.getSessionId() + ")");
+        if (rules != null && rules.hasTaskRules() && !newChain.isDeclared()) {
+            info("Note: task has no declared taskKey; task rules do not apply.");
+        }
+        AlignmentRender render = renderAlignment(alignment, baseline, newChain, outcomes, totals, manager, stability);
+        if (jsonMode) {
+            out.println(taskJson(TaskReportMode.TASK_ALIGN, newChain.getRequestText(), newChain.getSessionId(), alignment.getSteps().size(), render, alignment.getCrossVersionCount(), alignment.getBaselineTime(), alignment.getNewChainTime(), alignment.isPrefixDependent()));
+        }
+    }
+
+    /**
+     * 成员判定模式（--member-check）：最新链对同任务最近 N 条历史链（样本窗
+     * 上限常量钉死）逐一核成员资格。行为全匹配的第一条（时间升序）即合法成员；
+     * 全不匹配时取信号分最高者为最接近样本（升序迭代 + 严格大于 = 平局取最早），
+     * 差异报告与候选登记都挂在证据对齐上。任务纪律为样本不变量，从证据对齐
+     * 取一次计一份，绝不跨样本累计。
+     */
+    private void alignMemberGroup(List<TaskChain> group, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager) {
+        TaskChain newChain = group.get(group.size() - 1);
+        int checked = Math.min(MEMBER_SAMPLE_LIMIT, group.size() - 1);
+        List<TaskChain> samples = group.subList(group.size() - 1 - checked, group.size() - 1);
+        info("Task \"" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "\": member check — new chain (session " + newChain.getSessionId() + ") against the " + checked + " most recent chain(s) of " + (group.size() - 1) + " (window " + MEMBER_SAMPLE_LIMIT + ")");
+
+        TaskAlignment evidence = null;
+        TaskChain evidenceSample = null;
+        boolean member = false;
+        TaskAlignment closest = null;
+        TaskChain closestSample = null;
+        double closestScore = -1.0;
+        for (TaskChain sample : samples) {
+            TaskAlignment alignment = TaskAligner.align(sample, newChain, comparator, rules);
+            double score = signalScoreOf(alignment);
+            // 首样本必为最接近基线（后续须严格更高才替换）——平局取最早，
+            // 且全样本零比对（缺/新增步骤，无配对可判）时 closest 仍有定义
+            if (closest == null || score > closestScore) {
+                closestScore = score;
+                closest = alignment;
+                closestSample = sample;
+            }
+            if (!member && behaviorMatchesSample(alignment)) {
+                member = true;
+                evidence = alignment;
+                evidenceSample = sample;
+            }
+        }
+        if (!member) {
+            evidence = closest;
+            evidenceSample = closestSample;
+        }
+        if (member) {
+            info("Member: behavior matches historical chain (session " + evidenceSample.getSessionId() + "); no regression against the sample window.");
+        } else {
+            info("No member match: closest historical chain is session " + evidenceSample.getSessionId() + "; differences below are against that sample.");
+        }
+
+        Stability stability = stabilityOf(group);
+        AlignmentRender render = renderAlignment(evidence, evidenceSample, newChain, outcomes, totals, manager, stability);
+        if (jsonMode) {
+            StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.MEMBER_CHECK.wireName() + "\"");
+            sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
+            sb.append(",\"task\":{\"request\":\"").append(RecursiveJsonParser.escape(newChain.getRequestText())).append("\",\"sessionId\":\"").append(RecursiveJsonParser.escape(newChain.getSessionId())).append("\"}");
+            sb.append(",\"member\":{\"checked\":").append(checked).append(",\"window\":").append(MEMBER_SAMPLE_LIMIT).append(",\"isMember\":").append(member);
+            if (member) {
+                sb.append(",\"matchedSession\":\"").append(RecursiveJsonParser.escape(evidenceSample.getSessionId())).append('"');
+            } else {
+                sb.append(",\"closestSession\":\"").append(RecursiveJsonParser.escape(evidenceSample.getSessionId())).append('"');
+                if (closestScore >= 0) {
+                    sb.append(",\"closestScore\":").append(plainDecimal(closestScore));
+                }
+            }
+            sb.append('}');
+            appendCommonReport(sb, newChain.getRequestText(), newChain.getSessionId(), evidence.getSteps().size(), render, evidence.getCrossVersionCount(), evidence.getBaselineTime(), evidence.getNewChainTime(), evidence.isPrefixDependent());
+            out.println(sb.toString());
+        }
+    }
+
+    /**
+     * 成员资格的行为判据：全部步骤 MATCHED 且 PASS。任务纪律违规在 align 内
+     * 一致折叠进每条样本对齐的链级 verdict（样本不变量），故这里只看步级行为。
+     */
+    private static boolean behaviorMatchesSample(TaskAlignment alignment) {
+        if (alignment.getSteps().isEmpty()) {
+            return false;
+        }
+        for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
+            if (step.getKind() != StepKind.MATCHED || step.getVerdict() != Verdict.PASS) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 渲染并累计一条对齐：逐步报告、任务纪律违规行、汇总行、成本与注记、
+     * 优化信号行、稳定性注记；键级结果与聚合计数就地入账。JSON 组装件随返回，
+     * 由各模式的报告方法自行成形。
+     */
+    private AlignmentRender renderAlignment(TaskAlignment alignment, TaskChain baseline, TaskChain newChain, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager, Stability stability) {
+        AlignmentRender render = new AlignmentRender();
         List<TaskRuleViolation> violations = alignment.getRuleViolations();
         totals.ruleViolations += violations.size();
         Set<String> ruleRequiredLabels = new LinkedHashSet<>();
@@ -501,20 +623,12 @@ public class TaskReplayRunner {
         Map<String, InteractionRecord> baselineRecords = recordsById(baseline);
         Map<String, InteractionRecord> newRecords = recordsById(newChain);
 
-        info("Task \"" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "\": baseline chain (session " + baseline.getSessionId() + ") → new chain (session " + newChain.getSessionId() + ")");
-        if (rules != null && rules.hasTaskRules() && !newChain.isDeclared()) {
-            info("Note: task has no declared taskKey; task rules do not apply.");
-        }
-        int missing = 0;
-        int added = 0;
-        int changed = 0;
-        int pass = 0;
         int index = 0;
         for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
             index++;
             String label = CliSupport.displayKey(step.getInvocationKey());
             if (step.getKind() == StepKind.MISSING) {
-                missing++;
+                render.missing++;
                 String detail = "missing step: baseline invoked '" + label + "', new chain did not";
                 if (step.getInvocationLabel() != null && ruleRequiredLabels.contains(step.getInvocationLabel())) {
                     detail += " (task rule violation: required step)";
@@ -522,7 +636,7 @@ public class TaskReplayRunner {
                 info(stepLine(index, step.getInvocationKey(), detail));
                 worstOutcome(outcomes, step.getInvocationKey(), StepOutcome.GAP);
             } else if (step.getKind() == StepKind.ADDED) {
-                added++;
+                render.added++;
                 info(stepLine(index, step.getInvocationKey(), "added step: new chain invoked '" + label + "', baseline did not"));
                 worstOutcome(outcomes, step.getInvocationKey(), StepOutcome.GAP);
             } else {
@@ -531,7 +645,7 @@ public class TaskReplayRunner {
                 InteractionRecord baselineStepRecord = baselineRecords.get(step.getBaselineRecordId());
                 String served = servedModelNote(newStepRecord == null ? null : newStepRecord.getServedModel(), baselineStepRecord == null ? null : baselineStepRecord.getServedModel(), "baseline");
                 if (step.getVerdict() == Verdict.CHANGED) {
-                    changed++;
+                    render.changed++;
                     info(stepLine(index, step.getInvocationKey(), versionPrefix + step.getComparison().getSummary()) + served);
                     String note = textDiffNote(step.getBaselineModelResponse(), step.getNewModelResponse());
                     if (!note.isEmpty()) {
@@ -549,7 +663,7 @@ public class TaskReplayRunner {
                         }
                     }
                 } else {
-                    pass++;
+                    render.pass++;
                     info(stepLine(index, step.getInvocationKey(), versionPrefix + "PASS") + served);
                     worstOutcome(outcomes, step.getInvocationKey(), StepOutcome.PASS);
                 }
@@ -557,11 +671,20 @@ public class TaskReplayRunner {
                     info("    (uneven record counts on this invocation; " + step.getSurplusCount() + " surplus unpaired, excluded from judgment)");
                 }
             }
+            render.comparedPairs += step.getComparedPairs();
+            render.skippedPairs += step.getSkippedPairs();
+            if (step.getComparison() != null) {
+                render.signalScoreSum += step.getComparison().getScore();
+                render.signalSteps++;
+            }
         }
         for (TaskRuleViolation violation : violations) {
             info("Task rule violation: " + violation.getDetail());
         }
-        info("Alignment summary: PASS " + pass + " | CHANGED " + changed + " | missing " + missing + " | added " + added + (violations.isEmpty() ? "" : " | " + CliSupport.plural(violations.size(), "rule violation")) + (alignment.getCrossVersionCount() > 0 ? " | cross-version " + alignment.getCrossVersionCount() : ""));
+        info("Alignment summary: PASS " + render.pass + " | CHANGED " + render.changed + " | missing " + render.missing + " | added " + render.added + (violations.isEmpty() ? "" : " | " + CliSupport.plural(violations.size(), "rule violation")) + (alignment.getCrossVersionCount() > 0 ? " | cross-version " + alignment.getCrossVersionCount() : ""));
+        if (render.signalSteps > 0) {
+            info("Optimization signal: score " + String.format(Locale.ROOT, "%.2f", render.signalScoreSum / render.signalSteps) + " over " + CliSupport.plural(render.signalSteps, "compared step") + " (" + CliSupport.plural(render.comparedPairs, "pair") + " compared, " + render.skippedPairs + " skipped; informational, not a verdict)");
+        }
         ChainCost baselineCost = new ChainCost(baseline);
         ChainCost currentCost = new ChainCost(newChain);
         info("Cost: baseline " + formatTokens(baselineCost.tokens) + formatCost(baselineCost.costUsd) + " → current " + formatTokens(currentCost.tokens) + formatCost(currentCost.costUsd));
@@ -575,28 +698,166 @@ public class TaskReplayRunner {
         if (!modelShift.isEmpty()) {
             info(modelShift);
         }
+        String stabilityLine = stability.humanLine();
+        if (!stabilityLine.isEmpty()) {
+            info(stabilityLine);
+        }
 
-        totals.pass += pass;
-        totals.changed += changed;
-        totals.missing += missing;
-        totals.added += added;
+        totals.pass += render.pass;
+        totals.changed += render.changed;
+        totals.missing += render.missing;
+        totals.added += render.added;
         totals.crossVersion += alignment.getCrossVersionCount();
-        if (changed + missing + added + violations.size() > 0) {
+        if (render.changed + render.missing + render.added + violations.size() > 0) {
             totals.anyTaskChanged = true;
         }
 
-        if (jsonMode) {
-            List<String> stepJsons = new ArrayList<>();
-            for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
-                String action = step.getKind() == StepKind.MISSING ? "missing" : step.getKind() == StepKind.ADDED ? "added" : "aligned";
-                stepJsons.add(alignedStepJson(action, step));
-            }
-            List<String> violationJsons = new ArrayList<>();
-            for (TaskRuleViolation violation : violations) {
-                violationJsons.add("{\"type\":\"" + violation.getType() + "\",\"label\":\"" + RecursiveJsonParser.escape(violation.getLabel()) + "\",\"detail\":\"" + RecursiveJsonParser.escape(violation.getDetail()) + "\"}");
-            }
-            out.println(taskJson(TaskReportMode.TASK_ALIGN, newChain.getRequestText(), newChain.getSessionId(), alignment.getSteps().size(), pass, changed, 0, 0, 0, missing, added, alignment.getCrossVersionCount(), stepJsons, alignment.getBaselineTime(), alignment.getNewChainTime(), alignment.isPrefixDependent(), violations.size(), violationJsons, costJson(baselineCost, currentCost)));
+        for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
+            String action = step.getKind() == StepKind.MISSING ? "missing" : step.getKind() == StepKind.ADDED ? "added" : "aligned";
+            render.stepJsons.add(alignedStepJson(action, step));
         }
+        for (TaskRuleViolation violation : violations) {
+            render.violationJsons.add("{\"type\":\"" + violation.getType() + "\",\"label\":\"" + RecursiveJsonParser.escape(violation.getLabel()) + "\",\"detail\":\"" + RecursiveJsonParser.escape(violation.getDetail()) + "\"}");
+        }
+        render.violations = violations;
+        render.costJson = costJson(baselineCost, currentCost);
+        render.stabilityJson = stability.jsonFragment();
+        return render;
+    }
+
+    /**
+     * 各模式共享的报告尾段（summary/signal/stability/steps/ruleViolations/时间/成本/前缀），
+     * 附加到已含 schema/mode/task 头部的构建器上。
+     */
+    private void appendCommonReport(StringBuilder sb, String request, String sessionId, int total, AlignmentRender render, int crossVersion, long baselineTime, Long newChainTime, boolean prefixDependent) {
+        sb.append(",\"summary\":{\"total\":").append(total).append(",\"pass\":").append(render.pass).append(",\"changed\":").append(render.changed).append(",\"inherited\":0,\"postDivergence\":0,\"skipped\":0,\"missing\":").append(render.missing).append(",\"added\":").append(render.added).append(",\"crossVersion\":").append(crossVersion);
+        if (render.violations != null && !render.violations.isEmpty()) {
+            sb.append(",\"ruleViolations\":").append(render.violations.size());
+        }
+        sb.append(",\"comparedPairs\":").append(render.comparedPairs).append(",\"skippedPairs\":").append(render.skippedPairs).append('}');
+        if (render.signalSteps > 0) {
+            sb.append(",\"signal\":{\"score\":").append(plainDecimal(render.signalScoreSum / render.signalSteps)).append(",\"steps\":").append(render.signalSteps).append('}');
+        }
+        if (render.stabilityJson != null) {
+            sb.append(",\"stability\":").append(render.stabilityJson);
+        }
+        sb.append(",\"steps\":[").append(String.join(",", render.stepJsons)).append(']');
+        if (render.violationJsons != null && !render.violationJsons.isEmpty()) {
+            sb.append(",\"ruleViolations\":[").append(String.join(",", render.violationJsons)).append(']');
+        }
+        sb.append(",\"baselineTime\":").append(baselineTime);
+        if (newChainTime != null) {
+            sb.append(",\"newChainTime\":").append(newChainTime);
+        }
+        if (render.costJson != null) {
+            sb.append(render.costJson);
+        }
+        if (prefixDependent) {
+            sb.append(",\"prefixDependent\":true");
+        }
+        sb.append('}');
+    }
+
+    /**
+     * 优化信号的单对齐聚合（成员判定的样本择优共用）：已比对步骤的信号分均值；
+     * 无任何已比对步骤时返回 -1（缺失不得默认补值）。
+     */
+    private static double signalScoreOf(TaskAlignment alignment) {
+        double sum = 0;
+        int steps = 0;
+        for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
+            if (step.getComparison() != null) {
+                sum += step.getComparison().getScore();
+                steps++;
+            }
+        }
+        return steps == 0 ? -1.0 : sum / steps;
+    }
+
+    /**
+     * 任务组的稳定性事实（纯读侧派生，不进判定）：同任务 N 条链里，逐调用点
+     * 统计历史指纹形态数——声明标签相同的步骤同点计数（与对齐分组同口径）。
+     * 指纹提取与判定同源，波动数 M > 1 的点即「追噪音风险点」。
+     */
+    private Stability stabilityOf(List<TaskChain> group) {
+        Stability stability = new Stability(group.size());
+        Map<String, Set<DeterministicFingerprint>> shapesByKey = new LinkedHashMap<>();
+        for (TaskChain chain : group) {
+            for (InteractionRecord record : chain.getRecords()) {
+                String label = record.getInvocationId();
+                String groupKey = label != null && !label.isEmpty() ? "L:" + label : CliSupport.invocationKeyOfRecord(record);
+                if (groupKey == null) {
+                    continue;
+                }
+                shapesByKey.computeIfAbsent(groupKey, k -> new LinkedHashSet<>()).add(FingerprintExtractor.extract(record, rules, record.getInvocationId()));
+            }
+        }
+        for (Map.Entry<String, Set<DeterministicFingerprint>> entry : shapesByKey.entrySet()) {
+            stability.points++;
+            if (entry.getValue().size() > 1) {
+                String displayKey = entry.getKey().startsWith("L:") ? entry.getKey().substring(2) : CliSupport.displayKey(entry.getKey());
+                stability.fluctuating.add(new FluctuatingPoint(displayKey, entry.getValue().size()));
+            }
+        }
+        return stability;
+    }
+
+    /**
+     * 稳定性注记的渲染件（人读一行 + JSON 片段），对齐与成员判定两模式共用。
+     */
+    private static final class Stability {
+        final int executions;
+        int points;
+        final List<FluctuatingPoint> fluctuating = new ArrayList<>();
+
+        Stability(int executions) {
+            this.executions = executions;
+        }
+
+        String humanLine() {
+            if (fluctuating.isEmpty()) {
+                return "Stability: " + CliSupport.plural(executions, "execution") + ", all " + CliSupport.plural(points, "invocation point") + " consistent across history (informational; not part of the verdict).";
+            }
+            return "Stability: " + CliSupport.plural(executions, "execution") + ", " + fluctuating.size() + " of " + CliSupport.plural(points, "invocation point") + " fluctuated across history (informational; not part of the verdict — do not chase noise).";
+        }
+
+        String jsonFragment() {
+            StringBuilder sb = new StringBuilder("{\"executions\":").append(executions).append(",\"points\":").append(points).append(",\"fluctuating\":[");
+            List<String> items = new ArrayList<>();
+            for (FluctuatingPoint point : fluctuating) {
+                items.add("{\"invocationKey\":\"" + RecursiveJsonParser.escape(point.key) + "\",\"distinctShapes\":" + point.distinctShapes + "}");
+            }
+            return sb.append(String.join(",", items)).append("]}").toString();
+        }
+    }
+
+    private static final class FluctuatingPoint {
+        final String key;
+        final int distinctShapes;
+
+        FluctuatingPoint(String key, int distinctShapes) {
+            this.key = key;
+            this.distinctShapes = distinctShapes;
+        }
+    }
+
+    /**
+     * 一条对齐的渲染产物：人读行已就地打印，聚合计数与 JSON 组装件随实例返回。
+     */
+    private static final class AlignmentRender {
+        int pass;
+        int changed;
+        int missing;
+        int added;
+        double signalScoreSum;
+        int signalSteps;
+        int comparedPairs;
+        int skippedPairs;
+        String costJson;
+        String stabilityJson;
+        List<TaskRuleViolation> violations;
+        final List<String> stepJsons = new ArrayList<>();
+        final List<String> violationJsons = new ArrayList<>();
     }
 
     /**
@@ -862,11 +1123,35 @@ public class TaskReplayRunner {
         return new ArrayList<>(groups.values());
     }
 
-    private void printSelfEstablished(TaskChain only) {
+    /**
+     * 单链任务首航：第一份录制自建基线；已声明 taskKey 且配了任务规则时，
+     * 首航即批改——「基线声明、当前答卷」的纪律从第一份答卷就生效，
+     * 违规与对齐模式同语义（折叠进退出码 1），不必等第二条链才能评。
+     */
+    private void printSelfEstablished(TaskChain only, AlignmentTotals totals) {
         info("Task \"" + CliSupport.abbreviateText(only.getRequestText(), 80) + "\" has a single chain (session " + only.getSessionId() + "); first recording becomes the baseline (" + CliSupport.plural(only.getRecords().size(), "step") + ").");
+        List<TaskRuleViolation> violations = TaskAligner.evaluateTaskRules(only, rules);
+        for (TaskRuleViolation violation : violations) {
+            info("Task rule violation: " + violation.getDetail());
+        }
+        if (!violations.isEmpty()) {
+            info("Task rules apply from the first recording; fix the behavior or adjust the declared rules before relying on this task.");
+            totals.ruleViolations += violations.size();
+            totals.anyTaskChanged = true;
+        }
         info("Re-run this command after the next real execution to pair against this baseline and produce an alignment report.");
         if (jsonMode) {
-            out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.TASK_ALIGN.wireName() + "\",\"selfEstablished\":true,\"task\":{\"request\":\"" + RecursiveJsonParser.escape(only.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(only.getSessionId()) + "\"},\"summary\":{\"total\":" + only.getRecords().size() + ",\"pass\":" + only.getRecords().size() + ",\"changed\":0,\"skipped\":0,\"missing\":0,\"added\":0},\"steps\":[],\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}");
+            StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.TASK_ALIGN.wireName() + "\",\"selfEstablished\":true,\"task\":{\"request\":\"" + RecursiveJsonParser.escape(only.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(only.getSessionId()) + "\"},\"summary\":{\"total\":" + only.getRecords().size() + ",\"pass\":" + only.getRecords().size() + ",\"changed\":0,\"skipped\":0,\"missing\":0,\"added\":0,\"comparedPairs\":0,\"skippedPairs\":0}");
+            if (!violations.isEmpty()) {
+                sb.append(",\"ruleViolations\":[");
+                List<String> violationJsons = new ArrayList<>();
+                for (TaskRuleViolation violation : violations) {
+                    violationJsons.add("{\"type\":\"" + violation.getType() + "\",\"label\":\"" + RecursiveJsonParser.escape(violation.getLabel()) + "\",\"detail\":\"" + RecursiveJsonParser.escape(violation.getDetail()) + "\"}");
+                }
+                sb.append(String.join(",", violationJsons)).append(']');
+            }
+            sb.append(",\"steps\":[],\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}");
+            out.println(sb.toString());
         }
     }
 
@@ -874,7 +1159,7 @@ public class TaskReplayRunner {
      * 只读预演：漂移集已在上文报告，这里列出将发生的任务配对与规则适用性，
      * 供 CI 在执行前核对选链是否如愿。
      */
-    private int dryRunPlan(List<TaskChain> scoped, boolean reDrive, DriftReport drift, boolean narrowed) {
+    private int dryRunPlan(List<TaskChain> scoped, boolean reDrive, DriftReport drift, boolean narrowed, boolean memberCheck) {
         List<List<TaskChain>> groups = groupByRequestText(scoped);
         info("Alignment plan (dry-run; no judgments, no baselines, no dispositions): " + CliSupport.plural(groups.size(), "task") + ", zero LLM calls.");
         if (reDrive) {
@@ -888,12 +1173,15 @@ public class TaskReplayRunner {
             TaskChain latest = group.get(group.size() - 1);
             if (group.size() == 1) {
                 info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": single chain (" + CliSupport.plural(latest.getRecords().size(), "step") + ") → first recording self-establishes the baseline.");
+            } else if (memberCheck) {
+                int checked = Math.min(MEMBER_SAMPLE_LIMIT, group.size() - 1);
+                info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": member check of new chain session " + latest.getSessionId() + " against the " + checked + " most recent chain(s) (window " + MEMBER_SAMPLE_LIMIT + "). Task rules: " + ruleApplicability(latest));
             } else {
                 TaskChain baseline = group.get(group.size() - 2);
                 info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": baseline session " + baseline.getSessionId() + " (" + CliSupport.plural(baseline.getRecords().size(), "step") + ") → new chain session " + latest.getSessionId() + " (" + CliSupport.plural(latest.getRecords().size(), "step") + "). Task rules: " + ruleApplicability(latest));
             }
             if (jsonMode) {
-                out.println(dryRunAlignJson(latest.getRequestText(), group.size() > 1 ? baselineSessionOf(group) : null, group.size() > 1 ? group.get(group.size() - 2).getRecords().size() : null, latest.getSessionId(), latest.getRecords().size()));
+                out.println(dryRunAlignJson(latest.getRequestText(), group.size() > 1 ? baselineSessionOf(group) : null, group.size() > 1 ? group.get(group.size() - 2).getRecords().size() : null, latest.getSessionId(), latest.getRecords().size(), memberCheck && group.size() > 1));
             }
         }
         return 0;
@@ -1015,34 +1303,16 @@ public class TaskReplayRunner {
         return note.length() <= TEXT_DIFF_BUDGET ? note : note.substring(0, TEXT_DIFF_BUDGET) + "...";
     }
 
-    private static String dryRunAlignJson(String request, String baselineSession, Integer baselineSteps, String newSession, int newSteps) {
-        return "{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.TASK_DRY_RUN.wireName() + "\",\"alignPlan\":{\"request\":\"" + RecursiveJsonParser.escape(request) + "\",\"baselineSession\":" + (baselineSession != null ? "\"" + RecursiveJsonParser.escape(baselineSession) + "\"" : "null") + ",\"baselineSteps\":" + (baselineSteps != null ? baselineSteps.toString() : "null") + ",\"newSession\":\"" + RecursiveJsonParser.escape(newSession) + "\"" + ",\"newSteps\":" + newSteps + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}";
+    private static String dryRunAlignJson(String request, String baselineSession, Integer baselineSteps, String newSession, int newSteps, boolean memberCheck) {
+        return "{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.TASK_DRY_RUN.wireName() + "\",\"alignPlan\":{\"request\":\"" + RecursiveJsonParser.escape(request) + "\",\"baselineSession\":" + (baselineSession != null ? "\"" + RecursiveJsonParser.escape(baselineSession) + "\"" : "null") + ",\"baselineSteps\":" + (baselineSteps != null ? baselineSteps.toString() : "null") + ",\"newSession\":\"" + RecursiveJsonParser.escape(newSession) + "\"" + ",\"newSteps\":" + newSteps + (memberCheck ? ",\"memberCheck\":true" : "") + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}";
     }
 
-    private static String taskJson(TaskReportMode mode, String request, String sessionId, int total, int pass, int changed, int inherited, int postDivergence, int skipped, int missing, int added, int crossVersion, List<String> steps, long baselineTime, Long newChainTime, boolean prefixDependent, Integer ruleViolationCount, List<String> ruleViolationJsons, String costJson) {
+    private String taskJson(TaskReportMode mode, String request, String sessionId, int total, AlignmentRender render, int crossVersion, long baselineTime, Long newChainTime, boolean prefixDependent) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"").append(mode.wireName()).append('"');
         sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
         sb.append(",\"task\":{\"request\":\"").append(RecursiveJsonParser.escape(request)).append("\",\"sessionId\":\"").append(RecursiveJsonParser.escape(sessionId)).append("\"}");
-        sb.append(",\"summary\":{\"total\":").append(total).append(",\"pass\":").append(pass).append(",\"changed\":").append(changed).append(",\"inherited\":").append(inherited).append(",\"postDivergence\":").append(postDivergence).append(",\"skipped\":").append(skipped).append(",\"missing\":").append(missing).append(",\"added\":").append(added).append(",\"crossVersion\":").append(crossVersion);
-        if (ruleViolationCount != null) {
-            sb.append(",\"ruleViolations\":").append(ruleViolationCount);
-        }
-        sb.append("}");
-        sb.append(",\"steps\":[").append(String.join(",", steps)).append("]");
-        if (ruleViolationJsons != null && !ruleViolationJsons.isEmpty()) {
-            sb.append(",\"ruleViolations\":[").append(String.join(",", ruleViolationJsons)).append("]");
-        }
-        sb.append(",\"baselineTime\":").append(baselineTime);
-        if (newChainTime != null) {
-            sb.append(",\"newChainTime\":").append(newChainTime);
-        }
-        if (costJson != null) {
-            sb.append(costJson);
-        }
-        if (prefixDependent) {
-            sb.append(",\"prefixDependent\":true");
-        }
-        return sb.append('}').toString();
+        appendCommonReport(sb, request, sessionId, total, render, crossVersion, baselineTime, newChainTime, prefixDependent);
+        return sb.toString();
     }
 
     /**

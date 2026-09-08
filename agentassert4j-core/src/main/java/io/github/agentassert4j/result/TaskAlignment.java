@@ -118,6 +118,16 @@ public class TaskAlignment {
          * 两侧记录数不齐时未被配对的富余侧计数（1:1 规范序配对，富余不判差异）
          */
         private int surplusCount;
+        /**
+         * 本步骤实际执行的配对判定数——首个 CHANGED 即停后剩余配对不再比对，
+         * 聚合口径只承认这里计入的配对
+         */
+        private int comparedPairs;
+        /**
+         * 计划配对中因首个 CHANGED 早停而未比对的数目（富余未配对侧不计入，
+         * 见 surplusCount）
+         */
+        private int skippedPairs;
         private String baselineModelResponse;
         private String newModelResponse;
         /**
@@ -218,6 +228,22 @@ public class TaskAlignment {
 
         public void setSurplusCount(int surplusCount) {
             this.surplusCount = surplusCount;
+        }
+
+        public int getComparedPairs() {
+            return comparedPairs;
+        }
+
+        public void setComparedPairs(int comparedPairs) {
+            this.comparedPairs = comparedPairs;
+        }
+
+        public int getSkippedPairs() {
+            return skippedPairs;
+        }
+
+        public void setSkippedPairs(int skippedPairs) {
+            this.skippedPairs = skippedPairs;
         }
 
         public String getBaselineModelResponse() {

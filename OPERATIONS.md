@@ -346,6 +346,28 @@ try {
 其余字段（`invocationKey`、`templateHash`（缺省由 `templateText` 派生）与 `skeletonHash` 由管道 enrich 派生兜底；`endpoint`/`modelRequestRaw` 为预留位）
 可不填。`metadata` 为 JSON 字符串扩展池，任务键声明写 `{"taskKey":"<场景id>"}`。
 
+### 8.1 声明配方：跟着 doctor 提示三步走
+
+声明不需要提前设计——先裸跑接入，doctor 与各命令出口会把值得声明的位置以确定性计数报出来，
+按提示逐层补声明即可。三步各解决一个问题：
+
+1. **调用点标签（`invocationId`）**——「这个调用点叫什么」。SDK 侧在适配注解/装配处声明；
+   starter 单技能应用一行完成（`agentassert4j.invocation-id=tavern`）；最小录制契约直接填
+   `r.setInvocationId("refund")`。声明标签后：调用点身份可跨模板版本稳定配对、任务规则有
+   步骤名可依。多步全无标签的链会出现在 doctor「multi-step unlabeled chains」计数里。
+2. **任务键（`taskKey`）**——「这条链属于哪个业务场景」。录制时在 `metadata` 写
+   `{"taskKey":"查订单"}`（或链首 userInput 即场景名，声明优先于派生）。声明后：同一场景
+   跨会话的多次执行自动配成「同一任务的多轮」，对齐/成员判定/任务规则全部按任务生效。
+   重复出现却未声明的请求文本族会出现在 doctor「repeated request-text families」里。
+3. **任务规则（rules.tasks）**——「这个场景必须怎么走」。声明 taskKey 后可在规则文件按
+   声明值加 `requiredSteps`/`requiredOrder`/`steps` 次数范围；任务纪律在任务首航即评
+   （单链也批改，违规折叠进 replay 退出码），此后每次对齐按新链侧评估。配了键却从未出现
+   声明链会在 doctor「tasks expectation mismatches」里报错位。
+
+发现-声明-验证的闭环：`agentassert4j doctor`（或 replay/status/verify 出口的 Health 一行）
+→ 按计数补上面对应层的声明 → 重新录制 → doctor 计数归零。全程零新机制，只是把录制契约
+里已有的三个可选字段按需点亮。
+
 ## 9. 版本与兼容语义
 
 | 标识 | 当前值 | 语义 |

@@ -43,6 +43,9 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--ci"}, description = "CI mode: no auto-establish; refuses to judge when the scope holds unestablished invocations (exit 2), drift identities are not collected (exit 0 with a warning); no governance writes from the pipeline")
     boolean ciMode;
 
+    @Option(names = {"--member-check"}, description = "Member determination: the latest chain of each task is checked against the most recent chains (bounded window) and passes if its behavior matches any of them; default pairing compares the latest chain against the previous one only")
+    boolean memberCheck;
+
     @Option(names = {"--re-drive"}, description = "Controlled re-drive (spends LLM calls): drift points by default, or every invocation in scope with --task/--invocation; re-drives recorded inputs with each point's latest archived template. Run --dry-run first for a cost estimate")
     boolean reDrive;
 
@@ -95,7 +98,7 @@ public class ReplayCommand implements Callable<Integer> {
             CliSupport.warnUnknownBehaviors(rules, jsonOutput ? err : out);
             CliSupport.warnMalformedTaskRules(rules, jsonOutput ? err : out);
 
-            return new TaskReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(task, resolvedInvocation, ciMode, dryRun, reDrive, fullChain, maxTotalCalls, maxTotalTokens);
+            return new TaskReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(task, resolvedInvocation, ciMode, dryRun, memberCheck, reDrive, fullChain, maxTotalCalls, maxTotalTokens);
         } catch (CliFailureException e) {
             return CliSupport.fail(jsonOutput, out, err, e);
         } catch (RuntimeException e) {

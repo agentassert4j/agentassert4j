@@ -48,6 +48,22 @@ class BaselineServiceTest {
     }
 
     @Test
+    @DisplayName("人读行回显已落库的申报锚：建档行与 exists 行都带 (ref X)")
+    void humanLinesEchoStoredCodeRef() {
+        repository.saveInteraction(makeRecord("rec-1", "skill-1", 1000L, "{\"ok\":true}"));
+        PrintStream out = new PrintStream(output, true);
+        BaselineService service = new BaselineService(repository);
+
+        service.establishMissing(out, "tester", "abc1234", false, null, null, null);
+        assertTrue(output.toString().contains(": baseline established (ref abc1234)"), output.toString());
+
+        output.reset();
+        service.establishMissing(out, "tester", "def5678", false, null, null, null);
+        String rerun = output.toString();
+        assertTrue(rerun.contains(": baseline exists (v1) (ref abc1234)"), "exists 行回显已落库的锚而非本次声明: " + rerun);
+    }
+
+    @Test
     @DisplayName("种子响应缺少必需关键词：建档完成但打印违规告警")
     void seedMissingRequiredKeyword_establishSucceedsWithWarning() {
         repository.saveInteraction(makeRecord("rec-1", "skill-1", 1000L, "已为您查询订单状态。"));
