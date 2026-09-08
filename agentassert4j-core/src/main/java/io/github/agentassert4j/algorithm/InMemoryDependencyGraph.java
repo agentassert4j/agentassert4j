@@ -92,8 +92,8 @@ public class InMemoryDependencyGraph {
         Map<String, GraphEdge> targets = outEdges.computeIfAbsent(src, k -> new LinkedHashMap<>());
         GraphEdge existing = targets.get(tgt);
         if (existing != null) {
-            // 已存在：升级置信度（保留最高的）
-            if (existing.getConfidence().ordinal() > confidence.ordinal()) {
+            // 已存在：升级置信度（保留最高的）——按显式秩比较，不依赖枚举声明顺序
+            if (existing.getConfidence().rank() > confidence.rank()) {
                 existing.setConfidence(confidence);
             }
             // 合并 throughNodes

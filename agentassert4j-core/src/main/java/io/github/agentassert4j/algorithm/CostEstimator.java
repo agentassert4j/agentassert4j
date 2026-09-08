@@ -17,8 +17,8 @@ import java.util.*;
  * 匹配把带日期的变体归入族价。查不到的模型不做货币估算——价格只是 token
  * 统计之上的装饰层，缺失时只报 token 消耗，不编造费用，也永不参与判定。</p>
  *
- * <p>两个入口共用同一张表：{@link #estimateCostPerCall} 用「假设 1000 输入
- * 500 输出 token」的固定口径做执行前预估文案与截断计算；{@link #estimateCallCostUsd}
+ * <p>两个入口共用同一张表：{@link #estimate} 用「假设 1000 输入
+ * 500 输出 token」的固定口径做执行前预估文案；{@link #estimateCallCostUsd}
  * 用调用实际 token 数在捕获时刻计价，冻结进记录的成本列。</p>
  *
  * @author axy-yxa
@@ -26,11 +26,6 @@ import java.util.*;
  */
 public final class CostEstimator {
 
-    /**
-     * 未知模型的兜底单价（美元/次）——仅供预算截断等内部算术使用，
-     * 绝不出现在面向用户的预估文案与捕获计价中（无价格不出货币数）
-     */
-    private static final double UNKNOWN_MODEL_PREVIEW_COST = 0.003;
     /**
      * 预估口径的假设 token 量：单次调用 1000 输入 / 500 输出
      */
@@ -69,20 +64,6 @@ public final class CostEstimator {
         }
         double estimatedCost = totalCalls * costPerCall;
         return String.format("Estimated %s, approx. $%.4f (model: %s)", calls, estimatedCost, model);
-    }
-
-    /**
-     * 按客户端名称（通常是模型名）估算单次调用成本（美元）——固定「1000 输入
-     * 500 输出 token」的预估口径，未知模型退回兜底单价。仅供预算截断等内部
-     * 算术使用；面向用户的预估文案走 {@link #estimate}（无价格不出货币数），
-     * 捕获时刻的精确计价走 {@link #estimateCallCostUsd}。
-     *
-     * @param clientName 客户端名称（通常是模型名称）
-     * @return 单次调用成本（美元）
-     */
-    public static double estimateCostPerCall(String clientName) {
-        Double cost = estimateCallCostUsd(clientName, PREVIEW_INPUT_TOKENS, PREVIEW_OUTPUT_TOKENS);
-        return cost != null ? cost : UNKNOWN_MODEL_PREVIEW_COST;
     }
 
     /**

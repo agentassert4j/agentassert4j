@@ -51,6 +51,26 @@ class InMemoryDependencyGraphTest {
     }
 
     @Test
+    void addEdge_duplicateNeverDowngrades() {
+        // 高置信边被后续低置信重复添加不得降级——合并方向钉死为「只升不降」
+        InMemoryDependencyGraph g = new InMemoryDependencyGraph();
+        g.addEdge("A", "B", Confidence.HIGH, null);
+        g.addEdge("A", "B", Confidence.LOW, null);
+        assertEquals(Confidence.HIGH, g.getAllEdges().get(0).getConfidence());
+
+        g.addEdge("C", "D", Confidence.LOW, null);
+        g.addEdge("C", "D", Confidence.TRANSPARENT, null);
+        assertEquals(Confidence.LOW, g.getAllEdges().get(1).getConfidence());
+    }
+
+    @Test
+    void confidence_rankIsIndependentOfDeclarationOrder() {
+        // 合并按显式秩比较：秩随置信度单调递减，与枚举常量声明顺序解耦
+        assertTrue(Confidence.HIGH.rank() < Confidence.LOW.rank());
+        assertTrue(Confidence.LOW.rank() < Confidence.TRANSPARENT.rank());
+    }
+
+    @Test
     void addEdge_transparentWithThroughNodes() {
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
         g.addEdge("A", "C", Confidence.TRANSPARENT, Collections.singletonList("B"));

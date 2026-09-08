@@ -53,30 +53,24 @@ class CostEstimatorTest {
     }
 
     @Test
-    void estimateCostPerCall_previewUsesAssumptionTokens() {
+    void estimateCallCostUsd_previewBasis_tokens() {
         // 预估口径固定 1000 输入 / 500 输出：gpt-4o → 2.5e-3 + 5e-3
-        assertEquals(0.0075, CostEstimator.estimateCostPerCall("gpt-4o"), DELTA);
+        assertEquals(0.0075, CostEstimator.estimateCallCostUsd("gpt-4o", 1000L, 500L), DELTA);
     }
 
     @Test
-    void estimateCostPerCall_ladder_longerKeyWins() {
+    void estimateCallCostUsd_ladder_longerKeyWins() {
         // 长键优先：mini 不得落进 gpt-4o 族价
-        assertEquals(0.00045, CostEstimator.estimateCostPerCall("gpt-4o-mini"), DELTA);
+        assertEquals(0.00045, CostEstimator.estimateCallCostUsd("gpt-4o-mini", 1000L, 500L), DELTA);
         // gpt-4o 比 gpt-4 更长，先参与匹配
-        assertEquals(0.0075, CostEstimator.estimateCostPerCall("gpt-4o"), DELTA);
-        assertEquals(0.06, CostEstimator.estimateCostPerCall("gpt-4"), DELTA);
+        assertEquals(0.0075, CostEstimator.estimateCallCostUsd("gpt-4o", 1000L, 500L), DELTA);
+        assertEquals(0.06, CostEstimator.estimateCallCostUsd("gpt-4", 1000L, 500L), DELTA);
     }
 
     @Test
-    void estimateCostPerCall_deepseekFamily() {
-        assertEquals(0.00049, CostEstimator.estimateCostPerCall("deepseek-chat"), DELTA);
-        assertEquals(0.00049, CostEstimator.estimateCostPerCall("deepseek-reasoner"), DELTA);
-    }
-
-    @Test
-    void estimateCostPerCall_unknownModel_fallbackPrice() {
-        assertEquals(0.003, CostEstimator.estimateCostPerCall("llama-3"), DELTA);
-        assertEquals(0.003, CostEstimator.estimateCostPerCall(null), DELTA);
+    void estimateCallCostUsd_deepseekFamily() {
+        assertEquals(0.00049, CostEstimator.estimateCallCostUsd("deepseek-chat", 1000L, 500L), DELTA);
+        assertEquals(0.00049, CostEstimator.estimateCallCostUsd("deepseek-reasoner", 1000L, 500L), DELTA);
     }
 
     @Test

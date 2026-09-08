@@ -10,13 +10,27 @@ public enum Confidence {
     /**
      * 字段值精确匹配
      */
-    HIGH,
+    HIGH(0),
     /**
      * 字段名前缀匹配
      */
-    LOW,
+    LOW(1),
     /**
      * 穿透压缩产生的透传边
      */
-    TRANSPARENT
+    TRANSPARENT(2);
+
+    private final int rank;
+
+    Confidence(int rank) {
+        this.rank = rank;
+    }
+
+    /**
+     * 置信度秩：数值越小置信越高。边合并按秩比较大小语义，
+     * 与枚举声明顺序解耦——重排枚举常量不得改变合并方向。
+     */
+    public int rank() {
+        return rank;
+    }
 }

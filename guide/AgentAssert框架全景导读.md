@@ -423,7 +423,7 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 | `agentassert4j baseline --force` | 按当前比对算法重建基线（旧基线自动存档） | 同上 | 不加 `--force` 时绝不覆盖已有基线 |
 | `agentassert4j baseline export` | 导出验收基线包（交付证据载体） | `--task <前缀>`（缩域）；`--include-samples`（脱敏样本）；`--out <文件>`（默认 `./acceptance-pack.json`）；`--json`（export-report/1：out/taskCount/stepCount/sha256/excluded 元数据报告） | 内容天然脱敏（结构指纹+键+声明规则段）；打印 SHA-256 供对账；未建档步骤或基线自违声明规则的链排除并警告 |
 | `agentassert4j status` | 查看调用点清单与基线状态 | `--diff`：展示待裁决的差异；`--json`（status/1） | 只看清单本体；已录制未建档的调用点在「Unestablished invocations」段列出 |
-| `agentassert4j doctor` | 库体检：身份/覆盖/规则三段确定性事实（骨架族、多步零标签链、未声明任务的重复请求族、未建档、规则期望错位），给声明建议 | 无必填参数 | 只读不判定不建档；退出码不承载门禁语义（正常恒 0，库打不开才 2） |
+| `agentassert4j doctor` | 库体检：身份/覆盖/规则三段确定性事实（骨架族、多步零标签链、未声明任务的重复请求族、未建档、规则期望错位），给声明建议 | 无必填参数（人读输出，无 `--json`） | 只读不判定不建档；退出码不承载门禁语义（正常恒 0，命令运行期故障统一出 2） |
 | `agentassert4j replay` | 全项目漂移检测 + 逐任务对齐（缺省零 LLM 调用） | `--task <前缀>` / `--invocation <目标>`（复合缩域）；`--ci`（不为无基线调用点建档、漂移不收编）；`--re-drive`（逐漂移点归档模板受控复核，花调用）+ `--full-chain`（扩为缩域内全部记录）+ `--max-total-calls/--max-total-tokens`（重驱预算池）；`--dry-run`（漂移集+对齐计划+重驱报价）；`--json`（task-report/1 逐行分段） | 缩域未命中/歧义出 2；`--ci` 缺档出 2；漂移 PASS 出 0 附未收编警告 |
 | `agentassert4j approve` / `reject` | bare 裁决全部待裁决候选（渲染候选差异 → 转正/丢弃） | `--invocation <目标>` 缩域；`--approver <名字>`（approve 专用，缺省取系统用户） | 无候选出 2 |
 | `agentassert4j rollback` | 把基线回滚到指定历史版本 | `--invocation <目标>` 与 `--version <版本号>`（**均必填**） | 缺任一参数直接报错 |
@@ -479,15 +479,15 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 **代码地图**：
 
 - `AgentAssert4jProperties`（starter 配置，前缀 `agentassert4j`）：`enabled`（默认 true，false 时自动装配整体退出、不建任何 Bean）+ `database`（默认 `agentassert4j.db`）+ `invocationId`（默认空串，应用级默认调用点标签）。刻意只有这三项——配置项是永久契约。
-- `AgentAssert4jAutoConfiguration`（boot3 在 `io.github.agentassert4j.springboot`，boot4 在 `io.github.agentassert4j.springboot4`，结构同构）：装配条件三个——classpath 有 `ChatModel`（无则静默退出）、`agentassert4j.enabled=true`（缺省视为 true）。产出三个 Bean：
+- `AgentAssert4jAutoConfiguration`（boot3 在 `io.github.agentassert4j.springboot`，boot4 在 `io.github.agentassert4j.springboot4`，结构同构）：装配条件两个——classpath 有 `ChatModel`（无则静默退出）、`agentassert4j.enabled=true`（缺省视为 true）。产出三个 Bean：
   1. `SqliteStorageRepository`（`destroyMethod="close"`，建库后立即 `initialize()` 建表）；
   2. `InteractionRecorder`（`destroyMethod="stop"`，构造后立即 `start()` 启动管道）；
   3. `static` 的 `RecordingChatModelPostProcessor`——**BeanPostProcessor，把容器内所有 ChatModel 包上 `RecordingChatModel`**，已包装的不重复包。static 的原因：BPP 必须在本配置类实例化之前注册，避免容器启动顺序告警；recorder 通过 `ObjectProvider` 延迟解析，保持启动顺序干净。
   - 用户自带 `StorageRepository`/`InteractionRecorder` Bean 时 `@ConditionalOnMissingBean` 让位——自带录制器需自行 start。
   - **启动期失败语义（有意决策）**：存储初始化失败会中断宿主启动——「录制框架静默失效（用户以为在录实际没录）」比启动失败更危险；不接受此语义的环境用 `enabled=false` 显式关闭。
 - `RecordingChatModel`（两代 SDK 各有一个，包 `springai1`/`springai2`）：装饰器，`call()` 计时捕获上下文后透传；`stream()` 在**调用线程**捕获 `RecordingContext` 闭包（聚合回调发生在异步完成信号线程，ThreadLocal 不可达），用 `MessageAggregator` 聚合完整响应后录制，TTFT 取首个 chunk。录制失败只 WARN 不抛——业务调用永远不被录制问题打断。1.x 的粒度说明：默认在 ChatModel 内部执行完整工具回路，装饰器视角一次 call = 完整工具回合（初始请求 + 最终聚合响应）。
-- `RecordingContext`（`AutoCloseable`）：`start(sessionId)` 开启作用域，`withInvocationId/withTemplateId/withMetadata` 链式声明，`close()` 恢复外层（可嵌套）。本质是栈式 ThreadLocal——**仅在声明线程内可见**，Reactor 链中从异步线程发起的调用取不到上下文，流式标注需在发起 stream() 的线程作用域内完成。`withMetadata` 也能携带任务键声明（第 11 章的 `taskKey`）。
-- 两代 SDK 差异：包名各自隔离（`springai1`/`springai2`、`springboot`/`springboot4`，两代坐标同名互斥必分模块）；缓存 token 在 ai1 走反射尽力提取、ai2 走 `Usage` 接口直读；Spring AI 2.x 的工具循环移到 ChatClient 的 Advisor 链（ChatModel 之上），装饰器天然逐轮可见。
+- `RecordingContext`（`AutoCloseable`，两代 SDK 各有一份同构实现，不在 core）：`start(sessionId)` 开启作用域，`withInvocationId/withTemplateId/withTemplateSkeleton/withMetadata` 链式声明，`close()` 恢复外层（可嵌套）。本质是栈式 ThreadLocal——**仅在声明线程内可见**，Reactor 链中从异步线程发起的调用取不到上下文，流式标注需在发起 stream() 的线程作用域内完成。`withMetadata` 也能携带任务键声明（第 11 章的 `taskKey`）。
+- 两代 SDK 差异：包名各自隔离（`springai1`/`springai2`、`springboot`/`springboot4`，两代坐标同名互斥必分模块）；缓存 token 在 ai1 走反射尽力提取（只探缓存读与思考 token，缓存写不留值）、ai2 走 `Usage` 接口直读（缓存读/写与思考 token 齐全）；Spring AI 2.x 的工具循环移到 ChatClient 的 Advisor 链（ChatModel 之上），装饰器天然逐轮可见。
 - **JDK8 手动路径**（第 8 幕老陈的系统）：不引 starter，手动装配 core + recorder + storage-sqlite 三个 jar，在自己的 LLM 调用出口组装 `InteractionRecord` 后调用 `recorder.intercept(record)`，并自行 `start()/stop()`。core 是全框架唯一零依赖模块，这是 JDK8 客户能接入的原因。
 
 **表结构（接入面写进记录的标记）**：`recorder_version` 列写 SDK 版本串（如 `agentassert4j-sdk-spring-ai1`），`api_protocol` 固定 `openai-chat`——描述落库数据的协议形状而非上游供应商；`provider` 由模型名前缀启发推断（deepseek→deepseek、gpt/o1/o3/o4→openai、claude→anthropic、qwen/qwq→qwen、gemini→gemini、llama→ollama、其余归 custom）。
@@ -517,18 +517,18 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 **代码地图**：
 
 - `InteractionRecorder`（实现 `RecordingInterceptor` SPI）——管道入口：
-  - `intercept(record)`：**先兜底再入队**——`recordId` 缺失时生成 UUID（存储层防重放语义依赖其唯一性）、`sessionId` 缺失时退化为独立会话（取 recordId，保住 NOT NULL 约束不炸批）；**到达即计数**；深拷贝脱敏；透传进程内单调 `seq`（丢弃造成的空洞合法，`(session_id, seq)` 是确定性排序键）；`tryNext()` 非阻塞入 RingBuffer，满时（`InsufficientCapacityException`）与发布异常均丢弃并计数 + WARN。整个方法 `synchronized`——与 `stop()` 互斥，否则无锁窗口内关停会把事件发布进已停摆的 RingBuffer（记录永久滞留且计数不闭合）。
+  - `intercept(record)`：**先兜底再入队**——`recordId` 缺失时生成 UUID（存储层防重放语义依赖其唯一性）、`sessionId` 缺失时退化为独立会话（取 recordId，保住 NOT NULL 约束不炸批）；**到达即计数**；深拷贝脱敏；透传进程内单调 `seq`（丢弃造成的空洞合法，`(session_id, seq)` 是确定性排序键）；`tryNext()` 非阻塞入 RingBuffer，满时（`InsufficientCapacityException`）与发布异常均丢弃并计数 + WARN。整个方法 `synchronized`——与 `stop()` 互斥，否则无锁窗口内关停会把事件发布进已停摆的 RingBuffer（记录永久滞留且计数不闭合）。注意兜底写发生在深拷贝之前：默认调用点标签、UUID `recordId`、`sessionId` 兜底都直接写**调用方传入的原记录**，之后才深拷贝脱敏——上游复用同一记录对象重复提交时，原对象会被框架改写。
   - `start()`：构建 Disruptor（`ProducerType.MULTI` 多生产者、`SleepingWaitStrategy`、守护线程工厂）+ 单线程定时 flush 调度器（默认 5 秒）；全局开关 `enabled=false` 时直接 no-op，不启动管道（生产打包形态）。
   - `stop()`：先 flush 剩余数据、停调度器，再 `disruptor.shutdown(10, SECONDS)`。
 - `BatchWriteHandler`（Disruptor `EventHandler`）——消费侧：
   - `onEvent`：`synchronized(buffer)` 内判断——缓冲达到 `maxBufferSize`（默认 500）时**丢弃新记录** + WARN（OOM 保护），否则入缓冲；缓冲达到 `batchSize`（默认 100）或本批次结束时触发 flush。
   - `flush`：交换出缓冲快照后清空原缓冲 → `enrich` → `saveInteractions` → 成功 `written` 计数；失败 `failed` 计数 + ERROR 日志，**不重试**（重试会阻塞消费线程，违背零侵入）。
-  - `enrich`：落库前补全派生字段——`invocation_key` 列有 NOT NULL 约束，缺失时用解析器派生值回填（否则整批 INSERT 失败）；**已有值不覆盖**（上游显式设置的调用点键优先）；单条补全失败不拦截落库（原始交互数据是真源）。指纹提取含响应体 JSON 解析，因此在消费线程执行，不占用业务线程。
+  - `enrich`：落库前补全派生字段——只回填三样：`template_hash`/`skeleton_hash` 两个哈希投影（sha256(模板全文)/sha256(骨架)，各只在缺失时回填）与 `invocation_key`（NOT NULL 约束，缺失时用解析器派生值回填，否则整批 INSERT 失败）；**已有值不覆盖**（上游显式设置的调用点键优先）；单条补全失败不拦截落库（原始交互数据是真源）。指纹不在这里提取——四维指纹只在判定域由 `FingerprintExtractor` 现场重提。这些派生计算都在后台线程执行（事件驱动 flush 在 Disruptor 消费线程、定时 flush 在调度线程、手动 flush/stop 在调用线程），永不占用业务线程。
 - `DataSanitizer`——脱敏器：
   - **无条件深拷贝**：脱敏配置只决定内容是否改写，不决定是否拷贝——消费线程的 enrich/序列化与上游对原对象的任何后续读写之间不得共享可变状态。`copyRecord` 复制全部 30 余个字段，toolCalls 逐个深拷贝（arguments 值树递归）、previousTurns 元素级深拷贝。
   - 脱敏范围：`toolCalls.arguments`（Map 任意深度递归，按键名忽略大小写匹配——嵌套结构里的敏感键是主阵地）；`toolCalls.result`（对含 JSON 的字符串做逐字符扫描的键值替换，DROP 策略回溯删除键名前空白与逗号，保证产物恒为合法 JSON）；`userInput`/`modelResponse` 可配置，**默认不脱敏**（改写会破坏回归重放的输入保真）。
   - `SanitizeStrategy` 三策略：`MASK`（默认，替换为 `***`）、`HASH`（SHA-256，保持唯一性不可逆）、`DROP`（整键删除）。
-- `RecorderConfig`（不可变，builder 构建）：`enabled=true`（总开关）、`ringBufferSize=16384`（向上取 2 的幂，上限 2^30）、`batchSize=100`、`flushIntervalMs=5000`、`maxBufferSize=500`（下限均钳 1）、`defaultInvocationId`（应用级默认声明）、采集门开关、脱敏四项（`sensitiveFields` 默认空、`sanitizeStrategy=MASK`、`sanitizeUserInput=false`、`sanitizeModelResponse=false`）。`batchSize` 大于 `maxBufferSize` 时钳位自愈（错配不丢数据）。
+- `RecorderConfig`（不可变，builder 构建）：`enabled=true`（总开关）、`ringBufferSize=16384`（向上取 2 的幂，下限 1、上限 2^30）、`batchSize=100`（下限钳 1）、`flushIntervalMs=5000`（无钳位，≤0 停用定时刷新，只剩批满与关停触发落库）、`maxBufferSize=500`（下限钳 1）、`defaultInvocationId`（应用级默认声明）、采集门开关、脱敏四项（`sensitiveFields` 默认空、`sanitizeStrategy=MASK`、`sanitizeUserInput=false`、`sanitizeModelResponse=false`）。`batchSize` 大于 `maxBufferSize` 时 maxBufferSize 被抬到 batchSize（错配自愈不丢数据）。
 
 **表结构（写侧与 NOT NULL 的契约）**：`interactions` 的 7 处 NOT NULL 约束（`record_id` 为 PRIMARY KEY）各有兜底或恒写链——`record_id`→UUID 兜底、`session_id`→recordId 兜底、`timestamp`→捕获侧恒写、`invocation_id`（声明位）→空串兜底、`invocation_key`→enrich 派生兜底、`tool_calls`/`has_tool_calls`→恒写（空表 JSON 与 0）。兜底的意义：任何一条记录都不会因为上游缺字段而炸掉整批 INSERT。
 
@@ -572,12 +572,12 @@ recorded（到达即计数） = written（批量写成功）
   `StorageRepository` 是聚合门面：`type()` / `initialize()` / `close()` 加上继承全部六域。录制管道只依赖 `InteractionWriteStore`（最小知识面）。插件平等：任何实现这六个接口的存储都可接入（R3），优先级链路里没有 `if (type=="sqlite")` 之类的硬编码（R4）。
 
 - `SqliteStorageRepository`（包 `io.github.agentassert4j.storage.sqlite`）：
-  - **全部公开方法 `synchronized`**：单连接策略下，多个 flush 源（批量/定时/手动/stop）并发进入会在事务层面互相交织吞批次——串行化是正确性前提，SQLite 本地写也无并发收益。
+  - **除只读的 `type()` 外全部公开方法 `synchronized`**：单连接策略下，多个 flush 源（批量/定时/手动/stop）并发进入会在事务层面互相交织吞批次——串行化是正确性前提，SQLite 本地写也无并发收益。
   - `initialize()`：建父目录 → `DriverManager.getConnection("jdbc:sqlite:"+dbPath)` → `setAutoCommit(true)` → `SchemaMigrator.migrate()`；失败时清理已开连接并抛 `StorageException`（starter 装配下即中断启动，见第 2 章的有意决策）。
   - `saveInteractions(list)`（录制管道主入口）：事务序列 = 关 autocommit → 逐条 INSERT → commit；异常时**先 `rollback` 再恢复 autocommit**——顺序不能反，因为对 sqlite-jdbc 的未决事务执行 `setAutoCommit(true)` 是一次隐式 COMMIT，会把半批脏数据悄悄落库。
   - `saveInteraction(单条)`：语义化单条入口，顺带 `persistTemplateTextQuietly`——把系统提示词原文写进 `prompt_texts`（`INSERT OR IGNORE` 首写为准；hash 不可逆，原文不落即永久丢失）。
-  - 查询：全部 `ORDER BY timestamp, seq, record_id`（确定性排序键，平局可决胜）；「谁在用这份提示词」的反查由 `findByTemplateHash` 承载（任务域与验收侧的链派生走 `findBySessionId`/`findAllSessionIds` 通道，缺省全量对齐后不再有按图裁剪的选链查询）。
-- `JsonMapper`（同包包私有类）：`toolCalls/turns/fingerprint/invocationProfile/archivedTemplateVersion` 与 JSON 的双向映射，构建在 `RecursiveJsonParser`（全框架唯一 JSON 真源）之上，容器一律 `LinkedHashMap/LinkedHashSet` 保插入序——**序列化字节可复现、可 diff**。指纹的 `fingerprint` 列 NOT NULL，空指纹与 null 的约定是 `"{}"`↔null 对写读对称。
+  - 查询：四个交互查询通道（按 invocationId/invocationKey/templateHash/sessionId）全部 `ORDER BY timestamp, seq, record_id`（确定性排序键，平局可决胜）；会话与画像列举无排序承诺，归档查询按 `archived_at DESC, rowid DESC`（同调用点同 tag 重复归档「最近者胜」tiebreaker 的载体）；「谁在用这份提示词」的反查由 `findByTemplateHash` 承载（任务域与验收侧的链派生走 `findBySessionId`/`findAllSessionIds` 通道，缺省全量对齐后不再有按图裁剪的选链查询）。
+- `JsonMapper`（同包包私有类）：`toolCalls/turns/fingerprint/invocationProfile/archivedTemplateVersion` 与 JSON 的双向映射，构建在 `RecursiveJsonParser`（全框架唯一 JSON 真源）之上：toolCalls/turns 等序列用 `LinkedHashMap` 保插入序，指纹的集合/映射字段经 core 的 `FingerprintJson` 以 `TreeSet`/`TreeMap` 自然序归序——**序列化字节可复现、可 diff**。指纹的 `fingerprint` 列 NOT NULL，空指纹与 null 的约定是 `"{}"`↔null 对写读对称。
 - `SchemaMigrator`（三段式）：库版本 **高于** 支持值 → 拒开（旧代码不得静默误读新语义）；**等于** → 直接返回；**低于** → 执行 `Schema.ALL_DDL` 建表并 `PRAGMA user_version = 1`。当前契约版本固定为 1：预发布阶段零兼容——schema 变更 = 删库重建，不存在任何「旧版迁移」代码。
 
 **表结构（五表逐列）**：
@@ -591,7 +591,7 @@ recorded（到达即计数） = written（批量写成功）
   - **遥测**：`input_tokens`/`output_tokens`/`cache_read_tokens`/`cache_write_tokens`/`reasoning_tokens`/`usage_raw`（供应商原始 usage 逐字保留）/`latency_ms`/`ttft_ms`/`cost_usd`（价格快照查得到才计价，查不到保持 null 不编造）；
   - **多轮与吸收**：`previous_turns`（JSON）、`metadata`（扩展属性池——任务键声明 `taskKey` 住这里，见第 11 章）、`recorder_version`。
   - 5 个索引：`idx_session_seq(session_id, seq)`（复合前缀同时覆盖单列查询）、`idx_invocation_id`、`idx_template_hash`、`idx_invocation_key`、`idx_timestamp`（第六个索引 `idx_archived_invocation` 在 `invocation_template_versions` 表上）。
-- `invocations`（15 列）：`invocation_key`(PK)、`label`（声明标签，可空）、`template_hash`（建档时模板哈希）、`invocation_name`、`invocation_type`（`TOOL`/`PURE_CHAT` 视图分类）、`fingerprint`(NOT NULL 现役基线)、`candidate_fingerprint`（可空候选）、`baseline_status`（默认 `BASELINE`）、`version_tag`、`algo_version`、`param_signature`、`approved_by`/`approved_at`（治理留痕）、`total_records`、`updated_at`。
+- `invocations`（15 列）：`invocation_key`(PK)、`label`（声明标签，可空）、`template_hash`（建档时模板哈希）、`invocation_name`/`invocation_type`（`TOOL`/`PURE_CHAT` 视图分类，均 NOT NULL 由建档派生回填）、`fingerprint`(NOT NULL 现役基线)、`candidate_fingerprint`（可空候选）、`baseline_status`（默认 `BASELINE`）、`version_tag`、`algo_version`、`param_signature`、`approved_by`/`approved_at`（治理留痕）、`total_records`（默认 0）、`updated_at`（NOT NULL，写入侧恒写）。
 - `invocation_template_versions`（9 列）：自增 `id`（同调用点同 tag 重复归档时「最近归档者胜」的 tiebreaker）+ `invocation_key`、`template_hash`（版本↔模板文本经 prompt_texts 可反查）+ 指纹与治理三列快照 + `archived_at`；索引 `idx_archived_invocation`。
 - `prompt_texts`（3 列）：`prompt_hash`(PK)/`prompt_text`/`created_at`，首写为准。
 - `graph_snapshot`（3 列）：`id`(DEFAULT `'current'`，整图单行)/`graph_json`/`updated_at`——图是派生数据，快照仅为巡检，可随时重建。
@@ -612,9 +612,9 @@ recorded（到达即计数） = written（批量写成功）
 
 **代码地图**：
 
-- `InteractionRecord`（`model/` 包 POJO，30 余个字段与 `interactions` 表 38 列一一对应，见第 4 章列组）——全框架的数据交换货币：SDK 捕获产出它、录制管道搬运它、CLI 分析消费它。`previousTurns` 是 `TurnContext` 列表（role/content/toolCallId/toolName/toolArguments，多轮历史与工具结果帧）；`ToolCall` 持有 toolName/toolCallId/arguments(Map)/argTypes(Map)/result/success。
+- `InteractionRecord`（`model/` 包 POJO）：字段与 `interactions` 表 38 列一一对应（见第 4 章列组），另有 `templateText`/`templateSkeleton` 两个瞬态声明字段不落列——templateText 经单条写旁路存入 `prompt_texts`，骨架只作哈希投影。它是全框架的数据交换货币：SDK 捕获产出它、录制管道搬运它、CLI 分析消费它。`previousTurns` 是 `TurnContext` 列表（role/content/toolCallId/toolName/toolArguments，多轮历史与工具结果帧）；`ToolCall` 持有 toolName/toolCallId/arguments(Map)/argTypes(Map)/result/success。
 - `InvocationResolver`（纯静态函数，无状态）——调用点身份的唯一真源，`resolve(record)` 派生逻辑（优先级从高到低，任一命中即停）：
-  - **锚点 1 声明锚点**：记录声明了 invocationId → invocationKey = `invocation:<标签>`，有模板时以 `:<细分哈希>` 细分同一标签内的多模板调用位置——细分哈希**骨架优先**（声明了模板骨架的调用点不随动态段组装漂移裂键），无骨架退全文哈希。形状不参与身份——同一声明下多形状分支的差异交给指纹暴露（这正是回归要抓的对象）。
+  - **锚点 1 声明锚点**：记录声明了 invocationId → invocationKey = `invocation:<标签>`，声明侧带骨架或模板时再以 `:<细分哈希>` 细分同一标签内的多模板调用位置——细分哈希**骨架优先**（声明了模板骨架的调用点不随动态段组装漂移裂键），无骨架退全文哈希，两者皆缺则不细分。形状不参与身份——同一声明下多形状分支的差异交给指纹暴露（这正是回归要抓的对象）。
   - **锚点 2 骨架锚点**：未声明但有骨架 → `skeleton:<skeletonHash>`。骨架 = 动态段（日期/环境/文件清单）替换为稳定占位符后的模板形态，出口声明式提供——**同骨架异全文同键**，agent harness 的组装后 system prompt 不再把每次运行变成新调用点。
   - **锚点 3 模板锚点**：未声明无骨架但 templateHash 非空 → invocationKey = `template:<templateHash>`。**工具调用与纯对话同分支**——形状（工具名/参数签名）已退出身份、降级为视图维度（`TOOL`/`PURE_CHAT` 分类与 paramSignature 列仅作展示与选例）。
   - **锚点 4 请求锚点兜底**：无声明无骨架无模板（无 system prompt 的应用）→ `adhoc:<sha256(modelRequestRaw)>`，退而 `adhoc:<sha256(userInput)>`，双缺失 `adhoc:no-anchor`（程序化构造防御）。键是溯源身份不是判定输入，因此输入派生键合法。
@@ -649,7 +649,7 @@ recorded（到达即计数） = written（批量写成功）
 - `ArgTypeUtil.derive(arguments)`：参数类型六词表 `string / number / boolean / object / array / null`（键小写），按**值的运行时形态**派生。捕获侧（SDK 填充）与重放侧（执行器从响应派生）共用此唯一实现——两侧词表一旦漂移，参数类型维就是无休止的假阳性。
 - `InvocationRulesConfig`（`agentassert4j-rules.json`）：`invocations.<invocationId>.{requiredKeywords, forbiddenKeywords, regexPatterns[{pattern,description}], behaviors}` 与 `tasks.<声明taskKey>.{requiredSteps, requiredOrder, steps{min,max}}`；解析失败安全退化为空配置；`InvocationRule` / `TaskRule` 不可变，未声明的调用点/任务返回共享 `EMPTY`。优先级：rules.json > 主配置内联 > 默认空。
 - `RegexPattern.matches`：`Pattern.compile(pattern).find()`；**非法正则按不匹配处理**（fail-closed）——坏规则在每条重放里都表现为可见的不匹配信号，而不是静默放行或崩溃。
-- `BehaviorChecker`：内置 8 个行为校验（`mustUseChinese`/`mustUseEnglish`/`returnsEmptyOnError`/`returnsErrorCode`/`noError`/`jsonOutput`/`nonEmptyOutput`/`containsCjk`），语言类判定用码点扫描而非正则（`.` 默认不匹配换行，多行中文输出会被正则误判）。**未知 behavior 默认通过**（不误报比漏报好），但 CLI 加载规则时对未知行为名显式告警并列出合法名单——笔误不再静默放行。
+- `BehaviorChecker`：内置 8 个行为校验（`mustUseChinese`/`mustUseEnglish`/`returnsEmptyOnError`/`returnsErrorCode`/`noError`/`jsonOutput`/`nonEmptyOutput`/`containsCjk`），语言类判定用码点扫描而非正则（`.` 默认不匹配换行，多行中文输出会被正则误判）。语义边界如实标注：`containsCjk` 的码点段同时覆盖日文假名（假名输出也通过）；`mustUseEnglish` = 含拉丁字母且不含 CJK；`returnsEmptyOnError` 当前以「输出含 `[]` 字面量」近似判空，含空数组的正常输出会误判通过（结构化判空待完善）。**未知 behavior 默认通过**（不误报比漏报好），但 CLI 加载规则时对未知行为名显式告警并列出合法名单——笔误不再静默放行。
 
 **关键语义——维度 3/4 的判定方向**：声明的规则**随基线指纹存档**，判定时取出基线声明的规则、对**当前输出的文本**做校验（关键词 `contains`、禁词、正则 `find`）。也就是说维度 3/4 是「基线声明、当前答卷」，不是两侧集合比对。第 12 章的验收包在此基础上把声明规则段**内嵌随包出境**（规则是断言而非提示词）：验收侧无需 rules.json 文件——维度 3/4 由包内指纹自带的声明集对本地输出校验，任务纪律由包内规则段评估；无规则段的包降级跳过并在报告注记。
 
@@ -682,7 +682,7 @@ recorded（到达即计数） = written（批量写成功）
   - `recordCandidate(baselineRecord, candidateFingerprint)`：重放对比非 PASS 时落候选。invocationKey 由解析器从基线记录**现场重算**；候选必须经持久层落库——重放与裁决通常不在同一进程，内存候选会让 approve 不可达。
   - `autoEstablishBaseline`（幂等建档：已有基线不覆盖）/ `reestablishBaseline`（`--force` 重建：被替换基线先归档留痕，版本按归档占用顺延；恢复出的旧语义基线会被重放入口的版本校验拒绝判定——属预期，再次重建即可）。建档以解析器产出为基底（invocation_name/invocation_type 等展示列来自解析派生，label/template_hash 自记录落列，裸画像会违反存储层 NOT NULL 契约）；指纹用三参提取（规则口径与重放同源）。
   - `stampApproval`（三条成为基线的路径共用）：`algoVersion = JudgmentSemantics.VERSION`；空白审批人归一为 **null**——`approvedBy=null` 是「未经审批链盖章」的异常信号，空白串落库会稀释该信号。
-- `BaselineService`（cli，`baseline` 命令与重放前置共用）：遍历 `recordedInvocationIds`（存储规范序），幂等建档；`--force` 重建时打印破坏性警告（既有基线版本与审批人点名）且**只取一条可解析记录作重建材料**（逐条调用会让版本标签随记录数连跳）；单条记录解析失败跳过不拦截；建档后回填 `totalRecords` 为真实录制数。建档后还会对声明了规则的调用点做**种子断言**：用声明规则校验种子记录的响应文本，违例（缺必需关键词/禁词出现/正则不命中）逐条打印告警——不阻断，只是让「基线自身就不满足规则」在建档现场可见。
+- `BaselineService`（cli，`baseline` 命令与重放前置共用）：遍历 `CliSupport.invocationBuckets`（全库记录按派生键分桶——桶键字典序的 TreeMap，桶内存储规范序），幂等建档；`--force` 重建时打印破坏性警告（既有基线版本与审批人点名）且**只取一条可解析记录作重建材料**（逐条调用会让版本标签随记录数连跳）；单条记录解析失败跳过不拦截；建档后回填 `totalRecords` 为真实录制数。建档后还会对声明了规则的调用点做**种子断言**：用声明规则校验种子记录的响应文本，违例（缺必需关键词/禁词出现/正则不命中）逐条打印告警——不阻断，只是让「基线自身就不满足规则」在建档现场可见。
 - CLI 命令面：`baseline --db --invocation --approver --force`；`approve/reject --invocation <目标> --approver（bare = 全部候选）`（**裁决前用 `FingerprintDiffRenderer` 渲染候选与基线的逐维差异**——replay 的 summary 是易失的进程输出，裁决常发生在另一进程另一时刻，渲染器把持久化的两份指纹摆到裁决者面前，补上「法官开庭时手里没有卷宗」的断档）；`rollback --invocation --version`（均必选）。
 
 **表结构**：`invocation_template_versions` 9 列（自增 id 是「同调用点同 tag 重复归档时最近者胜」的 tiebreaker）——归档行是基线按模板版本的完整快照：调用点键、模板哈希、指纹、版本、语义版本、审批人、审批时间。
@@ -701,14 +701,14 @@ recorded（到达即计数） = written（批量写成功）
 
 **设计问题**：两个指纹摆在一起，「有没有差异、差在哪、算不算回归」必须是一个纯函数的确定输出——同一对指纹在任何机器任何时间得到同一判定（R9）。本章就是那个纯函数。
 
-**概念与术语**：二值判定（PASS/CHANGED——任一维存在可行动差异即 CHANGED）、可行动差异（ignorableFields 归一化后仍不同的维度事实）、展示分（多维差异折算的 0–1 分，仅排序辅助、不参与判定）、可忽略字段（`ignorableFields`，已知噪声字段的白名单——归一化覆盖一切字段，含 error 类叶子名）、判定语义版本（裁决口径的版本戳，公开发布前恒定）。
+**概念与术语**：二值判定（PASS/CHANGED——任一维存在可行动差异即 CHANGED）、可行动差异（ignorableFields 归一化后仍不同的维度事实）、展示分（多维差异折算的 0–1 分，仅排序辅助、不参与判定）、可忽略字段（`ignorableFields`，已知噪声字段的白名单——归一化覆盖维度 2 的一切字段，含 error 类叶子名；维度 1 的参数类型映射是整体相等比对、不经归一化；字段类型按基线侧键遍历，仅在当前侧新增字段的类型变化由新增字段点名承接）、判定语义版本（裁决口径的版本戳，公开发布前恒定）。
 
 **代码地图**：
 
 - `DeterministicComparator.compare(baseline, current, currentOutput)`——判定 = 在 ignorableFields 归一化下逐维比对，**任一维度存在可行动差异即 CHANGED，否则 PASS**：
 
 1. **工具调用维**：工具集（排序后集合相等）与参数类型映射逐一相等；
-2. **输出结构维**：contentType 相同、纯文本长度数量级相同、字段集无增删（可忽略字段过滤后）、字段类型逐一相等——任一不满足即差异；
+2. **输出结构维**：contentType 相同、纯文本长度数量级相同、字段集无增删（可忽略字段过滤后）、字段类型逐一相等（按基线侧键遍历）——任一不满足即差异；
 3. **内容规则/约束行为维**：基线声明、当前答卷（关键词 contains、禁词、正则 find；内置行为校验）。
 
 历史上的「直判规则」（error 字段、字段删除、工具集变化直接判最高级）与 error 类叶子名词表随三态判定一并退役：二值语义下它们没有存在意义——error 字段就是普通的可行动差异，用户把它配置为可忽略即声明「它的出现不构成行为差异」，归一化覆盖一切字段。加权评分保留为展示分（无声明维度动态升权的四组权重不变），不参与任何分支判断。
@@ -750,10 +750,10 @@ recorded（到达即计数） = written（批量写成功）
 - `RegressionTestExecutor`（core，4 构造参数：llmClient/comparator/baselineManager/rules）——`execute(baselineRecord, newSystemPrompt, userInput, config)` 单条流程：
   1. dryRun → 直接返回 SKIP 结果，不调 LLM；
   2. `buildReplayRequest`：新 prompt 设为 systemPrompt；历史用户输入、多轮上下文（**完整复制**——tool 轮的 toolCallId/toolName 是与原对话对齐的关联键，丢弃会被服务端拒绝；system 帧不注入，模板域由 systemPrompt 承载；骨架声明不影响重放——请求重建与受控重驱的模板取回都以归档全文（template_hash）为准，骨架只定调用点身份）、工具定义（从录制 JSON 数组原样拆装——**重放不带工具，模型无法发起工具调用，工具维指纹必然假阳性**；损坏定义跳过宁可不带）；
-  3. **链式半重放（编排记录的专用路径）**：观察装饰产出的记录带完整编排与每轮结果，`execute` 在入口路由——结果道具齐备即走链式：拿基线录制的旧结果当道具，逐轮重建「当时输入」并比对响应的 tool_calls 与基线编排的下一片段（工具名 + 参数解析后严格相等；tool_call id 是关联键不参与），全部轮次匹配后末轮四维比对收口；分歧即停并输出「第 k 轮工具决策分歧」定位。合成帧（assistant 发起调用 + tool 结果）以合成 tool_call_id 关联、参数与结果内容无损——`TurnContext.toolArguments` 承载真实参数，历史录制帧仍以 "{}" 占位（协议校验只看结构）。结果道具缺失（录制时工具失败）退回单发重放；
+  3. **链式半重放（编排记录的专用路径）**：观察装饰产出的记录带完整编排与每轮结果，`execute` 在入口路由——结果道具齐备即走链式：拿基线录制的旧结果当道具，逐轮重建「当时输入」并比对响应的 tool_calls 与基线编排的下一片段（工具名 + 参数解析后严格相等；tool_call id 是关联键不参与），全部轮次匹配后末轮四维比对收口；分歧即停并输出「第 k 轮工具决策分歧」定位，且分歧结果**不落候选**——候选只从完整走完的末轮四维比对产生，分歧的处置靠报告定位后真实再执行或重驱复核。合成帧（assistant 发起调用 + tool 结果）以合成 tool_call_id 关联、参数与结果内容无损——`TurnContext.toolArguments` 承载真实参数，历史录制帧仍以 "{}" 占位（协议校验只看结构）。结果道具缺失（录制时工具失败）退回单发重放；
   4. `llmClient.chat` 异常三分类：`LlmTimeoutException` → TIMEOUT 结果、`LlmApiException` → API_ERROR、其余 RuntimeException → ERROR（客户端编程错误也转为单条结果，批量不中断）；
   5. 成功后 `buildCurrentRecord` 构造当前记录（不持久化）：重放路径的 `ToolCall.argTypes` 由 `ArgTypeUtil.derive` 按同一词表补齐（与捕获侧对称，否则参数类型维必失配）；调用时刻遥测（served/finishReason/usage/latency）就地落位；
-  6. **双侧都用三参提取**（基线记录与当前记录各自带规则提指纹）→ `comparator.compare`（第二参数是当前输出文本，供内容规则校验）；
+  6. **双侧都用三参提取**（基线记录与当前记录各自带规则提指纹）→ `comparator.compare`（第三参数是当前输出文本，供内容规则校验）；
   7. 非 PASS → `recordCandidate` 落候选（落库失败 SEVERE 留痕不中断批量）；`replayOutput` 透传候选原文（只存活于重放现场，裁决侧没有原文）。
 - `OpenAiCompatibleClient`（cli，`llm/` 子包）：基于 JDK `HttpURLConnection`（Java 8 可用、零 SDK 依赖），兼容 OpenAI/DeepSeek/通义等 chat 格式。要点：
   - 端点尾斜杠归一；请求路径 `/v1/chat/completions`；重试 `DEFAULT_MAX_RETRIES=2`，指数退避 1s/2s；可重试集合 = 429/5xx/ConnectException，**其余 IO 故障直接抛 `LlmApiException`**（重试洗白只会放大耗时并让故障形态失真）；`SocketTimeoutException` → `LlmTimeoutException` 不重试。
@@ -809,7 +809,7 @@ recorded（到达即计数） = written（批量写成功）
 **代码地图**：
 
 - `TaskChainView`（core `algorithm/`，纯静态函数）——任务链派生的唯一真源：
-  - `resolveSession(sessionId, records)`：传入记录不必有序，内部按规范序（timestamp→seq→recordId）重排后行走。记录 `userInput` 非 blank → 当前请求文本更新为该原文；记录归属「当前链」；会话开头没有请求文本的记录（纯 tool 起始）不属于任何任务链。同会话同文本重复提问**并入同一链**（键的字面定义，链内按规范序自然含两次执行；声明态不同的同名文本另开链）。
+  - `resolveSession(sessionId, records)`：传入记录不必有序，内部按规范序（timestamp→seq→recordId）重排后行走。记录 `userInput` 非 blank（两侧空白裁剪后判定）→ 当前请求文本更新为该原文；记录归属「当前链」；会话开头没有请求文本的记录（纯 tool 起始）不属于任何任务链。同会话**连续**的同文本重复提问并入当前链（键的字面定义，链内按规范序自然含两次执行；声明态不同的同名文本另开链）——中间隔了其他请求的同名文本（A→B→A）按链定义各开新链。
   - **声明优先**：记录 `metadata` JSON 含非 blank `"taskKey"`（公开常量 `DECLARED_TASK_KEY`）→ 以声明值为请求文本；供编排并发/改问法等派生失真场景逃生——声明来自录制 API 既有入口 `withMetadata`，零新增面。metadata 解析失败按未声明处理（R10）。
   - `resolveAll(repository)`：所有会话的链合并，按链首时间升序——跨会话配对与「取最新链」共用本口径。
 - `TaskAligner`（core `algorithm/`，纯比较，零 LLM 调用）：
@@ -881,13 +881,13 @@ recorded（到达即计数） = written（批量写成功）
 
 **代码地图**：
 
-- **命令全景**（picocli，根命令 `agentassert4j`，全部子命令带 `mixinStandardHelpOptions`）：`status` / `baseline`(含 `export`) / `replay` / `approve` / `reject` / `rollback` / `rules` / `graph show` / `verify` / `doctor` / `completion`。各命令的 bare 语义、参数终态与报告 schema **以 `guide/spec/cli.md` 为基准**（本表不再双写参数矩阵——replay help 的终态参数面有测试钉，拆除参数不复活）。JSON 输出通道是**全命令统一契约**（stdout 只产报告本体、诊断走 stderr、失败路径 stdout 零产出），由 `JsonContractTest` 逐命令钉住；根 help 以 exitCodeList 呈现退出码契约。
+- **命令全景**（picocli，根命令 `agentassert4j`，全部子命令带 `mixinStandardHelpOptions`）：`status` / `baseline`(含 `export`) / `replay` / `approve` / `reject` / `rollback` / `rules` / `graph show` / `verify` / `doctor` / `completion`。各命令的 bare 语义、参数终态与报告 schema **以 `guide/spec/cli.md` 为基准**（本表不再双写参数矩阵——replay help 的终态参数面有测试钉，拆除参数不复活）。JSON 输出通道是**全命令统一契约**（stdout 只产报告本体、诊断走 stderr、失败路径 stdout 零产出；doctor 以人读体检为主、未提供 `--json`），由 `JsonContractTest` 逐命令钉住；根 help 以 exitCodeList 呈现退出码契约。
 
 - `CliSupport`（包私有，命令间共用逻辑）：
   - `installUtf8Console`：主入口统一 UTF-8 直写标准流（绕过 Windows 控制台默认编码，中文报告不乱码）。
   - `openRepository`：加载配置后**先打印配置来源一行**（命中路径或「未找到用默认」——错误目录下的旧配置静默生效是最难查的排障黑洞），`~` 前缀展开后建库初始化。
   - `recordedInvocationIds`：走「session 全量 → 逐记录提取」通道收集业务标签（TreeSet 字典序稳定）。
-  - `resolveInvocationFilter`（status 人读缩域与 baseline 建档缩域用，标签命中其全部模板桶）：与业务 invocationId 精确相等按原义；否则显示短形反解或 invocationKey **唯一**前缀匹配并换算回业务标签（歧义前缀显式报错；对应调用点覆盖多个业务标签也报错并列出）。
+  - `resolveInvocationFilter`（status 人读缩域与 baseline 建档缩域用，标签命中其全部模板桶）：与业务 invocationId 精确相等按原义；否则显示短形反解或 invocationKey **唯一**前缀匹配并换算回业务标签（歧义前缀显式报错；对应调用点覆盖多个业务标签也报错并列出）。**前缀无命中时原样返回过滤值**——baseline 缩域拼错不会报错，只会输出「全部已建档」；拼错自查靠 status 的 no-match 提示行。
   - `resolveInvocationKeyTarget`（replay 缩域与画像操作类 approve/reject/rollback 用，返回唯一 invocationKey）：完整调用点键精确命中（即使它是别的 key 的前缀）> 业务标签（覆盖多调用点时点名报错）> 显示短形（对画像键现算显示形全等比对，哈希段大小写不敏感，`resolveByDisplayForm`）> 唯一前缀；无命中/多命中抛 `IllegalStateException`，命令层转译为退出码 2。
   - `taskChains` / `invocationKeyOfRecord`：任务链派生与记录键解析的共用入口。
   - `currentActor`：`user.name` → 缺失记 `unknown`（不留无主审批记录）。
@@ -1089,7 +1089,7 @@ acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
 | 计数闭合 | recorded = written + dropped + failed，filtered 另列（总到达 = recorded + filtered） | 第 3 章 |
 | 采集门 | 默认全量录制；recordUndeclaredChat=false 时未声明且无可见工具调用的交互被过滤（filtered 与 dropped 分列，首条与每满 100 条告警） | 第 3 章 |
 | 判定二值化 | 判定只有 PASS/CHANGED 两值，权重与直判规则退役出判定链路 | 第 8 章 |
-| 锚点收敛 | 显式声明 > 模板锚点 > 请求锚点兜底，键文法对任意输入单射 | 第 5 章 |
+| 锚点收敛 | 声明锚点 > 骨架锚点 > 模板锚点 > 请求锚点兜底，键文法对任意输入单射 | 第 5 章 |
 
 ---
 

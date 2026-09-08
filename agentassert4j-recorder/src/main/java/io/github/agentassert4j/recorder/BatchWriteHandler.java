@@ -159,8 +159,11 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
     }
 
     /**
-     * 落库前补全分组键。
-     * 在消费线程执行——指纹提取含响应体 JSON 解析，不允许回到业务线程。
+     * 落库前补全派生字段。
+     * 派生计算全部发生在后台 flush 线程——事件驱动 flush 在 Disruptor 消费线程，
+     * 定时 flush 在调度线程，手动 flush/stop 在调用线程——任何路径都不占用业务线程。
+     * 这里不做指纹提取：四维指纹只在判定域由 FingerprintExtractor 现场重提，
+     * 库里只存原始事实与哈希投影。
      * invocation_key 列有 NOT NULL 约束，上游缺失时回充分组器派生值，否则整批 INSERT 失败；
      * 已有值不覆盖（上游显式设置的优先）。
      * 只回填 invocationKey 与 templateHash/skeletonHash 两个哈希投影：record.invocationId 是业务声明位，

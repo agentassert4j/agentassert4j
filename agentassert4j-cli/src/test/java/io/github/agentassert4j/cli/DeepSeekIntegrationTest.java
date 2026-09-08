@@ -571,9 +571,10 @@ class DeepSeekIntegrationTest {
             assertTrue(inTokens >= 10 && inTokens <= 200, "inputTokens 应在合理范围，实际: " + inTokens);
             assertTrue(outTokens >= 10 && outTokens <= 500, "outputTokens 应在合理范围，实际: " + outTokens);
 
-            double costPerCall = CostEstimator.estimateCostPerCall("deepseek-chat");
+            Double costPerCall = CostEstimator.estimateCallCostUsd("deepseek-chat", 1000L, 500L);
+            assertNotNull(costPerCall);
             assertTrue(costPerCall > 0);
-            System.out.println("[8.1] CostEstimator 单价: $" + costPerCall);
+            System.out.println("[8.1] CostEstimator 预估口径单价: $" + costPerCall);
 
             // DeepSeek Chat 定价（2026参考）: input $0.27/M, output $1.10/M
             double realCost = inTokens * 0.27 / 1_000_000 + outTokens * 1.10 / 1_000_000;

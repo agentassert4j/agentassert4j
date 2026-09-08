@@ -252,13 +252,11 @@ public class OpenAiCompatibleClient implements LlmClient {
     /**
      * 构建 OpenAI Chat Completion 请求体。
      *
-     * <p>消息格式：</p>
+     * <p>消息顺序与录制轮次序保真：</p>
      * <pre>
-     * {"role":"system","content":"..."}     ← systemPrompt
-     * {"role":"user","content":"..."}       ← userInput
-     * {"role":"assistant","content":"..."}  ← previousTurns(role=assistant)
-     * {"role":"user","content":"..."}       ← previousTurns(role=user)
-     * {"role":"tool","content":"..."}       ← previousTurns(role=tool)
+     * {"role":"system","content":"..."}     ← systemPrompt（新模板；历史 system 帧一律跳过防双 system）
+     * {"role":"assistant"/"user"/"tool",...} ← previousTurns 按录制顺序原样展开
+     * {"role":"user","content":"..."}       ← userInput（本轮输入固定在最后）
      * </pre>
      *
      * <p>工具定义（可选）：</p>
