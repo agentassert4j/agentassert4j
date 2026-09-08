@@ -52,7 +52,7 @@ public class StatusCommand implements Callable<Integer> {
             List<InvocationProfile> allProfiles = repository.findAllInvocations();
             List<InvocationProfile> profiles = allProfiles;
             Map<String, String> labelsByInvocationKey = businessLabelsByInvocationKey(repository);
-            Map<String, String> driftByInvocationKey = templateDriftByInvocationKey(repository, allProfiles);
+            Map<String, TemplateDriftState> driftByInvocationKey = templateDriftByInvocationKey(repository, allProfiles);
             // 缩域是人读巡检特性：--json 通道恒全量（机器消费方自行过滤），换算只在人读路径发生
             String labelFilter = jsonOutput ? null : CliSupport.resolveInvocationFilter(repository, invocation, out);
             int totalCount = allProfiles.size();
@@ -70,7 +70,7 @@ public class StatusCommand implements Callable<Integer> {
                 for (InvocationProfile profile : profiles) {
                     if (invocations.length() > 0) invocations.append(",");
                     String archivedTags = archivedVersionTags(repository, profile.getInvocationKey());
-                    invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(profile.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), ""))).append("\",\"status\":\"").append(profile.getBaselineStatus()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(profile.getVersionTag() != null ? profile.getVersionTag() : "")).append("\",\"hasCandidate\":").append(profile.getCandidateFingerprint() != null).append(",\"templateDrift\":\"").append(driftByInvocationKey.getOrDefault(profile.getInvocationKey(), "none")).append("\",\"archivedVersions\":\"").append(RecursiveJsonParser.escape(archivedTags)).append("\"}");
+                    invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(profile.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), ""))).append("\",\"status\":\"").append(profile.getBaselineStatus()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(profile.getVersionTag() != null ? profile.getVersionTag() : "")).append("\",\"hasCandidate\":").append(profile.getCandidateFingerprint() != null).append(",\"templateDrift\":\"").append(driftByInvocationKey.getOrDefault(profile.getInvocationKey(), TemplateDriftState.NONE).wireName()).append("\",\"archivedVersions\":\"").append(RecursiveJsonParser.escape(archivedTags)).append("\"}");
                 }
                 StringBuilder uncoveredJson = new StringBuilder();
                 for (String tag : uncoveredBusinessTags(repository, profiles)) {
@@ -78,7 +78,7 @@ public class StatusCommand implements Callable<Integer> {
                     uncoveredJson.append("\"").append(RecursiveJsonParser.escape(tag)).append("\"");
                 }
                 StringBuilder unestablishedJson = new StringBuilder();
-                for (CliSupport.InvocationFootprint footprint : unestablishedFootprints(repository, profiles)) {
+                for (InvocationFootprint footprint : unestablishedFootprints(repository, profiles)) {
                     if (unestablishedJson.length() > 0) unestablishedJson.append(",");
                     unestablishedJson.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(footprint.invocationKey)).append("\",\"recordCount\":").append(footprint.recordCount).append("}");
                 }
@@ -89,7 +89,7 @@ public class StatusCommand implements Callable<Integer> {
             out.printf("  %-50s %-9s %-6s %-4s %-5s %-12s %s%n", "invocationKey", "status", "ver", "cand", "drift", "archived", "label");
             for (InvocationProfile profile : profiles) {
                 String archivedTags = archivedVersionTags(repository, profile.getInvocationKey());
-                out.printf("  %-50s %-9s %-6s %-4s %-5s %-12s %s%n", CliSupport.displayKey(profile.getInvocationKey()), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "yes" : "-", driftSymbol(driftByInvocationKey.get(profile.getInvocationKey())), archivedTags.isEmpty() ? "-" : archivedTags, labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), "-"));
+                out.printf("  %-50s %-9s %-6s %-4s %-5s %-12s %s%n", CliSupport.displayKey(profile.getInvocationKey()), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "yes" : "-", driftByInvocationKey.getOrDefault(profile.getInvocationKey(), TemplateDriftState.NONE).symbol(), archivedTags.isEmpty() ? "-" : archivedTags, labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), "-"));
                 printTemplateText(repository, profile);
                 if (diff) {
                     printCandidateDiff(profile);
@@ -113,9 +113,10 @@ public class StatusCommand implements Callable<Integer> {
                 out.println("Total: " + CliSupport.plural(profiles.size(), "invocation profile") + ".");
             }
             return 0;
+        } catch (CliFailureException e) {
+            return CliSupport.fail(jsonOutput, out, err, e);
         } catch (RuntimeException e) {
-            err.println("status failed: " + e.getMessage());
-            return 2;
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_ENV, "status failed: " + CliSupport.describe(e), "Fix the reported problem and retry; `agentassert4j doctor` reports database and config health.", "agentassert4j doctor");
         } finally {
             if (repository != null) {
                 repository.close();
@@ -188,29 +189,46 @@ public class StatusCommand implements Callable<Integer> {
     }
 
     /**
-     * 画像模板身份的漂移三态（● 一致 / ▲ 漂移 / - 无身份）：与 replay 共用同一
-     * 检测器单一真源，巡检不跑 replay 就能看见「哪里漂了」。
+     * 画像模板身份的漂移三态：与 replay 共用同一检测器单一真源，巡检不跑 replay
+     * 就能看见「哪里漂了」。
      */
-    private static Map<String, String> templateDriftByInvocationKey(StorageRepository repository, List<InvocationProfile> profiles) {
+    private static Map<String, TemplateDriftState> templateDriftByInvocationKey(StorageRepository repository, List<InvocationProfile> profiles) {
         DriftReport drift = DriftDetector.detect(repository);
-        Map<String, String> result = new HashMap<>();
+        Map<String, TemplateDriftState> result = new HashMap<>();
         for (DriftReport.DriftPoint point : drift.getSameKeyDrifts()) {
-            result.put(point.getInvocationKey(), "drifted");
+            result.put(point.getInvocationKey(), TemplateDriftState.DRIFTED);
         }
         for (String key : drift.getZeroTemplateKeys()) {
-            result.put(key, "none");
+            result.put(key, TemplateDriftState.NONE);
         }
         for (InvocationProfile profile : profiles) {
-            result.putIfAbsent(profile.getInvocationKey(), "clean");
+            result.putIfAbsent(profile.getInvocationKey(), TemplateDriftState.CLEAN);
         }
         return result;
     }
 
-    private static String driftSymbol(String driftStatus) {
-        if ("drifted".equals(driftStatus)) {
-            return "▲";
+    /**
+     * 画像模板身份三态 — status/1 templateDrift 字段与人读漂移列共用的封闭词表
+     * （wire 值冻结；符号仅人读列渲染）。
+     */
+    private enum TemplateDriftState {
+        CLEAN("clean", "●"), DRIFTED("drifted", "▲"), NONE("none", "-");
+
+        private final String wireName;
+        private final String symbol;
+
+        TemplateDriftState(String wireName, String symbol) {
+            this.wireName = wireName;
+            this.symbol = symbol;
         }
-        return "clean".equals(driftStatus) ? "●" : "-";
+
+        String wireName() {
+            return wireName;
+        }
+
+        String symbol() {
+            return symbol;
+        }
     }
 
     /**
@@ -276,10 +294,10 @@ public class StatusCommand implements Callable<Integer> {
      */
     private void printUnestablished(StorageRepository repository, String labelFilter) {
         // established 判定必须用全量画像（缩域后的子集会把已建档键误判为未建档）
-        List<CliSupport.InvocationFootprint> unestablished = unestablishedFootprints(repository, repository.findAllInvocations());
+        List<InvocationFootprint> unestablished = unestablishedFootprints(repository, repository.findAllInvocations());
         if (labelFilter != null) {
-            List<CliSupport.InvocationFootprint> filtered = new ArrayList<>();
-            for (CliSupport.InvocationFootprint footprint : unestablished) {
+            List<InvocationFootprint> filtered = new ArrayList<>();
+            for (InvocationFootprint footprint : unestablished) {
                 if (labelFilter.equals(TaskAligner.declaredLabelOfKey(footprint.invocationKey)) || footprint.invocationKey.startsWith(labelFilter)) {
                     filtered.add(footprint);
                 }
@@ -291,18 +309,18 @@ public class StatusCommand implements Callable<Integer> {
             return;
         }
         out.println("Unestablished invocations (run `agentassert4j baseline` to collect):");
-        for (CliSupport.InvocationFootprint footprint : unestablished) {
+        for (InvocationFootprint footprint : unestablished) {
             out.println("  " + CliSupport.displayKey(footprint.invocationKey) + " (" + (footprint.label != null ? footprint.label : "no label") + ") " + CliSupport.plural(footprint.recordCount, "record") + ", latest session " + footprint.lastSessionId);
         }
     }
 
-    private static List<CliSupport.InvocationFootprint> unestablishedFootprints(StorageRepository repository, List<InvocationProfile> profiles) {
+    private static List<InvocationFootprint> unestablishedFootprints(StorageRepository repository, List<InvocationProfile> profiles) {
         Set<String> established = new HashSet<>();
         for (InvocationProfile profile : profiles) {
             established.add(profile.getInvocationKey());
         }
-        List<CliSupport.InvocationFootprint> unestablished = new ArrayList<>();
-        for (CliSupport.InvocationFootprint footprint : CliSupport.recordedInvocationFootprints(repository)) {
+        List<InvocationFootprint> unestablished = new ArrayList<>();
+        for (InvocationFootprint footprint : CliSupport.recordedInvocationFootprints(repository)) {
             if (!established.contains(footprint.invocationKey)) {
                 unestablished.add(footprint);
             }

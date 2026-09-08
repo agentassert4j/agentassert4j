@@ -80,7 +80,7 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
 
 | 场景 | 结果 |
 |---|---|
-| bare、全库无录制 | exit 2 + 录制引导（stderr in --json） |
+| bare、全库无录制 | exit 2 + 录制引导（stderr in --json；机器包络见 cli 契约 7） |
 | bare、全部任务单链 | 逐任务自建基线，exit 0 |
 | bare、任务两链同构 | 对齐 PASS；无漂移出 0；有漂移按处置出口 |
 | 任一对齐 CHANGED / 缺步骤 / 新增 / 规则违规 | exit 1（CHANGED 步落候选） |

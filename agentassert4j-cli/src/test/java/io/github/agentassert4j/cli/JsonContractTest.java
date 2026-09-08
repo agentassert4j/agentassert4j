@@ -5,6 +5,7 @@ import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
@@ -135,6 +136,26 @@ class JsonContractTest {
         return report;
     }
 
+    /**
+     * 失败包络断言三要素：schema 开头、错误码归属、hints 必填。
+     */
+    private void assertErrorEnvelope(String lastLine, String expectedErrorCode) {
+        assertTrue(lastLine.startsWith("{\"schema\":\"agentassert4j.error/1\""), "失败须以 error/1 包络收尾: " + lastLine);
+        assertTrue(lastLine.contains("\"status\":\"error\""), lastLine);
+        assertTrue(lastLine.contains("\"errorCode\":\"" + expectedErrorCode + "\""), "错误码归属: " + lastLine);
+        assertTrue(lastLine.contains("\"hints\":[\""), "失败路径 hints 必填: " + lastLine);
+    }
+
+    /**
+     * 失败前已产出部分报告时的 stdout 收尾行——包络恒为最后一行。
+     */
+    private String lastStdoutLine() {
+        String trimmed = stdout().trim();
+        assertFalse(trimmed.isEmpty(), "--json 模式 stdout 必须有产出");
+        String[] lines = trimmed.split("\r?\n");
+        return lines[lines.length - 1];
+    }
+
     @Nested
     @DisplayName("baseline 与 export")
     class BaselineAndExport {
@@ -239,16 +260,29 @@ class JsonContractTest {
         }
 
         @Test
-        @DisplayName("approve --json 无候选：退出码 2，stdout 零污染，原因走 stderr")
-        void approveJson_withoutCandidate_exit2StdoutClean() throws Exception {
+        @DisplayName("approve --json 无候选可裁决：退出码 2，stdout 以 E-NO-DATA 包络收尾")
+        void approveJson_withoutCandidate_errorEnvelope() throws Exception {
             seedOneRecord();
             execute("baseline", "--db", dbPath);
 
             int exit = execute("approve", "--db", dbPath, "--invocation", "queryOrder", "--json");
 
             assertEquals(2, exit);
-            assertEquals("", stdout().trim(), "失败路径 stdout 不得产出任何内容: " + stdout());
-            assertTrue(stderr().contains("No candidate"), "失败原因必须走 stderr: " + stderr());
+            assertErrorEnvelope(singleLineReport(), "E-NO-DATA");
+            assertTrue(stderr().contains("No candidate"), "现象必须同时走 stderr 供人排障: " + stderr());
+        }
+
+        @Test
+        @DisplayName("人读模式失败：stdout 零失败内容契约不变（与 --json 包络并行不悖）")
+        void humanMode_failure_stdoutStaysClean() throws Exception {
+            seedOneRecord();
+            execute("baseline", "--db", dbPath);
+
+            int exit = execute("approve", "--db", dbPath, "--invocation", "queryOrder");
+
+            assertEquals(2, exit);
+            assertFalse(stdout().contains("No candidate"), "人读失败路径不得向 stdout 输出失败内容: " + stdout());
+            assertTrue(stderr().contains("No candidate"), "失败原因走 stderr: " + stderr());
         }
 
         @Test
@@ -270,16 +304,33 @@ class JsonContractTest {
         }
 
         @Test
-        @DisplayName("rollback --json 版本不存在：退出码 2，stdout 零污染，可选值提示走 stderr")
-        void rollbackJson_missingVersion_exit2StdoutClean() throws Exception {
+        @DisplayName("rollback --json 版本不存在：退出码 2，包络携带现象与可选值指引，stderr 同步")
+        void rollbackJson_missingVersion_errorEnvelope() throws Exception {
             seedOneRecord();
             execute("baseline", "--db", dbPath);
 
             int exit = execute("rollback", "--db", dbPath, "--invocation", "queryOrder", "--version", "v9", "--json");
 
             assertEquals(2, exit);
-            assertEquals("", stdout().trim(), "失败路径 stdout 不得产出任何内容: " + stdout());
-            assertTrue(stderr().contains("no archived versions"), "可选值提示必须走 stderr: " + stderr());
+            String envelope = singleLineReport();
+            assertErrorEnvelope(envelope, "E-NO-DATA");
+            assertTrue(envelope.contains("no archived versions"), "包络 message 携带可选值指引: " + envelope);
+            assertTrue(stderr().contains("no archived versions"), "可选值提示必须同时走 stderr: " + stderr());
+        }
+
+        @Test
+        @DisplayName("rollback --json 包络转义：版本值含引号不破坏 JSON 单行结构")
+        void rollbackJson_envelopeEscapesQuotes() throws Exception {
+            seedOneRecord();
+            execute("baseline", "--db", dbPath);
+
+            int exit = execute("rollback", "--db", dbPath, "--invocation", "queryOrder", "--version", "v\"9", "--json");
+
+            assertEquals(2, exit);
+            String envelope = singleLineReport();
+            assertErrorEnvelope(envelope, "E-NO-DATA");
+            assertTrue(envelope.contains("v\\\"9"), "引号必须以 \\\" 形态转义: " + envelope);
+            RecursiveJsonParser.parse(envelope);
         }
     }
 
@@ -320,7 +371,7 @@ class JsonContractTest {
         }
 
         @Test
-        @DisplayName("graph show --json：边携带穿透节点，环与计数齐备，人类渲染不落 stdout")
+        @DisplayName("graph show --json：边、置信与环计数齐备，人类渲染不落 stdout")
         void graphShowJson_edgesAndCycles() throws Exception {
             saveChainRecord("r-1", "queryOrder", 1000L, null, "{\"order_id\":\"SO-77\",\"status\":\"shipped\"}");
             saveChainRecord("r-2", "refundOrder", 2000L, "SO-77", null);
@@ -349,6 +400,94 @@ class JsonContractTest {
             assertTrue(report.startsWith("{\"schema\":\"agentassert4j.rules/1\""), report);
             assertTrue(report.contains("\"behaviors\":["), report);
             assertTrue(report.contains("\"name\":\"mustUseChinese\""), report);
+        }
+    }
+
+    @Nested
+    @DisplayName("机器失败包络与 doctor 机器通道")
+    class ErrorEnvelopeAndDoctorMachineChannel {
+
+        @Test
+        @DisplayName("replay --json 用法错误：--full-chain 无 --re-drive 出 E-USAGE 包络")
+        void replayJson_usageError_envelope() throws Exception {
+            int exit = execute("replay", "--db", dbPath, "--full-chain", "--json");
+
+            assertEquals(2, exit);
+            String envelope = singleLineReport();
+            assertErrorEnvelope(envelope, "E-USAGE");
+            assertTrue(envelope.contains("--re-drive"), "现象与指引必须点名缺失的旗标: " + envelope);
+            assertTrue(envelope.contains("agentassert4j replay --re-drive"), "nextAction 给出可执行命令: " + envelope);
+        }
+
+        @Test
+        @DisplayName("replay --json --ci 未建档守卫：拒绝判定出 E-GUARD 包络（漂移报告在先，包络收尾）")
+        void replayJson_ciGuard_envelopeAfterDriftReport() throws Exception {
+            seedOneRecord();
+
+            int exit = execute("replay", "--db", dbPath, "--ci", "--json");
+
+            assertEquals(2, exit);
+            assertTrue(stdout().contains("agentassert4j.task-report/1"), "漂移检测报告先行产出: " + stdout());
+            String envelope = lastStdoutLine();
+            assertErrorEnvelope(envelope, "E-GUARD");
+            assertTrue(envelope.contains("baseline"), "守卫拒绝必须指路建档: " + envelope);
+        }
+
+        @Test
+        @DisplayName("verify --json 覆盖缺口：报告在先、E-NO-DATA 包络收尾，exit 2")
+        void verifyJson_uncovered_envelopeAfterReport() throws Exception {
+            seedOneRecord();
+            execute("baseline", "--db", dbPath);
+            Path packPath = tempDir.resolve("pack.json");
+            execute("baseline", "export", "--db", dbPath, "--out", packPath.toString());
+            // 全新空库：包任务全部未执行 = 覆盖缺口
+            Path emptyDb = tempDir.resolve("empty.db");
+
+            int exit = execute("verify", "--pack", packPath.toString(), "--db", emptyDb.toString(), "--json");
+
+            assertEquals(2, exit);
+            assertTrue(stdout().contains("agentassert4j.verify-report/1"), "验收报告先行产出: " + stdout());
+            String envelope = lastStdoutLine();
+            assertErrorEnvelope(envelope, "E-NO-DATA");
+            assertTrue(envelope.contains("no local execution"), "包络点明缺口语义: " + envelope);
+        }
+
+        @Test
+        @DisplayName("doctor --json：三段体检机器报告，人类渲染不落 stdout")
+        void doctorJson_healthReport() throws Exception {
+            seedKeyedRecord();
+
+            int exit = execute("doctor", "--db", dbPath, "--json");
+
+            assertEquals(0, exit, "doctor 不承 CI gating 职责，恒 0");
+            String report = singleLineReport();
+            assertTrue(report.startsWith("{\"schema\":\"agentassert4j.doctor/1\""), report);
+            assertTrue(report.contains("\"identity\":{\"skeletonCount\":0"), "未声明骨架的记录不进骨架族: " + report);
+            assertTrue(report.contains("\"unestablishedInvocations\":1"), "建档前调用点属未收编: " + report);
+            assertTrue(report.contains("\"recordsMissingTemplateHash\":0"), report);
+            assertTrue(report.contains("\"expectationMismatches\":0"), report);
+            assertFalse(stdout().contains("Identity check:"), "人类渲染不得污染 stdout: " + stdout());
+        }
+
+        /**
+         * 带落库调用点键的记录——足迹枚举只认存储键（enrich 写入口径），
+         * 机器通道的未收编计数以此为前提。
+         */
+        private void seedKeyedRecord() {
+            InteractionRecord record = new InteractionRecord();
+            record.setRecordId("rec-1");
+            record.setSessionId("session-1");
+            record.setTimestamp(1000L);
+            record.setSeq(1L);
+            record.setInvocationId("queryOrder");
+            record.setInvocationKey("invocation:queryOrder:hash-old");
+            record.setTemplateHash("hash-old");
+            record.setUserInput("查订单");
+            record.setTurnIndex(0);
+            record.setModelResponse("{\"orderId\":\"ORD-001\"}");
+            record.setToolCalls(new ArrayList<>());
+            record.setHasToolCalls(false);
+            repository.saveInteraction(record);
         }
     }
 }

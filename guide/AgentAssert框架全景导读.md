@@ -144,7 +144,8 @@ $ agentassert4j doctor
 没声明标签的链、跨会话重复出现的请求文本族）、**覆盖段**（已录制未建档的调用点、缺 template_hash
 的记录数）、**规则段**（规则文件里的畸形声明、配了键但库里从未出现过的期望错位）。它只陈述事实、
 不判定不建档（正常执行退出码恒 0，不承载门禁语义）——零声明接入的团队该在哪几个调用点补声明，
-首次建档前库干不干净，看它就够。特别是「重复请求文本族」一栏：同一个问题在多个会话反复出现，就是补任务键声明的最佳候选
+首次建档前库干不干净，看它就够。需要程序消费时加 `--json`：同源事实以 `agentassert4j.doctor/1`
+单行报告出境（计数全量、样本封顶）。特别是「重复请求文本族」一栏：同一个问题在多个会话反复出现，就是补任务键声明的最佳候选
 （`withMetadata("taskKey", <场景id>)`，配对更稳）。真实输出长这样（虚构演示库）：
 
 <img src="../assets/cli-doctor.png" alt="doctor 三段体检：身份/覆盖/规则，只读不判定（演示库真实输出）" width="880"/>
@@ -423,7 +424,7 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 | `agentassert4j baseline --force` | 按当前比对算法重建基线（旧基线自动存档） | 同上 | 不加 `--force` 时绝不覆盖已有基线 |
 | `agentassert4j baseline export` | 导出验收基线包（交付证据载体） | `--task <前缀>`（缩域）；`--include-samples`（脱敏样本）；`--out <文件>`（默认 `./acceptance-pack.json`）；`--json`（export-report/1：out/taskCount/stepCount/sha256/excluded 元数据报告） | 内容天然脱敏（结构指纹+键+声明规则段）；打印 SHA-256 供对账；未建档步骤或基线自违声明规则的链排除并警告 |
 | `agentassert4j status` | 查看调用点清单与基线状态 | `--diff`：展示待裁决的差异；`--json`（status/1） | 只看清单本体；已录制未建档的调用点在「Unestablished invocations」段列出 |
-| `agentassert4j doctor` | 库体检：身份/覆盖/规则三段确定性事实（骨架族、多步零标签链、未声明任务的重复请求族、未建档、规则期望错位），给声明建议 | 无必填参数（人读输出，无 `--json`） | 只读不判定不建档；退出码不承载门禁语义（正常恒 0，命令运行期故障统一出 2） |
+| `agentassert4j doctor` | 库体检：身份/覆盖/规则三段确定性事实（骨架族、多步零标签链、未声明任务的重复请求族、未建档、规则期望错位），给声明建议 | 无必填参数；`--json`（doctor/1：计数全量+样本封顶的同源机器报告） | 只读不判定不建档；退出码不承载门禁语义（正常恒 0，命令运行期故障统一出 2） |
 | `agentassert4j replay` | 全项目漂移检测 + 逐任务对齐（缺省零 LLM 调用） | `--task <前缀>` / `--invocation <目标>`（复合缩域）；`--ci`（不为无基线调用点建档、漂移不收编）；`--re-drive`（逐漂移点归档模板受控复核，花调用）+ `--full-chain`（扩为缩域内全部记录）+ `--max-total-calls/--max-total-tokens`（重驱预算池）；`--dry-run`（漂移集+对齐计划+重驱报价）；`--json`（task-report/1 逐行分段） | 缩域未命中/歧义出 2；`--ci` 缺档出 2；漂移 PASS 出 0 附未收编警告 |
 | `agentassert4j approve` / `reject` | bare 裁决全部待裁决候选（渲染候选差异 → 转正/丢弃） | `--invocation <目标>` 缩域；`--approver <名字>`（approve 专用，缺省取系统用户） | 无候选出 2 |
 | `agentassert4j rollback` | 把基线回滚到指定历史版本 | `--invocation <目标>` 与 `--version <版本号>`（**均必填**） | 缺任一参数直接报错 |
@@ -758,8 +759,8 @@ recorded（到达即计数） = written（批量写成功）
   - 请求体手拼（转义统一走 `RecursiveJsonParser.escape`）：消息序列 system → previousTurns → user（多模态时 content 是原样注入的 JSON 数组）；**tool 消息前若缺「assistant 发起调用」帧则按已知 id/toolName 合成最小合法帧**（历史录制没有该轮的独立载体，arguments 以空对象占位）；缺失 callId 的 tool 帧跳过该轮并告警（保住其余用例）；`temperature` 为 null/非 finite 时不携带该成员（推理模型方言：发送 0.0 会被 400 拒绝）；`extraBodyFields` 作为顶层成员原样追加（DeepSeek 思考态等方言逃生舱）。
   - 响应解析统一走 `RecursiveJsonParser` 导航（choices[0].message.content / tool_calls / usage 子树 / 顶层 model / finish_reason）；usage 子树原文逐字存 `usageRaw`；缓存 token 取 `prompt_tokens_details.cached_tokens`、思考 token 取 `completion_tokens_details.reasoning_tokens`（**input_tokens 语义钉死为总处理输入 token**）；`finish_reason` 归一为枚举词表 stop/tool_calls/max_tokens/content_filter/other。
   - `ProviderDialects`（数据注册表，资源文件 `provider-dialects.json`）：规则 = `matchModelPrefix` + `dropParams`，当前仅收录「发送即报错」的方言（o1/o3/o4/gpt-5 → drop temperature）；命中时显式配置的参数被裁掉并**一次性 WARN**（点名 extraBody 逃生舱，防静默丢配置的排障黑洞）；快照损坏等同缺席，退化不中断。
-- `TaskReplayRunner`（cli，统一重放引擎）——bare 命令即全项目完整默认能力，三层判定模型：**身份检测**（DriftDetector 全库只读巡检画像模板身份 vs 最新记录，检测报告全项目零调用）→ **真实对齐**（逐任务最新链 vs 次新链按调用点对齐，零调用，退出码载体）→ **受控重驱**（`--re-drive` 显式开启：逐漂移点以该点最新归档模板重驱录制输入，预算池合计封顶，`--full-chain` 扩为缩域内全部记录）。漂移处置状态机把每个漂移点收敛到三出口之一：对齐 PASS → 开发态自动收编（`--ci` 不落治理写、附警告）；CHANGED → 现场重提指纹落候选等人工裁决；证据缺口（缺步骤/新增/规则违规/无可对齐证据）→ 挂起。守卫六项在引擎入口：判定语义版本、`--ci` 未建档拒绝、换模型告警（含默认模型盲区）、图重建与快照、全败按基础设施故障出 2（重驱层）、served 模型就地标注。**本块是地图不是规格**——编排细节、退出码复合与行为矩阵以 `guide/spec/replay.md` 为基准（该 spec 以落地代码成文）。
-  - **输出通道契约**（全命令统一）：`--json` 模式 stdout 只产报告本体（replay 为 `agentassert4j.task-report/1`，逐行分段：drift-detection / task-align / drift-disposition / task-re-drive / task-dry-run），进度静默、诊断走 stderr；失败路径 stdout 零产出、配置披露与告警改走 stderr。报告 schema 总表见 `guide/spec/cli.md`。
+- `TaskReplayRunner`（cli，统一重放引擎）——bare 命令即全项目完整默认能力，三层判定模型：**身份检测**（DriftDetector 全库只读巡检画像模板身份 vs 最新记录，检测报告全项目零调用）→ **真实对齐**（逐任务最新链 vs 次新链按调用点对齐，零调用，退出码载体）→ **受控重驱**（`--re-drive` 显式开启：逐漂移点以该点最新归档模板重驱录制输入，预算池合计封顶，`--full-chain` 扩为缩域内全部记录）。漂移处置状态机把每个漂移点收敛到三出口之一：对齐 PASS → 开发态自动收编（`--ci` 不落治理写、附警告）；CHANGED → 现场重提指纹落候选等人工裁决；证据缺口（缺步骤/新增/规则违规/无可对齐证据）→ 挂起。守卫五项在引擎入口：判定语义版本、`--ci` 未建档拒绝、换模型告警（含默认模型盲区）、全败按基础设施故障出 2（重驱层）、served 模型就地标注。**本块是地图不是规格**——编排细节、退出码复合与行为矩阵以 `guide/spec/replay.md` 为基准（该 spec 以落地代码成文）。
+  - **输出通道契约**（全命令统一）：`--json` 模式 stdout 只产报告本体（replay 为 `agentassert4j.task-report/1`，逐行分段：drift-detection / task-align / drift-disposition / task-re-drive / task-dry-run），进度静默、诊断走 stderr；失败的运行以 `agentassert4j.error/1` 包络收尾 stdout（错误码四族 E-USAGE/E-NO-DATA/E-GUARD/E-ENV + hints + nextAction），人读失败路径 stdout 零产出；配置披露与告警改走 stderr。报告 schema 总表见 `guide/spec/cli.md`。
 - `CostEstimator`（core）：价格真源是随 jar 分发的精选快照 `model_prices.json`（LiteLLM MIT 库裁剪，发布前再生成；`_meta` 前缀键是元信息非价格行），查找 = 精确命中后按最长包含匹配归入模型族。两个入口同一张表：`estimate`（执行前预估文案，固定 1000 输入/500 输出口径；**模型无价格时只报调用次数、不编造货币数**）与 `estimateCallCostUsd`（捕获时刻按实际 token 计价，查不到返回 null）；快照缺席/损坏等同无价格表。
 
 **表结构**：重放不新增表——它的持久化后果只有候选指纹写入 `invocations.candidate_fingerprint`（第 7 章）。
@@ -878,7 +879,7 @@ recorded（到达即计数） = written（批量写成功）
 
 **代码地图**：
 
-- **命令全景**（picocli，根命令 `agentassert4j`，全部子命令带 `mixinStandardHelpOptions`）：`status` / `baseline`(含 `export`) / `replay` / `approve` / `reject` / `rollback` / `rules` / `graph show` / `verify` / `doctor` / `completion`。各命令的 bare 语义、参数终态与报告 schema **以 `guide/spec/cli.md` 为基准**（本表不再双写参数矩阵——replay help 的终态参数面有测试钉，拆除参数不复活）。JSON 输出通道是**全命令统一契约**（stdout 只产报告本体、诊断走 stderr、失败路径 stdout 零产出；doctor 以人读体检为主、未提供 `--json`），由 `JsonContractTest` 逐命令钉住；根 help 以 exitCodeList 呈现退出码契约。
+- **命令全景**（picocli，根命令 `agentassert4j`，全部子命令带 `mixinStandardHelpOptions`）：`status` / `baseline`(含 `export`) / `replay` / `approve` / `reject` / `rollback` / `rules` / `graph show` / `verify` / `doctor` / `completion`。各命令的 bare 语义、参数终态与报告 schema **以 `guide/spec/cli.md` 为基准**（本表不再双写参数矩阵——replay help 的终态参数面有测试钉，拆除参数不复活）。JSON 输出通道是**全命令统一契约**（stdout 只产报告本体、诊断走 stderr；`--json` 失败以 `agentassert4j.error/1` 包络收尾 stdout，人读失败 stdout 零产出；doctor 机器通道为 doctor/1），由 `JsonContractTest` 逐命令钉住；根 help 以 exitCodeList 呈现退出码契约。
 
 - `CliSupport`（包私有，命令间共用逻辑）：
   - `installUtf8Console`：主入口统一 UTF-8 直写标准流（绕过 Windows 控制台默认编码，中文报告不乱码）。
@@ -1081,7 +1082,7 @@ acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
 | 覆盖缺口 | 包内任务未在验收侧执行——证据缺口，exit 2 | 第 12 章 |
 | 跨模型验收 | 开发侧与本地 servedModel 不一致——结构判定有效，文本差异属措辞预期内 | 第 12 章 |
 | 退出码契约 | 0 无差异 / 1 有差异或证据不完整 / 2 用法或基础设施故障 | 第 9/11 章 |
-| 证据报告 | `--json` 的单行机器可读输出（replay 为 task-report/1 逐行分段；status/1、baseline-report/1、export-report/1、adjudication/1、rollback/1、verify-report/1、graph/1、rules/1 各命令一一对应） | 第 9/11/12/13 章 |
+| 证据报告 | `--json` 的单行机器可读输出（replay 为 task-report/1 逐行分段；status/1、baseline-report/1、export-report/1、adjudication/1、rollback/1、verify-report/1、graph/1、rules/1、doctor/1 各命令一一对应）；失败路径为 error/1 错误包络（errorCode 四族 + hints + nextAction） | 第 9/11/12/13 章 |
 | 四写法等价 | 业务标签 = 完整 invocationKey = 唯一前缀 = 显示短形 标签@8位（replay/approve/reject/rollback 四写法全收；status/baseline 缩域用其中标签、显示短形、前缀三写法） | 第 13 章 |
 | 计数闭合 | recorded = written + dropped + failed，filtered 另列（总到达 = recorded + filtered） | 第 3 章 |
 | 采集门 | 默认全量录制；recordUndeclaredChat=false 时未声明且无可见工具调用的交互被过滤（filtered 与 dropped 分列，首条与每满 100 条告警） | 第 3 章 |

@@ -67,12 +67,10 @@ public class BaselineCommand implements Callable<Integer> {
                 out.println(established > 0 ? "Done: " + CliSupport.plural(established, "invocation") + " " + (force ? "re-established" : "established") + "." : "Done: every invocation already has a baseline.");
             }
             return 0;
-        } catch (IllegalStateException e) {
-            err.println(e.getMessage());
-            return 2;
+        } catch (CliFailureException e) {
+            return CliSupport.fail(jsonOutput, out, err, e);
         } catch (RuntimeException e) {
-            err.println("baseline failed: " + e.getMessage());
-            return 2;
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_ENV, "baseline failed: " + CliSupport.describe(e), "Fix the reported problem and retry; `agentassert4j doctor` reports database and config health.", "agentassert4j doctor");
         } finally {
             if (repository != null) {
                 repository.close();

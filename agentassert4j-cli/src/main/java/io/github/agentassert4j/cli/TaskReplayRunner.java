@@ -84,6 +84,29 @@ public class TaskReplayRunner {
         }
     }
 
+    /**
+     * 命令失败统一出口：现象与指引走诊断通道（人类模式 out / --json 模式 err），
+     * --json 模式另向 stdout 追加 agentassert4j.error/1 包络（stdout 恒为机器可读）。
+     * 返回退出码 2。
+     */
+    private int fail(CliErrorCode errorCode, String message, String hint, String nextAction) {
+        diagnostic(message);
+        if (hint != null && !hint.isEmpty()) {
+            diagnostic(hint);
+        }
+        return failWithEnvelopeOnly(errorCode, message, hint, nextAction);
+    }
+
+    /**
+     * 已有多行诊断在先的失败出口——不再重复打印，只补机器包络。返回退出码 2。
+     */
+    private int failWithEnvelopeOnly(CliErrorCode errorCode, String message, String hint, String nextAction) {
+        if (jsonMode) {
+            out.println(CliSupport.errorEnvelope(errorCode, message, hint, nextAction));
+        }
+        return 2;
+    }
+
     private static PrintStream discardStream() {
         return new PrintStream(new ByteArrayOutputStream(), true);
     }
@@ -106,8 +129,7 @@ public class TaskReplayRunner {
 
         List<TaskChain> chains = CliSupport.taskChains(repository);
         if (chains.isEmpty()) {
-            diagnostic("No recorded interactions found. Run your agent first to record some interactions.");
-            return 2;
+            return fail(CliErrorCode.E_NO_DATA, "No recorded interactions found.", "Run your agent first to record some interactions, then retry.", "agentassert4j status");
         }
 
         warnIfModelDiffers();
@@ -120,13 +142,15 @@ public class TaskReplayRunner {
         }
 
         // 缩域：--task × --invocation 复合 AND（检测报告不受缩域影响）
-        List<TaskChain> scoped = selectChains(chains, taskPrefix, invocationKey);
-        if (scoped == null) {
-            return 2;
+        List<TaskChain> scoped;
+        try {
+            scoped = selectChains(chains, taskPrefix, invocationKey);
+        } catch (CliFailureException e) {
+            // 选择器歧义在抛出点已钉错误码；引擎入口自洽翻译，不依赖命令层接住
+            return fail(e.errorCode, CliSupport.describe(e), e.hint, e.nextAction);
         }
         if (scoped.isEmpty()) {
-            diagnostic("No task chains matched the scope. Record interactions first, or check invocation keys and task prefixes with `status`.");
-            return 2;
+            return fail(CliErrorCode.E_NO_DATA, "No task chains matched the scope.", "Record interactions first, or check invocation keys and task prefixes with `status`.", "agentassert4j status");
         }
         boolean narrowed = taskPrefix != null || invocationKey != null;
 
@@ -144,7 +168,7 @@ public class TaskReplayRunner {
                     diagnostic("  " + key);
                 }
                 diagnostic("Run `agentassert4j baseline` locally to review and establish baselines, then retry; or drop --ci to auto-establish.");
-                return 2;
+                return failWithEnvelopeOnly(CliErrorCode.E_GUARD, "Refusing to judge in --ci mode: the scope holds " + CliSupport.plural(unbaselined.size(), "unbaselined invocation") + " (full list on stderr).", "Run `agentassert4j baseline` locally to review and establish baselines, then retry; or drop --ci to auto-establish.", "agentassert4j baseline");
             }
         } else {
             // 自动建档（开发态自动化，报告可见）：裂键新档与全新键在此收编
@@ -156,7 +180,9 @@ public class TaskReplayRunner {
         String semanticProblem = checkJudgmentSemantics();
         if (semanticProblem != null) {
             diagnostic(semanticProblem);
-            return 2;
+            String[] problemLines = semanticProblem.split("\r?\n");
+            String summary = problemLines[0] + (problemLines.length > 1 ? " (+" + (problemLines.length - 1) + " more, full list on stderr)" : "");
+            return failWithEnvelopeOnly(CliErrorCode.E_GUARD, summary, "Run `agentassert4j baseline --force` to re-establish baselines under the current semantics.", "agentassert4j baseline --force");
         }
         warnUngroupableRecords(scoped);
 
@@ -203,11 +229,10 @@ public class TaskReplayRunner {
             return 1;
         }
         if (reDriveTotals.failed > 0 && reDriveTotals.pass == 0) {
-            diagnostic("All re-drive calls failed (no comparisons). Check llm config, credentials and network, then retry.");
-            return 2;
+            return fail(CliErrorCode.E_ENV, "All re-drive calls failed (no comparisons).", "Check llm config, credentials and network, then retry.", "");
         }
         if (reDriveTotals.skipped > 0) {
-            return 2;
+            return fail(CliErrorCode.E_USAGE, "Re-drive truncated by the budget caps: " + reDriveTotals.callsUsed + " call(s), " + reDriveTotals.tokensUsed + " tokens used; " + CliSupport.plural(reDriveTotals.skipped, "record") + " skipped.", "Raise --max-total-calls/--max-total-tokens, narrow the scope with --task/--invocation, or drop the caps.", "");
         }
         return 0;
     }
@@ -346,7 +371,7 @@ public class TaskReplayRunner {
         }
         info("Re-drive summary: PASS " + rd.pass + " | CHANGED " + rd.changed + " | failed " + rd.failed + " | skipped " + rd.skipped + " (" + CliSupport.plural(rd.callsUsed, "real re-drive call") + (rd.tokensUsed > 0 ? ", " + CliSupport.plural(rd.tokensUsed, "token") : "") + ")");
         if (jsonMode) {
-            StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-re-drive\"");
+            StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.TASK_RE_DRIVE.wireName() + "\"");
             sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
             sb.append(",\"summary\":{\"total\":").append(rd.pass + rd.changed + rd.failed).append(",\"pass\":").append(rd.pass).append(",\"changed\":").append(rd.changed).append(",\"failed\":").append(rd.failed).append(",\"skipped\":").append(rd.skipped).append(",\"callsUsed\":").append(rd.callsUsed).append("}");
             sb.append(",\"steps\":[").append(String.join(",", stepJsons)).append("]}");
@@ -410,6 +435,40 @@ public class TaskReplayRunner {
      */
     private enum StepOutcome {
         PASS, CHANGED, GAP
+    }
+
+    /**
+     * 漂移点族别 — task-report/1 drift-disposition 报告 kind 字段的封闭词表（wire 值冻结）。
+     */
+    private enum DriftKind {
+        SAME_KEY("same-key"), LABEL_SPLIT("label-split");
+
+        private final String wireName;
+
+        DriftKind(String wireName) {
+            this.wireName = wireName;
+        }
+
+        String wireName() {
+            return wireName;
+        }
+    }
+
+    /**
+     * task-report/1 报告的 mode 封闭词表（wire 值冻结；与 guide/spec/cli.md 契约 6 同源）。
+     */
+    private enum TaskReportMode {
+        DRIFT_DETECTION("drift-detection"), TASK_ALIGN("task-align"), TASK_DRY_RUN("task-dry-run"), DRIFT_DISPOSITION("drift-disposition"), TASK_RE_DRIVE("task-re-drive");
+
+        private final String wireName;
+
+        TaskReportMode(String wireName) {
+            this.wireName = wireName;
+        }
+
+        String wireName() {
+            return wireName;
+        }
     }
 
     /**
@@ -536,7 +595,7 @@ public class TaskReplayRunner {
             for (TaskRuleViolation violation : violations) {
                 violationJsons.add("{\"type\":\"" + violation.getType() + "\",\"label\":\"" + RecursiveJsonParser.escape(violation.getLabel()) + "\",\"detail\":\"" + RecursiveJsonParser.escape(violation.getDetail()) + "\"}");
             }
-            out.println(taskJson("task-align", newChain.getRequestText(), newChain.getSessionId(), alignment.getSteps().size(), pass, changed, 0, 0, 0, missing, added, alignment.getCrossVersionCount(), stepJsons, alignment.getBaselineTime(), alignment.getNewChainTime(), alignment.isPrefixDependent(), violations.size(), violationJsons, costJson(baselineCost, currentCost)));
+            out.println(taskJson(TaskReportMode.TASK_ALIGN, newChain.getRequestText(), newChain.getSessionId(), alignment.getSteps().size(), pass, changed, 0, 0, 0, missing, added, alignment.getCrossVersionCount(), stepJsons, alignment.getBaselineTime(), alignment.getNewChainTime(), alignment.isPrefixDependent(), violations.size(), violationJsons, costJson(baselineCost, currentCost)));
         }
     }
 
@@ -548,13 +607,13 @@ public class TaskReplayRunner {
         DispositionTotals totals = new DispositionTotals();
         List<String> dispositionJsons = jsonMode ? new ArrayList<>() : null;
         for (DriftReport.DriftPoint point : drift.getSameKeyDrifts()) {
-            disposeOne(point, "same-key", scopedKeys, ciMode, outcomes, manager, totals, dispositionJsons);
+            disposeOne(point, DriftKind.SAME_KEY, scopedKeys, ciMode, outcomes, manager, totals, dispositionJsons);
         }
         for (DriftReport.DriftPoint point : drift.getLabelSplits()) {
-            disposeOne(point, "label-split", scopedKeys, ciMode, outcomes, manager, totals, dispositionJsons);
+            disposeOne(point, DriftKind.LABEL_SPLIT, scopedKeys, ciMode, outcomes, manager, totals, dispositionJsons);
         }
         if (jsonMode) {
-            StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"drift-disposition\"");
+            StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.DRIFT_DISPOSITION.wireName() + "\"");
             sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
             sb.append(",\"summary\":{\"collected\":").append(totals.collected).append(",\"candidates\":").append(totals.candidates).append(",\"hung\":").append(totals.hung).append(",\"external\":").append(totals.external).append(",\"uncollected\":").append(totals.uncollected).append("}");
             sb.append(",\"dispositions\":[").append(String.join(",", dispositionJsons)).append("]}");
@@ -563,7 +622,7 @@ public class TaskReplayRunner {
         return totals;
     }
 
-    private void disposeOne(DriftReport.DriftPoint point, String kind, Set<String> scopedKeys, boolean ciMode, Map<String, StepOutcome> outcomes, BaselineManager manager, DispositionTotals totals, List<String> dispositionJsons) {
+    private void disposeOne(DriftReport.DriftPoint point, DriftKind kind, Set<String> scopedKeys, boolean ciMode, Map<String, StepOutcome> outcomes, BaselineManager manager, DispositionTotals totals, List<String> dispositionJsons) {
         String key = point.getInvocationKey();
         String shown = CliSupport.displayKey(key);
         StepOutcome outcome = outcomes.get(key);
@@ -597,10 +656,10 @@ public class TaskReplayRunner {
             boolean advanced = manager.advanceTemplateIdentity(key);
             totals.collected++;
             action = "collected";
-            info("Collected: " + shown + " (no behavioral difference; " + ("label-split".equals(kind) && !advanced ? "new profile established with the latest template as identity" : "template identity " + shortHash(point.getProfileTemplateHash()) + " → " + shortHash(point.getLatestTemplateHash())) + ")");
+            info("Collected: " + shown + " (no behavioral difference; " + (kind == DriftKind.LABEL_SPLIT && !advanced ? "new profile established with the latest template as identity" : "template identity " + shortHash(point.getProfileTemplateHash()) + " → " + shortHash(point.getLatestTemplateHash())) + ")");
         }
         if (dispositionJsons != null) {
-            dispositionJsons.add("{\"invocationKey\":\"" + RecursiveJsonParser.escape(key) + "\",\"kind\":\"" + kind + "\",\"action\":\"" + action + "\"}");
+            dispositionJsons.add("{\"invocationKey\":\"" + RecursiveJsonParser.escape(key) + "\",\"kind\":\"" + kind.wireName() + "\",\"action\":\"" + action + "\"}");
         }
     }
 
@@ -743,9 +802,6 @@ public class TaskReplayRunner {
         List<TaskChain> scoped = chains;
         if (taskPrefix != null) {
             scoped = selectByRequestText(scoped, taskPrefix);
-            if (scoped == null) {
-                return null;
-            }
         }
         if (invocationKey != null) {
             List<TaskChain> filtered = new ArrayList<>();
@@ -765,7 +821,7 @@ public class TaskReplayRunner {
     /**
      * 任务链选择：请求文本精确相等优先（同文本多链是同一任务的多轮执行，升序全保留，
      * 由调用方取最新为对照）；精确未命中时按前缀匹配——唯一候选文本直接采用，
-     * 多个候选文本属歧义，报错列出全部候选并返回 null（调用方以用法错误退出）。
+     * 多个候选文本属歧义，抛 E-USAGE 的 {@link CliFailureException} 列出全部候选。
      * 与 --invocation 的「唯一前缀 + 歧义报错」目标选择器标准同款。
      */
     private List<TaskChain> selectByRequestText(List<TaskChain> chains, String taskPrefix) {
@@ -790,8 +846,7 @@ public class TaskReplayRunner {
             for (String text : sorted) {
                 shown.add(CliSupport.visibleText(CliSupport.abbreviateText(text, 60)));
             }
-            diagnostic("--task '" + CliSupport.visibleText(taskPrefix) + "' matches multiple tasks: " + String.join(", ", shown) + "; provide a longer prefix.");
-            return null;
+            throw new CliFailureException(CliErrorCode.E_USAGE, "--task '" + CliSupport.visibleText(taskPrefix) + "' matches multiple tasks: " + String.join(", ", shown) + "; provide a longer prefix.", "Provide a longer --task prefix so exactly one task matches.", "");
         }
         return prefixed;
     }
@@ -811,7 +866,7 @@ public class TaskReplayRunner {
         info("Task \"" + CliSupport.abbreviateText(only.getRequestText(), 80) + "\" has a single chain (session " + only.getSessionId() + "); first recording becomes the baseline (" + CliSupport.plural(only.getRecords().size(), "step") + ").");
         info("Re-run this command after the next real execution to pair against this baseline and produce an alignment report.");
         if (jsonMode) {
-            out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-align\",\"selfEstablished\":true,\"task\":{\"request\":\"" + RecursiveJsonParser.escape(only.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(only.getSessionId()) + "\"},\"summary\":{\"total\":" + only.getRecords().size() + ",\"pass\":" + only.getRecords().size() + ",\"changed\":0,\"skipped\":0,\"missing\":0,\"added\":0},\"steps\":[],\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}");
+            out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.TASK_ALIGN.wireName() + "\",\"selfEstablished\":true,\"task\":{\"request\":\"" + RecursiveJsonParser.escape(only.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(only.getSessionId()) + "\"},\"summary\":{\"total\":" + only.getRecords().size() + ",\"pass\":" + only.getRecords().size() + ",\"changed\":0,\"skipped\":0,\"missing\":0,\"added\":0},\"steps\":[],\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}");
         }
     }
 
@@ -899,21 +954,21 @@ public class TaskReplayRunner {
     }
 
     private static String driftJson(DriftReport drift) {
-        StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"drift-detection\"");
+        StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.DRIFT_DETECTION.wireName() + "\"");
         sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
         sb.append(",\"summary\":{\"sameKey\":").append(drift.getSameKeyDrifts().size()).append(",\"labelSplits\":").append(drift.getLabelSplits().size()).append(",\"zeroTemplate\":").append(drift.getZeroTemplateProfiles()).append(",\"skippedQueries\":").append(drift.getSkippedQueries()).append("}");
         sb.append(",\"drifts\":[");
         List<String> points = new ArrayList<>();
         for (DriftReport.DriftPoint point : drift.getSameKeyDrifts()) {
-            points.add(driftPointJson(point, "same-key"));
+            points.add(driftPointJson(point, DriftKind.SAME_KEY));
         }
         for (DriftReport.DriftPoint point : drift.getLabelSplits()) {
-            points.add(driftPointJson(point, "label-split"));
+            points.add(driftPointJson(point, DriftKind.LABEL_SPLIT));
         }
         return sb.append(String.join(",", points)).append("]}").toString();
     }
 
-    private static String driftPointJson(DriftReport.DriftPoint point, String kind) {
+    private static String driftPointJson(DriftReport.DriftPoint point, DriftKind kind) {
         StringBuilder sb = new StringBuilder("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(point.getInvocationKey())).append('"');
         if (point.getLabel() != null) {
             sb.append(",\"label\":\"").append(RecursiveJsonParser.escape(point.getLabel())).append('"');
@@ -924,7 +979,7 @@ public class TaskReplayRunner {
         if (point.getLatestTemplateHash() != null) {
             sb.append(",\"latestTemplateHash\":\"").append(RecursiveJsonParser.escape(point.getLatestTemplateHash())).append('"');
         }
-        return sb.append(",\"kind\":\"").append(kind).append("\"}").toString();
+        return sb.append(",\"kind\":\"").append(kind.wireName()).append("\"}").toString();
     }
 
     private static String stepLine(int index, String key, String detail) {
@@ -961,11 +1016,11 @@ public class TaskReplayRunner {
     }
 
     private static String dryRunAlignJson(String request, String baselineSession, Integer baselineSteps, String newSession, int newSteps) {
-        return "{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"task-dry-run\",\"alignPlan\":{\"request\":\"" + RecursiveJsonParser.escape(request) + "\",\"baselineSession\":" + (baselineSession != null ? "\"" + RecursiveJsonParser.escape(baselineSession) + "\"" : "null") + ",\"baselineSteps\":" + (baselineSteps != null ? baselineSteps.toString() : "null") + ",\"newSession\":\"" + RecursiveJsonParser.escape(newSession) + "\"" + ",\"newSteps\":" + newSteps + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}";
+        return "{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.TASK_DRY_RUN.wireName() + "\",\"alignPlan\":{\"request\":\"" + RecursiveJsonParser.escape(request) + "\",\"baselineSession\":" + (baselineSession != null ? "\"" + RecursiveJsonParser.escape(baselineSession) + "\"" : "null") + ",\"baselineSteps\":" + (baselineSteps != null ? baselineSteps.toString() : "null") + ",\"newSession\":\"" + RecursiveJsonParser.escape(newSession) + "\"" + ",\"newSteps\":" + newSteps + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}";
     }
 
-    private static String taskJson(String mode, String request, String sessionId, int total, int pass, int changed, int inherited, int postDivergence, int skipped, int missing, int added, int crossVersion, List<String> steps, long baselineTime, Long newChainTime, boolean prefixDependent, Integer ruleViolationCount, List<String> ruleViolationJsons, String costJson) {
-        StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"").append(mode).append('"');
+    private static String taskJson(TaskReportMode mode, String request, String sessionId, int total, int pass, int changed, int inherited, int postDivergence, int skipped, int missing, int added, int crossVersion, List<String> steps, long baselineTime, Long newChainTime, boolean prefixDependent, Integer ruleViolationCount, List<String> ruleViolationJsons, String costJson) {
+        StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"").append(mode.wireName()).append('"');
         sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
         sb.append(",\"task\":{\"request\":\"").append(RecursiveJsonParser.escape(request)).append("\",\"sessionId\":\"").append(RecursiveJsonParser.escape(sessionId)).append("\"}");
         sb.append(",\"summary\":{\"total\":").append(total).append(",\"pass\":").append(pass).append(",\"changed\":").append(changed).append(",\"inherited\":").append(inherited).append(",\"postDivergence\":").append(postDivergence).append(",\"skipped\":").append(skipped).append(",\"missing\":").append(missing).append(",\"added\":").append(added).append(",\"crossVersion\":").append(crossVersion);

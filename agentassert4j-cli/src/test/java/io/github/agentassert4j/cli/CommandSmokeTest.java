@@ -289,8 +289,8 @@ class CommandSmokeTest {
     }
 
     @Test
-    @DisplayName("replay --json 冷启动：stdout 零污染，指导信息走 stderr")
-    void replayJson_coldStart_stdoutCleanErrorsOnStderr() {
+    @DisplayName("replay --json 冷启动：失败以 error/1 包络收尾 stdout，指导信息走 stderr")
+    void replayJson_coldStart_envelopeOnStdoutErrorsOnStderr() {
         PrintStream originalOut = System.out;
         PrintStream originalErr = System.err;
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -306,8 +306,11 @@ class CommandSmokeTest {
         }
 
         assertEquals(2, exit);
-        assertEquals("", out.toString(), "--json 模式 stdout 只允许报告本体，冷启动失败不得产出 JSON: " + out);
-        assertTrue(errOut.toString().contains("No recorded interactions found"), "用法错误必须走 stderr 供 CI 采集: " + errOut);
+        String envelope = out.toString().trim();
+        assertTrue(envelope.startsWith("{\"schema\":\"agentassert4j.error/1\""), "--json 模式失败以机器包络收尾 stdout: " + out);
+        assertTrue(envelope.contains("\"errorCode\":\"E-NO-DATA\""), "空库属无对象可操作: " + envelope);
+        assertFalse(envelope.contains("\n"), "包络必须单行: " + envelope);
+        assertTrue(errOut.toString().contains("No recorded interactions found"), "现象必须同时走 stderr 供人排障: " + errOut);
     }
 
     @Test

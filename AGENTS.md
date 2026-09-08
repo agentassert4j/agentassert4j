@@ -175,6 +175,13 @@ io.github.agentassert4j/
 3. 枚举类以含义命名（如 `BaselineStatus`、`InvocationType`），注释说明每个值的语义
 4. 跨包引用必须显式 import（即使是同 base package 的子包）
 5. 有工厂方法的模型（如 `AnalysisResult.noBaseline()`）放在 model 包
+6. **嵌套类型**：嵌套类/枚举用于仅宿主私有的实现细节与 Builder。跨模块消费或承载公开契约
+   （wire JSON、SPI 签名、公开方法签名）的类型必须顶层并按领域归包（model/result/…）；
+   同包跨类消费默认抽顶层包私有类型。两类豁免保留嵌套：配置节（与宿主配置类 JSON 同构
+   共生，无独立 import 面）与报告行（报告类的行列实体，限定名自解释）。访问级别按真实
+   消费面给足即止——单消费者不得挂 public。封闭 wire 词表的枚举带显式 `wireName()`
+   字段，常量名与线上值形态分岔（SCREAMING_SNAKE vs kebab-case）时禁止 `name().replace`
+   式隐式转换约定
 
 ---
 

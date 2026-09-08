@@ -98,23 +98,25 @@ class CliSupportResolverTest {
     }
 
     @Test
-    @DisplayName("业务标签覆盖多个分组时报错并列出全部分组")
+    @DisplayName("业务标签覆盖多个分组时报错并列出全部分组（E-USAGE）")
     void businessLabel_multiGroup_errors() {
         saveRecord("r1", "queryOrder", "hash-a");
         saveRecord("r2", "queryOrder", "hash-b");
 
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "queryOrder"));
+        CliFailureException e = assertThrows(CliFailureException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "queryOrder"));
+        assertEquals(CliErrorCode.E_USAGE, e.errorCode);
         assertTrue(e.getMessage().contains("covers multiple invocations"));
         assertTrue(e.getMessage().contains("invocation:queryOrder:hash-a") && e.getMessage().contains("invocation:queryOrder:hash-b"));
     }
 
     @Test
-    @DisplayName("无命中时报错并指引两种合法写法")
+    @DisplayName("无命中时报错并指引两种合法写法（E-NO-DATA）")
     void noMatch_errors() {
         saveRecord("r1", "sk1", "hash-a");
         establishAll();
 
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "no-such"));
+        CliFailureException e = assertThrows(CliFailureException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "no-such"));
+        assertEquals(CliErrorCode.E_NO_DATA, e.errorCode);
         assertTrue(e.getMessage().contains("No invocation matching"));
     }
 
@@ -158,25 +160,27 @@ class CliSupportResolverTest {
     }
 
     @Test
-    @DisplayName("显示短形撞车（前 8 位相同）报错并列出完整键")
+    @DisplayName("显示短形撞车（前 8 位相同）报错并列出完整键（E-USAGE）")
     void displayForm_collision_errors() {
         saveRecord("r1", "queryOrder", "abcdef1200000001");
         saveRecord("r2", "queryOrder", "abcdef1200000002");
         establishAll();
 
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "queryOrder@abcdef12"));
+        CliFailureException e = assertThrows(CliFailureException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "queryOrder@abcdef12"));
+        assertEquals(CliErrorCode.E_USAGE, e.errorCode);
         assertTrue(e.getMessage().contains("hash collision"));
         assertTrue(e.getMessage().contains("invocation:queryOrder:abcdef1200000001") && e.getMessage().contains("invocation:queryOrder:abcdef1200000002"));
     }
 
     @Test
-    @DisplayName("末段非 8 位十六进制不视为显示短形，走原解析路径")
+    @DisplayName("末段非 8 位十六进制不视为显示短形，走原解析路径（E-NO-DATA）")
     void displayForm_nonHexSuffix_fallsThrough() {
         saveRecord("r1", "sk1", "abcdef1234567890");
         establishAll();
 
         // 「@toolong」不是 8 位 → 不按显示短形处理，走前缀/标签路径后无命中报错
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "sk1@toolong"));
+        CliFailureException e = assertThrows(CliFailureException.class, () -> CliSupport.resolveInvocationKeyTarget(repository, "sk1@toolong"));
+        assertEquals(CliErrorCode.E_NO_DATA, e.errorCode);
         assertTrue(e.getMessage().contains("No invocation matching"));
     }
 

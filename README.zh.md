@@ -96,8 +96,7 @@ agentassert4j replay
 命令输出为英文单语（下面是演示库真实输出的节选）：
 
 ```text
-Dependency graph: 5 nodes / 4 edges
-Drift: 2 same-key, 0 label splits, 2 downstream (0 zero-template invocations undetectable)
+Drift: 2 same-key, 0 label splits (0 zero-template invocations undetectable)
   ▲ 查询物流@8d9dbac2 (查询物流) template 6feac2e8 → d15016ac
   ▲ 查询订单@b3e4b38c (查询订单) template ba3e3bc4 → c30f63a2
 Task "订单 1234 的物流太慢，我要退款": baseline chain (session demo-session-0801) → new chain (session demo-session-0901)
@@ -229,8 +228,9 @@ stage('AgentAssert 行为回归') {
 | `1` | 存在行为差异（含缺步骤 / 新增步骤） | 人裁决 approve / reject |
 | `2` | 用法或基础设施故障 / 证据不完整（预算耗尽、覆盖缺口、`--ci` 遇无基线调用点、判定语义不符） | 修环境，不算回归 |
 
-`--json` 输出单行机器可读报告到 stdout（每命令一个 schema 标签），诊断与进度走 stderr——
-程序与人各看各的。通道契约与 schema 清单见 [OPERATIONS.md](OPERATIONS.md#4-ci-门禁配方)。
+`--json` 输出单行机器可读报告到 stdout（每命令一个 schema 标签），诊断与进度走 stderr；
+失败的运行以 `agentassert4j.error/1` 错误包络收尾 stdout（错误码 + 可行动建议 + 下一步命令）——
+要了 JSON 就恒得 JSON。通道契约与 schema 清单见 [OPERATIONS.md](OPERATIONS.md#4-ci-门禁配方)。
 
 ## 接入矩阵
 

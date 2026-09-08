@@ -13,6 +13,7 @@ import io.github.agentassert4j.spi.InteractionQueryStore;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -154,24 +155,6 @@ final class CliSupport {
     }
 
     /**
-     * 调用点足迹——按完整键分组的只读巡检视图（status 未建档段与 doctor 共用）。
-     */
-    static final class InvocationFootprint {
-
-        final String invocationKey;
-        final String label;
-        final int recordCount;
-        final String lastSessionId;
-
-        InvocationFootprint(String invocationKey, String label, int recordCount, String lastSessionId) {
-            this.invocationKey = invocationKey;
-            this.label = label;
-            this.recordCount = recordCount;
-            this.lastSessionId = lastSessionId;
-        }
-    }
-
-    /**
      * 全库按完整键分组的调用点足迹（键缺失记录不入组；最近会话取该键时间戳最大记录所在会话）。
      */
     static List<InvocationFootprint> recordedInvocationFootprints(StorageRepository repository) {
@@ -287,7 +270,7 @@ final class CliSupport {
                 return labelMatches.get(0);
             }
             if (labelMatches.size() > 1) {
-                throw new IllegalStateException("--invocation " + filter + " maps to multiple business labels: " + String.join(", ", labelMatches) + "; use the exact business label.");
+                throw new CliFailureException(CliErrorCode.E_USAGE, "--invocation " + filter + " maps to multiple business labels: " + String.join(", ", labelMatches) + "; use the exact business label.", "Use the exact business label as recorded; `status` lists the label column.", "");
             }
         }
         List<InvocationProfile> prefixMatches = new ArrayList<>();
@@ -301,7 +284,7 @@ final class CliSupport {
             for (InvocationProfile profile : prefixMatches) {
                 keys.add(profile.getInvocationKey());
             }
-            throw new IllegalStateException("--invocation " + filter + " prefix matches multiple invocations: " + String.join(", ", keys) + "; provide a longer prefix.");
+            throw new CliFailureException(CliErrorCode.E_USAGE, "--invocation " + filter + " prefix matches multiple invocations: " + String.join(", ", keys) + "; provide a longer prefix.", "Provide a longer --invocation prefix so exactly one invocation matches.", "");
         }
         if (prefixMatches.isEmpty()) {
             return filter;
@@ -313,7 +296,7 @@ final class CliSupport {
             return businessMatches.get(0);
         }
         if (businessMatches.size() > 1) {
-            throw new IllegalStateException("--invocation " + filter + " maps to multiple business labels: " + String.join(", ", businessMatches) + "; use the exact business label.");
+            throw new CliFailureException(CliErrorCode.E_USAGE, "--invocation " + filter + " maps to multiple business labels: " + String.join(", ", businessMatches) + "; use the exact business label.", "Use the exact business label as recorded; `status` lists the label column.", "");
         }
         return filter;
     }
@@ -322,12 +305,12 @@ final class CliSupport {
      * 解析 --invocation 目标值（画像操作类命令用：approve/reject/rollback），返回唯一 invocationKey。
      * 解析优先级：完整 invocationKey 精确命中（即使它是其他 key 的前缀）＞ 业务标签（该标签
      * 覆盖多个分组时报错并列出）＞ 显示短形（status 展示的 标签@8位/skl@8位 等，看得到的写法
-     * 选得到）＞ invocationKey 唯一前缀。无命中或多命中均抛 {@link IllegalStateException}，
-     * 由命令层转译为退出码 2。
+     * 选得到）＞ invocationKey 唯一前缀。无命中抛 E-NO-DATA、多命中抛 E-USAGE 的
+     * {@link CliFailureException}，由命令层转译为退出码 2 与机器包络。
      */
     static String resolveInvocationKeyTarget(StorageRepository repository, String filter) {
         if (filter == null || filter.isEmpty()) {
-            throw new IllegalStateException("Missing invocation target.");
+            throw new CliFailureException(CliErrorCode.E_USAGE, "Missing invocation target.", "Pass --invocation with a business label, invocationKey prefix, or the status display form.", "");
         }
         for (InvocationProfile profile : repository.findAllInvocations()) {
             if (filter.equals(profile.getInvocationKey())) {
@@ -344,10 +327,10 @@ final class CliSupport {
                 }
             }
             if (invocationKeys.isEmpty()) {
-                throw new IllegalStateException("No groupable records under business label " + filter + "; cannot resolve the invocation.");
+                throw new CliFailureException(CliErrorCode.E_NO_DATA, "No groupable records under business label " + filter + "; cannot resolve the invocation.", "Record interactions carrying this invocationId first, then retry.", "");
             }
             if (invocationKeys.size() > 1) {
-                throw new IllegalStateException("Business label " + filter + " covers multiple invocations: " + String.join(", ", invocationKeys) + "; specify one with an invocationKey (unique prefix or the status display form).");
+                throw new CliFailureException(CliErrorCode.E_USAGE, "Business label " + filter + " covers multiple invocations: " + String.join(", ", invocationKeys) + "; specify one with an invocationKey (unique prefix or the status display form).", "Pick one invocationKey (unique prefix or the status display form) from the listed candidates.", "");
             }
             return invocationKeys.iterator().next();
         }
@@ -362,14 +345,14 @@ final class CliSupport {
             }
         }
         if (prefixMatches.isEmpty()) {
-            throw new IllegalStateException("No invocation matching " + filter + " (accepted: business label, invocationKey prefix, or the status display form like label@8hex; see `status` for the full list).");
+            throw new CliFailureException(CliErrorCode.E_NO_DATA, "No invocation matching " + filter + " (accepted: business label, invocationKey prefix, or the status display form like label@8hex; see `status` for the full list).", "Check the value against `status` output, then retry.", "agentassert4j status");
         }
         if (prefixMatches.size() > 1) {
             List<String> keys = new ArrayList<>();
             for (InvocationProfile profile : prefixMatches) {
                 keys.add(profile.getInvocationKey());
             }
-            throw new IllegalStateException("Prefix matches multiple invocations: " + String.join(", ", keys) + "; provide a longer prefix.");
+            throw new CliFailureException(CliErrorCode.E_USAGE, "Prefix matches multiple invocations: " + String.join(", ", keys) + "; provide a longer prefix.", "Provide a longer --invocation prefix so exactly one invocation matches.", "");
         }
         return prefixMatches.get(0).getInvocationKey();
     }
@@ -378,8 +361,8 @@ final class CliSupport {
      * 显示短形反解——status/对齐报告展示的「标签@8位哈希」「skl@8位」等短形可直接
      * 粘贴为 --invocation 值，消除「看得到的写法选不了」的文法分叉。匹配方式：对画像键
      * 现算显示形后全等比对（哈希段大小写不敏感）；末段不是 8 位十六进制的值不视为显示
-     * 短形，返回 null 由调用方走原解析路径。多命中（细分哈希前 8 位撞车）抛
-     * {@link IllegalStateException} 由命令层转译为退出码 2。
+     * 短形，返回 null 由调用方走原解析路径。多命中（细分哈希前 8 位撞车）抛 E-USAGE 的
+     * {@link CliFailureException} 由命令层转译为退出码 2 与机器包络。
      */
     static String resolveByDisplayForm(StorageRepository repository, String filter) {
         int at = filter == null ? -1 : filter.lastIndexOf('@');
@@ -410,7 +393,7 @@ final class CliSupport {
             for (InvocationProfile profile : matches) {
                 keys.add(profile.getInvocationKey());
             }
-            throw new IllegalStateException("Display form " + filter + " matches multiple invocations (subdivision hash collision in the first 8 hex chars): " + String.join(", ", keys) + "; provide the full invocationKey.");
+            throw new CliFailureException(CliErrorCode.E_USAGE, "Display form " + filter + " matches multiple invocations (subdivision hash collision in the first 8 hex chars): " + String.join(", ", keys) + "; provide the full invocationKey.", "Provide the full invocationKey to disambiguate the hash collision.", "");
         }
         return matches.get(0).getInvocationKey();
     }
@@ -535,33 +518,80 @@ final class CliSupport {
     }
 
     /**
-     * rules.tasks 段的畸形声明告警——畸形约束要么无约束力要么永不满足，
+     * rules.tasks 段的畸形声明告警清单——畸形约束要么无约束力要么永不满足，
      * 静默存在会让团队纪律形同虚设或全部误报，必须在加载时点破。
+     * 输出与机器通道（doctor/1 的 ruleWarnings）共用同一份清单，两通道同词。
      */
-    static void warnMalformedTaskRules(InvocationRulesConfig rules, PrintStream out) {
+    static List<String> malformedTaskRuleWarnings(InvocationRulesConfig rules) {
+        List<String> warnings = new ArrayList<>();
         for (String note : rules.getParseNotes()) {
-            out.println("Warning: rules.tasks " + note + ".");
+            warnings.add("rules.tasks " + note + ".");
         }
         for (String taskKey : rules.getDeclaredTaskKeys()) {
             if (taskKey == null || taskKey.trim().isEmpty()) {
-                out.println("Warning: rules.tasks has an empty task key declaration (never matches; use the taskKey declared at recording time).");
+                warnings.add("rules.tasks has an empty task key declaration (never matches; use the taskKey declared at recording time).");
                 continue;
             }
             InvocationRulesConfig.TaskRule rule = rules.getTaskRule(taskKey);
             if (rule.getRequiredSteps().isEmpty() && rule.getRequiredOrder().isEmpty() && rule.getSteps().isEmpty()) {
-                out.println("Warning: task " + taskKey + " declares no constraints (requiredSteps/requiredOrder/steps all empty); the rule has no effect.");
+                warnings.add("task " + taskKey + " declares no constraints (requiredSteps/requiredOrder/steps all empty); the rule has no effect.");
             }
             if (!rule.getRequiredOrder().isEmpty() && rule.getRequiredOrder().stream().anyMatch(step -> step == null || step.trim().isEmpty())) {
-                out.println("Warning: task " + taskKey + " has empty labels in requiredOrder.");
+                warnings.add("task " + taskKey + " has empty labels in requiredOrder.");
             }
             for (Map.Entry<String, InvocationRulesConfig.StepCount> entry : rule.getSteps().entrySet()) {
                 InvocationRulesConfig.StepCount bounds = entry.getValue();
                 if (bounds.isUnbounded()) {
-                    out.println("Warning: task " + taskKey + " step " + entry.getKey() + " declares neither min nor max (no constraint).");
+                    warnings.add("task " + taskKey + " step " + entry.getKey() + " declares neither min nor max (no constraint).");
                 } else if (bounds.getMin() != null && bounds.getMax() != null && bounds.getMin() > bounds.getMax()) {
-                    out.println("Warning: task " + taskKey + " step " + entry.getKey() + " declares min(" + bounds.getMin() + ") > max(" + bounds.getMax() + ") (unsatisfiable; judged as all violations).");
+                    warnings.add("task " + taskKey + " step " + entry.getKey() + " declares min(" + bounds.getMin() + ") > max(" + bounds.getMax() + ") (unsatisfiable; judged as all violations).");
                 }
             }
         }
+        return warnings;
+    }
+
+    /**
+     * 规则告警就地输出（Warning: 前缀的人类通道形态）。
+     */
+    static void warnMalformedTaskRules(InvocationRulesConfig rules, PrintStream out) {
+        for (String warning : malformedTaskRuleWarnings(rules)) {
+            out.println("Warning: " + warning);
+        }
+    }
+
+    /**
+     * 命令失败统一出口：人类通道输出现象一行，--json 模式向 stdout 追加
+     * agentassert4j.error/1 单行包络（stdout 恒为机器可读）。返回退出码 2。
+     */
+    static int fail(boolean jsonOutput, PrintStream out, PrintStream err, CliErrorCode errorCode, String message, String hint, String nextAction) {
+        err.println(message);
+        if (jsonOutput) {
+            out.println(errorEnvelope(errorCode, message, hint, nextAction));
+        }
+        return 2;
+    }
+
+    /**
+     * {@link CliFailureException} 的出口转译——错误码与指引在抛出点已钉死。
+     */
+    static int fail(boolean jsonOutput, PrintStream out, PrintStream err, CliFailureException e) {
+        return fail(jsonOutput, out, err, e.errorCode, describe(e), e.hint, e.nextAction);
+    }
+
+    /**
+     * agentassert4j.error/1 单行包络：机器消费方按 errorCode 分支、按 hints 自助续行。
+     * hints 为失败路径必填项，空缺时以通用指引兜底。
+     */
+    static String errorEnvelope(CliErrorCode errorCode, String message, String hint, String nextAction) {
+        String safeHint = hint == null || hint.isEmpty() ? "Fix the reported problem, then retry." : hint;
+        return "{\"schema\":\"agentassert4j.error/1\",\"status\":\"error\",\"errorCode\":\"" + errorCode.wireName() + "\",\"message\":\"" + RecursiveJsonParser.escape(message != null ? message : "") + "\",\"hints\":[\"" + RecursiveJsonParser.escape(safeHint) + "\"],\"nextAction\":\"" + RecursiveJsonParser.escape(nextAction != null ? nextAction : "") + "\"}";
+    }
+
+    /**
+     * 异常的单行现象描述——message 缺席时退化为类名，包络与 stderr 不出 "null"。
+     */
+    static String describe(Throwable e) {
+        return e.getMessage() != null ? e.getMessage() : e.toString();
     }
 }

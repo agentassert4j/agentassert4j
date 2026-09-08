@@ -62,12 +62,13 @@ public class RollbackCommand implements Callable<Integer> {
                 out.println("  " + invocationKey + " → " + version + " (approver " + reloaded.getApprovedBy() + ")");
             }
             return 0;
+        } catch (CliFailureException e) {
+            return CliSupport.fail(jsonOutput, out, err, e);
         } catch (IllegalStateException e) {
-            err.println(e.getMessage());
-            return 2;
+            // 目标画像/归档版本不存在：无对象可回滚，非环境故障
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, CliSupport.describe(e), "Pick a version from the archived column in `status`, then retry.", "agentassert4j status");
         } catch (RuntimeException e) {
-            err.println("rollback failed: " + e.getMessage());
-            return 2;
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_ENV, "rollback failed: " + CliSupport.describe(e), "Fix the reported problem and retry; `agentassert4j doctor` reports database and config health.", "agentassert4j doctor");
         } finally {
             if (repository != null) {
                 repository.close();

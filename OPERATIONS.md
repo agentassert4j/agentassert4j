@@ -180,8 +180,11 @@ agentassert4j replay --ci --json
   拒绝、判定语义不符、重驱预算耗尽/全败）——修环境，不算回归。
 - `--json`：stdout 逐行输出机器可读报告（`agentassert4j.task-report/1`，mode 分段：
   drift-detection / task-align / drift-disposition / task-re-drive / task-dry-run），
-  诊断与进度走 stderr；按退出码分流消费——0/1 解析 stdout，2 只读 stderr。
-  同一通道契约覆盖全部命令（schema 清单见 §9），失败路径 stdout 零产出。
+  诊断与进度走 stderr；按退出码分流消费——0/1 解析 stdout 报告，2 解析 stdout 收尾行的
+  `agentassert4j.error/1` 失败包络（`errorCode` 四族：E-USAGE 用法与选择器 / E-NO-DATA
+  无可操作对象 / E-GUARD 判定守卫拒绝 / E-ENV 环境与 IO；`hints[]` 可行动建议必填，
+  `nextAction` 给最可能的下一条命令）。人读模式失败路径 stdout 零产出不变。
+  同一通道契约覆盖全部命令（schema 清单见 §9）。
 
 <img src="assets/cli-replay-ci.png" alt="replay --ci --json 实跑：task-report/1 逐行分段报告，exit 1 门禁红灯" width="880"/>
 
@@ -349,7 +352,7 @@ try {
 |------|--------|------|
 | 存储 schema（`PRAGMA user_version`） | 1 | 预发布固定不演进，schema 变更=删库重建；发布后只增不改 |
 | 判定语义 | `det-v1` | 改变「同样差异得出什么判定」的变更必须递增；发布前恒定 |
-| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`graph/1`、`rules/1`（每命令 `--json` 各对应其一；replay 的 mode 分段见 §4） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
+| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`graph/1`、`rules/1`、`doctor/1`（每命令 `--json` 各对应其一；replay 的 mode 分段见 §4）、`error/1`（`--json` 失败包络：errorCode 四族 + hints + nextAction） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
 | Maven 版本 | `1.0.0-SNAPSHOT` | 发布时转正式版 |
 | CLI 可执行形态 | `agentassert4j-cli-standalone` | cli 模块的全依赖 shaded 产物（含 slf4j-nop 与 Main-Class），`java -jar` 直接运行 |
 

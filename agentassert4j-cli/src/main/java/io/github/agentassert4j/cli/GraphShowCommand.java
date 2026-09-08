@@ -17,9 +17,9 @@ import java.util.concurrent.Callable;
 /**
  * graph show 命令 — 现场重建依赖图并渲染（只读，不落盘）。
  *
- * <p>图是派生数据：本命令每次从交互记录重建，永远反映最新录制状态；
- * 快照留档归 replay（写者唯一），本命令只读。多轮工具会话之外的数据
- * 建不出边——空图说明录制数据缺会话链，不是图功能故障。</p>
+ * <p>图是派生数据：本命令每次从交互记录重建，永远反映最新录制状态。
+ * 多轮工具会话之外的数据建不出边——空图说明录制数据缺会话链，
+ * 不是图功能故障。</p>
  *
  * @author axy-yxa
  * @since 2026-08-27
@@ -81,9 +81,10 @@ public class GraphShowCommand implements Callable<Integer> {
                 out.println("      Recording data must contain multi-turn interactions within one sessionId to produce edges.");
             }
             return 0;
+        } catch (CliFailureException e) {
+            return CliSupport.fail(jsonOutput, out, err, e);
         } catch (RuntimeException e) {
-            err.println("graph show failed: " + e.getMessage());
-            return 2;
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_ENV, "graph show failed: " + CliSupport.describe(e), "Fix the reported problem and retry; `agentassert4j doctor` reports database and config health.", "agentassert4j doctor");
         } finally {
             if (repository != null) {
                 repository.close();

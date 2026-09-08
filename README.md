@@ -103,8 +103,7 @@ agentassert4j replay
 The output is English-only (excerpt from the fictional demo database, genuine CLI output):
 
 ```text
-Dependency graph: 5 nodes / 4 edges
-Drift: 2 same-key, 0 label splits, 2 downstream (0 zero-template invocations undetectable)
+Drift: 2 same-key, 0 label splits (0 zero-template invocations undetectable)
   ▲ 查询物流@8d9dbac2 (查询物流) template 6feac2e8 → d15016ac
   ▲ 查询订单@b3e4b38c (查询订单) template ba3e3bc4 → c30f63a2
 Task "订单 1234 的物流太慢，我要退款": baseline chain (session demo-session-0801) → new chain (session demo-session-0901)
@@ -117,8 +116,8 @@ Candidate registered: 查询物流@8d9dbac2 (behavior change awaiting adjudicati
   [6] 理赔查询@3e4c2031  added step: new chain invoked '理赔查询@3e4c2031', baseline did not
 Alignment summary: PASS 3 | CHANGED 1 | missing 1 | added 1
 ```
-The detection layer names **which invocations changed template identity** (drift points fan out over
-the dependency graph); the alignment layer pairs the two real chains of every task by invocation —
+The detection layer names **which invocations changed template identity**; the alignment layer pairs
+the two real chains of every task by invocation —
 missing steps / added steps / per-step structure diff, wording differences shown as low-confidence
 references for humans, **the verdict only reads structural fingerprints**. The whole command needs no
 API key. To have the framework replay recorded inputs against each point's new template as a
@@ -251,7 +250,9 @@ identity, baseline status, version, candidate, archived versions, business label
 | `2` | Usage or infrastructure failure / incomplete evidence (budget exhausted, coverage gap, `--ci` with unbaselined invocations, judgment-semantics mismatch) | Fix the environment; not a regression |
 
 `--json` emits a single-line machine-readable report on stdout (one schema tag per command);
-diagnostics go to stderr. Channel contract and schema list in [OPERATIONS.md](OPERATIONS.md).
+diagnostics go to stderr. A failed run appends an `agentassert4j.error/1` error envelope to
+stdout (error code, actionable hints, next command) — ask for JSON, always get JSON.
+Channel contract and schema list in [OPERATIONS.md](OPERATIONS.md).
 
 ## Integration matrix
 

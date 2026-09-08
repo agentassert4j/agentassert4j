@@ -67,8 +67,7 @@ public class BaselineExportCommand implements Callable<Integer> {
                 chains.removeIf(c -> !c.getRequestText().startsWith(task));
             }
             if (chains.isEmpty()) {
-                err.println("No task chains to export. Record interactions and establish baselines first, or check the --task prefix.");
-                return 2;
+                return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, "No task chains to export.", "Record interactions and run `agentassert4j baseline` first, or check the --task prefix.", "agentassert4j baseline");
             }
 
             InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
@@ -139,16 +138,14 @@ public class BaselineExportCommand implements Callable<Integer> {
             }
 
             if (pack.getTasks().isEmpty()) {
-                err.println("No task chain has complete baseline fingerprints; pack not written. Excluded chains: " + String.join("; ", excluded));
-                return 2;
+                return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, "No task chain has complete baseline fingerprints; pack not written. Excluded chains: " + String.join("; ", excluded), "Establish or fix baselines for the excluded chains (`agentassert4j baseline`), then re-export.", "agentassert4j baseline");
             }
 
             String json = PackCodec.toJson(pack);
             try {
                 Files.write(Paths.get(outPath), json.getBytes(StandardCharsets.UTF_8));
             } catch (IOException e) {
-                err.println("Failed to write the acceptance pack: " + e.getMessage());
-                return 2;
+                return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_ENV, "Failed to write the acceptance pack: " + CliSupport.describe(e), "Check the --out path and write permissions, then retry.", "");
             }
             int stepCount = pack.getTasks().stream().mapToInt(t -> t.getSteps().size()).sum();
             if (jsonOutput) {
@@ -180,9 +177,10 @@ public class BaselineExportCommand implements Callable<Integer> {
                 out.println("  Warning: task chains with unestablished steps were excluded: " + String.join("; ", unestablishedOnly));
             }
             return 0;
+        } catch (CliFailureException e) {
+            return CliSupport.fail(jsonOutput, out, err, e);
         } catch (RuntimeException e) {
-            err.println("export failed: " + e.getMessage());
-            return 2;
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_ENV, "export failed: " + CliSupport.describe(e), "Fix the reported problem and retry; `agentassert4j doctor` reports database and config health.", "agentassert4j doctor");
         } finally {
             if (repository != null) {
                 repository.close();

@@ -55,8 +55,7 @@ public class VerifyCommand implements Callable<Integer> {
         try {
             packContent = new String(Files.readAllBytes(Paths.get(packPath)), StandardCharsets.UTF_8);
         } catch (Exception e) {
-            err.println("Cannot read the acceptance pack file: " + packPath);
-            return 2;
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_ENV, "Cannot read the acceptance pack file: " + packPath, "Check the --pack path; the file must exist and be readable.", "");
         }
         String digest = HashUtil.sha256(packContent);
 
@@ -66,9 +65,10 @@ public class VerifyCommand implements Callable<Integer> {
             repository = CliSupport.openRepository(db, jsonOutput ? err : out);
             DeterministicComparator comparator = CliSupport.createComparator(config);
             return new VerifyRunner(repository, comparator, out, err, jsonOutput).run(packContent, digest, task, reportPath, dryRun);
+        } catch (CliFailureException e) {
+            return CliSupport.fail(jsonOutput, out, err, e);
         } catch (RuntimeException e) {
-            err.println("verify failed: " + e.getMessage());
-            return 2;
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_ENV, "verify failed: " + CliSupport.describe(e), "Fix the reported problem and retry; `agentassert4j doctor` reports database and config health.", "agentassert4j doctor");
         } finally {
             if (repository != null) {
                 repository.close();

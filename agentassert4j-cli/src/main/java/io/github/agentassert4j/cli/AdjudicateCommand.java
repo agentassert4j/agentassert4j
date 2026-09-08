@@ -44,8 +44,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
             repository = CliSupport.openRepository(db, jsonOutput ? err : out);
             List<InvocationProfile> targets = resolveTargets(repository);
             if (targets.isEmpty()) {
-                printNoTargets(repository);
-                return 2;
+                return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, "No candidates pending adjudication.", "Behavioral differences land candidates during `agentassert4j replay`; run it after a template change.", "agentassert4j replay");
             }
 
             BaselineManager manager = new BaselineManager(repository);
@@ -68,12 +67,13 @@ abstract class AdjudicateCommand implements Callable<Integer> {
                 out.println("{\"schema\":\"agentassert4j.adjudication/1\",\"action\":\"" + action() + "\",\"invocations\":[" + String.join(",", results) + "]}");
             }
             return 0;
+        } catch (CliFailureException e) {
+            return CliSupport.fail(jsonOutput, out, err, e);
         } catch (IllegalStateException e) {
-            err.println(e.getMessage());
-            return 2;
+            // BaselineManager 的对象缺失守卫（画像/候选不存在）：无对象可操作，非环境故障
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, CliSupport.describe(e), "Check the target against `status` output, then retry.", "agentassert4j status");
         } catch (RuntimeException e) {
-            err.println("adjudication failed: " + e.getMessage());
-            return 2;
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_ENV, "adjudication failed: " + CliSupport.describe(e), "Fix the reported problem and retry; `agentassert4j doctor` reports database and config health.", "agentassert4j doctor");
         } finally {
             if (repository != null) {
                 repository.close();
@@ -101,14 +101,6 @@ abstract class AdjudicateCommand implements Callable<Integer> {
             }
         }
         return targets;
-    }
-
-    private void printNoTargets(StorageRepository repository) {
-        if (invocation != null) {
-            err.println("No invocation matching " + invocation + " (accepted: business label, invocationKey prefix, or the status display form like label@8hex; see `status` for the full list).");
-            return;
-        }
-        err.println("No candidates pending adjudication.");
     }
 
     /**

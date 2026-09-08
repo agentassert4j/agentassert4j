@@ -71,6 +71,22 @@ public class VerifyRunner {
     }
 
     /**
+     * 命令失败统一出口：现象与指引走诊断通道（人类模式 out / --json 模式 err），
+     * --json 模式另向 stdout 追加 agentassert4j.error/1 包络（stdout 恒为机器可读）。
+     * 返回退出码 2。
+     */
+    private int fail(CliErrorCode errorCode, String message, String hint, String nextAction) {
+        diagnostic(message);
+        if (hint != null && !hint.isEmpty()) {
+            diagnostic(hint);
+        }
+        if (jsonMode) {
+            out.println(CliSupport.errorEnvelope(errorCode, message, hint, nextAction));
+        }
+        return 2;
+    }
+
+    /**
      * 执行验收比对。
      *
      * @param dryRun 只读预演：装载包、列任务与本地链配对情况、跨模型注记，零判定零写入
@@ -81,12 +97,10 @@ public class VerifyRunner {
         try {
             pack = PackCodec.fromJson(packContent);
         } catch (IllegalArgumentException e) {
-            diagnostic("Acceptance pack rejected: " + e.getMessage());
-            return 2;
+            return fail(CliErrorCode.E_USAGE, "Acceptance pack rejected: " + CliSupport.describe(e), "Re-export the pack with `agentassert4j baseline export`, or pass the intended --pack path.", "agentassert4j baseline export");
         }
         if (pack.getMeta() == null || !JudgmentSemantics.VERSION.equals(pack.getMeta().getJudgmentSemantics())) {
-            diagnostic("Version guard: pack judgment semantics is " + (pack.getMeta() == null ? "unmarked" : pack.getMeta().getJudgmentSemantics()) + ", current engine is " + JudgmentSemantics.VERSION + ". Refusing to judge to avoid silent reinterpretation.");
-            return 2;
+            return fail(CliErrorCode.E_GUARD, "Version guard: pack judgment semantics is " + (pack.getMeta() == null ? "unmarked" : pack.getMeta().getJudgmentSemantics()) + ", current engine is " + JudgmentSemantics.VERSION + ".", "Judging anyway would silently reinterpret the pack; re-export it with the current engine, then retry.", "agentassert4j baseline export");
         }
 
         List<TaskChain> localChains = TaskChainView.resolveAll(repository);
@@ -97,8 +111,7 @@ public class VerifyRunner {
             }
         }
         if (tasks.isEmpty()) {
-            diagnostic("No tasks in the pack match prefix '" + taskPrefix + "'.");
-            return 2;
+            return fail(CliErrorCode.E_NO_DATA, "No tasks in the pack match prefix '" + taskPrefix + "'.", "Check the --task prefix against the pack task keys; `verify --dry-run` lists pairings.", "");
         }
 
         if (dryRun) {
@@ -199,7 +212,12 @@ public class VerifyRunner {
         if (changed + missing + added > 0) {
             return 1;
         }
-        return uncovered.isEmpty() ? 0 : 2;
+        if (uncovered.isEmpty()) {
+            return 0;
+        }
+        // 覆盖缺口：包任务未在本地执行属证据缺口，不允许冒充通过——报告已在 stdout，
+        // 包络作收尾行显式说明缺口与补证路径
+        return fail(CliErrorCode.E_NO_DATA, "Verification incomplete: no local execution for " + CliSupport.plural(uncovered.size(), "pack task") + ".", "Run the uncovered tasks in your agent, then re-run verify; `verify --dry-run` lists pairings.", "agentassert4j verify --dry-run");
     }
 
     /**

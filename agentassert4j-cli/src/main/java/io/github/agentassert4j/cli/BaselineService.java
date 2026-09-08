@@ -177,34 +177,35 @@ public class BaselineService {
 
     /**
      * 单个调用点的建档结果 — 逐调用点 JSON 报告字段（人类结果行已就地打印）。
+     * 仅同包建档命令消费，不对外承诺。
      */
-    public static final class BaselineOutcome {
+    static final class BaselineOutcome {
 
         private final String invocationKey;
         private final String label;
         private final String action;
         private final String versionTag;
 
-        public BaselineOutcome(String invocationKey, String label, String action, String versionTag) {
+        BaselineOutcome(String invocationKey, String label, String action, String versionTag) {
             this.invocationKey = invocationKey;
             this.label = label;
             this.action = action;
             this.versionTag = versionTag;
         }
 
-        public String getInvocationKey() {
+        String getInvocationKey() {
             return invocationKey;
         }
 
-        public String getLabel() {
+        String getLabel() {
             return label;
         }
 
-        public String getAction() {
+        String getAction() {
             return action;
         }
 
-        public String getVersionTag() {
+        String getVersionTag() {
             return versionTag;
         }
     }

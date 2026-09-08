@@ -64,20 +64,16 @@ public class ReplayCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         if (fullChain && !reDrive) {
-            err.println("--full-chain requires --re-drive.");
-            return 2;
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--full-chain requires --re-drive.", "Add --re-drive to run the widened re-drive, or drop --full-chain.", "agentassert4j replay --re-drive --full-chain");
         }
         if ((maxTotalCalls != null || maxTotalTokens != null) && !reDrive) {
-            err.println("--max-total-calls/--max-total-tokens require --re-drive.");
-            return 2;
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--max-total-calls/--max-total-tokens require --re-drive.", "Add --re-drive, or drop the budget caps.", "");
         }
         if (maxTotalCalls != null && maxTotalCalls < 1) {
-            err.println("--max-total-calls must be >= 1.");
-            return 2;
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--max-total-calls must be >= 1.", "Pass a positive call cap, or drop the flag for no cap.", "");
         }
         if (maxTotalTokens != null && maxTotalTokens < 1) {
-            err.println("--max-total-tokens must be >= 1.");
-            return 2;
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--max-total-tokens must be >= 1.", "Pass a positive token cap, or drop the flag for no cap.", "");
         }
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
         StorageRepository repository = null;
@@ -100,9 +96,10 @@ public class ReplayCommand implements Callable<Integer> {
             CliSupport.warnMalformedTaskRules(rules, jsonOutput ? err : out);
 
             return new TaskReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(task, resolvedInvocation, ciMode, dryRun, reDrive, fullChain, maxTotalCalls, maxTotalTokens);
+        } catch (CliFailureException e) {
+            return CliSupport.fail(jsonOutput, out, err, e);
         } catch (RuntimeException e) {
-            err.println("replay failed: " + e.getMessage());
-            return 2;
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_ENV, "replay failed: " + CliSupport.describe(e), "Fix the reported problem and retry; `agentassert4j doctor` reports database and config health.", "agentassert4j doctor");
         } finally {
             if (repository != null) {
                 repository.close();
