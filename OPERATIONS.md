@@ -268,6 +268,47 @@ agentassert4j audit --json       # agentassert4j.audit/1 机器报告（writes �
 MCP 工具清单的 description 声明各变异动词的使用要求（如 accept 应在人类指示后调用），
 授权确认由 harness 权限系统执行。
 
+## 6.2 MCP 接入（AI 自主验证回路）
+
+standalone jar 本身就是 MCP server（stdio）：把行为回归能力交给 code agent / harness
+自主调用。工具面 = CLI 动词薄壳（check/diff/report/verify/doctor/graph + establish/
+accept/reject + re-drive + export）+ record 摄取（非 Java 栈上报交互的入场券）。
+
+```json
+{
+  "mcpServers": {
+    "agentassert4j": {
+      "command": "java",
+      "args": ["-jar", "/path/to/agentassert4j-standalone.jar", "mcp", "--db", "/path/to/agentassert4j.db"]
+    }
+  }
+}
+```
+
+- 工作目录建议指向项目根（`agentassert4j.json` 的隐式查找链 cwd → home → classpath）；
+  `--db` 显式绑定库文件。
+- Claude Code：`claude mcp add agentassert4j -- java -jar … mcp --db …`；ZCode/OpenCode
+  等同构（stdio 客户端只需拉起子进程 + 读写管道）。
+- 排障开关 `--diag`：逐消息向 stderr 记 method 与耗时（默认静默；stdout 只出协议消息）。
+- Java 应用的**录制**仍走 starter/SDK（进程内直录）；MCP record 动词服务非 Java 栈
+  （TS/Python agent 把原生 LLM 调用的原始请求/响应 JSON 上报落库，幂等可重发）。
+
+AI 自主回路的典型时序（人在 harness 权限系统里授权，不在框架里）：
+
+```
+record（上报交互，声明 invocation 标签与 taskKey）
+  → doctor（健康：裂键/未声明告警）→ establish（建档，approver=agent:<名称>）
+  → 改提示词 → check（全项目变更检测，零调用）
+  → diff（缩域看具体差异）→ accept/reject（人类指示后裁决）
+  → audit（人类事后回溯全部 agent:* 治理写）
+```
+
+工具结果为双形态：text 文本块（CLI 的 schema 标签 JSON 报告行，超预算截断）+
+structuredContent（`{"reports":[...]}`；失败态为 agentassert4j.error/1 包络对象，
+按 hints 自助续行）。判定语义（PASS/CHANGED）由报告承载，exit 0/1 都不是工具错误；
+读动词走 CI 语义（未建档拒绝并指向 establish，零治理写）。完整契约见
+`guide/spec/mcp.md`。
+
 ## 7. 故障排查
 
 **7.1 数据面**

@@ -119,7 +119,23 @@ public class SqliteStorageRepository implements StorageRepository {
 
     @Override
     public synchronized void saveInteraction(InteractionRecord r) {
-        // INSERT OR IGNORE：interactions 是只追加历史，record_id 冲突（崩溃重放双写）静默跳过
+        doInsertInteraction(r);
+    }
+
+    /**
+     * INSERT OR IGNORE 并回告是否真正写入——record 摄取（MCP record 工具）以回告区分
+     * saved 与 duplicate；调用方据此如实报告，幂等语义与 {@link #saveInteraction} 同源。
+     */
+    public synchronized boolean saveInteractionIfAbsent(InteractionRecord r) {
+        return doInsertInteraction(r) == 1;
+    }
+
+    /**
+     * INSERT OR IGNORE：interactions 是只追加历史，record_id 冲突（崩溃重放双写）静默跳过。
+     *
+     * @return 实际插入行数（0 = record_id 已存在被忽略，1 = 新写入）
+     */
+    private int doInsertInteraction(InteractionRecord r) {
         String sql = "INSERT OR IGNORE INTO interactions" + " (record_id, session_id, timestamp, seq," + "  template_id, template_hash, skeleton_hash," + "  api_protocol, provider, model, served_model, endpoint," + "  invocation_id, invocation_key, user_input, turn_index," + "  tools_definition, sampling_params, model_request_raw," + "  finish_reason, model_response, model_response_raw," + "  tool_calls, has_tool_calls," + "  input_tokens, output_tokens, cache_read_tokens, cache_write_tokens," + "  reasoning_tokens, usage_raw, latency_ms, ttft_ms, cost_usd," + "  multimodal_input, multimodal_content, previous_turns," + "  metadata, recorder_version)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             int i = 1;
@@ -163,8 +179,9 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setString(i++, JsonMapper.turnsToJson(r.getPreviousTurns()));
             ps.setString(i++, r.getMetadata());
             ps.setString(i++, r.getRecorderVersion());
-            ps.executeUpdate();
+            int inserted = ps.executeUpdate();
             persistTemplateTextQuietly(r);
+            return inserted;
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "saveInteraction failed", e);
             throw new StorageException("saveInteraction", e);

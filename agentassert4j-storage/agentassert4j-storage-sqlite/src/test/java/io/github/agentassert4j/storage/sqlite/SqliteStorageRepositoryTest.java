@@ -73,6 +73,19 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
+    void saveInteractionIfAbsent_reportsSavedThenDuplicate() {
+        InteractionRecord first = createSampleRecord("rec-ifabsent", "session-1", "skill-1", "hash-abc");
+        assertTrue(repo.saveInteractionIfAbsent(first), "首写应回告已写入");
+
+        // 同 record_id 重写被 INSERT OR IGNORE 跳过且首写数据不被覆盖——
+        // record 摄取的 saved/duplicate 报告以此为凭据
+        InteractionRecord replayed = createSampleRecord("rec-ifabsent", "session-1", "skill-1", "hash-abc");
+        replayed.setModelResponse("second-write-must-not-land");
+        assertFalse(repo.saveInteractionIfAbsent(replayed), "record_id 冲突应回告跳过");
+        assertEquals("response text", repo.findByInvocationId("skill-1").get(0).getModelResponse());
+    }
+
+    @Test
     void findByTemplateHash() {
         repo.saveInteraction(createSampleRecord("r1", "s1", "sk1", "hash-xxx"));
         repo.saveInteraction(createSampleRecord("r2", "s2", "sk2", "hash-xxx"));

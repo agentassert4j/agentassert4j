@@ -91,8 +91,9 @@ public class OpenAiCompatibleClient implements LlmClient {
     /**
      * finish_reason 归一为固定枚举：stop/tool_calls/max_tokens/content_filter/error/other。
      * OpenAI 方言值 tool_calls/function_call → tool_calls；未知值归 other（TEXT 枚举加值零迁移）。
+     * wire 摄取（MCP record）与客户端重放共用本归一器——同一方言不得有两套词表。
      */
-    static String normalizeFinishReason(String raw) {
+    public static String normalizeFinishReason(String raw) {
         if (raw == null || raw.isEmpty()) return null;
         switch (raw) {
             case "stop":
