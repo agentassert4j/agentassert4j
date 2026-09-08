@@ -18,8 +18,8 @@ invocationKey 的派生文法（identity）；查询结果的业务消费（各�
 |---|---|---|
 | `interactions`（38 列） | 只追加的原始真源账本，record_id 主键 | 不可重建（录制即历史） |
 | `prompt_texts`（3 列） | 模板原文唯一反查点（hash 不可逆，原文不落即永久丢失） | 不可重建 |
-| `invocations`（15 列） | 治理档案 = 派生 + 治理写混合体 | 身份/视图列可从 interactions 重建；治理列（指纹/候选/审批）以治理写为准 |
-| `invocation_template_versions`（9 列） | 只追加归档历史（rollback 数据源） | 不可重建 |
+| `invocations`（16 列） | 治理档案 = 派生 + 治理写混合体 | 身份/视图列可从 interactions 重建；治理列（指纹/候选/审批/代码锚）以治理写为准 |
+| `invocation_template_versions`（10 列） | 只追加归档历史（rollback 数据源） | 不可重建 |
 
 **三层列结构**（interactions）：概念层（跨协议稳定的概念数据）/ 原文层（`*_raw` 逐字保留，
 后续新增概念列的回填来源）/ 吸收层（`metadata` JSON 承接未预见扩展）。
@@ -59,7 +59,7 @@ close(): 关连接置 null；与写路径共用实例监视器——flush 进行
 7. **敌对内容逐字保真**：特殊字符/NUL/控制符/深嵌套 JSON 在文本列与 JSON 列写读往返逐字一致。
    【测试钉】specialCharacters_roundTripUnescaped / jsonColumns_roundTripHostileContent /
    fingerprintColumns_roundTripHostileContent
-8. **列 ↔ 模型 setter 契约**：interactions 捕获保真列、invocations 治理列写读往返逐字段对齐；
+8. **列 ↔ 模型 setter 契约**：interactions 捕获保真列、invocations 治理列（含 code_ref）写读往返逐字段对齐；
    指纹 null ↔ `"{}"` 对称。【测试钉】captureFidelityColumnsRoundTrip /
    skillProfileGovernanceColumnsRoundTrip / fingerprintColumn_nullRoundTripsAsNull
 9. **归档 tiebreaker**：同调用点同版本标签重复归档时「最近归档者胜」（`archived_at DESC,

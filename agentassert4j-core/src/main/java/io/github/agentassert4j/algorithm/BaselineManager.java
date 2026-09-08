@@ -36,9 +36,11 @@ public class BaselineManager {
      *
      * @param invocationKey 调用点键（InvocationResolver 派生）
      * @param approver      审批人身份，随活跃画像与归档行留痕（纯治理元数据，永不参与判定）
+     * @param codeRef       代码锚（申报制：调用方声明的代码参照如 git 提交号，随活跃画像留痕；
+     *                      空缺合法，永不参与判定）
      * @throws IllegalStateException 无候选指纹时抛出
      */
-    public synchronized void approve(String invocationKey, String approver) {
+    public synchronized void approve(String invocationKey, String approver, String codeRef) {
         InvocationProfile profile = repository.findInvocationByKey(invocationKey);
         if (profile == null) {
             throw new IllegalStateException("Invocation profile not found: " + invocationKey);
@@ -63,7 +65,7 @@ public class BaselineManager {
         profile.setBaselineStatus(BaselineStatus.BASELINE);
         // 更新版本标签：跳过归档中已占用的 tag，保证 tag↔指纹一一对应（回滚后不产生同 tag 双指纹）
         profile.setVersionTag(nextAvailableVersionTag(invocationKey, profile.getVersionTag()));
-        stampApproval(profile, approver);
+        stampApproval(profile, approver, codeRef);
         repository.saveInvocationProfile(profile);
     }
 
@@ -143,6 +145,9 @@ public class BaselineManager {
         profile.setAlgoVersion(archived.getAlgoVersion());
         profile.setApprovedBy(archived.getApprovedBy());
         profile.setApprovedAt(archived.getApprovedAt());
+        // 代码锚随归档快照一起回退：活跃行的锚必须始终描述当前基线自身的获批坐标，
+        // 否则行为是旧版本、标注却挂着新提交，审计账本说谎
+        profile.setCodeRef(archived.getCodeRef());
         repository.saveInvocationProfile(profile);
     }
 
@@ -187,8 +192,8 @@ public class BaselineManager {
      * @param record   首次录制的交互记录
      * @param approver 使该基线成为基线的操作者身份（自动建立同样留痕，纯治理元数据）
      */
-    public synchronized void autoEstablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules) {
-        establish(record, approver, false, rules);
+    public synchronized void autoEstablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef) {
+        establish(record, approver, false, rules, codeRef);
     }
 
     /**
@@ -202,11 +207,11 @@ public class BaselineManager {
      * @param rules    规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
      * @throws IllegalStateException 该调用点无画像且无录制数据可解析时抛出
      */
-    public synchronized void reestablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules) {
-        establish(record, approver, true, rules);
+    public synchronized void reestablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef) {
+        establish(record, approver, true, rules, codeRef);
     }
 
-    private void establish(InteractionRecord record, String approver, boolean overwrite, InvocationRulesConfig rules) {
+    private void establish(InteractionRecord record, String approver, boolean overwrite, InvocationRulesConfig rules, String codeRef) {
         if (record == null) {
             return;
         }
@@ -239,20 +244,23 @@ public class BaselineManager {
         profile.setBaselineStatus(BaselineStatus.BASELINE);
         profile.setVersionTag(overwrite ? nextAvailableVersionTag(grouping.getInvocationKey(), profile.getVersionTag()) : "v1");
         profile.setTotalRecords(existing != null ? existing.getTotalRecords() : 1);
-        stampApproval(profile, approver);
+        stampApproval(profile, approver, codeRef);
 
         repository.saveInvocationProfile(profile);
     }
 
     /**
-     * 盖上审批痕迹：语义版本 + 审批人 + 时间。建立/批准/重建三条成为基线的路径共用。
+     * 盖上审批痕迹：语义版本 + 审批人 + 时间 + 代码锚。建立/批准/重建三条成为
+     * 基线的路径共用。
      */
-    private void stampApproval(InvocationProfile profile, String approver) {
+    private void stampApproval(InvocationProfile profile, String approver, String codeRef) {
         profile.setAlgoVersion(JudgmentSemantics.VERSION);
         // 空白身份归一为 null：approvedBy=null 是「未经审批链盖章」的异常信号，
         // 空白串落库会稀释该信号。core 只归一调用方传入的身份，不嗅探环境
         profile.setApprovedBy(approver == null || approver.trim().isEmpty() ? null : approver.trim());
         profile.setApprovedAt(System.currentTimeMillis());
+        // 代码锚同样空白归一为 null：申报制字段，空缺合法，归一后回显口径统一
+        profile.setCodeRef(codeRef == null || codeRef.trim().isEmpty() ? null : codeRef.trim());
     }
 
     /**
@@ -314,6 +322,7 @@ public class BaselineManager {
             archived.setAlgoVersion(profile.getAlgoVersion());
             archived.setApprovedBy(profile.getApprovedBy());
             archived.setApprovedAt(profile.getApprovedAt());
+            archived.setCodeRef(profile.getCodeRef());
             repository.archiveTemplateVersion(archived);
         }
     }

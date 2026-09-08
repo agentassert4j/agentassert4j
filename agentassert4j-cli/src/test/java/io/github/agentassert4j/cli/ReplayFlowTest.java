@@ -67,7 +67,7 @@ class ReplayFlowTest {
     }
 
     private void establishAll() {
-        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", false, null, null, null);
+        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", null, false, null, null, null);
     }
 
     @Nested
@@ -107,7 +107,7 @@ class ReplayFlowTest {
             InvocationProfile profile = repository.findInvocationByKey("invocation:order:hash-a");
             assertEquals(BaselineStatus.CANDIDATE, profile.getBaselineStatus());
 
-            new BaselineManager(repository).approve("invocation:order:hash-a", "tester");
+            new BaselineManager(repository).approve("invocation:order:hash-a", "tester", null);
 
             InvocationProfile settled = repository.findInvocationByKey("invocation:order:hash-a");
             assertEquals(BaselineStatus.BASELINE, settled.getBaselineStatus(), "approve 必须清候选转正");
@@ -144,7 +144,7 @@ class ReplayFlowTest {
             engine.run(null, null, false, false, false, false, null, null);
             DeterministicFingerprint oldBaseline = repository.findInvocationByKey("invocation:order:hash-a").getFingerprint();
 
-            new BaselineManager(repository).approve("invocation:order:hash-a", "tester");
+            new BaselineManager(repository).approve("invocation:order:hash-a", "tester", null);
             assertEquals("v2", repository.findInvocationByKey("invocation:order:hash-a").getVersionTag());
 
             new BaselineManager(repository).rollback("invocation:order:hash-a", "v1");
@@ -199,7 +199,7 @@ class ReplayFlowTest {
             assertEquals(2, runner().run(null, null, false, false, false, false, null, null));
             assertTrue(output.toString().contains("Judgment semantics version mismatch"));
 
-            new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", true, null, null, null);
+            new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", null, true, null, null, null);
             assertEquals(JudgmentSemantics.VERSION, repository.findInvocationByKey(key).getAlgoVersion());
             assertEquals(0, runner().run(null, null, false, false, false, false, null, null));
         }

@@ -165,7 +165,7 @@ class JsonContractTest {
         void baselineJson_firstRun_realReport() throws Exception {
             seedOneRecord();
 
-            int exit = execute("baseline", "--db", dbPath, "--json");
+            int exit = execute("baseline", "--db", dbPath, "--ref", "abc1234", "--json");
 
             assertEquals(0, exit);
             String report = singleLineReport();
@@ -203,13 +203,14 @@ class JsonContractTest {
             execute("baseline", "--db", dbPath);
             Path packPath = tempDir.resolve("pack.json");
 
-            int exit = execute("baseline", "export", "--db", dbPath, "--out", packPath.toString(), "--json");
+            int exit = execute("baseline", "export", "--db", dbPath, "--out", packPath.toString(), "--ref", "abc1234", "--json");
 
             assertEquals(0, exit);
             String report = singleLineReport();
             assertTrue(report.startsWith("{\"schema\":\"agentassert4j.export-report/1\""), report);
             assertTrue(report.contains("\"taskCount\":1"), report);
             assertTrue(report.contains("\"stepCount\":1"), report);
+            assertTrue(report.contains("\"codeRef\":\"abc1234\""), report);
             assertTrue(report.contains("\"excluded\":[]"), report);
             assertTrue(report.contains("pack.json"), "报告必须携带输出路径: " + report);
             int shaStart = report.indexOf("\"sha256\":\"") + "\"sha256\":\"".length();
@@ -230,7 +231,7 @@ class JsonContractTest {
             execute("baseline", "--db", dbPath);
             seedCandidate("invocation:queryOrder:hash-old", record);
 
-            int exit = execute("approve", "--db", dbPath, "--invocation", "queryOrder", "--json");
+            int exit = execute("approve", "--db", dbPath, "--invocation", "queryOrder", "--ref", "def5678", "--json");
 
             assertEquals(0, exit);
             String report = singleLineReport();
@@ -238,6 +239,7 @@ class JsonContractTest {
             assertTrue(report.contains("\"action\":\"approve\""), report);
             assertTrue(report.contains("\"invocationKey\":\"invocation:queryOrder:hash-old\""), report);
             assertTrue(report.contains("\"versionTag\":\"v2\""), "approve 推进版本标签: " + report);
+            assertTrue(report.contains("\"codeRef\":\"def5678\""), report);
             assertTrue(report.contains("\"status\":\"BASELINE\""), report);
             assertTrue(report.contains("\"hasCandidate\":false"), report);
         }
@@ -289,8 +291,8 @@ class JsonContractTest {
         @DisplayName("rollback --json：恢复归档版本，报告携带恢复后状态与审批人")
         void rollbackJson_restoresArchivedVersion() throws Exception {
             seedOneRecord();
-            execute("baseline", "--db", dbPath);
-            execute("baseline", "--db", dbPath, "--force");
+            execute("baseline", "--db", dbPath, "--ref", "abc1234");
+            execute("baseline", "--db", dbPath, "--force", "--ref", "def5678");
 
             int exit = execute("rollback", "--db", dbPath, "--invocation", "queryOrder", "--version", "v1", "--json");
 
@@ -301,6 +303,7 @@ class JsonContractTest {
             assertTrue(report.contains("\"versionTag\":\"v1\""), report);
             assertTrue(report.contains("\"status\":\"BASELINE\""), report);
             assertTrue(report.contains("\"approvedBy\":\""), "审批人留痕必须在报告中: " + report);
+            assertTrue(report.contains("\"codeRef\":\"abc1234\""), report);
         }
 
         @Test
@@ -354,6 +357,7 @@ class JsonContractTest {
             assertTrue(report.contains("\"status\":\"BASELINE\""), report);
             assertTrue(report.contains("\"hasCandidate\":false"), report);
             assertTrue(report.contains("\"archivedVersions\":\"\""), report);
+            assertTrue(report.contains("\"codeRef\":\""), report);
             assertTrue(report.contains("\"uncovered\":[]"), "建档后无覆盖缺口: " + report);
             assertFalse(stdout().contains("Total: "), "人类巡检汇总行不得污染 stdout: " + stdout());
         }

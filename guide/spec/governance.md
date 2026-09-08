@@ -17,10 +17,11 @@
 
 | 语义状态 | 真源 | 携带方式 |
 |---|---|---|
-| 治理主体 | 调用点（invocations 行，主键 = invocationKey） | 治理字段 = fingerprint/candidateFingerprint/baselineStatus/versionTag/algoVersion/approvedBy/approvedAt/templateHash；簿记字段 = totalRecords |
+| 治理主体 | 调用点（invocations 行，主键 = invocationKey） | 治理字段 = fingerprint/candidateFingerprint/baselineStatus/versionTag/algoVersion/approvedBy/approvedAt/codeRef/templateHash；簿记字段 = totalRecords |
 | 候选 | 画像 candidateFingerprint 列 | 跨进程持久化——重放与裁决通常不在同一进程，候选必须落库才对裁决可达 |
-| 归档基线 | invocation_template_versions 行 | 完整治理面快照：指纹、模板哈希、语义版本、审批人/时间、归档时间；rollback 的唯一恢复源 |
+| 归档基线 | invocation_template_versions 行 | 完整治理面快照：指纹、模板哈希、语义版本、审批人/时间、代码锚、归档时间；rollback 的唯一恢复源 |
 | 审批事实 | approvedBy/approvedAt | 空白身份归一为 null——approvedBy=null 是「未经审批链盖章」的显式信号，空白串会稀释该信号 |
+| 代码锚 | codeRef（invocations 与 invocation_template_versions 双表携带） | 申报制审计标注：建档/approve 时调用方声明的代码参照（如 git 提交号），定位「行为最后被认可于哪个提交」；不校验、不连 git、不参与判定；空白归一为 null，空缺合法。归档行携带归档基线自身的锚，rollback 连锚回退——活跃行的锚必须始终描述当前基线自身，否则账本说谎 |
 | 模板身份 | 最新可分组记录的 templateHash | 建档种子携带；approve/显式收编按同一口径前移（身份前移见下） |
 
 **单一写者**：画像治理字段只经 `BaselineManager`（生命周期方法以实例监视器互斥，同一 JVM
@@ -39,7 +40,7 @@ stateDiagram-v2
     CANDIDATE --> BASELINE: approve（旧基线先归档+身份前移）
     CANDIDATE --> BASELINE: reject（丢弃候选）
     BASELINE --> BASELINE: --force 重建（旧基线归档，tag 顺延）
-    BASELINE --> BASELINE: rollback（当前基线归档，按快照恢复）
+    BASELINE --> BASELINE: rollback（当前基线归档，按快照恢复，代码锚随快照回退）
     BASELINE --> BASELINE: 漂移收编（仅前移模板哈希，其余不动）
 ```
 

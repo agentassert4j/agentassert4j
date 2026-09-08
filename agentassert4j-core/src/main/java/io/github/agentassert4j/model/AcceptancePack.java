@@ -110,6 +110,19 @@ public class AcceptancePack {
         public void setServedModel(String servedModel) {
             this.servedModel = servedModel;
         }
+
+        /**
+         * 代码锚（申报制审计标注：导出方声明的包对应代码参照，如 git 提交号；不校验）
+         */
+        private String codeRef;
+
+        public String getCodeRef() {
+            return codeRef;
+        }
+
+        public void setCodeRef(String codeRef) {
+            this.codeRef = codeRef;
+        }
     }
 
     /**

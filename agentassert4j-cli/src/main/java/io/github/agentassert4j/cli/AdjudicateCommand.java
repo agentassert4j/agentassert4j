@@ -58,7 +58,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
                 InvocationProfile reloaded = repository.findInvocationByKey(target.getInvocationKey());
                 InvocationProfile shown = reloaded != null ? reloaded : target;
                 if (jsonOutput) {
-                    results.add("{\"invocationKey\":\"" + RecursiveJsonParser.escape(target.getInvocationKey()) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(shown.getVersionTag() != null ? shown.getVersionTag() : "") + "\",\"status\":\"" + shown.getBaselineStatus() + "\",\"hasCandidate\":" + (shown.getCandidateFingerprint() != null) + "}");
+                    results.add("{\"invocationKey\":\"" + RecursiveJsonParser.escape(target.getInvocationKey()) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(shown.getVersionTag() != null ? shown.getVersionTag() : "") + "\",\"status\":\"" + shown.getBaselineStatus() + "\",\"hasCandidate\":" + (shown.getCandidateFingerprint() != null) + ",\"codeRef\":\"" + RecursiveJsonParser.escape(shown.getCodeRef() != null ? shown.getCodeRef() : "") + "\"}");
                 } else {
                     out.println("  " + target.getInvocationKey() + ": " + describeResult(shown));
                 }

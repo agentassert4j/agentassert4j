@@ -104,6 +104,7 @@ final class Schema {
                     "  approved_by           TEXT," +
                     "  approved_at           INTEGER," +
                     "  total_records         INTEGER DEFAULT 0," +
+                    "  code_ref              TEXT," +
                     "  updated_at            INTEGER NOT NULL" +
                     ")",
 
@@ -117,6 +118,7 @@ final class Schema {
                     "  algo_version   TEXT," +
                     "  approved_by    TEXT," +
                     "  approved_at    INTEGER," +
+                    "  code_ref       TEXT," +
                     "  archived_at    INTEGER NOT NULL" +
                     ")",
 

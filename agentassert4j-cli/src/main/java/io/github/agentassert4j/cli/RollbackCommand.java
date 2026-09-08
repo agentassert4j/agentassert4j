@@ -57,9 +57,9 @@ public class RollbackCommand implements Callable<Integer> {
             new BaselineManager(repository).rollback(invocationKey, version);
             InvocationProfile reloaded = repository.findInvocationByKey(invocationKey);
             if (jsonOutput) {
-                out.println("{\"schema\":\"agentassert4j.rollback/1\",\"invocationKey\":\"" + RecursiveJsonParser.escape(invocationKey) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(version) + "\",\"status\":\"" + reloaded.getBaselineStatus() + "\",\"approvedBy\":\"" + RecursiveJsonParser.escape(reloaded.getApprovedBy() != null ? reloaded.getApprovedBy() : "") + "\",\"ok\":true}");
+                out.println("{\"schema\":\"agentassert4j.rollback/1\",\"invocationKey\":\"" + RecursiveJsonParser.escape(invocationKey) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(version) + "\",\"status\":\"" + reloaded.getBaselineStatus() + "\",\"approvedBy\":\"" + RecursiveJsonParser.escape(reloaded.getApprovedBy() != null ? reloaded.getApprovedBy() : "") + "\",\"codeRef\":\"" + RecursiveJsonParser.escape(reloaded.getCodeRef() != null ? reloaded.getCodeRef() : "") + "\",\"ok\":true}");
             } else {
-                out.println("  " + invocationKey + " → " + version + " (approver " + reloaded.getApprovedBy() + ")");
+                out.println("  " + invocationKey + " → " + version + " (approver " + reloaded.getApprovedBy() + (reloaded.getCodeRef() != null ? ", ref " + reloaded.getCodeRef() : "") + ")");
             }
             return 0;
         } catch (CliFailureException e) {

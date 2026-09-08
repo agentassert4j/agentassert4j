@@ -172,7 +172,7 @@ public class TaskReplayRunner {
             }
         } else {
             // 自动建档（开发态自动化，报告可见）：裂键新档与全新键在此收编
-            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), false, null, rules, null);
+            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), null, false, null, rules, null);
         }
 
         // 判定语义守卫：任何画像由其他版本（含未标记历史行）批准即拒绝判定——

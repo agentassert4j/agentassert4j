@@ -591,6 +591,43 @@ class SqliteStorageRepositoryTest {
         return r;
     }
 
+    @Test
+    void invocationProfile_codeRefRoundtrip() {
+        InvocationProfile p = new InvocationProfile();
+        p.setLabel("order");
+        p.setInvocationKey("invocation:order:h1");
+        p.setInvocationName("OrderTool");
+        p.setInvocationType(InvocationType.TOOL);
+        p.setBaselineStatus(BaselineStatus.BASELINE);
+        p.setTotalRecords(3);
+        DeterministicFingerprint fp = new DeterministicFingerprint();
+        fp.setToolCallSet(new HashSet<>());
+        p.setFingerprint(fp);
+        p.setCodeRef("abc1234");
+        repo.saveInvocationProfile(p);
+
+        InvocationProfile loaded = repo.findInvocationByKey("invocation:order:h1");
+        assertEquals("abc1234", loaded.getCodeRef());
+    }
+
+    @Test
+    void archivedVersion_codeRefRoundtrip() {
+        DeterministicFingerprint fp = new DeterministicFingerprint();
+        fp.setToolCallSet(new HashSet<>());
+        ArchivedTemplateVersion archived = new ArchivedTemplateVersion();
+        archived.setInvocationKey("invocation:order-flow:ref-1");
+        archived.setFingerprint(fp);
+        archived.setVersionTag("v1");
+        archived.setAlgoVersion("det-v1");
+        archived.setApprovedBy("tester");
+        archived.setApprovedAt(1L);
+        archived.setCodeRef("def5678");
+        repo.archiveTemplateVersion(archived);
+
+        ArchivedTemplateVersion loaded = repo.findArchivedVersion("invocation:order-flow:ref-1", "v1");
+        assertEquals("def5678", loaded.getCodeRef());
+    }
+
     private void saveMinimalProfile(String invocationId, String invocationKey, String name) {
         InvocationProfile p = new InvocationProfile();
         p.setLabel(invocationId);

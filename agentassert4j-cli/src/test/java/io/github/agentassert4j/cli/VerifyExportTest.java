@@ -106,7 +106,7 @@ class VerifyExportTest {
     }
 
     private void establishBaselines() {
-        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null, null);
+        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", null, false, null, null, null);
     }
 
     @Test
@@ -236,7 +236,7 @@ class VerifyExportTest {
             saveRecord("c1", customerDb, 9000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "cust-model");
             // 包导出之后又录了新任务：范围外链的典型成因
             saveRecord("c2", customerDb, 9500L, "查物流", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "cust-model");
-            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null, null);
+            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", null, false, null, null, null);
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
 
             int exit = runner.run(json, "digest", null, null, false);
@@ -266,7 +266,7 @@ class VerifyExportTest {
         customerDb.initialize();
         try {
             saveRecord("c1", customerDb, 9000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "customer-local-model");
-            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null, null);
+            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", null, false, null, null, null);
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
 
             int exit = runner.run(json, "digest", null, null, false);
@@ -356,7 +356,7 @@ class VerifyExportTest {
         try {
             // 客户侧同调用点换了模板版本（细分哈希不同）、行为一致——配对按标签而非版本
             saveRecord("c1", customerDb, 9000L, "查订单", "invocation:verdict:h-new", "verdict", "h-new", "{\"verdict\":\"DONE\"}", "cust-model");
-            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null, null);
+            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", null, false, null, null, null);
 
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
             Path reportPath = tempDir.resolve("verify-report.md");
@@ -392,7 +392,7 @@ class VerifyExportTest {
         customerDb.initialize();
         try {
             saveRecord("c1", customerDb, 9000L, "查订单", "invocation:verdict:h-new", "verdict", "h-new", "{\"status\":\"FAILED\"}", "cust-model");
-            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", false, null, null, null);
+            new BaselineService(customerDb).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", null, false, null, null, null);
             VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
             Path reportPath = tempDir.resolve("verify-report-changed.md");
             int exit = runner.run(json, "digest", null, reportPath.toString(), false);

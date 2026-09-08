@@ -17,9 +17,12 @@ public class ApproveCommand extends AdjudicateCommand {
     @Option(names = {"--approver"}, description = "Approver identity recorded with the baseline and its archives (defaults to the current OS user)")
     String approver;
 
+    @Option(names = {"--ref"}, description = "Code reference (e.g. a git commit) the promoted baseline corresponds to; declared, not verified")
+    String codeRef;
+
     @Override
     void apply(BaselineManager manager, String invocationKey) {
-        manager.approve(invocationKey, resolvedApprover());
+        manager.approve(invocationKey, resolvedApprover(), codeRef);
     }
 
     @Override
@@ -29,7 +32,7 @@ public class ApproveCommand extends AdjudicateCommand {
 
     @Override
     String describeResult(InvocationProfile profile) {
-        return "Approved (approver " + resolvedApprover() + "); baseline " + profile.getVersionTag() + " (previous baseline archived)";
+        return "Approved (approver " + resolvedApprover() + "); baseline " + profile.getVersionTag() + (profile.getCodeRef() != null ? " (ref " + profile.getCodeRef() + ")" : "") + " (previous baseline archived)";
     }
 
     private String resolvedApprover() {

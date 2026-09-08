@@ -219,7 +219,7 @@ CLI 分析侧不受影响，仍可对既有库做巡检/验收。
 **开发侧：**
 
 1. 确认基线干净：`agentassert4j status`——全部调用点 BASELINE、无未裁决候选（候选先 approve/reject 清场）；
-2. 导出：`agentassert4j baseline export --out acceptance-pack.json` → 记录打印的 **SHA-256** 与任务链/步骤数；
+2. 导出：`agentassert4j baseline export --out acceptance-pack.json --ref <git提交号>` → 记录打印的 **SHA-256** 与任务链/步骤数；`--ref` 是申报制代码锚（不校验），验收方凭它对账"这份行为承诺来自哪个交付版本"；
    被排除的链在输出与 `--json` 报告的 `excluded` 数组中列出并给出原因（存在未建档步骤 / 基线违反自身
    声明规则）——排除属导出守卫，先把该链的基线建干净或修正规则声明再重导；
 

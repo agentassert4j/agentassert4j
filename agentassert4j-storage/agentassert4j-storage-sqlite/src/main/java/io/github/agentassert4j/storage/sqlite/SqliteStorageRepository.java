@@ -267,7 +267,7 @@ public class SqliteStorageRepository implements StorageRepository {
 
     @Override
     public synchronized void saveInvocationProfile(InvocationProfile p) {
-        String sql = "INSERT OR REPLACE INTO invocations" + " (invocation_key, label, template_hash, invocation_name, invocation_type, fingerprint," + "  candidate_fingerprint, baseline_status, version_tag," + "  algo_version, param_signature, approved_by, approved_at," + "  total_records, updated_at)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        String sql = "INSERT OR REPLACE INTO invocations" + " (invocation_key, label, template_hash, invocation_name, invocation_type, fingerprint," + "  candidate_fingerprint, baseline_status, version_tag," + "  algo_version, param_signature, approved_by, approved_at," + "  total_records, code_ref, updated_at)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             int i = 1;
             ps.setString(i++, p.getInvocationKey());
@@ -284,6 +284,7 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setString(i++, p.getApprovedBy());
             setNullableLong(ps, i++, p.getApprovedAt());
             ps.setInt(i++, p.getTotalRecords());
+            ps.setString(i++, p.getCodeRef());
             ps.setLong(i++, System.currentTimeMillis());
             ps.executeUpdate();
         } catch (SQLException e) {
@@ -353,7 +354,7 @@ public class SqliteStorageRepository implements StorageRepository {
 
     @Override
     public synchronized void archiveTemplateVersion(ArchivedTemplateVersion archived) {
-        String sql = "INSERT INTO invocation_template_versions (invocation_key, template_hash, fingerprint, version_tag, algo_version, approved_by, approved_at, archived_at) VALUES (?,?,?,?,?,?,?,?)";
+        String sql = "INSERT INTO invocation_template_versions (invocation_key, template_hash, fingerprint, version_tag, algo_version, approved_by, approved_at, code_ref, archived_at) VALUES (?,?,?,?,?,?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, archived.getInvocationKey());
             ps.setString(2, archived.getTemplateHash());
@@ -362,7 +363,8 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setString(5, archived.getAlgoVersion());
             ps.setString(6, archived.getApprovedBy());
             setNullableLong(ps, 7, archived.getApprovedAt());
-            ps.setLong(8, System.currentTimeMillis());
+            ps.setString(8, archived.getCodeRef());
+            ps.setLong(9, System.currentTimeMillis());
             ps.executeUpdate();
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "archiveTemplateVersion failed", e);

@@ -52,6 +52,9 @@ public class BaselineExportCommand implements Callable<Integer> {
     @Option(names = {"--out"}, defaultValue = "acceptance-pack.json", description = "Output file path (default ./acceptance-pack.json)")
     String outPath;
 
+    @Option(names = {"--ref"}, description = "Code reference (e.g. a git commit) recorded in the acceptance pack metadata; declared, not verified")
+    String codeRef;
+
     @Option(names = {"--json"}, description = "Print a single-line JSON report to stdout (agentassert4j.export-report/1)")
     boolean jsonOutput;
 
@@ -79,6 +82,7 @@ public class BaselineExportCommand implements Callable<Integer> {
             meta.setJudgmentSemantics(JudgmentSemantics.VERSION);
             meta.setStorageSchemaVersion(1);
             meta.setFrameworkVersion(AgentAssert4jCli.FRAMEWORK_VERSION);
+            meta.setCodeRef(codeRef == null || codeRef.trim().isEmpty() ? null : codeRef.trim());
             pack.setMeta(meta);
 
             List<String> excluded = new ArrayList<>();
@@ -154,11 +158,11 @@ public class BaselineExportCommand implements Callable<Integer> {
                     if (excludedJson.length() > 0) excludedJson.append(",");
                     excludedJson.append("\"").append(RecursiveJsonParser.escape(excludedChain)).append("\"");
                 }
-                out.println("{\"schema\":\"agentassert4j.export-report/1\",\"out\":\"" + RecursiveJsonParser.escape(outPath) + "\",\"taskCount\":" + pack.getTasks().size() + ",\"stepCount\":" + stepCount + ",\"sha256\":\"" + HashUtil.sha256(json) + "\",\"excluded\":[" + excludedJson + "]}");
+                out.println("{\"schema\":\"agentassert4j.export-report/1\",\"out\":\"" + RecursiveJsonParser.escape(outPath) + "\",\"taskCount\":" + pack.getTasks().size() + ",\"stepCount\":" + stepCount + ",\"sha256\":\"" + HashUtil.sha256(json) + "\",\"codeRef\":\"" + RecursiveJsonParser.escape(meta.getCodeRef() != null ? meta.getCodeRef() : "") + "\",\"excluded\":[" + excludedJson + "]}");
                 return 0;
             }
             out.println("Acceptance pack written: " + outPath);
-            out.println("  " + CliSupport.plural(pack.getTasks().size(), "task chain") + " / " + CliSupport.plural(stepCount, "step") + (includeSamples ? " (masked samples included)" : " (no samples)"));
+            out.println("  " + CliSupport.plural(pack.getTasks().size(), "task chain") + " / " + CliSupport.plural(stepCount, "step") + (includeSamples ? " (masked samples included)" : " (no samples)") + (meta.getCodeRef() != null ? " (ref " + meta.getCodeRef() + ")" : ""));
             out.println("  SHA-256: " + HashUtil.sha256(json) + " (reconcile with the accepting party)");
             List<String> ruleViolated = new ArrayList<>();
             List<String> unestablishedOnly = new ArrayList<>();

@@ -45,7 +45,7 @@ public class BaselineService {
      *                         明细供 --json 报告组装）
      * @return 本次新建/重建基线的分组数
      */
-    public int establishMissing(PrintStream out, String actor, boolean force, String invocationFilter, InvocationRulesConfig rules, List<BaselineOutcome> outcomes) {
+    public int establishMissing(PrintStream out, String actor, String codeRef, boolean force, String invocationFilter, InvocationRulesConfig rules, List<BaselineOutcome> outcomes) {
         BaselineManager manager = new BaselineManager(repository);
         int established = 0;
 
@@ -61,7 +61,7 @@ public class BaselineService {
             if (hadBaseline && !force) {
                 out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + existing.getVersionTag() + ")");
                 if (outcomes != null) {
-                    outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "exists", existing.getVersionTag()));
+                    outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "exists", existing.getVersionTag(), existing.getCodeRef()));
                 }
                 continue;
             }
@@ -73,11 +73,11 @@ public class BaselineService {
                 }
                 // 重建取桶内规范序首条可分组记录（分桶已剔除不可分组记录）；
                 // 逐条调用会让版本标签随记录数连跳
-                manager.reestablishBaseline(records.get(0), actor, rules);
+                manager.reestablishBaseline(records.get(0), actor, rules, codeRef);
             } else {
                 for (InteractionRecord record : records) {
                     try {
-                        manager.autoEstablishBaseline(record, actor, rules);
+                        manager.autoEstablishBaseline(record, actor, rules, codeRef);
                     } catch (RuntimeException e) {
                         // 单条建档失败（存储抖动等）不中断整批——与录制 enrich 的
                         // 单条容错同哲学；分桶已剔除不可分组记录，这里只剩存储面故障
@@ -91,7 +91,7 @@ public class BaselineService {
             if (created == null || created.getFingerprint() == null) {
                 out.println("  " + displayLabel(records) + invocationKey + ": baseline establishment failed (storage error; see storage logs)");
                 if (outcomes != null) {
-                    outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "failed", null));
+                    outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "failed", null, null));
                 }
                 continue;
             }
@@ -101,7 +101,7 @@ public class BaselineService {
             repository.saveInvocationProfile(created);
             out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "baseline re-established under the current judgment semantics (" + created.getVersionTag() + ")" : "baseline established"));
             if (outcomes != null) {
-                outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), hadBaseline ? "reestablished" : "created", created != null ? created.getVersionTag() : null));
+                outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), hadBaseline ? "reestablished" : "created", created.getVersionTag(), created.getCodeRef()));
             }
             warnSeedRuleViolations(out, records.get(0), rules);
         }
@@ -185,12 +185,14 @@ public class BaselineService {
         private final String label;
         private final String action;
         private final String versionTag;
+        private final String codeRef;
 
-        BaselineOutcome(String invocationKey, String label, String action, String versionTag) {
+        BaselineOutcome(String invocationKey, String label, String action, String versionTag, String codeRef) {
             this.invocationKey = invocationKey;
             this.label = label;
             this.action = action;
             this.versionTag = versionTag;
+            this.codeRef = codeRef;
         }
 
         String getInvocationKey() {
@@ -207,6 +209,10 @@ public class BaselineService {
 
         String getVersionTag() {
             return versionTag;
+        }
+
+        String getCodeRef() {
+            return codeRef;
         }
     }
 

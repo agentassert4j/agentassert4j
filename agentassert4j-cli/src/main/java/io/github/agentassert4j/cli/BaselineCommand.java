@@ -38,6 +38,9 @@ public class BaselineCommand implements Callable<Integer> {
     @Option(names = {"--force"}, description = "Rebuild baselines under the current judgment semantics: existing baselines are overwritten by fresh fingerprints (recovery path after a judgment-semantics upgrade)")
     boolean force;
 
+    @Option(names = {"--ref"}, description = "Code reference (e.g. a git commit) the established baselines correspond to; declared, not verified")
+    String codeRef;
+
     @Option(names = {"--json"}, description = "Print a single-line JSON report to stdout")
     boolean jsonOutput;
 
@@ -53,14 +56,14 @@ public class BaselineCommand implements Callable<Integer> {
             InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
             CliSupport.warnUnknownBehaviors(rules, notice);
             List<BaselineService.BaselineOutcome> outcomes = new ArrayList<>();
-            int established = new BaselineService(repository).establishMissing(jsonOutput ? CliSupport.discardStream() : out, actor, force, resolvedInvocation, rules, outcomes);
+            int established = new BaselineService(repository).establishMissing(jsonOutput ? CliSupport.discardStream() : out, actor, codeRef, force, resolvedInvocation, rules, outcomes);
             if (jsonOutput) {
                 StringBuilder invocations = new StringBuilder();
                 for (BaselineService.BaselineOutcome outcome : outcomes) {
                     if (invocations.length() > 0) {
                         invocations.append(",");
                     }
-                    invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(outcome.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(outcome.getLabel())).append("\",\"action\":\"").append(outcome.getAction()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(outcome.getVersionTag() != null ? outcome.getVersionTag() : "")).append("\"}");
+                    invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(outcome.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(outcome.getLabel())).append("\",\"action\":\"").append(outcome.getAction()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(outcome.getVersionTag() != null ? outcome.getVersionTag() : "")).append("\",\"codeRef\":\"").append(RecursiveJsonParser.escape(outcome.getCodeRef() != null ? outcome.getCodeRef() : "")).append("\"}");
                 }
                 out.println("{\"schema\":\"agentassert4j.baseline-report/1\",\"force\":" + force + ",\"established\":" + established + ",\"invocations\":[" + invocations + "]}");
             } else {

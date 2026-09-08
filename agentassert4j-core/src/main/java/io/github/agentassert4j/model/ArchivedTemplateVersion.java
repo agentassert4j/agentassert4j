@@ -92,6 +92,19 @@ public class ArchivedTemplateVersion {
         this.approvedAt = approvedAt;
     }
 
+    /**
+     * 代码锚（申报制审计标注：该版本基线获批时调用方声明的代码参照，如 git 提交号）
+     */
+    private String codeRef;
+
+    public String getCodeRef() {
+        return codeRef;
+    }
+
+    public void setCodeRef(String codeRef) {
+        this.codeRef = codeRef;
+    }
+
     public long getArchivedAt() {
         return archivedAt;
     }

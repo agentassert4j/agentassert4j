@@ -123,6 +123,7 @@ final class JsonMapper {
         long approvedAt = rs.getLong("approved_at");
         p.setApprovedAt(rs.wasNull() ? null : approvedAt);
         p.setTotalRecords(rs.getInt("total_records"));
+        p.setCodeRef(rs.getString("code_ref"));
         return p;
     }
 
@@ -136,6 +137,7 @@ final class JsonMapper {
         ab.setApprovedBy(rs.getString("approved_by"));
         long approvedAt = rs.getLong("approved_at");
         ab.setApprovedAt(rs.wasNull() ? null : approvedAt);
+        ab.setCodeRef(rs.getString("code_ref"));
         ab.setArchivedAt(rs.getLong("archived_at"));
         return ab;
     }

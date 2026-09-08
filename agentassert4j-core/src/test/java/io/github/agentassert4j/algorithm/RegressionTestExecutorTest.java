@@ -271,7 +271,7 @@ class RegressionTestExecutorTest {
 
         // 基线带工具调用，重放响应为纯文本 → 工具集维度必然差异（非 PASS）
         InteractionRecord baseline = makeBaselineWithToolCall("hash", "input");
-        baselineManager.autoEstablishBaseline(baseline, "tester", null);
+        baselineManager.autoEstablishBaseline(baseline, "tester", null, null);
         String invocationKey = InvocationResolver.resolve(baseline).getInvocationKey();
         stubClient.response = makeTextResponse("plain answer");
 
@@ -293,7 +293,7 @@ class RegressionTestExecutorTest {
         // 基线与重放响应完全同形 → 指纹相同（PASS），无可裁决对象
         InteractionRecord baseline = makeBaseline("hash", "input");
         baseline.setModelResponse("same answer");
-        baselineManager.autoEstablishBaseline(baseline, "tester", null);
+        baselineManager.autoEstablishBaseline(baseline, "tester", null, null);
         String invocationKey = InvocationResolver.resolve(baseline).getInvocationKey();
         stubClient.response = makeTextResponse("same answer");
 

@@ -63,6 +63,22 @@ public class InvocationProfile {
      * 批准时间戳（毫秒 epoch）
      */
     private Long approvedAt;
+    /**
+     * 代码锚（申报制审计标注：建档/批准时调用方声明的代码参照，如 git 提交号；
+     * 不校验、不参与判定）
+     */
+    private String codeRef;
+
+    /**
+     * 申报制代码锚——随基线落库与回显，空缺合法。
+     */
+    public String getCodeRef() {
+        return codeRef;
+    }
+
+    public void setCodeRef(String codeRef) {
+        this.codeRef = codeRef;
+    }
 
     public String getInvocationKey() {
         return invocationKey;
