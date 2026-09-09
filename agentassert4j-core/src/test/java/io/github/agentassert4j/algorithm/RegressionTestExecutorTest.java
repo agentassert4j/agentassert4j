@@ -60,6 +60,23 @@ class RegressionTestExecutorTest {
     }
 
     @Test
+    void buildReplayRequest_carriesRecordWireProtocol() {
+        // 记录的原摄取方言随请求携带——同协议原样重放零配置（路由客户端消费此提示）
+        InteractionRecord baseline = makeBaseline("hash", "input");
+        baseline.setApiProtocol("anthropic-messages");
+        TestExecutionConfig config = TestExecutionConfig.defaults();
+
+        assertEquals("anthropic-messages", executor.buildReplayRequest(baseline, "p", null, config).getWireProtocol());
+        assertNull(executor.buildReplayRequest(makeBaseline("hash", "input"), "p", null, config).getWireProtocol(), "记录无方言时请求不带提示（路由客户端走配置/兜底）");
+
+        // 方言血统随重放产物传递：按基线方言发射产生的新记录标注同一方言，
+        // 后续再重放不回退错方言
+        InteractionRecord current = executor.buildCurrentRecord(baseline, new LlmResponse(), "p", null);
+        assertEquals("anthropic-messages", current.getApiProtocol());
+        assertNull(executor.buildCurrentRecord(makeBaseline("hash", "input"), new LlmResponse(), "p", null).getApiProtocol());
+    }
+
+    @Test
     void buildReplayRequest_injectsPreviousTurns() {
         InteractionRecord baseline = makeBaseline("hash", "input");
         baseline.setTurnIndex(2);

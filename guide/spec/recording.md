@@ -62,6 +62,61 @@
     丢了多少/写了多少/败了多少）。【命令可证】应用关闭日志的 recorded/filtered/dropped/written/
     failed 汇总行
 
+## wire 方言归一（MCP record 摄取；重放客户端共用）
+
+record 摄取把三协议 wire 报文归一为 **OpenAI chat 范式记录**（协议中立落库，跨协议重放的
+比较在结构指纹层天然成立）；重放客户端（cli.llm 客户端族）反向执行同一合同。协议词表单源 =
+`LlmWireProtocol` 枚举（`openai-chat`/`anthropic-messages`/`openai-responses`）——同一方言
+不得有两套词表（finish/usage 归一器实现于 cli.llm 的方言工具类，摄取与客户端共用）。
+
+**finish 归一表**（内部词表 stop/tool_calls/max_tokens/content_filter/other）：
+
+| 内部值 | openai-chat | anthropic-messages | openai-responses（派生） |
+|---|---|---|---|
+| stop | stop | end_turn、stop_sequence | status=completed 且无 function_call |
+| tool_calls | tool_calls、function_call | tool_use | output 含 function_call item（无论 status） |
+| max_tokens | max_tokens、length | max_tokens | incomplete(reason=max_output_tokens) |
+| content_filter | content_filter | refusal | incomplete(其他 reason) |
+| other | 未知值 | 未知值 | failed 等其余 |
+
+**usage 归一表**（inputTokens=总量口径 per-protocol 公式；求和缺项按 0 计；cacheRead/
+cacheWrite/reasoning 字段缺失为 null——未知≠0；usageRaw=usage 子树原文 serialize）：
+
+| 记录字段 | openai-chat | anthropic-messages | openai-responses |
+|---|---|---|---|
+| inputTokens | prompt_tokens（已是总量） | input_tokens + cache_creation_input_tokens + cache_read_input_tokens（非缓存口径求和） | input_tokens |
+| outputTokens | completion_tokens | output_tokens | output_tokens |
+| cacheReadTokens | prompt_tokens_details.cached_tokens | cache_read_input_tokens | input_tokens_details.cached_tokens |
+| cacheWriteTokens | —（null） | cache_creation_input_tokens | —（null） |
+| reasoningTokens | completion_tokens_details.reasoning_tokens | —（null） | output_tokens_details.reasoning_tokens |
+
+**请求面映射矩阵**（wire 请求 → 范式记录字段）：
+
+| 范式字段 | openai-chat | anthropic-messages | openai-responses |
+|---|---|---|---|
+| templateText | system/developer 消息（末者为准） | 顶层 system（字符串或 text 块拼接） | instructions；或 items 内 system/developer message |
+| userInput + turnIndex | 末位 user 消息（content 数组按多模态落库） | 末位 user 消息；含 tool_result 块的末位 user 是链式中间态，按历史轮处理（turnIndex=下一轮计数，同 chat 末位 tool 帧语义） | input 字符串直为输入；或末位 user message item |
+| 多模态（范式=OpenAI content 数组） | 原样（范式原生） | image 块 base64 source → data-URI 组装 | input_image 的 image_url 直通（url 与 data-URI 均合法） |
+| previousTurns | 逐轮展开（tool 帧带 toolCallId；assistant 的 tool_calls 逐调用收编为发起帧——id/name/arguments 真值，与另两协议结构一致） | text 块聚合（空串直拼）+ tool_use 块→assistant 发起帧（id/name/**arguments 真值**）+ tool_result 块→tool 结果帧（名字由同请求内 id 配对回填） | message item→轮 + function_call→发起帧（**arguments 真值**）+ function_call_output→结果帧（名字回填）；reasoning item 跳过（思考痕迹非对话内容） |
+| toolsDefinition（范式=OpenAI tools 嵌套形） | tools 原样（范式原生） | 扁平形 `{name,description,input_schema}` 转嵌套形 | 扁平形 `{type,name,description,parameters}` 转嵌套形 |
+| samplingParams | temperature/top_p/top_k/max_tokens/frequency_penalty/presence_penalty/stop/seed | temperature/top_p/top_k/max_tokens/stop_sequences | temperature/top_p/max_output_tokens |
+
+**响应面映射矩阵**（wire 响应 → 范式记录字段）：
+
+| 范式字段 | openai-chat | anthropic-messages | openai-responses |
+|---|---|---|---|
+| modelResponse | choices[0].message.content | text 块空串直拼（纯 tool_use 响应为 null） | output 中 message item 的 output_text 拼接 |
+| toolCalls（argTypes 同源派生、success 恒真） | message.tool_calls（arguments 字符串二次解析） | tool_use 块（input 对象直取） | function_call item（arguments 字符串二次解析） |
+| servedModel / 幂等 response.id | 顶层 model / id | 同左 | 同左 |
+| modelRequestRaw / modelResponseRaw | 原文双列（三方同规则——wire 摄取比 ChatModel 层捕获更富） | 同左 | 同左 |
+
+发起帧 arguments 真值随轮次落库（TurnContext.toolArguments，previous_turns JSON 键）——
+重放的「当时输入」重建依赖它。不可转换的 part（历史轮图像、无 base64 源/无 image_url 的
+图像）宁缺勿非法：丢弃并经工具结果 stderr 可见告警；敌对形态（元素非对象、无 type、坏
+JSON 参数）静默退化——对应字段 null/空，退化不中断。显式 protocol 声明优先于自动识别；
+识别失败与非法值报 E-USAGE 列三候选（宁报错不静默错判）。【测试钉】`McpRecordIngestionTest`
+（三协议矩阵/finish 与 usage 归一表全值参数化/自动识别与显式覆盖/敌对组）
+
 ## 行为矩阵
 
 | 场景 | 行为 |
@@ -96,3 +151,5 @@
 | 日期 | 方式 | 发现 |
 |---|---|---|
 | 2026-09-03 | S5 成文：InteractionRecorder/RecorderConfig/DataSanitizer/BatchWriteHandler 全量对账 + 测试指针核实 | ①filtered 与 dropped 分列是语义要求（过滤=决策、丢弃=故障），诊断时不得合并；②ConsumerDropped 与生产侧 dropped 分属不同线程域，聚合口径以 getDroppedCount() 为准；③record_id UUID 兜底处保留既有 TODO（SDK 接线前是最终设计位） |
+| 2026-09-09 | 三协议全量审查批：chat 摄取收编 assistant tool_calls 发起帧（原历史近似「细节不入轮」废弃——三协议 previousTurns 结构就此一致，重放合成发起帧拿到真值而非空名占位）；发射协议改三级推导（配置显式>记录 apiProtocol 提示>openai-chat 兜底，LlmConfig.protocol 缺省改 null 表达未配置） | 审查发现两点：①chat 摄取对 assistant tool_calls 的忽略使三协议记录结构不对称；②llm.protocol 缺省恒 openai-chat 使未配置协议的 anthropic/responses 库重放打错方言——按「记录基线可自动推导」主张修复 |
+| 2026-09-09 | 三协议批①新增「wire 方言归一」节：McpRecordIngestion 三协议映射矩阵 + finish/usage 归一表对码成文（归一器实现于 AnthropicMessagesWireFormat/OpenAiResponsesWireFormat，摄取与重放客户端共用单源） | ①anthropic input_tokens 是非缓存口径，总量须三项求和——chat 客户端旧 TODO 就此兑现于 anthropic 侧；②TurnContext.toolArguments 此前不随 previous_turns JSON 落库（历史轮无载体故无感），三协议摄取可存 arguments 真值，JsonMapper 读写两侧已补键（JSON 内部加键向后兼容，非 schema 列变更）；③空 messages 列表在旧摄取路径会 IndexOutOfBounds 崩溃（E-ENV 兜底），重构中就近修复为退化落库并有敌对钉 |

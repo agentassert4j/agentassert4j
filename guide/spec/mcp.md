@@ -89,27 +89,26 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
    harness 权限系统执行（MCP 原生同意点）；框架不校验 approver 值，事后经 CLI `audit`
    回溯 agent 申报的治理写（governance.md「agent 治理与审计」节为权威表述）。
    【测试钉】manifest 组（description 含治理写声明）
-8. **record 摄取（幂等，OpenAI 兼容方言解析；多协议跟进为后续批）**：入参 sessionId（必填）、request/response（必填，
-   OpenAI 兼容 chat completion 的原始请求/响应 JSON 文本）、invocation（声明标签）、
-   taskKey（任务键声明）、recordId（幂等键）、timestamp/latencyMs（遥测可选）、metadata
-   （JSON 对象文本；无 protocol 参数——v1 只解析 OpenAI 兼容方言）。解析映射与 SDK 捕获侧同源（SpringAiRecordMapper 契约）：
-   system 消息 → templateText/templateHash（多 system 末者为准；developer 帧按同等的
-   模板材料处置——OpenAI 现代指令帧变体，不入轮次）；末位 user 消息 →
-   userInput + turnIndex（content 为数组时按多模态数组落库）；其余消息 → previousTurns
-   （tool 帧携带 toolCallId；assistant 的 tool_calls 细节不入轮次——与录制侧同等近似）；
-   request.tools → toolsDefinition 原样；采样参数（temperature/top_p/top_k/max_tokens/
-   frequency_penalty/presence_penalty/stop/seed）→ samplingParams；响应侧 choices[0].
-   message.content → modelResponse、tool_calls → ToolCall（argTypes 同源派生）、usage →
-   token 四计数 + usageRaw、finish_reason 归一（与 OpenAiCompatibleClient 同一归一器）、
-   顶层 model → servedModel；raw 原文双列落库（modelRequestRaw/modelResponseRaw——wire
-   摄取比 ChatModel 层捕获更富）。**幂等三层**：caller recordId > response.id >
+8. **record 摄取（幂等，三协议 wire 方言）**：入参 sessionId（必填）、request/response（必填，
+   原始请求/响应 JSON 文本）、protocol（可选，封闭词表 `openai-chat`/`anthropic-messages`/
+   `openai-responses`，词表单源=LlmWireProtocol 枚举——显式声明优先；缺省按响应形态自动
+   识别：choices → openai-chat，stop_reason 或顶层 content 块数组 → anthropic-messages，
+   output 数组或 status → openai-responses，全部不中 → E-USAGE 列三候选）、invocation
+   （声明标签）、taskKey（任务键声明）、recordId（幂等键）、timestamp/latencyMs（遥测
+   可选）、metadata（JSON 对象文本）。三协议的映射矩阵与 finish/usage 归一表的权威表述
+   见 recording.md「wire 方言归一」节（归一器与重放客户端共用，同一方言不得有两套词表）；
+   摄取产出的落库记录恒为 OpenAI chat 范式形（工具定义转范式嵌套形、图像转 data-URI），
+   apiProtocol 列记录实际摄取方言。**幂等三层**：caller recordId > response.id >
    sha256(sessionId+invocation+turnIndex+requestRaw+responseRaw) 内容哈希；存储层
    INSERT OR IGNORE 天然去重，`saveInteractionIfAbsent` 回告 saved/duplicate，报告
-   schema=agentassert4j.record/1。taskKey 落 metadata 的 `taskKey` 字段
+   schema=agentassert4j.record/1（含 `protocol` 字段回显实际采用的方言——含自动识别
+   结果，误判当场可见，重发显式 protocol 即可）。taskKey 落 metadata 的 `taskKey` 字段
    （TaskChainView.DECLARED_TASK_KEY 契约，声明优先于派生）。身份派生走与录制管道同一
    enrich 顺序：哈希投影先行、后键派生（wire 摄取无骨架，未声明时锚到 template/adhoc）。
-   入参语义校验失败（必填缺失、request/response/metadata 非法 JSON）→ isError + E-USAGE
-   包络。【测试钉】record 组（saved/duplicate/taskKey/身份/错误路径）
+   不可转换的 part（历史轮图像、无 base64 源的图像块）宁缺勿非法——丢弃并经工具结果
+   stderr 可见告警。入参语义校验失败（必填缺失、request/response/metadata 非法 JSON、
+   protocol 非法值、无法识别）→ isError + E-USAGE 包络。【测试钉】`McpServerTest` record 组
+   （chat 全链）+ `McpRecordIngestionTest`（三协议矩阵/归一表全值/自动识别/敌对）
 9. **结果双形态与证据预算**：`content` = 文本块（命令 stdout 的 schema 标签报告行原样，
    预算 100 000 字符，超出截断并标注——AI 可缩域重取）；`structuredContent` = JSON 对象
    （2025-11-25 方言要求对象形）：成功 = `{"reports":[<逐行解析的报告对象>]}`
@@ -167,3 +166,6 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
   规范修正——规划原文与规范冲突，判规范侧成立并就地收窄）、record 幂等三层、ci 语义
   读动词、双形态结果、stdout 纯净性。实现与测试同批交付，通道 2 双宿主实测为 1.0.0
   验收标准（本 spec 契约 6/7 的最终裁判）。
+- 2026-09-09 三协议批①：契约 8 由「OpenAI 方言 only、多协议后续批」改写为三协议摄取
+  （protocol 参数 + 自动识别 + protocol 字段回显）；映射矩阵与归一表移 recording.md
+  「wire 方言归一」节单源承载。归一器实现与测试同批交付（McpRecordIngestionTest）。

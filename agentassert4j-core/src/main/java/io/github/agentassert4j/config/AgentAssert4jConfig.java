@@ -21,7 +21,7 @@ import java.util.Map;
  *   "storage": { "url": "~/.agentassert4j/agentassert4j.db" },
  *   "recorder": { "batchSize": 100, "flushIntervalMs": 5000 },
  *   "regression": { "ignorableFields": ["debugInfo", "timestamp"] },
- *   "llm": { "apiKey": "${AGENTASSERT_API_KEY}", "endpoint": "...", "model": "gpt-4o",
+ *   "llm": { "protocol": "openai-chat", "apiKey": "${AGENTASSERT_API_KEY}", "endpoint": "...", "model": "gpt-4o",
  *            "extraBody": "\"thinking\":{\"type\":\"disabled\"}" }
  * }
  * </pre>
@@ -237,6 +237,13 @@ public class AgentAssert4jConfig {
          */
         private String apiKey;
         /**
+         * wire 协议方言（LlmWireProtocol 的线上值）。null（缺省）= 自动推导：重放
+         * 按基线记录的原摄取方言发射，无记录提示时回退 openai-chat；显式配置
+         * = 覆盖推导（跨协议重放是显式意图）。未知值在客户端构造点报错
+         * （配置解析层原样保留，不静默回退）
+         */
+        private String protocol;
+        /**
          * API 端点
          */
         private String endpoint = "https://api.openai.com";
@@ -264,6 +271,7 @@ public class AgentAssert4jConfig {
             if (map == null) return defaults;
             LlmConfig c = new LlmConfig();
             c.apiKey = getString(map, "apiKey", defaults.apiKey);
+            c.protocol = getString(map, "protocol", defaults.protocol);
             c.endpoint = getString(map, "endpoint", defaults.endpoint);
             c.model = getString(map, "model", defaults.model);
             c.timeoutMs = getInt(map, "timeoutMs", defaults.timeoutMs);
@@ -284,6 +292,14 @@ public class AgentAssert4jConfig {
 
         public void setApiKey(String apiKey) {
             this.apiKey = apiKey;
+        }
+
+        public String getProtocol() {
+            return protocol;
+        }
+
+        public void setProtocol(String protocol) {
+            this.protocol = protocol;
         }
 
         public String getEndpoint() {

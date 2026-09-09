@@ -30,6 +30,13 @@ public class LlmRequest {
      * <p>设置此字段后，LLM 可能返回 tool_calls 响应。</p>
      */
     private List<String> toolDefinitions;
+    /**
+     * 本次调用的 wire 方言提示（LlmWireProtocol 的线上值，如 "anthropic-messages"）。
+     * 重放装配侧携带基线记录的 apiProtocol，供协议路由客户端按记录原方言发射；
+     * null = 无提示，由客户端按配置或缺省方言解析。值是提示不是指令——
+     * 显式配置的 llm.protocol 优先级更高（跨协议重放是显式用户意图）。
+     */
+    private String wireProtocol;
 
     public String getSystemPrompt() {
         return systemPrompt;
@@ -94,5 +101,13 @@ public class LlmRequest {
 
     public void setToolDefinitions(List<String> toolDefinitions) {
         this.toolDefinitions = toolDefinitions;
+    }
+
+    public String getWireProtocol() {
+        return wireProtocol;
+    }
+
+    public void setWireProtocol(String wireProtocol) {
+        this.wireProtocol = wireProtocol;
     }
 }

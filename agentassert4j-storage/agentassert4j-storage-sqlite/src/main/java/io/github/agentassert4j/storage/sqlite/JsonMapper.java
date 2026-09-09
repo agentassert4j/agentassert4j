@@ -88,6 +88,7 @@ final class JsonMapper {
             TurnContext tc = new TurnContext(asString(m.get("role")), asString(m.get("content")));
             tc.setToolCallId(asString(m.get("toolCallId")));
             tc.setToolName(asString(m.get("toolName")));
+            tc.setToolArguments(asString(m.get("toolArguments")));
             result.add(tc);
         }
         return result;
@@ -159,6 +160,9 @@ final class JsonMapper {
         m.put("content", tc.getContent());
         m.put("toolCallId", tc.getToolCallId());
         m.put("toolName", tc.getToolName());
+        // 发起帧的实际参数 JSON（Anthropic/Responses 摄取可存真值）：重放的
+        // 「当时输入」重建依赖它，落库即定格
+        m.put("toolArguments", tc.getToolArguments());
         return m;
     }
 

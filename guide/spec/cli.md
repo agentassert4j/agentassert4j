@@ -72,7 +72,8 @@ schema、退出码契约、help 终态。
    清单：state=active/archived、invocationKey、versionTag、approvedBy、approvedAt 恒在，
    codeRef 缺省省略；读动词恒 exit 0，空清单 writes=[]）；record 摄取（MCP record 工具）=
    agentassert4j.record/1（status=saved/duplicate、recordId、sessionId、invocationKey、
-   turnIndex、token 计数、hasToolCalls；声明标签时另带 invocationId）；doctor=agentassert4j.doctor/1（三段体检：
+   protocol（实际采用的 wire 方言，含自动识别结果）、turnIndex、token 计数、hasToolCalls；
+   声明标签时另带 invocationId）；doctor=agentassert4j.doctor/1（三段体检：
    身份/覆盖/规则，计数全量 + 样本封顶 3 条，样本请求文本与人类输出同款缩略）；失败=
    agentassert4j.error/1（契约 7）。报告与包元数据回显申报制代码锚 codeRef
    （baseline-report 逐调用点、adjudication/1、rollback/1、status/1、export-report/1、

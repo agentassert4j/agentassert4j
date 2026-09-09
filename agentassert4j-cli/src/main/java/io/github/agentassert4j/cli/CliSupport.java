@@ -1,13 +1,17 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.*;
+import io.github.agentassert4j.cli.llm.AnthropicMessagesClient;
 import io.github.agentassert4j.cli.llm.OpenAiCompatibleClient;
+import io.github.agentassert4j.cli.llm.OpenAiResponsesClient;
+import io.github.agentassert4j.cli.llm.ProtocolRoutingLlmClient;
 import io.github.agentassert4j.config.AgentAssert4jConfig;
 import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.InvocationRulesConfig.InvocationRule;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
+import io.github.agentassert4j.model.LlmWireProtocol;
 import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.result.DriftReport;
 import io.github.agentassert4j.spi.InteractionQueryStore;
@@ -511,11 +515,21 @@ final class CliSupport {
     }
 
     /**
-     * 依据主配置 llm 段构造 OpenAI 兼容客户端——重放类命令共用
-     * 同一构造（单一来源），端点/密钥/模型/重试/extraBody 口径不得分叉。
+     * 依据主配置 llm 段构造重放客户端——协议路由装配（显式配置 llm.protocol
+     * 覆盖记录方言推导，见 ProtocolRoutingLlmClient），重放类命令共用同一构造
+     * （单一来源），端点/密钥/模型/重试/extraBody 口径不得分叉。未知协议值在
+     * 此抛用法错误并列全部合法值——配置错误就近可见，不静默回退。
      */
     static LlmClient createLlmClient(AgentAssert4jConfig config) {
-        return new OpenAiCompatibleClient(config.getLlm().getEndpoint(), config.getLlm().getApiKey(), config.getLlm().getModel(), OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, config.getLlm().getExtraBody());
+        String protocol = config.getLlm().getProtocol();
+        if (protocol != null && LlmWireProtocol.fromWireName(protocol) == null) {
+            throw new CliFailureException(CliErrorCode.E_USAGE, "llm.protocol '" + protocol + "' is not a known wire protocol.", "Valid values: " + LlmWireProtocol.legalWireNames() + ".", "");
+        }
+        String endpoint = config.getLlm().getEndpoint();
+        String apiKey = config.getLlm().getApiKey();
+        String model = config.getLlm().getModel();
+        String extraBody = config.getLlm().getExtraBody();
+        return new ProtocolRoutingLlmClient(protocol, new OpenAiCompatibleClient(endpoint, apiKey, model, OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, extraBody), new AnthropicMessagesClient(endpoint, apiKey, model, OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, extraBody), new OpenAiResponsesClient(endpoint, apiKey, model, OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, extraBody));
     }
 
     /**

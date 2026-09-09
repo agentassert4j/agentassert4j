@@ -162,6 +162,12 @@ public class RegressionTestExecutor {
      * 即构成假差异。
      */
     private void applyReplayControls(LlmRequest request, InteractionRecord baseline, TestExecutionConfig config) {
+        // wire 方言提示：随基线记录的原摄取方言发射（同协议原样重放零配置）；
+        // 显式配置 llm.protocol 在路由客户端处覆盖此提示（跨协议重放是显式意图）
+        if (baseline.getApiProtocol() != null && !baseline.getApiProtocol().isEmpty()) {
+            request.setWireProtocol(baseline.getApiProtocol());
+        }
+
         // 多轮对话：注入前序轮次（完整复制——tool 角色的 toolCallId/toolName
         // 是重放请求与原对话对齐的关联键，丢弃会导致服务端拒绝整个请求）。
         // 判据只看前序轮次是否非空：无 user 消息收尾的会话（典型：tool 结果轮）
@@ -240,8 +246,7 @@ public class RegressionTestExecutor {
         current.setOutputTokens(response.getOutputTokens());
 
         // 调用时刻遥测——只在此刻可知，事后无法重建。
-        // 模型身份列（provider/endpoint/apiProtocol 等）捕获侧尚未填充，
-        // 算法层不持有供应商方言知识，响应侧遥测在此就地落位
+        // served 模型等模型身份遥测在此就地落位
         current.setServedModel(response.getServedModel());
         current.setFinishReason(response.getFinishReason());
         current.setUsageRaw(response.getUsageRaw());
@@ -249,6 +254,10 @@ public class RegressionTestExecutor {
         current.setCacheWriteTokens(response.getCacheWriteTokens());
         current.setReasoningTokens(response.getReasoningTokens());
         current.setLatencyMs(response.getLatencyMs());
+
+        // wire 方言血统随基线传递：本记录按基线方言的文法发射产生，重放路由
+        // （applyReplayControls 消费 apiProtocol）据此在同协议再重放时保持方言一致
+        current.setApiProtocol(baseline.getApiProtocol());
 
         // 多模态复用
         current.setMultimodalInput(baseline.isMultimodalInput());

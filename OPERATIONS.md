@@ -85,12 +85,21 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 | recorder.batchSize | — | 100 | 批量落库批大小 |
 | recorder.flushIntervalMs | — | 5000 | 定时冲刷间隔（毫秒） |
 | regression.ignorableFields | — | 空列表 | 已知噪声字段白名单（归一化后仍不同才构成差异） |
+| llm.protocol | — | 自动推导 | 重放端点的 wire 协议。不配置时自动推导：按基线记录的原摄取方言发射（同协议原样重放零配置），无记录提示时回退 `openai-chat`；显式配置 `openai-chat`/`anthropic-messages`/`openai-responses` 覆盖推导（跨协议重放）；未知值启动时报错并列全部合法值 |
 | llm.apiKey | — | 空 | 重放用；支持 `${ENV}` 引用；缺失时 `--re-drive` 打印警告（bare 对齐零调用，不检查 Key） |
 | llm.endpoint | — | `https://api.openai.com` | OpenAI 兼容端点（DeepSeek/通义等同协议端点均可） |
 | llm.model | — | `gpt-4o` | 重放请求的模型；与录制模型不一致时命令行告警 |
 | llm.timeoutMs | — | 30000 | **单次尝试**预算（下限钳 1000）；超时不重试 |
 | llm.temperature | — | 0.0 | 钳位 0–2；推理模型方言下不携带（见故障排查 §7.3） |
 | llm.extraBody | — | 空 | 追加到请求体顶层的原样 JSON 片段（厂商方言逃生舱，如 `"thinking":{"type":"disabled"}`） |
+
+三协议的端点与鉴权形态：
+
+| protocol | 端点示例 | 鉴权 |
+|---|---|---|
+| `openai-chat` | `https://api.deepseek.com`（一切 OpenAI 兼容端点） | Bearer |
+| `anthropic-messages` | `https://api.anthropic.com` 或厂商的 Messages 兼容端点（如 `https://api.deepseek.com/anthropic`） | `x-api-key` + `anthropic-version`（客户端自带） |
+| `openai-responses` | `https://api.openai.com` 或 `https://api.deepseek.com` | Bearer |
 
 ### 2.2 starter 属性（`application.yml`，前缀 `agentassert4j`）
 

@@ -5,38 +5,27 @@ import io.github.agentassert4j.model.LlmResponse;
 import io.github.agentassert4j.model.ToolCallResult;
 import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.spi.LlmApiException;
-import io.github.agentassert4j.spi.LlmClient;
-import io.github.agentassert4j.spi.LlmTimeoutException;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.ConnectException;
 import java.net.HttpURLConnection;
-import java.net.SocketTimeoutException;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * OpenAI 兼容 LLM 客户端。
+ * OpenAI 兼容 LLM 客户端（Chat Completions 方言）。
  *
- * <p>基于 JDK 内置 HttpURLConnection（Java 8 可用），零 SDK 依赖。
- * 兼容 Azure OpenAI / 通义千问 / DeepSeek / Gemini 等 OpenAI API 格式。
- * 请求体手工拼装、响应体统一经 core 的 RecursiveJsonParser 解析——
- * 转义与解析语法不在此处另立第二真源。</p>
+ * <p>兼容 Azure OpenAI / 通义千问 / DeepSeek 等一切 OpenAI chat 格式端点；
+ * HTTP 管道与超时/重试契约见共享基座。请求体手工拼装、响应体统一经 core 的
+ * RecursiveJsonParser 解析——转义与解析语法不在此处另立第二真源。</p>
  *
  * @author axy-yxa
  * @since 2026-08-27
  */
-public class OpenAiCompatibleClient implements LlmClient {
+public class OpenAiCompatibleClient extends AbstractHttpLlmClient {
 
     private static final Logger LOG = LoggerFactory.getLogger(OpenAiCompatibleClient.class);
 
@@ -45,26 +34,9 @@ public class OpenAiCompatibleClient implements LlmClient {
      */
     public static final int DEFAULT_MAX_RETRIES = 2;
     /**
-     * 响应体读取上限（字节）——防异常端点拖垮客户端内存
-     */
-    static final int MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
-    /**
      * 内置方言裁剪规则（数据文件驱动）：命中模型省略「发送即报错」的标准参数
      */
     private static final ProviderDialects DIALECTS = ProviderDialects.load();
-    private final String endpoint;
-    private final String apiKey;
-    private final String defaultModel;
-    private final int maxRetries;
-    /**
-     * 厂商方言扩展字段——原样注入请求体顶层的 JSON 成员片段。
-     * 例：DeepSeek V4 系模型默认开启思考态且思考 token 与输出共享预算，
-     * 需注入 "thinking":{"type":"disabled"} 才能拿到非空正文。
-     * 客户端保持供应商中立，不做任何按模型名的硬编码分支，
-     * 由使用方按所接厂商在构造时声明；片段必须为合法 JSON 成员序列，
-     * 非法时服务端以 400 拒绝——错误显式可见，不做静默修正。
-     */
-    private final String extraBodyFields;
     /**
      * 方言裁剪告警只发一次——批量重放对同一模型逐请求告警会淹没输出
      */
@@ -81,11 +53,7 @@ public class OpenAiCompatibleClient implements LlmClient {
      *                        null 或空白表示无扩展；须为合法 JSON 成员序列，否则请求将被服务端拒绝
      */
     public OpenAiCompatibleClient(String endpoint, String apiKey, String defaultModel, int maxRetries, String extraBodyFields) {
-        this.endpoint = normalizeEndpoint(endpoint);
-        this.apiKey = apiKey;
-        this.defaultModel = defaultModel;
-        this.maxRetries = Math.max(0, maxRetries);
-        this.extraBodyFields = extraBodyFields != null && !extraBodyFields.trim().isEmpty() ? extraBodyFields.trim() : null;
+        super(endpoint, apiKey, defaultModel, maxRetries, extraBodyFields);
     }
 
     /**
@@ -111,131 +79,19 @@ public class OpenAiCompatibleClient implements LlmClient {
         }
     }
 
-    private static String normalizeEndpoint(String endpoint) {
-        if (endpoint == null) return "https://api.openai.com";
-        return endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
+    @Override
+    protected String requestPath() {
+        return "/v1/chat/completions";
     }
 
     @Override
-    public LlmResponse chat(LlmRequest request, long timeoutMs) throws LlmTimeoutException, LlmApiException {
-
-        String model = request.getModel() != null ? request.getModel() : this.defaultModel;
-        String body = buildRequestBody(request, model);
-
-        Exception lastException = null;
-        long startNanos = System.nanoTime();
-
-        for (int attempt = 0; attempt <= maxRetries; attempt++) {
-            if (attempt > 0) {
-                // 指数退避：1s, 2s, 4s ...
-                try {
-                    Thread.sleep((long) (1000 * Math.pow(2, attempt - 1)));
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new LlmApiException("Retry interrupted", e);
-                }
-            }
-
-            HttpURLConnection conn = null;
-            try {
-                conn = openChatConnection(timeoutMs);
-                try (OutputStream os = conn.getOutputStream()) {
-                    os.write(body.getBytes(StandardCharsets.UTF_8));
-                }
-
-                int statusCode = conn.getResponseCode();
-                String responseBody = readBody(conn);
-
-                if (statusCode == 200) {
-                    LlmResponse parsed = parseResponse(responseBody);
-                    // 端到端墙钟（含重试等待）：latencyMs 的语义是整次调用的耗时
-                    parsed.setLatencyMs((System.nanoTime() - startNanos) / 1_000_000L);
-                    return parsed;
-                }
-
-                // 可重试的状态码
-                if (statusCode == 429 || statusCode >= 500) {
-                    lastException = new LlmApiException("HTTP " + statusCode + ": " + responseBody);
-                    continue;
-                }
-
-                // 不可重试的客户端错误
-                throw new LlmApiException("HTTP " + statusCode + ": " + responseBody);
-
-            } catch (SocketTimeoutException e) {
-                // 单次尝试的超时预算已耗尽：立即判超时，不重试
-                throw new LlmTimeoutException("LLM call timed out after " + timeoutMs + "ms", e);
-            } catch (ConnectException e) {
-                // 连接被拒是声明契约中唯一可重试的 IO 故障（对端暂时不可达）
-                lastException = new LlmApiException("Connection failed: " + e.getMessage(), e);
-            } catch (IOException e) {
-                // 其余 IO 故障（读中断/流意外关闭）不在可重试集合内——
-                // 重试洗白只会放大耗时与费用，且让真实故障形态失真
-                throw new LlmApiException("I/O error during LLM call: " + e.getMessage(), e);
-            } finally {
-                if (conn != null) conn.disconnect();
-            }
-        }
-
-        // 所有重试耗尽
-        if (lastException instanceof LlmApiException) {
-            throw (LlmApiException) lastException;
-        }
-        throw new LlmApiException("All retries exhausted: " + (lastException != null ? lastException.getMessage() : "unknown error"), lastException);
-    }
-
-    private HttpURLConnection openChatConnection(long timeoutMs) throws IOException {
-        URL url = new URL(endpoint + "/v1/chat/completions");
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        // 单次尝试预算：连接与读取各自以 timeoutMs 为上限（总耗时另含重试与退避等待）
-        conn.setConnectTimeout((int) Math.min(timeoutMs, Integer.MAX_VALUE));
-        conn.setReadTimeout((int) Math.min(timeoutMs, Integer.MAX_VALUE));
-        conn.setRequestMethod("POST");
-        conn.setRequestProperty("Content-Type", "application/json");
+    protected void decorateConnection(HttpURLConnection conn) {
         conn.setRequestProperty("Authorization", "Bearer " + apiKey);
-        conn.setDoOutput(true);
-        return conn;
-    }
-
-    private static String readBody(HttpURLConnection conn) throws IOException {
-        InputStream stream = conn.getResponseCode() >= 400 ? conn.getErrorStream() : conn.getInputStream();
-        if (stream == null) {
-            return "";
-        }
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        byte[] chunk = new byte[4096];
-        int read;
-        while ((read = stream.read(chunk)) != -1) {
-            if (buffer.size() + read > MAX_RESPONSE_BYTES) {
-                // 异常端点可能返回任意大小的响应体，无上限会拖垮客户端内存
-                throw new IOException("LLM response body exceeds the " + MAX_RESPONSE_BYTES + "-byte limit; read aborted");
-            }
-            buffer.write(chunk, 0, read);
-        }
-        return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
     }
 
     @Override
     public String name() {
         return defaultModel;
-    }
-
-    @Override
-    public boolean isAvailable() {
-        HttpURLConnection conn = null;
-        try {
-            URL url = new URL(endpoint + "/v1/models");
-            conn = (HttpURLConnection) url.openConnection();
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Authorization", "Bearer " + apiKey);
-            return conn.getResponseCode() == 200;
-        } catch (Exception e) {
-            return false;
-        } finally {
-            if (conn != null) conn.disconnect();
-        }
     }
 
     /**
@@ -265,7 +121,8 @@ public class OpenAiCompatibleClient implements LlmClient {
      * "tools":[{"type":"function","function":{"name":"...","parameters":{...}}}]
      * </pre>
      */
-    String buildRequestBody(LlmRequest request, String model) {
+    @Override
+    protected String buildRequestBody(LlmRequest request, String model) {
         StringBuilder sb = new StringBuilder(512);
         sb.append("{\"model\":\"").append(RecursiveJsonParser.escape(model)).append("\"");
 
@@ -387,7 +244,8 @@ public class OpenAiCompatibleClient implements LlmClient {
      * 回填来源），缓存读/思考 token 在此完成方言归一。响应体不是合法 JSON 对象时
      * 抛 {@link LlmApiException}；合法但缺成员时对应字段保持 null，退化不中断。</p>
      */
-    LlmResponse parseResponse(String body) throws LlmApiException {
+    @Override
+    protected LlmResponse parseResponse(String body) throws LlmApiException {
         try {
             Object parsed = RecursiveJsonParser.parse(body);
             if (!(parsed instanceof Map)) {
@@ -410,7 +268,9 @@ public class OpenAiCompatibleClient implements LlmClient {
                 response.setInputTokens(orZero(memberInt(usage, "prompt_tokens")));
                 response.setOutputTokens(orZero(memberInt(usage, "completion_tokens")));
                 // input_tokens 语义钉死为"总处理输入 token"：
-                // OpenAI/DeepSeek 的 prompt_tokens 已是总量；Anthropic 合成规则由其专属客户端实现
+                // OpenAI/DeepSeek 的 prompt_tokens 已是总量；Anthropic 的
+                // cache_creation/cache_read 属于总量的一部分，其求和规则由该方言的
+                // 摄取与客户端实现
                 Map<?, ?> promptDetails = memberMap(usage, "prompt_tokens_details");
                 if (promptDetails != null) {
                     response.setCacheReadTokens(memberInt(promptDetails, "cached_tokens"));
@@ -419,9 +279,6 @@ public class OpenAiCompatibleClient implements LlmClient {
                 if (completionDetails != null) {
                     response.setReasoningTokens(memberInt(completionDetails, "reasoning_tokens"));
                 }
-                // TODO: [cache write 未解析] Anthropic 风格的 cache_creation_input_tokens
-                // 暂不解析，cacheWriteTokens 保持 null（未知 ≠ 0）；出现真实报告该字段的
-                // 兼容端点时随方言适配补齐
             }
 
             // 响应报告的实际服务模型（顶层 "model" 字段）
