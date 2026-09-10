@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * 统一重放引擎的端到端流程测试 — 临时 SQLite 上走通
- * 建基线 → 检测/对齐 → 候选落库 → approve/reject/rollback 全链收敛。
+ * 建基线 → 检测/对齐 → 候选落库 → accept/reject/rollback 全链收敛。
  *
  * @author axy-yxa
  * @since 2026-08-27
@@ -97,8 +97,8 @@ class ReplayFlowTest {
     class DiffAndAdjudicate {
 
         @Test
-        @DisplayName("行为差异 → 退出码 1 + 候选落库 → approve 清候选转正基线")
-        void diff_candidate_approve_settles() {
+        @DisplayName("行为差异 → 退出码 1 + 候选落库 → accept 清候选转正基线")
+        void diff_candidate_accept_settles() {
             saveRecord("rec-1", "session-a", 1000L, "order", "hash-a", "{\"answer\":\"old\"}");
             saveRecord("rec-2", "session-b", 2000L, "order", "hash-a", "{\"result\":\"new\"}");
             establishAll();
@@ -107,10 +107,10 @@ class ReplayFlowTest {
             InvocationProfile profile = repository.findInvocationByKey("invocation:order:hash-a");
             assertEquals(BaselineStatus.CANDIDATE, profile.getBaselineStatus());
 
-            new BaselineManager(repository).approve("invocation:order:hash-a", "tester", null);
+            new BaselineManager(repository).accept("invocation:order:hash-a", "tester", null);
 
             InvocationProfile settled = repository.findInvocationByKey("invocation:order:hash-a");
-            assertEquals(BaselineStatus.BASELINE, settled.getBaselineStatus(), "approve 必须清候选转正");
+            assertEquals(BaselineStatus.BASELINE, settled.getBaselineStatus(), "accept 必须清候选转正");
             assertNotNull(settled.getCandidateFingerprint() == null ? settled.getFingerprint() : null);
             assertEquals("v2", settled.getVersionTag());
             // 对齐层陈述的是「最近两次真实执行之间变了」——事实差异在新真实链入账前如实存续
@@ -135,8 +135,8 @@ class ReplayFlowTest {
         }
 
         @Test
-        @DisplayName("approve 覆盖后 rollback 恢复旧基线，重放恢复通过")
-        void approveThenRollback_restoresBaseline() {
+        @DisplayName("accept 覆盖后 rollback 恢复旧基线，重放恢复通过")
+        void acceptThenRollback_restoresBaseline() {
             saveRecord("rec-1", "session-a", 1000L, "order", "hash-a", "{\"answer\":\"old\"}");
             saveRecord("rec-2", "session-b", 2000L, "order", "hash-a", "{\"result\":\"new\"}");
             establishAll();
@@ -144,7 +144,7 @@ class ReplayFlowTest {
             engine.run(null, null, false, false, false, false, false, null, null);
             DeterministicFingerprint oldBaseline = repository.findInvocationByKey("invocation:order:hash-a").getFingerprint();
 
-            new BaselineManager(repository).approve("invocation:order:hash-a", "tester", null);
+            new BaselineManager(repository).accept("invocation:order:hash-a", "tester", null);
             assertEquals("v2", repository.findInvocationByKey("invocation:order:hash-a").getVersionTag());
 
             new BaselineManager(repository).rollback("invocation:order:hash-a", "v1");
@@ -161,7 +161,7 @@ class ReplayFlowTest {
     class BareAdjudicate {
 
         @Test
-        @DisplayName("bare approve = 裁决全部待裁决候选并各自转正")
+        @DisplayName("bare accept = 裁决全部待裁决候选并各自转正")
         void bareApprove_adjudicatesAllPending() {
             saveRecord("rec-1", "session-a", 1000L, "order", "hash-a", "{\"answer\":\"old\"}");
             saveRecord("rec-2", "session-b", 2000L, "order", "hash-a", "{\"result\":\"new\"}");
@@ -170,11 +170,11 @@ class ReplayFlowTest {
             establishAll();
             assertEquals(1, runner().run(null, null, false, false, false, false, false, null, null));
 
-            ApproveCommand approve = new ApproveCommand();
-            approve.db = tempDir.resolve("flow.db").toString();
-            approve.out = new PrintStream(new ByteArrayOutputStream(), true);
-            approve.err = new PrintStream(new ByteArrayOutputStream(), true);
-            assertEquals(0, approve.call());
+            AcceptCommand accept = new AcceptCommand();
+            accept.db = tempDir.resolve("flow.db").toString();
+            accept.out = new PrintStream(new ByteArrayOutputStream(), true);
+            accept.err = new PrintStream(new ByteArrayOutputStream(), true);
+            assertEquals(0, accept.call());
 
             assertEquals(BaselineStatus.BASELINE, repository.findInvocationByKey("invocation:order:hash-a").getBaselineStatus());
             assertEquals(BaselineStatus.BASELINE, repository.findInvocationByKey("invocation:poem:hash-p").getBaselineStatus());

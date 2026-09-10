@@ -1,5 +1,6 @@
 package io.github.agentassert4j.cli;
 
+import io.github.agentassert4j.algorithm.VersionMismatchException;
 import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.spi.StorageRepository;
@@ -38,6 +39,9 @@ public class BaselineCommand implements Callable<Integer> {
     @Option(names = {"--force"}, description = "Rebuild baselines under the current judgment semantics: existing baselines are overwritten by fresh fingerprints (recovery path after a judgment-semantics upgrade)")
     boolean force;
 
+    @Option(names = {"--expected-version"}, description = "Optimistic concurrency guard for --force: refuse unless every active baseline version still equals this tag")
+    String expectedVersion;
+
     @Option(names = {"--ref"}, description = "Code reference (e.g. a git commit) the established baselines correspond to; declared, not verified")
     String codeRef;
 
@@ -56,7 +60,7 @@ public class BaselineCommand implements Callable<Integer> {
             InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
             CliSupport.warnUnknownBehaviors(rules, notice);
             List<BaselineService.BaselineOutcome> outcomes = new ArrayList<>();
-            int established = new BaselineService(repository).establishMissing(jsonOutput ? CliSupport.discardStream() : out, actor, codeRef, force, resolvedInvocation, rules, outcomes);
+            int established = new BaselineService(repository).establishMissing(jsonOutput ? CliSupport.discardStream() : out, actor, codeRef, force, resolvedInvocation, rules, outcomes, expectedVersion);
             if (jsonOutput) {
                 StringBuilder invocations = new StringBuilder();
                 for (BaselineService.BaselineOutcome outcome : outcomes) {
@@ -70,6 +74,8 @@ public class BaselineCommand implements Callable<Integer> {
                 out.println(established > 0 ? "Done: " + CliSupport.plural(established, "invocation") + " " + (force ? "re-established" : "established") + "." : "Done: every invocation already has a baseline.");
             }
             return 0;
+        } catch (VersionMismatchException e) {
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run report to see the active versions, then retry with --expected-version <tag>, or drop the guard.", "report");
         } catch (CliFailureException e) {
             return CliSupport.fail(jsonOutput, out, err, e);
         } catch (RuntimeException e) {

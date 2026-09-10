@@ -307,7 +307,7 @@ final class CliSupport {
     }
 
     /**
-     * 解析 --invocation 目标值（画像操作类命令用：approve/reject/rollback），返回唯一 invocationKey。
+     * 解析 --invocation 目标值（画像操作类命令用：accept/reject/rollback），返回唯一 invocationKey。
      * 解析优先级：完整 invocationKey 精确命中（即使它是其他 key 的前缀）＞ 业务标签（该标签
      * 覆盖多个分组时报错并列出）＞ 显示短形（status 展示的 标签@8位/skl@8位 等，看得到的写法
      * 选得到）＞ invocationKey 唯一前缀。无命中抛 E-NO-DATA、多命中抛 E-USAGE 的

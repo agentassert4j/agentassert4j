@@ -1,6 +1,7 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.TaskChainView;
+import io.github.agentassert4j.config.AgentAssert4jConfig;
 import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.InteractionRecord;
@@ -50,6 +51,10 @@ public class DoctorCommand implements Callable<Integer> {
             List<TaskChain> chains = TaskChainView.resolveAll(repository);
             List<InvocationProfile> profiles = repository.findAllInvocations();
             InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
+            AgentAssert4jConfig mainConfig = ConfigLoader.loadAgentAssert4jConfig();
+            for (String note : mainConfig.getConfigNotes()) {
+                (jsonOutput ? err : out).println("Config note: " + note);
+            }
 
             DoctorFindings findings = collectFindings(repository, records, chains, profiles, rules);
             if (jsonOutput) {

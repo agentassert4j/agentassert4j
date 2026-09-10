@@ -37,6 +37,12 @@ public interface InteractionQueryStore {
     List<InteractionRecord> findBySessionId(String sessionId);
 
     /**
+     * 按 record_id 精确查询单条交互（排障/取证面：回显原始 wire 双列）。
+     * record_id 全局幂等，命中至多一条；未命中返回 null。
+     */
+    InteractionRecord findByRecordId(String recordId);
+
+    /**
      * 获取所有 session ID（任务链派生与分桶枚举使用）
      */
     List<String> findAllSessionIds();

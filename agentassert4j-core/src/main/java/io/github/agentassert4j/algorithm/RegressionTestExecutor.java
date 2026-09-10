@@ -37,7 +37,7 @@ public class RegressionTestExecutor {
      *
      * @param llmClient       LLM 客户端
      * @param comparator      确定性对比器
-     * @param baselineManager 基线管理器：对比结果非 PASS 时把候选指纹落库供 approve/reject 裁决（传 null 跳过）
+     * @param baselineManager 基线管理器：对比结果非 PASS 时把候选指纹落库供 accept/reject 裁决（传 null 跳过）
      * @param rules           声明式规则配置：维度 3-4（内容规则/约束行为）按声明标签查找注入（传 null 跳过规则判定）
      */
     public RegressionTestExecutor(LlmClient llmClient, DeterministicComparator comparator, BaselineManager baselineManager, InvocationRulesConfig rules) {
@@ -103,7 +103,7 @@ public class RegressionTestExecutor {
             ComparisonResult comparison = comparator.compare(baselineFp, currentFp, response.getContent());
 
             // 候选落库：与基线存在差异的新指纹进入待裁决状态（PASS 指纹相同，无可裁决对象）。
-            // 落库失败不中断批量回归——报告仍完整，仅 approve 不可用，SEVERE 留痕
+            // 落库失败不中断批量回归——报告仍完整，仅 accept 不可用，SEVERE 留痕
             if (baselineManager != null && comparison.getVerdict() != Verdict.PASS) {
                 try {
                     baselineManager.recordCandidate(baseline, currentFp);

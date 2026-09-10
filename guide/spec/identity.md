@@ -32,7 +32,7 @@
 ## 状态机与生命周期
 
 本域无状态机。身份在 enrich 派生时定格、随记录落库后永不变更；治理侧的画像身份前移
-（approve 重算/自动收编）是 governance 域对画像行的写行为，不回改任何记录的键。
+（accept 重算/自动收编）是 governance 域对画像行的写行为，不回改任何记录的键。
 
 ## 契约
 
@@ -114,4 +114,4 @@
 | 日期 | 方式 | 发现 |
 |---|---|---|
 | 2026-09-03 | S1 成文：InvocationResolver/BatchWriteHandler/CliSupport/ParameterValueTracer/Schema 全量对账 + 测试指针核实 | ①`BatchWriteHandler` 类注释仍引用 `group_key` 列名（B1' 全库改名残留，实列为 `invocation_key`）——待随代码批修复；②导读第 5 章「invocations 16 列」与 Schema 实际 15 列不符（第 4 章正确）——导读对账批修正；③modelRequestRaw 无采集侧填充方属实（与导读第 4 章「预留」一致，非漂移），已写入行为矩阵 |
-| 2026-09-03 | C1 交付后全量代码审查（同会话第二轮，对抗性自证） | ①契约 8 原【命令可证】指针失实——status 画像行按 `findAllInvocations` 原始行序输出而非分桶字典序，已改写为建档种子【测试钉】（随批新增 `BaselineServiceTest` 种子序回归钉）+ 内部字典序【人工对账】；②C1 已落地治理侧身份前移（approve 前移/rollback 恢复/显式收编 + DriftDetector），归属 governance 域，待 S4 成文承接；③①②之外的漂移发现随审查批修复（group_key 注释/导读列数/测试旧词） |
+| 2026-09-03 | C1 交付后全量代码审查（同会话第二轮，对抗性自证） | ①契约 8 原【命令可证】指针失实——status 画像行按 `findAllInvocations` 原始行序输出而非分桶字典序，已改写为建档种子【测试钉】（随批新增 `BaselineServiceTest` 种子序回归钉）+ 内部字典序【人工对账】；②C1 已落地治理侧身份前移（accept 前移/rollback 恢复/显式收编 + DriftDetector），归属 governance 域，待 S4 成文承接；③①②之外的漂移发现随审查批修复（group_key 注释/导读列数/测试旧词） |

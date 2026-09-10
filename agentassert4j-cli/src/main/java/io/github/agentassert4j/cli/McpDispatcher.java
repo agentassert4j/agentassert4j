@@ -181,12 +181,14 @@ final class McpDispatcher implements StdioTransport.MessageHandler {
      */
     private String toolResultJson(McpToolOutcome outcome) {
         boolean isError = outcome.failed();
-        StringBuilder text = new StringBuilder(outcome.stdout);
-        if (!outcome.stderr.isEmpty()) {
+        String stdout = McpVerbs.channelize(outcome.stdout);
+        String stderr = McpVerbs.channelize(outcome.stderr);
+        StringBuilder text = new StringBuilder(stdout);
+        if (!stderr.isEmpty()) {
             if (text.length() > 0 && text.charAt(text.length() - 1) != '\n') {
                 text.append('\n');
             }
-            text.append("stderr:\n").append(outcome.stderr);
+            text.append("stderr:\n").append(stderr);
         }
         String textValue = text.toString();
         if (textValue.length() > TEXT_BUDGET_CHARS) {
@@ -195,7 +197,7 @@ final class McpDispatcher implements StdioTransport.MessageHandler {
         StringBuilder sb = new StringBuilder("{\"content\":[{\"type\":\"text\",\"text\":\"");
         sb.append(RecursiveJsonParser.escape(textValue));
         sb.append("\"}]");
-        String structured = structuredContent(outcome, isError);
+        String structured = structuredContent(stdout, isError);
         if (structured != null) {
             sb.append(",\"structuredContent\":").append(structured);
         }
@@ -210,12 +212,12 @@ final class McpDispatcher implements StdioTransport.MessageHandler {
      * 可解析对象）；成功态 = 全部可解析报告行组成的 reports 数组（空则省略字段）。
      * 报告行逐行验证后才嵌入——半行或非 JSON 文本绝不进结构化通道。
      */
-    private String structuredContent(McpToolOutcome outcome, boolean isError) {
+    private String structuredContent(String stdout, boolean isError) {
         Map<String, Object> envelope = null;
         Map<String, Object> firstObject = null;
         StringBuilder reports = new StringBuilder();
         int reportCount = 0;
-        for (String line : outcome.stdout.split("\r?\n")) {
+        for (String line : stdout.split("\r?\n")) {
             if (line.trim().isEmpty()) {
                 continue;
             }

@@ -37,7 +37,7 @@ AgentAssert4j 解决的就是这个「心里没底」。它的思路用人话说
 按调用点自动把新链和基线链配对对齐，出一张逐步差异报告。哪里变了精确列出来；变化是不是你想要的，
 由人裁决。它刻意不评判「更好还是更坏」——「一样不一样」是程序可以确定回答的问题，「好不好」留给人。这套闭环的全貌一张图（后面十二幕就是把图上每个环节讲透）：
 
-<img src="../assets/hero-loop.zh.png" alt="核心闭环：Agent 旁路录制进单文件 SQLite，baseline 建档，改提示词后 replay --task 出逐步差异报告，approve / reject 裁决，export → verify 交付验收" width="860"/>
+<img src="../assets/hero-loop.zh.png" alt="核心闭环：Agent 旁路录制进单文件 SQLite，baseline 建档，改提示词后 replay --task 出逐步差异报告，accept / reject 裁决，export → verify 交付验收" width="860"/>
 
 除了嵌进应用的框架本体，随包还有一个**命令行工具**：以 standalone jar（`java -jar` 直接运行）或 Maven
 依赖提供，获取方式见 README；命令名叫 `agentassert4j`，后面跟
@@ -189,21 +189,21 @@ A 换成工具 B 是变好还是变坏，程序无从判断，宣称「回归」
 的效果，用裁决命令接受它：
 
 ```
-$ agentassert4j approve
+$ agentassert4j accept
 ```
 
-`approve` 是裁决命令：bare 一次裁决**全部待裁决候选**（`--invocation` 可缩域到单个调用点），把有
+`accept` 是裁决命令：bare 一次裁决**全部待裁决候选**（`--invocation` 可缩域到单个调用点），把有
 差异的新指纹转正为新基线（旧基线自动进存档，随时可以回滚）。status 里看到的短形（`标签@8位`）也
 能直接粘贴给 `--invocation`。不认可就用 `reject`——新指纹作废，老基线原地不动。裁决一个候选的真实输出长这样（演示库；差异明细逐字段
 点名，转正为 v2、旧基线自动归档）：
 
-<img src="../assets/cli-approve.png" alt="approve 裁决：候选差异明细 + 转正为 v2、旧基线归档（演示库真实输出）" width="880"/>
+<img src="../assets/cli-accept.png" alt="accept 裁决：候选差异明细 + 转正为 v2、旧基线归档（演示库真实输出）" width="880"/>
 
 整条链路没有出现一句「这段回答更好/更差」。框架只陈述事实：哪里一样，哪里不一样，差异在第几维、哪个
 字段。方向判断是小王做的。
 
 > **伏笔去向**：重放请求怎么组装 → 第 9 章；判定规则 → 第 8 章；差异怎么渲染给人看 → 第 8 章；
-> approve 之后数据怎么流转 → 第 7 章。
+> accept 之后数据怎么流转 → 第 7 章。
 
 ## 第 4 幕 · 一句话改动，整条链的回归
 
@@ -273,7 +273,7 @@ $ agentassert4j replay
 
 ## 第 6 幕 · 后悔药
 
-上周小王手一抖，把一个不该接受的差异 approve 转正了。补救是一行命令：
+上周小王手一抖，把一个不该接受的差异 accept 转正了。补救是一行命令：
 
 ```
 $ agentassert4j rollback --invocation refund --version v3
@@ -426,7 +426,7 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 | `agentassert4j status` | 查看调用点清单与基线状态 | `--diff`：展示待裁决的差异；`--json`（status/1） | 只看清单本体；已录制未建档的调用点在「Unestablished invocations」段列出 |
 | `agentassert4j doctor` | 库体检：身份/覆盖/规则三段确定性事实（骨架族、多步零标签链、未声明任务的重复请求族、未建档、规则期望错位），给声明建议 | 无必填参数；`--json`（doctor/1：计数全量+样本封顶的同源机器报告） | 只读不判定不建档；退出码不承载门禁语义（正常恒 0，命令运行期故障统一出 2） |
 | `agentassert4j replay` | 全项目漂移检测 + 逐任务对齐（缺省零 LLM 调用） | `--task <前缀>` / `--invocation <目标>`（复合缩域）；`--ci`（不为无基线调用点建档、漂移不收编）；`--re-drive`（逐漂移点归档模板受控复核，花调用）+ `--full-chain`（扩为缩域内全部记录）+ `--max-total-calls/--max-total-tokens`（重驱预算池）；`--dry-run`（漂移集+对齐计划+重驱报价）；`--json`（task-report/1 逐行分段） | 缩域未命中/歧义出 2；`--ci` 缺档出 2；漂移 PASS 出 0 附未收编警告 |
-| `agentassert4j approve` / `reject` | bare 裁决全部待裁决候选（渲染候选差异 → 转正/丢弃） | `--invocation <目标>` 缩域；`--approver <名字>`（approve 专用，缺省取系统用户） | 无候选出 2 |
+| `agentassert4j accept` / `reject` | bare 裁决全部待裁决候选（渲染候选差异 → 转正/丢弃） | `--invocation <目标>` 缩域；`--approver <名字>`（accept 专用，缺省取系统用户） | 无候选出 2 |
 | `agentassert4j rollback` | 把基线回滚到指定历史版本 | `--invocation <目标>` 与 `--version <版本号>`（**均必填**） | 缺任一参数直接报错 |
 | `agentassert4j verify` | 交付验收：验收包核对本机真实执行链（只读不落库） | `--pack <文件>`（**必填**）；`--task <前缀>`（缩域）；`--dry-run`（配对预演，零判定）；`--report <md>`（交付证据）；`--json`（verify-report/1） | 版本守卫拒绝异语义包；覆盖缺口 exit 2；跨模型标注结构判定有效；规则段随包生效、缺席降级注记 |
 | `agentassert4j rules` | 展示内置约束行为目录与规则文件写法样例 | `--json`（rules/1 目录报告） | 无 |
@@ -666,7 +666,7 @@ recorded（到达即计数） = written（批量写成功）
 
 ## 第 7 章 基线治理
 
-**本幕回顾**：第 2 幕（建档盖章）、第 3 幕（approve/reject 裁决）、第 6 幕（回滚与重建）。
+**本幕回顾**：第 2 幕（建档盖章）、第 3 幕（accept/reject 裁决）、第 6 幕（回滚与重建）。
 
 **设计问题**：基线是「团队认可的正确行为」的载体——它一旦可以被悄悄改写，整个门禁就不可信。所以治理层要回答：谁能让它变？每次变化留不留痕？改错了能不能回去？算法升级了旧基线怎么办？
 
@@ -675,20 +675,20 @@ recorded（到达即计数） = written（批量写成功）
 **代码地图**：
 
 - `BaselineManager`（core，全部生命周期方法 `synchronized`——同一 JVM 内并发安全；跨进程并发写同一存储需调用方自行排他）。设计姿态写进类 Javadoc：**框架只报告差异（侦探），接受与否由开发者裁决（法官）**。
-  - `approve(invocationKey, approver)`：候选转正（验收调用点的候选模板版本）。顺序是**旧基线先归档、候选再提升**——归档行快照的是旧基线自身的指纹与治理事实（审批人/语义版本），必须先于新审批信息写入。归档与保存是两步独立写入、无跨表事务：保存失败向上可见，重试时 `archiveIfAbsent` 去重守卫（同 tag 已在归档即跳过）保证不产生重复归档行，approve 可安全重放。版本标签经 `nextAvailableVersionTag` 递增并**跳过归档已占用的 tag**——任一 tag 在归档与活跃态之间始终只对应一个指纹，rollback 不产生歧义。
-  - `reject(invocationKey)`：丢弃候选、保留旧基线；无候选抛 `IllegalStateException`（与 approve 对称）。**提示词的回滚是 git 的职责，不是测试框架的职责**。
+  - `accept(invocationKey, approver)`：候选转正（验收调用点的候选模板版本）。顺序是**旧基线先归档、候选再提升**——归档行快照的是旧基线自身的指纹与治理事实（审批人/语义版本），必须先于新审批信息写入。归档与保存是两步独立写入、无跨表事务：保存失败向上可见，重试时 `archiveIfAbsent` 去重守卫（同 tag 已在归档即跳过）保证不产生重复归档行，accept 可安全重放。版本标签经 `nextAvailableVersionTag` 递增并**跳过归档已占用的 tag**——任一 tag 在归档与活跃态之间始终只对应一个指纹，rollback 不产生歧义。
+  - `reject(invocationKey)`：丢弃候选、保留旧基线；无候选抛 `IllegalStateException`（与 accept 对称）。**提示词的回滚是 git 的职责，不是测试框架的职责**。
   - `rollback(invocationKey, versionTag)`：从归档恢复——当前基线也先归档（若其 tag 未曾归档），然后恢复目标版本的**指纹与治理三列**（审批人与语义版本随基线一起回退：活跃行的治理事实必须始终描述当前基线自身的获批历史）。
-  - `recordCandidate(baselineRecord, candidateFingerprint)`：重放对比非 PASS 时落候选。invocationKey 由解析器从基线记录**现场重算**；候选必须经持久层落库——重放与裁决通常不在同一进程，内存候选会让 approve 不可达。
+  - `recordCandidate(baselineRecord, candidateFingerprint)`：重放对比非 PASS 时落候选。invocationKey 由解析器从基线记录**现场重算**；候选必须经持久层落库——重放与裁决通常不在同一进程，内存候选会让 accept 不可达。
   - `autoEstablishBaseline`（幂等建档：已有基线不覆盖）/ `reestablishBaseline`（`--force` 重建：被替换基线先归档留痕，版本按归档占用顺延；恢复出的旧语义基线会被重放入口的版本校验拒绝判定——属预期，再次重建即可）。建档以解析器产出为基底（invocation_name/invocation_type 等展示列来自解析派生，label/template_hash 自记录落列，裸画像会违反存储层 NOT NULL 契约）；指纹用三参提取（规则口径与重放同源）。
   - `stampApproval`（三条成为基线的路径共用）：`algoVersion = JudgmentSemantics.VERSION`；空白审批人归一为 **null**——`approvedBy=null` 是「未经审批链盖章」的异常信号，空白串落库会稀释该信号。
 - `BaselineService`（cli，`baseline` 命令与重放前置共用）：遍历 `CliSupport.invocationBuckets`（全库记录按派生键分桶——桶键字典序的 TreeMap，桶内存储规范序），幂等建档；`--force` 重建时打印破坏性警告（既有基线版本与审批人点名）且**只取一条可解析记录作重建材料**（逐条调用会让版本标签随记录数连跳）；单条记录解析失败跳过不拦截；建档后回填 `totalRecords` 为真实录制数。建档后还会对声明了规则的调用点做**种子断言**：用声明规则校验种子记录的响应文本，违例（缺必需关键词/禁词出现/正则不命中）逐条打印告警——不阻断，只是让「基线自身就不满足规则」在建档现场可见。
-- CLI 命令面：`baseline --db --invocation --approver --force`；`approve/reject --invocation <目标> --approver（bare = 全部候选）`（**裁决前用 `FingerprintDiffRenderer` 渲染候选与基线的逐维差异**——replay 的 summary 是易失的进程输出，裁决常发生在另一进程另一时刻，渲染器把持久化的两份指纹摆到裁决者面前，补上「法官开庭时手里没有卷宗」的断档）；`rollback --invocation --version`（均必选）。
+- CLI 命令面：`baseline --db --invocation --approver --force`；`accept/reject --invocation <目标> --approver（bare = 全部候选）`（**裁决前用 `FingerprintDiffRenderer` 渲染候选与基线的逐维差异**——replay 的 summary 是易失的进程输出，裁决常发生在另一进程另一时刻，渲染器把持久化的两份指纹摆到裁决者面前，补上「法官开庭时手里没有卷宗」的断档）；`rollback --invocation --version`（均必选）。
 
 **表结构**：`invocation_template_versions` 9 列（自增 id 是「同调用点同 tag 重复归档时最近者胜」的 tiebreaker）——归档行是基线按模板版本的完整快照：调用点键、模板哈希、指纹、版本、语义版本、审批人、审批时间。
 
-**生命周期与并发契约**：approve/reject/rollback/recordCandidate/establish 全部 `synchronized`；SDK 多线程接入都落在这一契约内。`JudgmentSemantics.VERSION`（当前 `det-v1`）在建立/批准/重建时盖章，重放入口校验版本一致，不一致（含未标记的历史行）拒绝判定。
+**生命周期与并发契约**：accept/reject/rollback/recordCandidate/establish 全部 `synchronized`；SDK 多线程接入都落在这一契约内。`JudgmentSemantics.VERSION`（当前 `det-v1`）在建立/批准/重建时盖章，重放入口校验版本一致，不一致（含未标记的历史行）拒绝判定。
 
-**测试怎么钉住它**：三态流转全路径（approve 转 tag、reject 保基线、rollback 恢复治理三列、force→rollback 链路自洽）、归档去重与 tag 跳占、并发版本数不变量、空审批人归一、候选落库跨进程可达、破坏性操作留痕文案、种子断言（违例告警/合规不误报/禁用时关闭）。
+**测试怎么钉住它**：三态流转全路径（accept 转 tag、reject 保基线、rollback 恢复治理三列、force→rollback 链路自洽）、归档去重与 tag 跳占、并发版本数不变量、空审批人归一、候选落库跨进程可达、破坏性操作留痕文案、种子断言（违例告警/合规不误报/禁用时关闭）。
 
 **身份契约（已落地）**：派生规则冻结为身份契约——黄金键测试钉住 invocationKey 字面值（含冒号注入对抗用例），键文法对任意输入单射；建档/重建/守卫统一以落库 invocation_key 优先、现算兜底，存储键与现算键不分叉。`JudgmentSemantics.VERSION` 公开发布前恒定，判定语义变更在开发期以删库重建承接；发布后派生规则变更 = 身份纪元事件，走版本递增与专项设计。
 
@@ -769,7 +769,7 @@ recorded（到达即计数） = written（批量写成功）
 
 单条 `execute()` 把一切失败折叠为结果状态（TIMEOUT/API_ERROR/ERROR），批量侧永不中断；**进程级退出码由统一引擎复合**（权威表见第 11 章）：`0` 无差异或 dry-run 完成；`1` 存在行为差异或证据缺口（对齐 CHANGED/缺步骤/新增步骤/任务规则违规/漂移挂起/重驱 CHANGED）；`2` 用法或基础设施故障（无用例、`--ci` 无基线拒绝、语义版本不一致、重驱预算耗尽、**重驱全部失败且无一次比对结果**——超时风暴/凭据失效是环境问题不是回归）。
 
-**测试怎么钉住它**：`ReplayFlowTest`（临时库 + 桩客户端走通建档→重放→候选→approve/reject 全链，含 CI 拒绝/dry-run 只读/全失败 exit 2、previousTurns 字段级保真）；客户端协议契约测试（500→200 重试成功、429 耗尽上抛、400 单次不重试、超时不重试、合成 assistant 帧、tool_call_id 携带、历史 system 轮跳过）；`DeepSeekIntegrationTest`（真机，密钥环境变量门控跳过）。
+**测试怎么钉住它**：`ReplayFlowTest`（临时库 + 桩客户端走通建档→重放→候选→accept/reject 全链，含 CI 拒绝/dry-run 只读/全失败 exit 2、previousTurns 字段级保真）；客户端协议契约测试（500→200 重试成功、429 耗尽上抛、400 单次不重试、超时不重试、合成 assistant 帧、tool_call_id 携带、历史 system 轮跳过）；`DeepSeekIntegrationTest`（真机，密钥环境变量门控跳过）。
 
 ---
 
@@ -829,7 +829,7 @@ recorded（到达即计数） = written（批量写成功）
 | 2 | 用法、数据或环境问题——选链错误、`--ci` 守卫与语义守卫拒绝、重驱预算耗尽、重驱全败（「被截断或环境故障」） |
 | 0 | 无回归（`--ci` 下漂移未收编仍出 0，附警告行） |
 
-**测试怎么钉住它**：`TaskChainViewTest`（派生/声明优先/同文本并链/损坏 metadata 退化）、`TaskAlignerTest`（配对三分类/富余不判差异/versionSwitch 注记 + 任务规则三约束）、`TaskReplayRunnerTest`（对齐判定与选择器、缩域 AND、漂移处置三出口七场景、守卫六项、受控重驱七场景、JSON 三段报告）、`ReplayFlowTest`（候选→approve/reject→rollback 跨命令收敛全链）。
+**测试怎么钉住它**：`TaskChainViewTest`（派生/声明优先/同文本并链/损坏 metadata 退化）、`TaskAlignerTest`（配对三分类/富余不判差异/versionSwitch 注记 + 任务规则三约束）、`TaskReplayRunnerTest`（对齐判定与选择器、缩域 AND、漂移处置三出口七场景、守卫六项、受控重驱七场景、JSON 三段报告）、`ReplayFlowTest`（候选→accept/reject→rollback 跨命令收敛全链）。
 
 ---
 
@@ -873,20 +873,20 @@ recorded（到达即计数） = written（批量写成功）
 
 **本幕回顾**：全部十二幕里出现过的每一次命令行交互。
 
-**设计问题**：CLI 是框架的**组合根**（把 core+recorder+storage 装配成可独立运行的工具）和**裁决工作台**（status 巡检、approve/reject 裁决、rollback 兜底）。命令输出的本质是产品界面而非日志（git/mvn 同款定位），可注入的 PrintStream 是它的测试通道。
+**设计问题**：CLI 是框架的**组合根**（把 core+recorder+storage 装配成可独立运行的工具）和**裁决工作台**（status 巡检、accept/reject 裁决、rollback 兜底）。命令输出的本质是产品界面而非日志（git/mvn 同款定位），可注入的 PrintStream 是它的测试通道。
 
 **概念与术语**：四写法等价（业务标签 / 完整 invocationKey / invocationKey 唯一前缀 / 显示短形 标签@8位）、配置查找链与来源披露、输出通道契约。
 
 **代码地图**：
 
-- **命令全景**（picocli，根命令 `agentassert4j`，全部子命令带 `mixinStandardHelpOptions`）：`status` / `baseline`(含 `export`) / `replay` / `approve` / `reject` / `rollback` / `rules` / `graph show` / `verify` / `doctor` / `completion`。各命令的 bare 语义、参数终态与报告 schema **以 `guide/spec/cli.md` 为基准**（本表不再双写参数矩阵——replay help 的终态参数面有测试钉，拆除参数不复活）。JSON 输出通道是**全命令统一契约**（stdout 只产报告本体、诊断走 stderr；`--json` 失败以 `agentassert4j.error/1` 包络收尾 stdout，人读失败 stdout 零产出；doctor 机器通道为 doctor/1），由 `JsonContractTest` 逐命令钉住；根 help 以 exitCodeList 呈现退出码契约。
+- **命令全景**（picocli，根命令 `agentassert4j`，全部子命令带 `mixinStandardHelpOptions`）：`status` / `baseline`(含 `export`) / `replay` / `accept` / `reject` / `rollback` / `rules` / `graph show` / `verify` / `doctor` / `completion`。各命令的 bare 语义、参数终态与报告 schema **以 `guide/spec/cli.md` 为基准**（本表不再双写参数矩阵——replay help 的终态参数面有测试钉，拆除参数不复活）。JSON 输出通道是**全命令统一契约**（stdout 只产报告本体、诊断走 stderr；`--json` 失败以 `agentassert4j.error/1` 包络收尾 stdout，人读失败 stdout 零产出；doctor 机器通道为 doctor/1），由 `JsonContractTest` 逐命令钉住；根 help 以 exitCodeList 呈现退出码契约。
 
 - `CliSupport`（包私有，命令间共用逻辑）：
   - `installUtf8Console`：主入口统一 UTF-8 直写标准流（绕过 Windows 控制台默认编码，中文报告不乱码）。
   - `openRepository`：加载配置后**先打印配置来源一行**（命中路径或「未找到用默认」——错误目录下的旧配置静默生效是最难查的排障黑洞），`~` 前缀展开后建库初始化。
   - `recordedInvocationIds`：走「session 全量 → 逐记录提取」通道收集业务标签（TreeSet 字典序稳定）。
   - `resolveInvocationFilter`（status 人读缩域与 baseline 建档缩域用，标签命中其全部模板桶）：与业务 invocationId 精确相等按原义；否则显示短形反解或 invocationKey **唯一**前缀匹配并换算回业务标签（歧义前缀显式报错；对应调用点覆盖多个业务标签也报错并列出）。**前缀无命中时原样返回过滤值**——baseline 缩域拼错不会报错，只会输出「全部已建档」；拼错自查靠 status 的 no-match 提示行。
-  - `resolveInvocationKeyTarget`（replay 缩域与画像操作类 approve/reject/rollback 用，返回唯一 invocationKey）：完整调用点键精确命中（即使它是别的 key 的前缀）> 业务标签（覆盖多调用点时点名报错）> 显示短形（对画像键现算显示形全等比对，哈希段大小写不敏感，`resolveByDisplayForm`）> 唯一前缀；无命中/多命中抛 `IllegalStateException`，命令层转译为退出码 2。
+  - `resolveInvocationKeyTarget`（replay 缩域与画像操作类 accept/reject/rollback 用，返回唯一 invocationKey）：完整调用点键精确命中（即使它是别的 key 的前缀）> 业务标签（覆盖多调用点时点名报错）> 显示短形（对画像键现算显示形全等比对，哈希段大小写不敏感，`resolveByDisplayForm`）> 唯一前缀；无命中/多命中抛 `IllegalStateException`，命令层转译为退出码 2。
   - `taskChains` / `invocationKeyOfRecord`：任务链派生与记录键解析的共用入口。
   - `currentActor`：`user.name` → 缺失记 `unknown`（不留无主审批记录）。
 - `ConfigLoader`（core）——查找链五级（主配置与规则配置各一套，键分别为 `agentassert4j.config.path`/`agentassert4j.rules.path`，文件名 `agentassert4j.json`/`agentassert4j-rules.json`）：
@@ -955,7 +955,7 @@ replay 重放比对（版本戳守卫 → 控制变量重放 → 四维对比）
  ├─ PASS ──→ 无事发生
  └─ 非 PASS ──→ recordCandidate 落候选（CANDIDATE 态）      ← 第 7 章 跨进程可达
                  ▼
-        approve（旧基线先归档→候选提升→tag 顺延→重新盖章）   ← 第 7 章
+        accept（旧基线先归档→候选提升→tag 顺延→重新盖章）   ← 第 7 章
          │                └─ reject（丢候选，保基线；prompt 回滚是 git 的事）
          ▼
   旧基线 → invocation_template_versions（快照含模板哈希与治理三列）
@@ -1039,7 +1039,7 @@ acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
 
 1. **存储 schema 列变更**——interactions 是只追加历史，不存在的列无法回填已录数据（预发布期：删库重建；发布后：只增不改 + 从 raw 回填）；
 2. **core/SPI 公开 API 签名变更**——发布后即破坏性变更；
-3. **判定语义/指纹定义变更**——会静默重解释用户已 approve 的全部历史基线（递增 `JudgmentSemantics.VERSION`，走 `--force` 重建路径；键派生规则变更另见第 7 章的纪元契约；验收包 schema 冻结同理）。
+3. **判定语义/指纹定义变更**——会静默重解释用户已 accept 的全部历史基线（递增 `JudgmentSemantics.VERSION`，走 `--force` 重建路径；键派生规则变更另见第 7 章的纪元契约；验收包 schema 冻结同理）。
 
 **提交前硬门槛**（全部可机械验证）：
 
@@ -1083,7 +1083,7 @@ acceptance-pack.json  ──搬运（SHA-256 对账）──→  verify --pack
 | 跨模型验收 | 开发侧与本地 servedModel 不一致——结构判定有效，文本差异属措辞预期内 | 第 12 章 |
 | 退出码契约 | 0 无差异 / 1 有差异或证据不完整 / 2 用法或基础设施故障 | 第 9/11 章 |
 | 证据报告 | `--json` 的单行机器可读输出（replay 为 task-report/1 逐行分段；status/1、baseline-report/1、export-report/1、adjudication/1、rollback/1、verify-report/1、graph/1、rules/1、doctor/1 各命令一一对应）；失败路径为 error/1 错误包络（errorCode 四族 + hints + nextAction） | 第 9/11/12/13 章 |
-| 四写法等价 | 业务标签 = 完整 invocationKey = 唯一前缀 = 显示短形 标签@8位（replay/approve/reject/rollback 四写法全收；status/baseline 缩域用其中标签、显示短形、前缀三写法） | 第 13 章 |
+| 四写法等价 | 业务标签 = 完整 invocationKey = 唯一前缀 = 显示短形 标签@8位（replay/accept/reject/rollback 四写法全收；status/baseline 缩域用其中标签、显示短形、前缀三写法） | 第 13 章 |
 | 计数闭合 | recorded = written + dropped + failed，filtered 另列（总到达 = recorded + filtered） | 第 3 章 |
 | 采集门 | 默认全量录制；recordUndeclaredChat=false 时未声明且无可见工具调用的交互被过滤（filtered 与 dropped 分列，首条与每满 100 条告警） | 第 3 章 |
 | 判定二值化 | 判定只有 PASS/CHANGED 两值，权重与直判规则退役出判定链路 | 第 8 章 |

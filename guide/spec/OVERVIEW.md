@@ -46,7 +46,7 @@ core 内出现任何 `com.*`/`org.*`（非 JDK）import 都是缺陷。core 内�
   录制管道: 脱敏 → 兜底 → RingBuffer 入队（满则丢弃计数，不阻塞生产者）
         → 消费线程缓冲 →（满批/定时）→ enrich 补派生字段 → SQLite interactions 落库
         → CLI 判定面: status 画像巡检 / baseline 建档 / replay 变更检测与对齐 / verify 验收
-        → 差异落候选 → approve/reject 人工裁决 → 基线转正/作废，旧基线按模板版本归档
+        → 差异落候选 → accept/reject 人工裁决 → 基线转正/作废，旧基线按模板版本归档
 ```
 
 派生事实不建实体表是全库统一哲学：任务链从 `interactions` 现场派生（TaskChainView），

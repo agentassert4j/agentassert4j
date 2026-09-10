@@ -1,7 +1,7 @@
 package io.github.agentassert4j.model;
 
 /**
- * 调用点模板版本归档行 — approve/rollback 时被替换的基线按模板版本整体快照。
+ * 调用点模板版本归档行 — accept/rollback 时被替换的基线按模板版本整体快照。
  *
  * <p>治理主体 = 调用点的模板版本史：除指纹与版本标签外，归档行同时留存该版本
  * 对应的模板哈希（经 prompt_texts 可反查模板原文）与获批时的语义版本、审批事实，

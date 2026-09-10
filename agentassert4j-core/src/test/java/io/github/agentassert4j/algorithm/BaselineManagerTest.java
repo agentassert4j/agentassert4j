@@ -76,7 +76,7 @@ class BaselineManagerTest {
             DeterministicFingerprint candidate = profile.getCandidateFingerprint();
             repo.saveInvocationProfile(profile);
 
-            manager.approve("gk-1", "tester", null);
+            manager.accept("gk-1", "tester", null);
 
             InvocationProfile updated = repo.findInvocationByKey("gk-1");
             assertEquals(BaselineStatus.BASELINE, updated.getBaselineStatus());
@@ -97,14 +97,14 @@ class BaselineManagerTest {
             InvocationProfile profile = makeProfileWithBaseline("gk-1", "order-flow");
             repo.saveInvocationProfile(profile);
 
-            IllegalStateException ex = assertThrows(IllegalStateException.class, () -> manager.approve("gk-1", "tester", null));
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () -> manager.accept("gk-1", "tester", null));
             assertTrue(ex.getMessage().contains("No candidate"));
         }
 
         @Test
         @DisplayName("Skill profile 不存在 → 抛出 IllegalStateException")
         void profileNotFound_throwsException() {
-            assertThrows(IllegalStateException.class, () -> manager.approve("nonexistent", "tester", null));
+            assertThrows(IllegalStateException.class, () -> manager.accept("nonexistent", "tester", null));
         }
 
         @Test
@@ -119,7 +119,7 @@ class BaselineManagerTest {
             profile.setVersionTag(null);
             repo.saveInvocationProfile(profile);
 
-            manager.approve("gk-1", "tester", null);
+            manager.accept("gk-1", "tester", null);
 
             // 无旧基线 → 不归档
             assertTrue(repo.archivedBaselines.isEmpty());
@@ -132,14 +132,14 @@ class BaselineManagerTest {
             // v1 → v2
             InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
             repo.saveInvocationProfile(profile);
-            manager.approve("gk-1", "tester", null);
+            manager.accept("gk-1", "tester", null);
 
             // 设置新候选 → v2 → v3
             InvocationProfile updated = repo.findInvocationByKey("gk-1");
             updated.setCandidateFingerprint(new DeterministicFingerprint());
             updated.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveInvocationProfile(updated);
-            manager.approve("gk-1", "tester", null);
+            manager.accept("gk-1", "tester", null);
 
             assertEquals("v3", repo.findInvocationByKey("gk-1").getVersionTag());
             assertEquals(2, repo.archivedBaselines.size());
@@ -194,7 +194,7 @@ class BaselineManagerTest {
             InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
             DeterministicFingerprint originalBaseline = profile.getFingerprint();
             repo.saveInvocationProfile(profile);
-            manager.approve("gk-1", "tester", null);
+            manager.accept("gk-1", "tester", null);
 
             // 现在 profile 是 v2，归档里有 v1
             // 再设一个候选准备回滚
@@ -233,7 +233,7 @@ class BaselineManagerTest {
         void rollback_currentBaselineAlsoArchived() {
             InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
             repo.saveInvocationProfile(profile);
-            manager.approve("gk-1", "tester", null); // v1 → v2, 归档 v1
+            manager.accept("gk-1", "tester", null); // v1 → v2, 归档 v1
 
             // v2 设候选
             InvocationProfile v2 = repo.findInvocationByKey("gk-1");
@@ -253,13 +253,13 @@ class BaselineManagerTest {
         void rollbackThenApprove_versionTagSkipsArchived() {
             InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
             repo.saveInvocationProfile(profile);
-            manager.approve("gk-1", "tester", null); // v1 归档，活跃 v2
+            manager.accept("gk-1", "tester", null); // v1 归档，活跃 v2
 
             InvocationProfile v2 = repo.findInvocationByKey("gk-1");
             v2.setCandidateFingerprint(new DeterministicFingerprint());
             v2.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveInvocationProfile(v2);
-            manager.approve("gk-1", "tester", null); // v2 归档，活跃 v3
+            manager.accept("gk-1", "tester", null); // v2 归档，活跃 v3
 
             manager.rollback("gk-1", "v1"); // 活跃恢复 v1，v3 归档
 
@@ -268,7 +268,7 @@ class BaselineManagerTest {
             rolled.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveInvocationProfile(rolled);
 
-            manager.approve("gk-1", "tester", null);
+            manager.accept("gk-1", "tester", null);
 
             // v2/v3 已在归档中，新基线必须跳到 v4——否则 rollback("v2") 无法区分两个不同指纹
             assertEquals("v4", repo.findInvocationByKey("gk-1").getVersionTag());
@@ -378,7 +378,7 @@ class BaselineManagerTest {
             repo.saveInvocationProfile(profile);
 
             // v1 → v2
-            manager.approve("gk-1", "tester", null);
+            manager.accept("gk-1", "tester", null);
             assertEquals("v2", repo.findInvocationByKey("gk-1").getVersionTag());
 
             // v2 → v3
@@ -386,7 +386,7 @@ class BaselineManagerTest {
             p.setCandidateFingerprint(new DeterministicFingerprint());
             p.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveInvocationProfile(p);
-            manager.approve("gk-1", "tester", null);
+            manager.accept("gk-1", "tester", null);
             assertEquals("v3", repo.findInvocationByKey("gk-1").getVersionTag());
         }
     }
@@ -420,7 +420,7 @@ class BaselineManagerTest {
             String invocationKey = InvocationResolver.resolve(record).getInvocationKey();
 
             manager.recordCandidate(record, new DeterministicFingerprint());
-            manager.approve(invocationKey, "tester", null);
+            manager.accept(invocationKey, "tester", null);
 
             assertNull(repo.findInvocationByKey(invocationKey).getCandidateFingerprint());
         }
@@ -457,7 +457,7 @@ class BaselineManagerTest {
             InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
             repo.saveInvocationProfile(profile);
 
-            manager.approve("gk-1", "alice", null);
+            manager.accept("gk-1", "alice", null);
 
             InvocationProfile updated = repo.findInvocationByKey("gk-1");
             assertEquals("alice", updated.getApprovedBy());
@@ -471,7 +471,7 @@ class BaselineManagerTest {
             InvocationProfile profile = makeProfileWithCandidate("gk-blank", "skill-blank");
             repo.saveInvocationProfile(profile);
 
-            manager.approve("gk-blank", "   ", null);
+            manager.accept("gk-blank", "   ", null);
 
             assertNull(repo.findInvocationByKey("gk-blank").getApprovedBy());
         }
@@ -482,7 +482,7 @@ class BaselineManagerTest {
             InvocationProfile profile = makeProfileWithCandidate("gk-trim", "skill-trim");
             repo.saveInvocationProfile(profile);
 
-            manager.approve("gk-trim", "  bob  ", null);
+            manager.accept("gk-trim", "  bob  ", null);
 
             assertEquals("bob", repo.findInvocationByKey("gk-trim").getApprovedBy());
         }
@@ -499,7 +499,7 @@ class BaselineManagerTest {
             p.setCandidateFingerprint(new DeterministicFingerprint());
             p.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveInvocationProfile(p);
-            manager.approve(invocationKey, "bob", null);
+            manager.accept(invocationKey, "bob", null);
 
             ArchivedTemplateVersion archived = repo.findArchivedVersion(invocationKey, firstVersion);
             assertNotNull(archived);
@@ -521,7 +521,7 @@ class BaselineManagerTest {
             p.setCandidateFingerprint(new DeterministicFingerprint());
             p.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveInvocationProfile(p);
-            manager.approve(invocationKey, "bob", null);
+            manager.accept(invocationKey, "bob", null);
 
             manager.rollback(invocationKey, firstVersion);
 
@@ -632,7 +632,7 @@ class BaselineManagerTest {
                             // 先补候选再批准；候选被其他线程先消费时 approve 按契约抛出
                             manager.recordCandidate(record, new DeterministicFingerprint());
                             try {
-                                manager.approve(invocationKey, actor, null);
+                                manager.accept(invocationKey, actor, null);
                                 successfulApproves.incrementAndGet();
                             } catch (IllegalStateException noCandidate) {
                                 // 并发下候选缺席属正常分支
@@ -746,7 +746,7 @@ class BaselineManagerTest {
             repo.saveInteraction(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
             repo.saveInteraction(skeletonRecord("r-new", "order-flow", "skl-1", "h2", 2000L));
 
-            manager.approve(KEY, "tester", null);
+            manager.accept(KEY, "tester", null);
 
             InvocationProfile updated = repo.findInvocationByKey(KEY);
             assertEquals("h2", updated.getTemplateHash(), "画像身份必须前移到最新记录哈希");
@@ -761,7 +761,7 @@ class BaselineManagerTest {
             repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h2"));
             repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
 
-            manager.approve(KEY, "tester", null);
+            manager.accept(KEY, "tester", null);
 
             assertEquals("h2", repo.findInvocationByKey(KEY).getTemplateHash());
             assertFalse(DriftDetector.detect(repo).hasDrift());
@@ -785,7 +785,7 @@ class BaselineManagerTest {
             repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
             repo.saveInteraction(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
             repo.saveInteraction(skeletonRecord("r-new", "order-flow", "skl-1", "h2", 2000L));
-            manager.approve(KEY, "tester", null);
+            manager.accept(KEY, "tester", null);
             assertEquals("h2", repo.findInvocationByKey(KEY).getTemplateHash());
 
             manager.rollback(KEY, "v1");
@@ -885,7 +885,7 @@ class BaselineManagerTest {
             profile.setCodeRef("abc1234");
             repo.saveInvocationProfile(profile);
 
-            manager.approve("gk-1", "tester", "def5678");
+            manager.accept("gk-1", "tester", "def5678");
 
             InvocationProfile updated = repo.findInvocationByKey("gk-1");
             assertEquals("def5678", updated.getCodeRef());
@@ -901,7 +901,7 @@ class BaselineManagerTest {
             profile.setCodeRef("abc1234");
             repo.saveInvocationProfile(profile);
 
-            manager.approve("gk-1", "tester", "def5678");
+            manager.accept("gk-1", "tester", "def5678");
             manager.rollback("gk-1", "v1");
 
             InvocationProfile rolled = repo.findInvocationByKey("gk-1");
@@ -915,7 +915,7 @@ class BaselineManagerTest {
             InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
             repo.saveInvocationProfile(profile);
 
-            manager.approve("gk-1", "tester", "   ");
+            manager.accept("gk-1", "tester", "   ");
 
             assertNull(repo.findInvocationByKey("gk-1").getCodeRef());
         }

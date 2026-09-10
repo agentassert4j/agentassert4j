@@ -80,9 +80,12 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
    缩域内存在未建档调用点时拒绝判定（E-GUARD 包络 + 指向 establish 的 nextAction）；
    漂移身份不收编。理由：MCP 读动词必须与 CLI 读动词同等「只读」，治理写只能经显式变异
    动词（establish/accept/reject）发生。report/verify/doctor/graph 本就是只读命令，直调。
-   注意：拒绝与失败包络的 nextAction/hints 以 CLI 命令形书写（如 `agentassert4j
-   baseline`）——工具动词与 CLI 命令同词（baseline→establish），AI 按 initialize
-   instructions 的映射消费，MCP 层不改写包络文本。【测试钉】工具组（未建档拒绝且不落
+注意：拒绝与失败包络的 nextAction/hints 在抛出点以 CLI 命令形单源产出；MCP 出口经通道化映射改写为工具名形态（baseline→establish、status→report、replay→check 等，CLI 专属的 --ci 逃生舱子句一并摘除），两个通道各自拿到母语指称。
+   **面一致性契约**：MCP 工具面是 CLI 命令面的完整映射（一层封装的双形态）——映射表与
+   豁免清单（completion/mcp 为 CLI 专属、record 为 MCP 专属）由 CliMcpParityTest 机械钉死；
+   CLI 新增命令/参数必须同步 MCP 工具面或在豁免清单显式登记，否则测试红。三对不同名映射
+   （baseline→establish、status→report、replay→check/diff/member-check/re-drive）为历史
+   命名的显式登记。【测试钉】工具组（未建档拒绝且不落
    画像 + 建档后通过）
 7. **变异动词使用要求与 agent 身份申报**：establish/accept/reject 的 description 声明
    「治理写，应在人类指示后调用；agent 以 approver="agent:<name>" 申报身份」。授权确认由
@@ -102,7 +105,9 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
    sha256(sessionId+invocation+turnIndex+requestRaw+responseRaw) 内容哈希；存储层
    INSERT OR IGNORE 天然去重，`saveInteractionIfAbsent` 回告 saved/duplicate，报告
    schema=agentassert4j.record/1（含 `protocol` 字段回显实际采用的方言——含自动识别
-   结果，误判当场可见，重发显式 protocol 即可）。taskKey 落 metadata 的 `taskKey` 字段
+   结果，误判当场可见，重发显式 protocol 即可）。duplicate 时若记录实际落在别的
+   会话（跨会话重录同 id），报告另带 `storedSessionId` 与 `note` 指引（换 recordId/
+   response id 才能存新记录）——幂等归属就近可见。taskKey 落 metadata 的 `taskKey` 字段
    （TaskChainView.DECLARED_TASK_KEY 契约，声明优先于派生）。身份派生走与录制管道同一
    enrich 顺序：哈希投影先行、后键派生（wire 摄取无骨架，未声明时锚到 template/adhoc）。
    不可转换的 part（历史轮图像、无 base64 源的图像块）宁缺勿非法——丢弃并经工具结果
@@ -114,7 +119,7 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
    （2025-11-25 方言要求对象形）：成功 = `{"reports":[<逐行解析的报告对象>]}`
    （仅收可解析为对象的行），执行错误 = error/1 包络对象。规范建议「返回 structuredContent
    的工具应同时在文本块携带序列化 JSON」——文本块即报告行本体，天然满足。不声明
-   outputSchema（报告 schema 的演化归 cli.md 契约，不为 12 个工具维护双份 schema 税）。
+   outputSchema（报告 schema 的演化归 cli.md 契约，不为 17 个工具维护双份 schema 税）。
    【测试钉】工具组
 10. **stdout 纯净性与传输纪律**：server 的 stdout 只写协议消息（单行 JSON + `\n`，UTF-8，
     每消息 flush）；诊断/日志只走 stderr（`--diag` 开关时逐消息记 method+耗时）。工具执行
@@ -162,10 +167,23 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
 
 ## 复核台账
 
-- 2026-09-08 成文（MCP 批）：五方法面、12 工具、错误分类法（含 unknown tool -32602
+- 2026-09-08 成文（MCP 批）：五方法面、12 工具（2026-09-09 增 audit 只读工具至 13）、错误分类法（含 unknown tool -32602
   规范修正——规划原文与规范冲突，判规范侧成立并就地收窄）、record 幂等三层、ci 语义
   读动词、双形态结果、stdout 纯净性。实现与测试同批交付，通道 2 双宿主实测为 1.0.0
   验收标准（本 spec 契约 6/7 的最终裁判）。
+- 2026-09-09 Round 2 修复批：+3 工具（rollback 治理环闭环/rules 目录与示例/
+  member-check 挂账#1 终审保留）至 16 工具；report 增 invocation/diff（对齐
+  status --diff）、verify 增 report（markdown 交付物）；**新增面一致性契约与
+  CliMcpParityTest 机械钉**——MCP 工具面=CLI 命令面完整映射的既定设计承诺
+  自此有测试护栏，CLI 面漂移当场红。同批修复 Round 2 发现：规则文件发现链
+  增主配置同目录回退（MCP server 工作目录由宿主决定，CWD 站不可依赖）；
+  record 数值入参类型守卫。
+- 2026-09-10 D6：+1 只读 record-show 工具（17 工具；按 recordId 回显 raw 双列
+  与关键元数据，未命中 E-NO-DATA）——对应 CLI `record show` 命令（parity 映射
+  登记）；两宿主实测的「记录正文无读取面」发现就此关闭。
+- 2026-09-09 通道 2 修复批：+1 只读 audit 工具（13 工具，治理对账闭环收回 MCP 面）；
+  契约 7 CLI 命令形改写为出口通道化映射（McpVerbs 词表，rollback 无工具等价保留 CLI 形）；
+  record/1 duplicate 增 storedSessionId/note。契约 7 的跨通道缝隙就此关闭。
 - 2026-09-09 三协议批①：契约 8 由「OpenAI 方言 only、多协议后续批」改写为三协议摄取
   （protocol 参数 + 自动识别 + protocol 字段回显）；映射矩阵与归一表移 recording.md
   「wire 方言归一」节单源承载。归一器实现与测试同批交付（McpRecordIngestionTest）。

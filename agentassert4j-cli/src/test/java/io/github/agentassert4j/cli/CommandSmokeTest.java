@@ -185,11 +185,11 @@ class CommandSmokeTest {
     }
 
     @Test
-    @DisplayName("approve bare = 裁决全部待裁决候选，无候选时显式说明")
+    @DisplayName("accept bare = 裁决全部待裁决候选，无候选时显式说明")
     void adjudicate_bare_reportsNoCandidates() {
         ByteArrayOutputStream out = redirectStdout();
         ByteArrayOutputStream errOut = redirectStderr();
-        int exit = new CommandLine(new AgentAssert4jCli()).execute("approve", "--db", dbPath);
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("accept", "--db", dbPath);
 
         assertEquals(2, exit);
         assertTrue(errOut.toString().contains("No candidates pending adjudication"), "bare 无候选必须显式说明而非误报成功: " + errOut);

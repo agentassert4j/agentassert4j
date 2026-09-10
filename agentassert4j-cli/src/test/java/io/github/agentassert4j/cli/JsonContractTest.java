@@ -227,33 +227,33 @@ class JsonContractTest {
     class AdjudicationAndRollback {
 
         @Test
-        @DisplayName("approve --json：候选提升为新基线，action=approve、版本推进、候选清空")
-        void approveJson_promotesCandidate() throws Exception {
+        @DisplayName("accept --json：候选提升为新基线，action=accept、版本推进、候选清空")
+        void acceptJson_promotesCandidate() throws Exception {
             InteractionRecord record = seedOneRecord();
             execute("baseline", "--db", dbPath);
             seedCandidate("invocation:queryOrder:hash-old", record);
 
-            int exit = execute("approve", "--db", dbPath, "--invocation", "queryOrder", "--ref", "def5678", "--json");
+            int exit = execute("accept", "--db", dbPath, "--invocation", "queryOrder", "--ref", "def5678", "--json");
 
             assertEquals(0, exit);
             String report = singleLineReport();
             assertTrue(report.startsWith("{\"schema\":\"agentassert4j.adjudication/1\""), report);
-            assertTrue(report.contains("\"action\":\"approve\""), report);
+            assertTrue(report.contains("\"action\":\"accept\""), report);
             assertTrue(report.contains("\"invocationKey\":\"invocation:queryOrder:hash-old\""), report);
-            assertTrue(report.contains("\"versionTag\":\"v2\""), "approve 推进版本标签: " + report);
+            assertTrue(report.contains("\"versionTag\":\"v2\""), "accept 推进版本标签: " + report);
             assertTrue(report.contains("\"codeRef\":\"def5678\""), report);
             assertTrue(report.contains("\"status\":\"BASELINE\""), report);
             assertTrue(report.contains("\"hasCandidate\":false"), report);
         }
 
         @Test
-        @DisplayName("approve 以 agent: 身份申报 → audit 列出该治理写")
-        void approveAgentMarked_listedInAudit() throws Exception {
+        @DisplayName("accept 以 agent: 身份申报 → audit 列出该治理写")
+        void acceptAgentMarked_listedInAudit() throws Exception {
             InteractionRecord record = seedOneRecord();
             execute("baseline", "--db", dbPath);
             seedCandidate("invocation:queryOrder:hash-old", record);
 
-            int exit = execute("approve", "--db", dbPath, "--invocation", "queryOrder", "--approver", "agent:codex", "--ref", "def5678", "--json");
+            int exit = execute("accept", "--db", dbPath, "--invocation", "queryOrder", "--approver", "agent:codex", "--ref", "def5678", "--json");
 
             assertEquals(0, exit);
 
@@ -301,12 +301,12 @@ class JsonContractTest {
         }
 
         @Test
-        @DisplayName("approve --json 无候选可裁决：退出码 2，stdout 以 E-NO-DATA 包络收尾")
-        void approveJson_withoutCandidate_errorEnvelope() throws Exception {
+        @DisplayName("accept --json 无候选可裁决：退出码 2，stdout 以 E-NO-DATA 包络收尾")
+        void acceptJson_withoutCandidate_errorEnvelope() throws Exception {
             seedOneRecord();
             execute("baseline", "--db", dbPath);
 
-            int exit = execute("approve", "--db", dbPath, "--invocation", "queryOrder", "--json");
+            int exit = execute("accept", "--db", dbPath, "--invocation", "queryOrder", "--json");
 
             assertEquals(2, exit);
             assertErrorEnvelope(singleLineReport(), "E-NO-DATA");
@@ -319,7 +319,7 @@ class JsonContractTest {
             seedOneRecord();
             execute("baseline", "--db", dbPath);
 
-            int exit = execute("approve", "--db", dbPath, "--invocation", "queryOrder");
+            int exit = execute("accept", "--db", dbPath, "--invocation", "queryOrder");
 
             assertEquals(2, exit);
             assertFalse(stdout().contains("No candidate"), "人读失败路径不得向 stdout 输出失败内容: " + stdout());

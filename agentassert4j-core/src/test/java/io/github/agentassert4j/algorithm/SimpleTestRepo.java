@@ -61,7 +61,11 @@ class SimpleTestRepo implements StorageRepository {
     }
 
     @Override
-    public List<InteractionRecord> findBySessionId(String sessionId) {
+    public InteractionRecord findByRecordId(String recordId) {
+        return null; // 测试桩不承载按 id 精确查询
+    }
+
+        public List<InteractionRecord> findBySessionId(String sessionId) {
         return interactions.stream().filter(r -> sessionId.equals(r.getSessionId())).collect(Collectors.toList());
     }
 

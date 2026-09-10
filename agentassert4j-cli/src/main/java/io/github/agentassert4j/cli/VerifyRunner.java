@@ -228,17 +228,29 @@ public class VerifyRunner {
      */
     private int dryRunPlan(AcceptancePack pack, List<AcceptancePack.PackTask> tasks, List<TaskChain> localChains) {
         info("Verification dry-run (no judgments, no report written): " + CliSupport.plural(tasks.size(), "pack task") + ", " + CliSupport.plural(localChains.size(), "local chain") + ".");
+        StringBuilder pairingsJson = new StringBuilder();
         for (AcceptancePack.PackTask task : tasks) {
             TaskChain local = latestLocalChain(localChains, task.getTaskKey());
             String pairing = local == null ? "no matching local chain (counts as a coverage gap when executed)" : "pairs with local chain session " + local.getSessionId() + " (" + CliSupport.plural(local.getRecords().size(), "step") + "; pack baseline " + CliSupport.plural(task.getSteps().size(), "step") + ")";
             info("  " + task.getTaskKey() + " → " + pairing);
+            if (jsonMode) {
+                if (pairingsJson.length() > 0) pairingsJson.append(",");
+                pairingsJson.append("{\"task\":\"").append(RecursiveJsonParser.escape(task.getTaskKey())).append('"');
+                if (local != null) {
+                    pairingsJson.append(",\"localSession\":\"").append(RecursiveJsonParser.escape(local.getSessionId())).append('"');
+                    pairingsJson.append(",\"localSteps\":").append(local.getRecords().size());
+                } else {
+                    pairingsJson.append(",\"localSession\":null");
+                }
+                pairingsJson.append('}');
+            }
         }
         String crossModel = isCrossModelOverTasks(tasks, localChains, pack.getMeta().getServedModel());
         if (!crossModel.isEmpty()) {
             info("Cross-model note: pack served " + pack.getMeta().getServedModel() + " differs from local served " + crossModel + "; structural fingerprints are the primary evidence for cross-model verdicts.");
         }
         if (jsonMode) {
-            out.println("{\"schema\":\"agentassert4j.verify-report/1\",\"mode\":\"dry-run\",\"summary\":{\"tasks\":" + tasks.size() + ",\"localChains\":" + localChains.size() + ",\"uncovered\":" + uncoveredCount(tasks, localChains) + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}");
+            out.println("{\"schema\":\"agentassert4j.verify-report/1\",\"mode\":\"dry-run\",\"summary\":{\"tasks\":" + tasks.size() + ",\"localChains\":" + localChains.size() + ",\"uncovered\":" + uncoveredCount(tasks, localChains) + "},\"pairings\":[" + pairingsJson + "],\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}");
         }
         return 0;
     }
@@ -318,11 +330,8 @@ public class VerifyRunner {
             } else {
                 ComparisonResult comparison = step.getComparison();
                 sb.append("**").append(step.getVerdict()).append("**");
-                if (comparison != null) {
-                    sb.append(" score=").append(String.format("%.2f", comparison.getScore()));
-                    if (comparison.getSummary() != null) {
-                        sb.append("  ").append(comparison.getSummary());
-                    }
+                if (comparison != null && comparison.getSummary() != null) {
+                    sb.append("  ").append(comparison.getSummary());
                 }
                 if (step.isVersionSwitch()) {
                     sb.append(" (cross-version pair ").append(shortHash(step.getBaselineSubdivision())).append("→").append(shortHash(step.getNewSubdivision())).append(")");
@@ -445,7 +454,7 @@ public class VerifyRunner {
                 ss.append(",\"verdict\":\"").append(step.getVerdict()).append('"');
             }
             if (step.getComparison() != null) {
-                ss.append(",\"score\":").append(step.getComparison().getScore());
+                ss.append(",\"similarity\":").append(step.getComparison().getScore());
                 ss.append(",\"dims\":{\"toolSet\":").append(step.getComparison().isToolCallMatch());
                 ss.append(",\"paramTypes\":").append(step.getComparison().isParamTypeMatch());
                 ss.append(",\"outputStructure\":").append(step.getComparison().isStructureMatch());

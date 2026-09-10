@@ -20,7 +20,7 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-09-08
  */
-@Command(name = "mcp", aliases = {"m"}, description = "Run as an MCP server over stdio: tools mirror the CLI verbs (check/diff/report/verify/doctor/graph, establish/accept/reject, re-drive) plus a record ingestion tool for non-Java stacks", mixinStandardHelpOptions = true)
+@Command(name = "mcp", aliases = {"m"}, description = "Run as an MCP server over stdio: tools mirror the CLI verbs (check/diff/report/verify/doctor/graph/rules, establish/accept/reject/rollback/audit, member-check, re-drive) plus record ingestion and record viewing tools for non-Java stacks", mixinStandardHelpOptions = true)
 public class McpCommand implements Callable<Integer> {
 
     // 诊断通道：--diag 时逐消息记 method/耗时；server 正常运行对本流零输出

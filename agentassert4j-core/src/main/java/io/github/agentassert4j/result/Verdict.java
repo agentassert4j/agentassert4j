@@ -8,7 +8,7 @@ package io.github.agentassert4j.result;
  *
  * <p>框架只陈述「与上一基线版本有无差异」，不判断变化的方向好坏——
  * 基线调工具 A、当前调工具 B，程序无从得知 B 是否更符合需求，
- * 方向判断是裁决人 approve/reject 的职责。</p>
+ * 方向判断是裁决人 accept/reject 的职责。</p>
  *
  * @author axy-yxa
  * @since 2026-08-26

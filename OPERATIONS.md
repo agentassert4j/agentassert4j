@@ -81,7 +81,7 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 
 | 段 | 键 | 默认 | 说明 |
 |----|----|------|------|
-| storage.url | — | `~/.agentassert4j/agentassert4j.db` | SQLite 文件路径，`~` 自动展开；开库命令（status/baseline/replay/approve/reject/rollback/verify/doctor/graph show/export）的 `--db` 可逐次覆盖 |
+| storage.url | — | `~/.agentassert4j/agentassert4j.db` | SQLite 文件路径，`~` 自动展开；开库命令（status/baseline/replay/accept/reject/rollback/verify/doctor/graph show/export）的 `--db` 可逐次覆盖 |
 | recorder.batchSize | — | 100 | 批量落库批大小 |
 | recorder.flushIntervalMs | — | 5000 | 定时冲刷间隔（毫秒） |
 | regression.ignorableFields | — | 空列表 | 已知噪声字段白名单（归一化后仍不同才构成差异） |
@@ -184,8 +184,8 @@ agentassert4j replay --ci --json
 - **零写死、零 API Key**：bare 缺省即全项目变更检测与逐任务对齐，判定零 LLM 调用；
   `--re-drive` 受控复核属人工动作，不进流水线缺省。
 - **退出码分流**：`0` 绿灯放行（`--ci` 下漂移未收编仍出 0，附「Identity not collected」警告——收敛动作
-  留给人侧 replay 或 approve）；`1` 存在行为差异或证据缺口（对齐 CHANGED/缺步骤/新增步骤/
-  任务规则违规/漂移挂起）——人裁决 approve/reject；`2` 用法或基础设施故障（含 `--ci` 无基线
+  留给人侧 replay 或 accept）；`1` 存在行为差异或证据缺口（对齐 CHANGED/缺步骤/新增步骤/
+  任务规则违规/漂移挂起）——人裁决 accept/reject；`2` 用法或基础设施故障（含 `--ci` 无基线
   拒绝、判定语义不符、重驱预算耗尽/全败）——修环境，不算回归。
 - `--json`：stdout 逐行输出机器可读报告（`agentassert4j.task-report/1`，mode 分段：
   drift-detection / task-align / drift-disposition / task-re-drive / task-dry-run），
@@ -227,7 +227,7 @@ CLI 分析侧不受影响，仍可对既有库做巡检/验收。
 
 **开发侧：**
 
-1. 确认基线干净：`agentassert4j status`——全部调用点 BASELINE、无未裁决候选（候选先 approve/reject 清场）；
+1. 确认基线干净：`agentassert4j status`——全部调用点 BASELINE、无未裁决候选（候选先 accept/reject 清场）；
 2. 导出：`agentassert4j baseline export --out acceptance-pack.json --ref <git提交号>` → 记录打印的 **SHA-256** 与任务链/步骤数；`--ref` 是申报制代码锚（不校验），验收方凭它对账"这份行为承诺来自哪个交付版本"；
    被排除的链在输出与 `--json` 报告的 `excluded` 数组中列出并给出原因（存在未建档步骤 / 基线违反自身
    声明规则）——排除属导出守卫，先把该链的基线建干净或修正规则声明再重导；
@@ -349,7 +349,7 @@ structuredContent（`{"reports":[...]}`；失败态为 agentassert4j.error/1 包
 
 | 症状 | 处置 |
 |------|------|
-| `--invocation` 报 covers multiple invocations（replay/approve/reject/rollback） | 这些命令的目标解析要求定位到**单个**调用点，不接受覆盖多个模板桶的业务标签——改用 invocationKey 唯一前缀或 status 显示短形（`标签@8位`）；baseline/status 的缩域解析无此限制（标签命中其全部模板桶：`--force` 跨桶重建、status 一标签展示全部桶） |
+| `--invocation` 报 covers multiple invocations（replay/accept/reject/rollback） | 这些命令的目标解析要求定位到**单个**调用点，不接受覆盖多个模板桶的业务标签——改用 invocationKey 唯一前缀或 status 显示短形（`标签@8位`）；baseline/status 的缩域解析无此限制（标签命中其全部模板桶：`--force` 跨桶重建、status 一标签展示全部桶） |
 | `--task` 找不到链 | 输入须与录制请求文本精确相等（或给唯一前缀，命中多个不同任务会报错列候选）；或该会话开头无请求文本（纯工具起始）不构成任务链 |
 | `verify` 报覆盖缺口 | 包任务在本地没有**精确同名**任务链——验收人按交付的请求清单原文执行；前缀同名的链不冒充证据（列入范围外） |
 | 追问任务对不上 | 追问链携带会话前缀——真实再执行对照必须重演到该问为止的完整前缀，报告已标注提示 |
@@ -363,7 +363,7 @@ structuredContent（`{"reports":[...]}`；失败态为 agentassert4j.error/1 包
 | 重驱报告「archived template text missing」 | 该漂移点在 `prompt_texts` 无全文可取（旧版录制或捕获侧漏设）——重新录制即可（管道现自动派生投影并归档） |
 | 首次 bare replay 报出大量漂移 | 建档种子取桶内最早记录——混合模板历史的库首跑会对「种子≠最新」的调用点各报一次，对齐 PASS 后逐点自动收编；属一次性收敛而非批量回归 |
 | 某任务每次 bare replay 都 exit 1（差异固定） | 库里有被 reject 的变异/测试工件链（只追加事实，对齐层如实陈述）——该任务再真实执行两轮即自然痊愈（最新 vs 次新回到干净对）；CI 不受影响（流水线库是新鲜录制） |
-| 标签裂键收编后任务仍 CHANGED | 收编只前移身份；对齐判定看的是最新两条**真实链**的现场重提比对，不消费任何治理档案——两条链结构本就不一致（模型非确定性或中间变异残留）就会持续 CHANGED。变绿路径只有一条：在当前模板下再真实执行，让最新两链结构一致（确定性输出即 PASS）后重放；`baseline --force`/`approve` 改的是画像基线与漂移身份，不改变链对链判定 |
+| 标签裂键收编后任务仍 CHANGED | 收编只前移身份；对齐判定看的是最新两条**真实链**的现场重提比对，不消费任何治理档案——两条链结构本就不一致（模型非确定性或中间变异残留）就会持续 CHANGED。变绿路径只有一条：在当前模板下再真实执行，让最新两链结构一致（确定性输出即 PASS）后重放；`baseline --force`/`accept` 改的是画像基线与漂移身份，不改变链对链判定 |
 
 ## 8. 最小录制契约
 

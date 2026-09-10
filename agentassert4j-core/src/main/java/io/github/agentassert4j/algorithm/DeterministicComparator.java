@@ -202,7 +202,7 @@ public class DeterministicComparator {
 
     private String buildSummary(ComparisonResult r) {
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("score=%.2f verdict=%s", r.getScore(), r.getVerdict()));
+        sb.append(String.format("similarity=%.2f verdict=%s", r.getScore(), r.getVerdict()));
 
         if (r.isToolCallMatch() && r.isParamTypeMatch()) {
             sb.append(" | tool calls match");
@@ -218,6 +218,11 @@ public class DeterministicComparator {
             sb.append(" | removed fields: ").append(r.getRemovedFields());
         }
         if (!r.isFieldTypeMatch()) sb.append(" | field types changed");
+        // 结构维失配但没有任何子片段触发（contentType/文本量级不同）时补一条，
+        // 否则 CHANGED 的 summary 只列匹配项、排查者无从得知失配维度
+        if (!r.isStructureMatch() && isEmpty(r.getAddedFields()) && isEmpty(r.getRemovedFields()) && r.isFieldTypeMatch()) {
+            sb.append(" | output structure changed");
+        }
         if (!r.isKeywordMatch()) sb.append(" | content rules mismatch");
         if (!r.isRegexMatch()) sb.append(" | regex rules mismatch");
         if (!r.isBehaviorMatch()) sb.append(" | behavior constraints failed");

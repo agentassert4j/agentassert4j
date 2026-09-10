@@ -29,19 +29,19 @@
 再跑一遍，两条链哪里变了，全靠人肉眼逐行对。
 
 AgentAssert4j 把这件事变成一条命令的功夫：**录制即基线，改后重放即报告，真实执行后自动对齐，
-approve / reject 一键裁决。** 业务代码零改动，core 零外部依赖，全部状态就是一个 SQLite 文件，
+accept / reject 一键裁决。** 业务代码零改动，core 零外部依赖，全部状态就是一个 SQLite 文件，
 内网离线可用。
 
 ## 核心闭环
 
-<img src="assets/hero-loop.zh.png" alt="核心闭环：你的 Agent 旁路录制进单文件 SQLite，baseline 建档，改提示词真实跑一遍后 replay 出漂移检测与逐步对齐报告，approve / reject 裁决，export → verify 交付验收" width="880"/>
+<img src="assets/hero-loop.zh.png" alt="核心闭环：你的 Agent 旁路录制进单文件 SQLite，baseline 建档，改提示词真实跑一遍后 replay 出漂移检测与逐步对齐报告，accept / reject 裁决，export → verify 交付验收" width="880"/>
 
 | 环节 | 命令 | 发生了什么 |
 |------|------|-----------|
 | **录制即基线** | （自动） | 框架旁路拦截每次真实 LLM 调用；一条 `baseline` 命令即完成盖章建档（幂等），replay 开发态也会为新出现的调用点自动建档 |
 | **变更检测与对齐** | `replay` | 全项目漂移检测 + 逐任务按调用点对齐：缺步骤 / 新增步骤 / 逐步结构 diff，零 LLM 调用 |
 | **受控重驱（可选）** | `replay --re-drive` | 逐漂移点以最新归档模板重放历史输入做受控复核，花真实调用、预算池封顶 |
-| **裁决门禁** | `approve` / `reject` | bare 裁决全部待裁决候选；预期改进转正（旧基线归档可回滚），回归丢弃；退出码 0/1/2 直接 gating |
+| **裁决门禁** | `accept` / `reject` | bare 裁决全部待裁决候选；预期改进转正（旧基线归档可回滚），回归丢弃；退出码 0/1/2 直接 gating |
 
 ## 快速开始
 
@@ -103,7 +103,7 @@ Task "订单 1234 的物流太慢，我要退款": baseline chain (session demo-
   [1] 意图识别@854e05b8  PASS
   [2] 查询订单@b3e4b38c  PASS
   [3] 查询物流@8d9dbac2  score=0.80 verdict=CHANGED | tool calls match | added fields: [delivery.promise]
-Candidate registered: 查询物流@8d9dbac2 (behavior change awaiting adjudication; approve promotes to baseline, reject discards).
+Candidate registered: 查询物流@8d9dbac2 (behavior change awaiting adjudication; accept promotes to baseline, reject discards).
   [4] 提交退款@b47b21ea  missing step: baseline invoked '提交退款@b47b21ea', new chain did not
   [5] 组织答复@8fd8be58  PASS
   [6] 理赔查询@3e4c2031  added step: new chain invoked '理赔查询@3e4c2031', baseline did not
@@ -120,7 +120,7 @@ LLM 逐轮执行本就有噪声：`replay --member-check` 让最新链只要与�
 **5. 裁决，然后真实执行自动对齐**
 
 ```bash
-agentassert4j approve   # bare = 裁决全部待裁决候选；预期内：转正，旧基线归档可回滚
+agentassert4j accept   # bare = 裁决全部待裁决候选；预期内：转正，旧基线归档可回滚
 agentassert4j reject --invocation 查询物流   # 回归：缩域丢弃该候选；提示词回滚是 git 的事
 
 # 下一次真实执行之后再跑一次 bare replay：新链自动配对，差异继续逐条点名
@@ -207,7 +207,7 @@ stage('AgentAssert 行为回归') {
 | `baseline export` | 导出验收基线包（`--task` 缩域；`--include-samples` 附强制脱敏样本） |
 | `status` | 调用点清单与基线状态巡检；`--diff` 看待裁决差异；`--invocation` 缩域 |
 | `replay` | 全项目模板漂移检测与任务对齐（缺省零 LLM 调用）；`--task`/`--invocation` 复合缩域；`--re-drive` 受控复核 |
-| `approve` / `reject` | 裁决候选指纹（转正 / 丢弃）。bare = 全部待裁决候选；`--invocation <目标>` 缩域 |
+| `accept` / `reject` | 裁决候选指纹（转正 / 丢弃）。bare = 全部待裁决候选；`--invocation <目标>` 缩域 |
 | `rollback` | 把基线回滚到归档版本（`--invocation` `--version` 均必填） |
 | `verify` | 交付验收：验收包 × 本机真实执行链（只读）；`--dry-run` 配对预演，`--report` 产出 markdown 交付证据 |
 | `rules` | 查看内置约束行为目录与规则文件写法 |
@@ -227,7 +227,7 @@ stage('AgentAssert 行为回归') {
 | 退出码 | 语义 | CI 动作 |
 |-------|------|--------|
 | `0` | 无差异 | 放行 |
-| `1` | 存在行为差异（含缺步骤 / 新增步骤） | 人裁决 approve / reject |
+| `1` | 存在行为差异（含缺步骤 / 新增步骤） | 人裁决 accept / reject |
 | `2` | 用法或基础设施故障 / 证据不完整（预算耗尽、覆盖缺口、`--ci` 遇无基线调用点、判定语义不符） | 修环境，不算回归 |
 
 `--json` 输出单行机器可读报告到 stdout（每命令一个 schema 标签），诊断与进度走 stderr；

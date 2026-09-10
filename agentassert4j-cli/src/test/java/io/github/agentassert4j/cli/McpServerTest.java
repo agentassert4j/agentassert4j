@@ -237,7 +237,7 @@ class McpServerTest {
             dispatcher.handle(rpc("initialize", "1", "{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{}}"));
             Map<String, Object> result = castMap(parseObject(dispatcher.handle(rpc("tools/list", "1", null))).get("result"));
             List<Object> tools = castList(result.get("tools"));
-            assertEquals(Arrays.asList("check", "diff", "report", "verify", "doctor", "graph", "record", "establish", "accept", "reject", "re-drive", "export"), toolNames(tools));
+            assertEquals(Arrays.asList("check", "diff", "report", "verify", "doctor", "graph", "record", "record-show", "establish", "accept", "reject", "rollback", "audit", "rules", "member-check", "re-drive", "export"), toolNames(tools));
         }
 
         @Test

@@ -46,7 +46,7 @@ public class RulesCommand implements Callable<Integer> {
             out.println("  " + name + " — " + describe(name));
         }
         out.println();
-        out.println("Rules file example (agentassert4j-rules.json, looked up next to agentassert4j.json):");
+        out.println("Rules file example (agentassert4j-rules.json; looked up next to agentassert4j.json, then working directory, then ~/.agentassert4j/):");
         out.println("{");
         out.println("  \"invocations\": {");
         out.println("    \"<business invocationId>\": {");

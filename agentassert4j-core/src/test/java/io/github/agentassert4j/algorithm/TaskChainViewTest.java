@@ -143,6 +143,10 @@ class TaskChainViewTest {
         }
 
         @Override
+        public InteractionRecord findByRecordId(String recordId) {
+        return null; // 测试桩不承载按 id 精确查询
+    }
+
         public List<InteractionRecord> findBySessionId(String sessionId) {
             List<InteractionRecord> result = new ArrayList<>();
             for (InteractionRecord record : records) {

@@ -17,3 +17,5 @@ Thumbs.db
 
 # 文档配图工作台
 /doc-tools/
+/.zcode/
+/channel2/

@@ -436,7 +436,7 @@ class DeterministicComparatorTest {
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
         assertNotNull(r.getSummary());
-        assertTrue(r.getSummary().contains("score="));
+        assertTrue(r.getSummary().contains("similarity="));
         assertTrue(r.getSummary().contains("verdict="));
         assertTrue(r.getSummary().contains("PASS"));
     }

@@ -1,5 +1,6 @@
 package io.github.agentassert4j.cli;
 
+import io.github.agentassert4j.algorithm.VersionMismatchException;
 import io.github.agentassert4j.algorithm.BaselineManager;
 import io.github.agentassert4j.algorithm.InvocationResolver;
 import io.github.agentassert4j.config.InvocationRulesConfig;
@@ -46,6 +47,10 @@ public class BaselineService {
      * @return 本次新建/重建基线的分组数
      */
     public int establishMissing(PrintStream out, String actor, String codeRef, boolean force, String invocationFilter, InvocationRulesConfig rules, List<BaselineOutcome> outcomes) {
+        return establishMissing(out, actor, codeRef, force, invocationFilter, rules, outcomes, null);
+    }
+
+    public int establishMissing(PrintStream out, String actor, String codeRef, boolean force, String invocationFilter, InvocationRulesConfig rules, List<BaselineOutcome> outcomes, String expectedVersion) {
         BaselineManager manager = new BaselineManager(repository);
         int established = 0;
 
@@ -69,6 +74,9 @@ public class BaselineService {
             if (force) {
                 if (hadBaseline) {
                     // 破坏性操作必须留痕：被覆盖的旧基线进入归档，rollback 可恢复
+                    if (expectedVersion != null && !expectedVersion.equals(existing.getVersionTag())) {
+                        throw new VersionMismatchException("Invocation " + invocationKey + " active baseline is " + existing.getVersionTag() + ", not the expected " + expectedVersion + "; a concurrent actor may have changed it.");
+                    }
                     out.println("  Warning: existing baseline " + existing.getVersionTag() + (existing.getApprovedBy() != null ? " (approved by " + existing.getApprovedBy() + ")" : "") + " of " + invocationKey + " will be rebuilt under the current semantics; the old baseline is archived and restorable via `rollback`.");
                 }
                 // 重建取桶内规范序首条可分组记录（分桶已剔除不可分组记录）；

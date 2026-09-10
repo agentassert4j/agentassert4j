@@ -843,7 +843,7 @@ class TaskReplayRunnerTest {
             }
             assertFalse(alignLine.isEmpty(), "必须有 task-align 报告行");
             assertTrue(alignLine.contains("\"comparedPairs\":1,\"skippedPairs\":1"), alignLine);
-            assertTrue(alignLine.contains("\"signal\":{\"score\":0."), alignLine);
+            assertTrue(alignLine.contains("\"signal\":{\"similarity\":0."), alignLine);
             assertTrue(alignLine.contains("\"steps\":1}"), alignLine);
         }
 

@@ -33,8 +33,9 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
 1. **三层判定模型**：bare 执行 = 身份检测（全项目零调用）→ 真实对齐（缩域内逐任务，零调用）
    →（受控重驱，花 LLM 钱的显式层）。缺省路径零 LLM 调用。【测试钉】`TaskReplayRunnerTest`
    （Alignment/DriftStateMachine 全组 + Guards.dryRun_readOnly 的零调用只读性）
-2. **任务链派生**：同 session 内按请求文本切片成链（声明 taskKey 优先）；同文本多链是同一
-   任务的多轮执行（升序全保留，对齐取最新 vs 次新）。【测试钉】`TaskChainViewTest`
+2. **任务链派生**：同 session 内按请求文本切片成链（声明 taskKey 优先；无本轮输入的中间态
+   记录——工具结果续跑轮——回退取规范化轮次中首个 user 轮文本为请求文本，不再附着到会话中
+   恰好打开的其他任务链）；同文本多链是同一任务的多轮执行（升序全保留，对齐取最新 vs 次新）。【测试钉】`TaskChainViewTest`
 3. **对齐配对**：有声明标签的步骤按标签分组、跨模板版本配对（细分哈希差异记 versionSwitch
    注记，判定照常）；无标签按完整键分组（版本即身份，不跨版本）；组内规范序 1:1 配对、
    较少侧配对、富余计数进报告不判差异；缺步骤/新增步骤是行为差异。【测试钉】
@@ -63,16 +64,19 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
    【测试钉】`TaskReplayRunnerTest.Alignment.stepDiff_changed_exits1_andRegistersCandidate`
    + `ReplayFlowTest.DiffAndAdjudicate`
 10. **对齐差异的语义**：对齐层陈述「最近两次真实执行之间行为变了吗」——事实差异在新真实链
-    入账前如实存续；approve 清候选转正基线、收敛漂移身份，不追溯改写已录链。变异/测试工件链
+    入账前如实存续；accept 清候选转正基线、收敛漂移身份，不追溯改写已录链。变异/测试工件链
     是只追加事实：被拒工件任务在两条干净链入账前每次 bare replay 如实 exit 1，自愈方式 =
     该任务再真实执行两轮；CI 库是本流水线新鲜录制，工件不跨库携带。【测试钉】
-    `ReplayFlowTest.DiffAndAdjudicate.diff_candidate_approve_settles`
+    `ReplayFlowTest.DiffAndAdjudicate.diff_candidate_accept_settles`
 11. **served 模型对偶检测**：基线链与新链的 served 模型族不相交即报告模型身份变更（同模板
     跨执行行为漂移的主因），零新增存储。【测试钉】`Guards.servedModelPairNoted`
 12. **受控重驱层**：`--re-drive` 逐点以最新归档模板真重驱，目标三档优先级——`--full-chain`
     为缩域内全部记录逐条；带缩域（`--task`/`--invocation`）为缩域内全部调用点每键取最新
     可分组记录（显式缩域即显式重驱域，不要求漂移在册）；缺省为仅漂移点（同键漂移 + 标签
-    裂键，含挂起点补证）。预算池合计封顶、原文缺席跳过可见、全败出 2；dry-run 出成本报价。
+    裂键，含挂起点补证）。预算池合计封顶、原文缺席跳过可见、全败出 2；dry-run 出成本报价（`re-drive-dry-run`
+    机器行与真跑目标同源：目标记录清单 + 历史 token 折算的费用预估）。`--invocation`
+    命名目标时目标集限定为该键（共享会话的链会因无请求文本的中间态记录混入多个
+    调用点，不得连带重驱）；每键取域内最新记录。
     【测试钉】`TaskReplayRunnerTest.ReDrive`（PASS/CHANGED 落候选/预算/全败/原文缺席/
     fullChain/缩域即域/bare 零漂移零目标/dry-run 九场景）
 13. **成员判定（--member-check）**：每任务最新链对同任务最近 N 条历史链逐一核成员资格，
@@ -88,7 +92,7 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
     `TaskReplayRunnerTest.FirstVoyageAndExitHealth.firstVoyage_taskRuleViolation_exits1`
 15. **优化信号（非判定）**：task-align/member-check 报告的 summary 携带 comparedPairs/
     skippedPairs（对齐在首个 CHANGED 配对即停，聚合只承认已比对配对，缺失分数不默认补值）；
-    signal 对象=已比对步骤信号分均值（无已比对步骤时整体省略）。明示非判定——判定始终
+    signal 对象=已比对步骤相似度均值，字段名 similarity（无已比对步骤时整体省略）。明示非判定——判定始终
     二值。【测试钉】`TaskAlignerTest.comparedSkippedPairs_earlyStopOnFirstChanged` +
     `TaskReplayRunnerTest.SignalAndStability.signalAndPairCounts_json`
 16. **稳定性注记（纯读侧）**：逐任务对组内全链逐调用点提取指纹（与判定同源），报告
@@ -170,6 +174,8 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
 
 | 日期 | 方式 | 发现 |
 |---|---|---|
+| 2026-09-09 | 通道 2 决策批：契约 2 增中间态记录请求文本回退（previousTurns 首个 user 轮）——粘链与 task 域失明同源解决；回放/文档动词 approve 全局更名 accept（含 adjudication/1 action 值） | 根因链：无请求文本记录附着到打开链（F2/F3 温床）+ 任务域对中间态不可见（F5）；维护者裁决采纳「父级 user 文本回填」而非裸键链概念——零 schema 变更、纯派生视图层、符合 R11（previousTurns 即真源） |
+| 2026-09-09 | 通道 2 修复批：re-drive 缩域失效修复（invocation 域限定+每键最新=契约 12 原文兑现；dry-run 计划与真跑目标同源单点 reDriveTargets）+ dry-run 报价兑现（re-drive-dry-run 模式行）+ 步级 protocol 字段 + score→similarity 改名（summary/signal/verify 同步，代码注释早已自认「score 与判定自相矛盾误导排查」）+ split 键 label 失名修复（status 巡检 label 改逐记录登记）+ 遗留 schema 守卫（版本戳齐但必需表缺席→可行动 StorageException） | 全部来自通道 2 双宿主实测发现（F2/F3/F8/F18/F14/F12/F6/F17）；行为验证=invocation 域真驱从 4 调用收敛到 1 调用且 dry-run 报价与真跑同源 |
 | 2026-09-09 | 连续同角色合并吸收自外部对标（官方 API 参考 2024-10 起合法+服务端合并；LangChain 源码 "Merge runs of human/tool messages"；Vercel convertToAnthropicMessagesPrompt 同款；LiteLLM #18271 未决即反面教材） | buildMessages 重构为结构化帧+合并趟（顺带收益：转义改走 serialize 单源）；tool_result 帧与末位文本输入不再产出连续 user 消息——严格旧兼容实现的最后风险位关闭；单文本常态保持字符串 content（golden 形态最小扰动） |
 | 2026-09-09 | 三协议批②（发射）同日：AnthropicMessagesClient/OpenAiResponsesClient 交付，契约 18 扩帧合成通用不变量与方言特化；真机三协议 DeepSeek 连通 6/6（含工具历史帧合成被真实端点接受） | 方案表格原表述「并行调用结果块集中同一条消息」按实现修正为逐对重建（发起帧与结果帧相邻）——文法等价（服务端按 id 配对）且忠实于记录的逐帧结构；真机发现 deepseek-chat 被 DeepSeek 服务端别名映射为 deepseek-v4-flash 回报，servedModel 断言不钉具体值 |
 | 2026-09-09 | 三协议批①（基座+摄取）：契约 18 新增；HTTP 管道自 OpenAiCompatibleClient 抽入共享基座（归位行为零变更，现有测试全绿为钉） | ①isAvailable 旧口径（GET models 仅 200 算可达）统一为传输层可达（2xx/404/405）——鉴权有效性让位给首个真实调用，属本批有意变更非回归；②llm.protocol 词表与 record 摄取/apiProtocol 列同源（LlmWireProtocol 单源四处同形） |

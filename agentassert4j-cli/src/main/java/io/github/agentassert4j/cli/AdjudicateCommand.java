@@ -1,6 +1,7 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.BaselineManager;
+import io.github.agentassert4j.algorithm.VersionMismatchException;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.RecursiveJsonParser;
@@ -12,7 +13,7 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 /**
- * 裁决命令基类 — approve 与 reject 共用的目标解析与执行流程。
+ * 裁决命令基类 — accept 与 reject 共用的目标解析与执行流程。
  *
  * <p>候选由 replay 落库；裁决与重放通常不在同一进程，操作对象是持久化的
  * invocations 行而非内存对象。</p>
@@ -32,6 +33,9 @@ abstract class AdjudicateCommand implements Callable<Integer> {
 
     @Option(names = {"--invocation"}, description = "Adjudication scope: business invocationId, invocationKey, or a unique prefix (defaults to all pending candidates)")
     String invocation;
+
+    @Option(names = {"--expected-version"}, description = "Optimistic concurrency guard: refuse unless the active baseline version still equals this tag (see report); protects against concurrent actors changing the baseline between your inspection and this write")
+    String expectedVersion;
 
     @Option(names = {"--json"}, description = "Print a single-line JSON report to stdout")
     boolean jsonOutput;
@@ -53,8 +57,8 @@ abstract class AdjudicateCommand implements Callable<Integer> {
                 if (!jsonOutput) {
                     printCandidateDiff(target);
                 }
-                apply(manager, target.getInvocationKey());
-                // approve/reject 在管理器内部改写画像，回读展示结果状态
+                apply(manager, expectedVersion, target.getInvocationKey());
+                // accept/reject 在管理器内部改写画像，回读展示结果状态
                 InvocationProfile reloaded = repository.findInvocationByKey(target.getInvocationKey());
                 InvocationProfile shown = reloaded != null ? reloaded : target;
                 if (jsonOutput) {
@@ -69,6 +73,9 @@ abstract class AdjudicateCommand implements Callable<Integer> {
             return 0;
         } catch (CliFailureException e) {
             return CliSupport.fail(jsonOutput, out, err, e);
+        } catch (VersionMismatchException e) {
+            // 乐观并发守卫：活跃版本与调用方所见不一致——并发写冲突就近拒绝
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run report to see the active version, then retry with --expected-version <tag>, or drop the guard.", "report");
         } catch (IllegalStateException e) {
             // BaselineManager 的对象缺失守卫（画像/候选不存在）：无对象可操作，非环境故障
             return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, CliSupport.describe(e), "Check the target against `status` output, then retry.", "agentassert4j status");
@@ -118,9 +125,9 @@ abstract class AdjudicateCommand implements Callable<Integer> {
     }
 
     /**
-     * 执行裁决操作（approve/reject）。
+     * 执行裁决操作（accept/reject）。
      */
-    abstract void apply(BaselineManager manager, String invocationKey);
+    abstract void apply(BaselineManager manager, String expectedVersion, String invocationKey);
 
     /**
      * 裁决动作名——--json 报告的 action 字段，区分共用报告契约的两个命令。

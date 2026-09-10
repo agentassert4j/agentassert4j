@@ -1,6 +1,7 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.BaselineManager;
+import io.github.agentassert4j.algorithm.VersionMismatchException;
 import io.github.agentassert4j.model.ArchivedTemplateVersion;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.StorageRepository;
@@ -16,7 +17,7 @@ import java.util.concurrent.Callable;
 /**
  * rollback 命令 — 把活跃基线恢复到指定版本的归档基线。
  *
- * <p>归档行在 approve 与 baseline --force 时生成；恢复出的旧语义基线会被
+ * <p>归档行在 accept 与 baseline --force 时生成；恢复出的旧语义基线会被
  * 重放守卫拒绝判定（属预期），再次 --force 以当前语义重建即可。</p>
  *
  * @author axy-yxa
@@ -32,6 +33,9 @@ public class RollbackCommand implements Callable<Integer> {
 
     @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
+
+    @Option(names = {"--expected-version"}, description = "Optimistic concurrency guard: refuse unless the active baseline version still equals this tag; protects against concurrent actors changing the baseline between your inspection and this write")
+    String expectedVersion;
 
     @Option(names = {"--invocation"}, required = true, description = "Target invocation: business invocationId, invocationKey, or a unique prefix (see `status` for the full list)")
     String invocation;
@@ -54,7 +58,7 @@ public class RollbackCommand implements Callable<Integer> {
                 throw new IllegalStateException("Invocation " + invocationKey + " has no baseline profile.");
             }
             ensureVersionExists(repository, invocationKey, version);
-            new BaselineManager(repository).rollback(invocationKey, version);
+            new BaselineManager(repository).rollback(invocationKey, version, expectedVersion);
             InvocationProfile reloaded = repository.findInvocationByKey(invocationKey);
             if (jsonOutput) {
                 out.println("{\"schema\":\"agentassert4j.rollback/1\",\"invocationKey\":\"" + RecursiveJsonParser.escape(invocationKey) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(version) + "\",\"status\":\"" + reloaded.getBaselineStatus() + "\",\"approvedBy\":\"" + RecursiveJsonParser.escape(reloaded.getApprovedBy() != null ? reloaded.getApprovedBy() : "") + "\",\"codeRef\":\"" + RecursiveJsonParser.escape(reloaded.getCodeRef() != null ? reloaded.getCodeRef() : "") + "\",\"ok\":true}");
@@ -76,6 +80,8 @@ public class RollbackCommand implements Callable<Integer> {
             return 0;
         } catch (CliFailureException e) {
             return CliSupport.fail(jsonOutput, out, err, e);
+        } catch (VersionMismatchException e) {
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run report to see the active version, then retry with --expected-version <tag>, or drop the guard.", "report");
         } catch (IllegalStateException e) {
             // 目标画像/归档版本不存在：无对象可回滚，非环境故障
             return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, CliSupport.describe(e), "Pick a version from the archived column in `status`, then retry.", "agentassert4j status");

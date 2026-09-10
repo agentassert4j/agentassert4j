@@ -4,9 +4,12 @@ import io.github.agentassert4j.util.RecursiveJsonParser;
 import io.github.agentassert4j.util.TextUtil;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 
 /**
  * AgentAssert4j 主配置模型 — 从 agentassert4j.json 加载。
@@ -35,6 +38,12 @@ public class AgentAssert4jConfig {
     private RecorderConfig recorder;
     private RegressionConfig regression;
     private LlmConfig llm;
+
+    /**
+     * 配置文件未知键告警（加载时收集，doctor 呈现）——拼错/放错层级的键
+     * 静默无效是排障黑洞，就近可见优于静默忽略。
+     */
+    private List<String> configNotes = new ArrayList<>();
 
     public AgentAssert4jConfig() {
         this.storage = new StorageConfig();
@@ -70,8 +79,32 @@ public class AgentAssert4jConfig {
         config.regression = RegressionConfig.fromJson(getMap(root, "regression"), config.regression);
         config.llm = LlmConfig.fromJson(getMap(root, "llm"), config.llm);
 
+        // 未知键就近可见：拼错/放错层级的配置键静默无效是排障黑洞（实测中
+        // 「protocol 放顶层不生效」即此坑）。只告警不拒绝——未知键不影响既有语义。
+        List<String> notes = new ArrayList<>();
+        for (Object key : root.keySet()) {
+            if (!ROOT_KEYS.contains(String.valueOf(key))) {
+                notes.add("unknown config key '" + key + "' (not under any known section)");
+            }
+        }
+        Map<String, Object> llmMap = getMap(root, "llm");
+        if (llmMap != null) {
+            for (Object key : llmMap.keySet()) {
+                if (!LLM_KEYS.contains(String.valueOf(key))) {
+                    notes.add("unknown llm key '" + key + "' (valid: " + LLM_KEYS + ")");
+                }
+            }
+        }
+        config.setConfigNotes(notes);
+
         return config;
     }
+
+    /** 已知根段与 llm 段键集——未知键检测的对照面。 */
+    private static final Set<String> ROOT_KEYS = new HashSet<>(
+            Arrays.asList("storage", "recorder", "regression", "llm", "tools"));
+    private static final Set<String> LLM_KEYS = new HashSet<>(
+            Arrays.asList("protocol", "apiKey", "endpoint", "model", "timeoutMs", "temperature", "extraBody"));
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> getMap(Map<String, Object> parent, String key) {
@@ -134,6 +167,15 @@ public class AgentAssert4jConfig {
 
     public LlmConfig getLlm() {
         return llm;
+    }
+
+    /** 配置未知键告警（可能为空）。 */
+    public List<String> getConfigNotes() {
+        return configNotes;
+    }
+
+    public void setConfigNotes(List<String> configNotes) {
+        this.configNotes = configNotes != null ? configNotes : new ArrayList<>();
     }
 
     public void setLlm(LlmConfig llm) {

@@ -5,6 +5,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import java.util.Arrays;
+
 /**
  * schema 契约版本管理（PRAGMA user_version）。
  *
@@ -32,6 +34,7 @@ final class SchemaMigrator {
         }
 
         if (current == Schema.USER_VERSION) {
+            verifyRequiredTables(connection);
             return;
         }
 
@@ -40,6 +43,24 @@ final class SchemaMigrator {
                 stmt.execute(ddl);
             }
             stmt.execute("PRAGMA user_version = " + Schema.USER_VERSION);
+        }
+        verifyRequiredTables(connection);
+    }
+
+    /**
+     * 版本戳齐但必需表缺席 = 早期开发构建的遗留库（开发期语义变更以删库重建
+     * 承接、版本号不迁移）：就地给出可行动错误，而非让后续查询以裸
+     * SQLITE_ERROR 失败。
+     */
+    private static void verifyRequiredTables(Connection connection) throws SQLException {
+        for (String table : Arrays.asList("interactions", "prompt_texts", "invocations", "invocation_template_versions")) {
+            try (ResultSet rs = connection.getMetaData().getTables(null, null, table, null)) {
+                if (!rs.next()) {
+                    throw new SQLException("Database file is missing required table '" + table
+                            + "' (a leftover database from an earlier development build; development builds do not migrate old schemas). "
+                            + "Delete the file or point --db at a fresh path.");
+                }
+            }
         }
     }
 

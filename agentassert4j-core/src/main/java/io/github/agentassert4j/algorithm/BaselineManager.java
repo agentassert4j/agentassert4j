@@ -10,7 +10,7 @@ import java.util.List;
  * 基线生命周期管理 — 框架只报告差异（侦探），接受与否由开发者裁决（法官）。
  *
  * <p>治理主体 = 调用点（invocation）的模板版本史。三态流转：BASELINE（当前认可的
- * 行为标准）→ 变更产生 CANDIDATE（待 approve/reject）→ approve 后旧基线按模板版本
+ * 行为标准）→ 变更产生 CANDIDATE（待 accept/reject）→ accept 后旧基线按模板版本
  * 归档（可 rollback 回溯）。</p>
  *
  * <p>线程契约：生命周期方法以实例监视器互斥，同一 JVM 内并发调用安全
@@ -32,7 +32,7 @@ public class BaselineManager {
      * 批准新基线：候选 → 基线，旧基线按模板版本归档。
      *
      * <p>归档与保存是两步独立写入，无跨表事务：保存失败经 StorageException 向上可见，
-     * 重试时归档去重守卫保证不产生重复归档行， approve 可安全重放。</p>
+     * 重试时归档去重守卫保证不产生重复归档行， accept 可安全重放。</p>
      *
      * @param invocationKey 调用点键（InvocationResolver 派生）
      * @param approver      审批人身份，随活跃画像与归档行留痕（纯治理元数据，永不参与判定）
@@ -40,15 +40,25 @@ public class BaselineManager {
      *                      空缺合法，永不参与判定）
      * @throws IllegalStateException 无候选指纹时抛出
      */
-    public synchronized void approve(String invocationKey, String approver, String codeRef) {
+    public synchronized void accept(String invocationKey, String approver, String codeRef) {
+        accept(invocationKey, null, approver, codeRef);
+    }
+
+    /**
+     * 接受候选（带乐观并发守卫）。expectedActiveVersion 非空时，写入前校验活跃
+     * 版本标签：多宿主共享同一库时，判定/巡检所见与裁决写入之间活跃版本可能
+     * 已被并行改写，不匹配即 {@link VersionMismatchException} 就近拒绝。
+     */
+    public synchronized void accept(String invocationKey, String expectedActiveVersion, String approver, String codeRef) {
         InvocationProfile profile = repository.findInvocationByKey(invocationKey);
         if (profile == null) {
             throw new IllegalStateException("Invocation profile not found: " + invocationKey);
         }
+        checkExpectedVersion(profile, expectedActiveVersion);
 
         DeterministicFingerprint candidate = profile.getCandidateFingerprint();
         if (candidate == null) {
-            throw new IllegalStateException("No candidate to approve for invocation: " + invocationKey);
+            throw new IllegalStateException("No candidate to accept for invocation: " + invocationKey);
         }
 
         // 旧基线归档（可回溯）；回滚恢复的旧基线已在归档中，跳过避免同 tag 重复行。
@@ -74,13 +84,19 @@ public class BaselineManager {
      * 开发者需自行回滚 Prompt（回滚是 git 的职责，不是测试框架的职责）。
      *
      * @param invocationKey 调用点键
-     * @throws IllegalStateException 无候选指纹时抛出（与 approve 对称）
+     * @throws IllegalStateException 无候选指纹时抛出（与 accept 对称）
      */
     public synchronized void reject(String invocationKey) {
+        reject(invocationKey, null);
+    }
+
+    /** 否决候选（带乐观并发守卫，语义同 {@link #accept} 的守卫说明）。 */
+    public synchronized void reject(String invocationKey, String expectedActiveVersion) {
         InvocationProfile profile = repository.findInvocationByKey(invocationKey);
         if (profile == null) {
             throw new IllegalStateException("Invocation profile not found: " + invocationKey);
         }
+        checkExpectedVersion(profile, expectedActiveVersion);
         if (profile.getCandidateFingerprint() == null) {
             throw new IllegalStateException("No candidate to reject for invocation: " + invocationKey);
         }
@@ -92,7 +108,7 @@ public class BaselineManager {
 
     /**
      * 将调用点的模板身份前移到最新可分组记录的模板哈希（漂移自动收编的写入口，
-     * 与 approve 的前移同一重算口径）。
+     * 与 accept 的前移同一重算口径）。
      *
      * <p>画像不存在、无可用记录凭据或最新模板哈希为空时保守保留原值并返回 false——
      * 不产出错误身份；哈希一致时幂等返回 false。指纹、候选、版本标签与审批链均不动。</p>
@@ -120,6 +136,11 @@ public class BaselineManager {
      * @throws IllegalStateException 无归档基线时抛出
      */
     public synchronized void rollback(String invocationKey, String versionTag) {
+        rollback(invocationKey, versionTag, null);
+    }
+
+    /** 回滚（带乐观并发守卫，语义同 {@link #accept} 的守卫说明）。 */
+    public synchronized void rollback(String invocationKey, String versionTag, String expectedActiveVersion) {
         ArchivedTemplateVersion archived = repository.findArchivedVersion(invocationKey, versionTag);
         if (archived == null) {
             throw new IllegalStateException("No archived template version found for invocation: " + invocationKey + ", version: " + versionTag);
@@ -129,6 +150,7 @@ public class BaselineManager {
         if (profile == null) {
             throw new IllegalStateException("Invocation profile not found: " + invocationKey);
         }
+        checkExpectedVersion(profile, expectedActiveVersion);
 
         // 当前基线也归档（若该 tag 未曾归档过）
         archiveIfAbsent(invocationKey, profile);
@@ -152,9 +174,9 @@ public class BaselineManager {
     }
 
     /**
-     * 记录回归测试产生的新指纹为候选，供后续 approve/reject 裁决。
+     * 记录回归测试产生的新指纹为候选，供后续 accept/reject 裁决。
      * 回归执行器在对比结果非 PASS 时调用——候选必须经持久层落库，
-     * 否则 approve 在新进程中不可达（重放与裁决通常不在同一进程）。
+     * 否则 accept 在新进程中不可达（重放与裁决通常不在同一进程）。
      *
      * <p>候选指纹与画像现役指纹一致时不登记（画像原样保留，含既未裁决的既有候选）——
      * 与基线无差异的候选不携带裁决信息，登记只会制造「有候选却无差异」的困惑界面；
@@ -207,6 +229,15 @@ public class BaselineManager {
      * @param rules    规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
      * @throws IllegalStateException 该调用点无画像且无录制数据可解析时抛出
      */
+    private void checkExpectedVersion(InvocationProfile profile, String expectedActiveVersion) {
+        if (expectedActiveVersion != null && !expectedActiveVersion.equals(profile.getVersionTag())) {
+            throw new VersionMismatchException("Invocation " + profile.getInvocationKey()
+                    + " active baseline is " + profile.getVersionTag()
+                    + ", not the expected " + expectedActiveVersion
+                    + "; a concurrent actor may have changed it. Re-read with report, then retry or drop the guard.");
+        }
+    }
+
     public synchronized void reestablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef) {
         establish(record, approver, true, rules, codeRef);
     }
@@ -285,7 +316,7 @@ public class BaselineManager {
     }
 
     /**
-     * 按最新可分组记录重算画像模板哈希（approve 前移与漂移收编共用的口径）。
+     * 按最新可分组记录重算画像模板哈希（accept 版本前移与漂移收编共用的口径）。
      * 身份凭据 = 存储键与现算键一致且可解析的最新记录；凭据缺失（记录损坏或全部
      * 不可用）或其模板哈希为空时保守保留原值。只改内存画像不落库，由调用方随
      * 其余字段一并写入。

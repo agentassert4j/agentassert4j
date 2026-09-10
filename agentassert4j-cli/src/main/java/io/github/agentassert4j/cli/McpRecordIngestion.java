@@ -62,11 +62,15 @@ final class McpRecordIngestion {
      * exit 2 时 stdout 携带 agentassert4j.error/1 包络行
      */
     static McpToolOutcome ingest(String db, Map<String, Object> args) {
-        String sessionId = nonBlankString(args, "sessionId");
+        String sessionId = stringArg(args, "sessionId");
         String requestRaw = nonBlankString(args, "request");
         String responseRaw = nonBlankString(args, "response");
         if (sessionId == null || requestRaw == null || responseRaw == null) {
-            return envelopeOutcome(CliErrorCode.E_USAGE, "record requires sessionId, request and response (request/response are the raw LLM wire JSON strings).", "Send the raw request and response JSON your stack produced, plus the session id.", "");
+            return envelopeOutcome(CliErrorCode.E_USAGE, "record requires sessionId, request and response (all strings; request/response are the raw LLM wire JSON strings).", "Send the raw request and response JSON your stack produced, plus the session id.", "");
+        }
+        String typeError = numericArgsTypeError(args);
+        if (typeError != null) {
+            return envelopeOutcome(CliErrorCode.E_USAGE, typeError, "Pass the value as a JSON number (epoch milliseconds / milliseconds), or drop the field to use defaults.", "");
         }
         String protocolParam = nonBlankString(args, "protocol");
         if (protocolParam != null && LlmWireProtocol.fromWireName(protocolParam) == null) {
@@ -104,8 +108,19 @@ final class McpRecordIngestion {
             InteractionRecord record = buildRecord(sessionId, protocol, requestRaw, request, responseRaw, response, args, metadata, warnings);
             repository = CliSupport.openRepository(db, CliSupport.discardStream());
             boolean saved = repository.saveInteractionIfAbsent(record);
+            String storedSessionId = null;
+            if (!saved) {
+                // 跨会话重录同 id 时报告调用方传入的 sessionId 会误导归属：
+                // 回显记录实际所在的会话，让「已存哪、怎么存新的」就近可见
+                for (InteractionRecord existing : repository.findByInvocationKey(record.getInvocationKey())) {
+                    if (record.getRecordId() != null && record.getRecordId().equals(existing.getRecordId())) {
+                        storedSessionId = existing.getSessionId();
+                        break;
+                    }
+                }
+            }
             String stderr = warnings.isEmpty() ? "" : String.join("\n", warnings) + "\n";
-            return McpToolOutcome.of(0, reportLine(record, saved) + "\n", stderr);
+            return McpToolOutcome.of(0, reportLine(record, saved, storedSessionId) + "\n", stderr);
         } catch (RuntimeException e) {
             return envelopeOutcome(CliErrorCode.E_ENV, "record failed: " + CliSupport.describe(e), "Fix the reported problem and retry; `agentassert4j doctor` reports database and config health.", "agentassert4j doctor");
         } finally {
@@ -1052,7 +1067,7 @@ final class McpRecordIngestion {
         return HashUtil.sha256(record.getSessionId() + "\n" + invocation + "\n" + record.getTurnIndex() + "\n" + HashUtil.sha256(requestRaw) + "\n" + HashUtil.sha256(responseRaw));
     }
 
-    private static String reportLine(InteractionRecord record, boolean saved) {
+    private static String reportLine(InteractionRecord record, boolean saved, String storedSessionId) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.record/1\",\"status\":\"").append(saved ? "saved" : "duplicate").append('"');
         sb.append(",\"recordId\":\"").append(RecursiveJsonParser.escape(record.getRecordId())).append('"');
         sb.append(",\"sessionId\":\"").append(RecursiveJsonParser.escape(record.getSessionId())).append('"');
@@ -1069,6 +1084,12 @@ final class McpRecordIngestion {
         sb.append(",\"inputTokens\":").append(record.getInputTokens());
         sb.append(",\"outputTokens\":").append(record.getOutputTokens());
         sb.append(",\"hasToolCalls\":").append(record.isHasToolCalls());
+        if (!saved) {
+            if (storedSessionId != null && !storedSessionId.equals(record.getSessionId())) {
+                sb.append(",\"storedSessionId\":\"").append(RecursiveJsonParser.escape(storedSessionId)).append('"');
+            }
+            sb.append(",\"note\":\"A record with this id is already stored; pass a different recordId (or response id) to store a new record.\"");
+        }
         return sb.append('}').toString();
     }
 
@@ -1109,6 +1130,25 @@ final class McpRecordIngestion {
     private static Long longArg(Map<String, Object> args, String key) {
         Object value = args.get(key);
         return value instanceof Number ? Long.valueOf(((Number) value).longValue()) : null;
+    }
+
+    /**
+     * 数值入参的类型守卫：timestamp/latencyMs 传非数值（典型字符串 epoch）曾被
+     * 静默接受并落库为缺失——上游契约违约必须就近可见，不做宽容解析。
+     */
+    private static String numericArgsTypeError(Map<String, Object> args) {
+        for (String key : new String[]{"timestamp", "latencyMs"}) {
+            Object value = args.get(key);
+            if (value != null && !(value instanceof Number)) {
+                return key + " must be a number (got " + value.getClass().getSimpleName() + ").";
+            }
+        }
+        return null;
+    }
+
+    private static String stringArg(Map<String, Object> args, String key) {
+        Object value = args.get(key);
+        return value instanceof String ? (String) value : null;
     }
 
     private static String memberString(Map<?, ?> obj, String key) {

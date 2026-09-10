@@ -14,8 +14,8 @@ import picocli.CommandLine.Command;
 public class RejectCommand extends AdjudicateCommand {
 
     @Override
-    void apply(BaselineManager manager, String invocationKey) {
-        manager.reject(invocationKey);
+    void apply(BaselineManager manager, String expectedVersion, String invocationKey) {
+        manager.reject(invocationKey, expectedVersion);
     }
 
     @Override

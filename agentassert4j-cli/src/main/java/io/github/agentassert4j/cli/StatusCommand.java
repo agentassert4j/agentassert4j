@@ -3,6 +3,7 @@ package io.github.agentassert4j.cli;
 import io.github.agentassert4j.algorithm.DriftDetector;
 import io.github.agentassert4j.algorithm.TaskAligner;
 import io.github.agentassert4j.model.ArchivedTemplateVersion;
+import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.result.DriftReport;
 import io.github.agentassert4j.spi.StorageRepository;
@@ -17,7 +18,7 @@ import java.util.concurrent.Callable;
 /**
  * status 命令 — 查看已录制调用点与基线状态（裁决前后的巡检入口）。
  *
- * <p>invocationKey 是 调用点 的稳定标识（分组器确定性产出），approve/reject 的
+ * <p>invocationKey 是 调用点 的稳定标识（分组器确定性产出），accept/reject 的
  * --invocation 以它（或其唯一前缀）为目标。</p>
  *
  * @author axy-yxa
@@ -88,6 +89,7 @@ public class StatusCommand implements Callable<Integer> {
             }
 
             out.printf("  %-50s %-9s %-6s %-4s %-5s %-12s %s%n", "invocationKey", "status", "ver", "cand", "drift", "archived", "label");
+            out.println("  drift column: \u25cf consistent / \u25b2 drifted / - none (template identity)");
             for (InvocationProfile profile : profiles) {
                 String archivedTags = archivedVersionTags(repository, profile.getInvocationKey());
                 out.printf("  %-50s %-9s %-6s %-4s %-5s %-12s %s%n", CliSupport.displayKey(profile.getInvocationKey()), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "yes" : "-", driftByInvocationKey.getOrDefault(profile.getInvocationKey(), TemplateDriftState.NONE).symbol(), archivedTags.isEmpty() ? "-" : archivedTags, labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), "-"));
@@ -144,22 +146,16 @@ public class StatusCommand implements Callable<Integer> {
      * 否则用户对着自己的代码认不出哪行是哪个 调用点。
      */
     private static Map<String, String> businessLabelsByInvocationKey(StorageRepository repository) {
-        Map<String, List<String>> mapping = new LinkedHashMap<>();
-        for (String invocationId : CliSupport.recordedInvocationIds(repository)) {
-            String invocationKey = new BaselineService(repository).invocationKeyOfFirstRecord(invocationId);
-            if (invocationKey == null) {
-                continue;
-            }
-            List<String> labels = mapping.get(invocationKey);
-            if (labels == null) {
-                labels = new ArrayList<>();
-                mapping.put(invocationKey, labels);
-            }
-            labels.add(invocationId);
-        }
+        // 记录是 label 与键的关联真源：label-split 产生的后继键不是首记录键，
+        // 只登记首记录键会让分裂后的键在巡检面失名——逐记录登记全部键
         Map<String, String> result = new LinkedHashMap<>();
-        for (Map.Entry<String, List<String>> entry : mapping.entrySet()) {
-            result.put(entry.getKey(), String.join(",", entry.getValue()));
+        for (String invocationId : CliSupport.recordedInvocationIds(repository)) {
+            for (InteractionRecord record : repository.findByInvocationId(invocationId)) {
+                String invocationKey = CliSupport.invocationKeyOfRecord(record);
+                if (invocationKey != null) {
+                    result.putIfAbsent(invocationKey, invocationId);
+                }
+            }
         }
         return result;
     }
@@ -181,7 +177,7 @@ public class StatusCommand implements Callable<Integer> {
     }
 
     /**
-     * 候选差异渲染（与 approve/reject 输出同源）——巡检时预览裁决证据。
+     * 候选差异渲染（与 accept/reject 输出同源）——巡检时预览裁决证据。
      */
     private void printCandidateDiff(InvocationProfile profile) {
         if (profile.getCandidateFingerprint() == null) {

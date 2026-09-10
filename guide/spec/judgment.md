@@ -61,7 +61,7 @@
    `CliSupportResolverTest`（unknownBehavior_warnedAtLoad）
 9. **判定语义版本守卫**：建立/批准/重建三条成为基线的路径统一盖章；重放入口校验基线
    `algo_version` 与引擎一致，不一致（含未标记历史行）拒绝判定——算法升级不得静默重解释
-   已批准基线。【测试钉】`BaselineManagerTest`（approve 后活跃行与归档行的 algoVersion 断言）+
+   已批准基线。【测试钉】`BaselineManagerTest`（accept 后活跃行与归档行的 algoVersion 断言）+
    `ReplayFlowTest`（staleAlgoVersion_refusesJudgment / unstampedAlgoVersion_refusesJudgment /
    报告头钉 judgmentSemantics）
 10. **空值兜底**：程序化构造的缺省集合字段、null 输出文本、双空指纹均安全比对不 NPE。

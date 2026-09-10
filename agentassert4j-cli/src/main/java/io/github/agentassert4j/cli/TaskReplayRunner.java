@@ -157,10 +157,11 @@ public class TaskReplayRunner {
         if (scoped.isEmpty()) {
             return fail(CliErrorCode.E_NO_DATA, "No task chains matched the scope.", "Record interactions first, or check invocation keys and task prefixes with `status`.", "agentassert4j status");
         }
+        info("Alignment basis: each task's latest chain is judged against its previous chain (same request text; declared taskKey groups first).");
         boolean narrowed = taskPrefix != null || invocationKey != null;
 
         if (dryRun) {
-            return dryRunPlan(scoped, reDrive, drift, narrowed, memberCheck);
+            return dryRunPlan(scoped, reDrive, drift, narrowed, memberCheck, invocationKey);
         }
 
         // --ci 未建档守卫：缩域内存在未建档调用点即拒绝判定——
@@ -224,23 +225,30 @@ public class TaskReplayRunner {
         // 第 3 层 受控重驱（显式开启）：逐点以最新归档模板重驱录制输入
         ReDriveTotals reDriveTotals = new ReDriveTotals();
         if (reDrive) {
-            reDriveLayer(drift, fullChain, narrowed, scoped, manager, maxTotalCalls, maxTotalTokens, reDriveTotals);
+            reDriveLayer(drift, fullChain, narrowed, invocationKey, scoped, manager, maxTotalCalls, maxTotalTokens, reDriveTotals);
         }
 
         if (!jsonMode && totals.pendingCandidates > 0) {
             info("Pending adjudication: " + String.join(", ", pendingInvocationKeys()));
-            info("Accept with `agentassert4j approve --invocation <prefix>`, or reject with `agentassert4j reject --invocation <prefix>`.");
+            info("Accept with `agentassert4j accept --invocation <prefix>`, or reject with `agentassert4j reject --invocation <prefix>`.");
         }
 
         // 出口健康摘要：doctor 行动价值的出口压缩形态，计数与 doctor 同源
         CliSupport.ExitHealth health = new CliSupport.ExitHealth(drift, chains);
+        boolean rulesBlind = rules == null || (rules.getDeclaredInvocationIds().isEmpty() && !rules.hasTaskRules());
+        String contentNote = "PASS compares structure and declared rules only; answer wording is not fingerprinted. Declare content rules (see the rules command) to pin wording.";
+        if (rulesBlind) {
+            if (!jsonMode) {
+                info("Note: " + contentNote);
+            }
+        }
         if (!jsonMode) {
             String healthLine = health.humanLine();
             if (healthLine != null) {
                 info(healthLine);
             }
         } else {
-            out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.EXIT_HEALTH.wireName() + "\",\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\",\"health\":" + health.jsonFragment() + "}");
+            out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.EXIT_HEALTH.wireName() + "\",\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\",\"health\":" + health.jsonFragment() + (rulesBlind ? ",\"notes\":[\"" + RecursiveJsonParser.escape(contentNote) + "\"]" : "") + "}");
         }
 
         // 退出码复合：行为差异或证据缺口（没跑够）→ 1；环境/预算截断 → 2；否则 0
@@ -275,7 +283,7 @@ public class TaskReplayRunner {
      * 显式重驱域，不要求漂移在册；缺省为仅漂移点（同键漂移 + 标签裂键，含挂起点
      * 补证）。漂移键不在缩域链键集内、天然排除。
      */
-    private List<InteractionRecord> reDriveTargets(DriftReport drift, boolean fullChain, boolean narrowed, List<TaskChain> scoped) {
+    private List<InteractionRecord> reDriveTargets(DriftReport drift, boolean fullChain, boolean narrowed, String invocationKey, List<TaskChain> scoped) {
         List<InteractionRecord> targets = new ArrayList<>();
         if (fullChain) {
             for (TaskChain chain : scoped) {
@@ -288,16 +296,21 @@ public class TaskReplayRunner {
             return targets;
         }
         if (narrowed) {
-            Set<String> seen = new LinkedHashSet<>();
+            // 每键取域内最新记录（规范序升序遍历、后写覆盖=最新链胜出）。
+            // --invocation 命名目标时进一步限定为该键：过滤器点名了重驱对象，
+            // 同链其他调用点不在委托范围（共享会话的链会因无请求文本的中间态
+            // 记录混入多个调用点，不得连带重驱）
+            Map<String, InteractionRecord> latest = new LinkedHashMap<>();
             for (TaskChain chain : scoped) {
                 for (InteractionRecord record : chain.getRecords()) {
                     String key = CliSupport.invocationKeyOfRecord(record);
-                    if (key != null && seen.add(key)) {
-                        targets.add(record);
+                    if (key == null || (invocationKey != null && !invocationKey.equals(key))) {
+                        continue;
                     }
+                    latest.put(key, record);
                 }
             }
-            return targets;
+            return new ArrayList<>(latest.values());
         }
         Set<String> scopedKeys = new HashSet<>();
         for (TaskChain chain : scoped) {
@@ -332,8 +345,8 @@ public class TaskReplayRunner {
      * 重放执行器——检测报告已确认漂移点真实运行过，归档原文必然可反查；原文缺席
      * 属数据缺口，跳过计数可见。预算池对全部真重驱合计封顶。
      */
-    private void reDriveLayer(DriftReport drift, boolean fullChain, boolean narrowed, List<TaskChain> scoped, BaselineManager manager, Integer maxTotalCalls, Integer maxTotalTokens, ReDriveTotals rd) {
-        List<InteractionRecord> targets = reDriveTargets(drift, fullChain, narrowed, scoped);
+    private void reDriveLayer(DriftReport drift, boolean fullChain, boolean narrowed, String invocationKey, List<TaskChain> scoped, BaselineManager manager, Integer maxTotalCalls, Integer maxTotalTokens, ReDriveTotals rd) {
+        List<InteractionRecord> targets = reDriveTargets(drift, fullChain, narrowed, invocationKey, scoped);
         info("Re-drive: " + CliSupport.plural(targets.size(), "record") + " using each point\'s latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + ".");
         if (!targets.isEmpty()) {
             info(CostEstimator.estimate(targets, llmClient.name()));
@@ -406,11 +419,14 @@ public class TaskReplayRunner {
     private static String reDriveStepJson(InteractionRecord record, String key, RegressionTestResult result) {
         StringBuilder sb = new StringBuilder("{\"recordId\":\"" + RecursiveJsonParser.escape(record.getRecordId()) + "\"");
         sb.append(",\"invocationKey\":\"").append(RecursiveJsonParser.escape(key != null ? key : "")).append('"');
+        if (record.getApiProtocol() != null) {
+            sb.append(",\"protocol\":\"").append(RecursiveJsonParser.escape(record.getApiProtocol())).append('"');
+        }
         sb.append(",\"action\":\"re-driven\"");
         ComparisonResult comparison = result.getComparison();
         if (comparison != null) {
             sb.append(",\"verdict\":\"").append(comparison.getVerdict()).append('"');
-            sb.append(",\"score\":").append(comparison.getScore());
+            sb.append(",\"similarity\":").append(comparison.getScore());
             if (comparison.getSummary() != null) {
                 sb.append(",\"summary\":\"").append(RecursiveJsonParser.escape(comparison.getSummary())).append('"');
             }
@@ -419,6 +435,40 @@ public class TaskReplayRunner {
             sb.append(",\"error\":\"").append(RecursiveJsonParser.escape(result.getErrorMessage())).append('"');
         }
         return sb.append('}').toString();
+    }
+
+    /**
+     * 重驱 dry-run 的机器计划行：目标记录清单与费用预估——manifest 承诺的
+     * cost estimate 就此兑现。预估口径 = 目标记录自身的历史 token 按其模型
+     * 单价折算，属参考值而非报价承诺。
+     */
+    private String reDrivePlanJson(List<InteractionRecord> planned, String fallbackModel) {
+        StringBuilder sb = new StringBuilder("{\"mode\":\"" + TaskReportMode.RE_DRIVE_DRY_RUN.wireName() + "\"");
+        sb.append(",\"plan\":{\"calls\":").append(planned.size()).append(",\"records\":[");
+        boolean first = true;
+        long estimatedTokens = 0;
+        double estimatedCostUsd = 0;
+        for (InteractionRecord record : planned) {
+            if (!first) {
+                sb.append(",");
+            }
+            first = false;
+            String key = CliSupport.invocationKeyOfRecord(record);
+            sb.append("{\"recordId\":\"").append(RecursiveJsonParser.escape(record.getRecordId())).append('"');
+            sb.append(",\"invocationKey\":\"").append(RecursiveJsonParser.escape(key != null ? key : "")).append('"');
+            if (record.getApiProtocol() != null) {
+                sb.append(",\"protocol\":\"").append(RecursiveJsonParser.escape(record.getApiProtocol())).append('"');
+            }
+            sb.append('}');
+            estimatedTokens += record.getInputTokens() + record.getOutputTokens();
+            Double cost = CostEstimator.estimateCallCostUsd(record.getServedModel() != null ? record.getServedModel() : fallbackModel, record.getInputTokens(), record.getOutputTokens());
+            if (cost != null) {
+                estimatedCostUsd += cost;
+            }
+        }
+        sb.append("],\"estimatedTokens\":").append(estimatedTokens);
+        sb.append(",\"estimatedCostUsd\":").append(plainDecimal(estimatedCostUsd));
+        return sb.append("}}").toString();
     }
 
     private static boolean budgetExhausted(Integer maxCalls, Integer maxTokens, int callsUsed, long tokensUsed) {
@@ -478,7 +528,7 @@ public class TaskReplayRunner {
      * task-report/1 报告的 mode 封闭词表（wire 值冻结；与 guide/spec/cli.md 契约 6 同源）。
      */
     private enum TaskReportMode {
-        DRIFT_DETECTION("drift-detection"), TASK_ALIGN("task-align"), TASK_DRY_RUN("task-dry-run"), DRIFT_DISPOSITION("drift-disposition"), TASK_RE_DRIVE("task-re-drive"), MEMBER_CHECK("member-check"), EXIT_HEALTH("exit-health");
+        DRIFT_DETECTION("drift-detection"), TASK_ALIGN("task-align"), TASK_DRY_RUN("task-dry-run"), DRIFT_DISPOSITION("drift-disposition"), TASK_RE_DRIVE("task-re-drive"), MEMBER_CHECK("member-check"), EXIT_HEALTH("exit-health"), RE_DRIVE_DRY_RUN("re-drive-dry-run");
 
         private final String wireName;
 
@@ -504,7 +554,7 @@ public class TaskReplayRunner {
 
     /**
      * 对齐一个任务组（次新链 → 最新链），输出逐步报告并聚合键级结果；
-     * CHANGED 步即测试行为，现场重提指纹落候选——候选不落库则 approve 在
+     * CHANGED 步即测试行为，现场重提指纹落候选——候选不落库则 accept 在
      * 新进程中不可达（重放与裁决通常不同进程）。
      */
     private void alignTaskGroup(List<TaskChain> group, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager) {
@@ -657,7 +707,7 @@ public class TaskReplayRunner {
                         boolean registered = manager.recordCandidate(changedRecord, FingerprintExtractor.extract(changedRecord, rules, changedRecord.getInvocationId()));
                         if (registered) {
                             totals.pendingCandidates++;
-                            info("Candidate registered: " + CliSupport.displayKey(step.getInvocationKey()) + " (behavior change awaiting adjudication; approve promotes to baseline, reject discards).");
+                            info("Candidate registered: " + CliSupport.displayKey(step.getInvocationKey()) + " (behavior change awaiting adjudication; accept promotes to baseline, reject discards).");
                         } else {
                             info("Difference holds against the paired chain, but the record fingerprint equals the profile's active baseline; no candidate registered (nothing to adjudicate).");
                         }
@@ -683,7 +733,7 @@ public class TaskReplayRunner {
         }
         info("Alignment summary: PASS " + render.pass + " | CHANGED " + render.changed + " | missing " + render.missing + " | added " + render.added + (violations.isEmpty() ? "" : " | " + CliSupport.plural(violations.size(), "rule violation")) + (alignment.getCrossVersionCount() > 0 ? " | cross-version " + alignment.getCrossVersionCount() : ""));
         if (render.signalSteps > 0) {
-            info("Optimization signal: score " + String.format(Locale.ROOT, "%.2f", render.signalScoreSum / render.signalSteps) + " over " + CliSupport.plural(render.signalSteps, "compared step") + " (" + CliSupport.plural(render.comparedPairs, "pair") + " compared, " + render.skippedPairs + " skipped; informational, not a verdict)");
+            info("Optimization signal: similarity " + String.format(Locale.ROOT, "%.2f", render.signalScoreSum / render.signalSteps) + " over " + CliSupport.plural(render.signalSteps, "compared step") + " (" + CliSupport.plural(render.comparedPairs, "pair") + " compared, " + render.skippedPairs + " skipped; informational, not a verdict)");
         }
         ChainCost baselineCost = new ChainCost(baseline);
         ChainCost currentCost = new ChainCost(newChain);
@@ -736,7 +786,7 @@ public class TaskReplayRunner {
         }
         sb.append(",\"comparedPairs\":").append(render.comparedPairs).append(",\"skippedPairs\":").append(render.skippedPairs).append('}');
         if (render.signalSteps > 0) {
-            sb.append(",\"signal\":{\"score\":").append(plainDecimal(render.signalScoreSum / render.signalSteps)).append(",\"steps\":").append(render.signalSteps).append('}');
+            sb.append(",\"signal\":{\"similarity\":").append(plainDecimal(render.signalScoreSum / render.signalSteps)).append(",\"steps\":").append(render.signalSteps).append('}');
         }
         if (render.stabilityJson != null) {
             sb.append(",\"stability\":").append(render.stabilityJson);
@@ -876,7 +926,7 @@ public class TaskReplayRunner {
         if (jsonMode) {
             StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.DRIFT_DISPOSITION.wireName() + "\"");
             sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
-            sb.append(",\"summary\":{\"collected\":").append(totals.collected).append(",\"candidates\":").append(totals.candidates).append(",\"hung\":").append(totals.hung).append(",\"external\":").append(totals.external).append(",\"uncollected\":").append(totals.uncollected).append("}");
+            sb.append(",\"summary\":{\"collected\":").append(totals.collected).append(",\"candidatePoints\":").append(totals.candidates).append(",\"hung\":").append(totals.hung).append(",\"external\":").append(totals.external).append(",\"uncollected\":").append(totals.uncollected).append("}");
             sb.append(",\"dispositions\":[").append(String.join(",", dispositionJsons)).append("]}");
             out.println(sb.toString());
         }
@@ -909,7 +959,7 @@ public class TaskReplayRunner {
             action = "hung";
             info("Hung: " + shown + " (alignment evidence gap; no collect, no candidate; a real re-run moves it to another outcome)");
         } else if (ciMode) {
-            // --ci 模式：PASS 也不落治理写——收敛动作留给开发态 replay 或 approve
+            // --ci 模式：PASS 也不落治理写——收敛动作留给开发态 replay 或 accept
             totals.uncollected++;
             action = "uncollected";
             info("Identity not collected (--ci writes no governance state): " + shown + " (exit stays 0; run replay in dev mode to collect)");
@@ -1159,14 +1209,20 @@ public class TaskReplayRunner {
      * 只读预演：漂移集已在上文报告，这里列出将发生的任务配对与规则适用性，
      * 供 CI 在执行前核对选链是否如愿。
      */
-    private int dryRunPlan(List<TaskChain> scoped, boolean reDrive, DriftReport drift, boolean narrowed, boolean memberCheck) {
+    private int dryRunPlan(List<TaskChain> scoped, boolean reDrive, DriftReport drift, boolean narrowed, boolean memberCheck, String invocationKey) {
         List<List<TaskChain>> groups = groupByRequestText(scoped);
         info("Alignment plan (dry-run; no judgments, no baselines, no dispositions): " + CliSupport.plural(groups.size(), "task") + ", zero LLM calls.");
         if (reDrive) {
-            List<InteractionRecord> planned = reDriveTargets(drift, false, narrowed, scoped);
+            List<InteractionRecord> planned = reDriveTargets(drift, false, narrowed, invocationKey, scoped);
             info("Re-drive plan (--re-drive): " + CliSupport.plural(planned.size(), "record") + " to re-drive with each point\'s latest archived template.");
             if (!planned.isEmpty()) {
                 info(CostEstimator.estimate(planned, llmClient.name()));
+            }
+            if (planned.isEmpty()) {
+                info("No re-drive targets: default re-drive covers drift points only, and the scope currently has none. Widen with --task/--invocation, or use --full-chain.");
+            }
+            if (jsonMode) {
+                out.println(reDrivePlanJson(planned, llmClient.name()));
             }
         }
         for (List<TaskChain> group : groups) {
@@ -1388,7 +1444,7 @@ public class TaskReplayRunner {
             sb.append(",\"verdict\":\"").append(step.getVerdict()).append('"');
         }
         if (step.getComparison() != null) {
-            sb.append(",\"score\":").append(step.getComparison().getScore());
+            sb.append(",\"similarity\":").append(step.getComparison().getScore());
             sb.append(",\"dims\":{\"toolSet\":").append(step.getComparison().isToolCallMatch());
             sb.append(",\"paramTypes\":").append(step.getComparison().isParamTypeMatch());
             sb.append(",\"outputStructure\":").append(step.getComparison().isStructureMatch());

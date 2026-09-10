@@ -5,7 +5,7 @@ import io.github.agentassert4j.model.ArchivedTemplateVersion;
 import java.util.List;
 
 /**
- * 调用点模板版本归档域 SPI — approve/rollback 中被替换的基线按模板版本归档，
+ * 调用点模板版本归档域 SPI — accept/rollback 中被替换的基线按模板版本归档，
  * 支持回滚到任意历史版本。
  *
  * <p>归档以 {@link ArchivedTemplateVersion} 值对象整体写入：指纹、版本标签之外，

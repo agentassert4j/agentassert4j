@@ -61,12 +61,15 @@ public class GraphShowCommand implements Callable<Integer> {
                     if (cyclesJson.length() > 0) cyclesJson.append(",");
                     cyclesJson.append("\"").append(RecursiveJsonParser.escape(node)).append("\"");
                 }
-                out.println("{\"schema\":\"agentassert4j.graph/1\",\"nodeCount\":" + nodes.size() + ",\"edgeCount\":" + edges.size() + ",\"edges\":[" + edgeJson + "],\"cycles\":[" + cyclesJson + "]}");
+                out.println("{\"schema\":\"agentassert4j.graph/1\",\"nodeCount\":" + nodes.size() + ",\"edgeCount\":" + edges.size() + ",\"edges\":[" + edgeJson + "],\"cycles\":[" + cyclesJson + "]" + (edges.isEmpty() ? ",\"note\":\"edges form when a recorded tool-call argument value traces back to an upstream response in the same session; non-overlapping or synthetic interactions produce no edges\"" : "") + "}");
                 return 0;
             }
 
             out.println("Nodes (" + nodes.size() + "): " + String.join(", ", nodes));
             out.println("Edges (" + edges.size() + "):");
+            if (edges.isEmpty()) {
+                out.println("  No data-flow edges: an edge forms when a tool call's argument value traces back to an upstream response in the same session; non-overlapping or synthetic interactions produce no edges.");
+            }
             for (GraphEdge edge : edges) {
                 out.println("  " + edge.getSource() + " -> " + edge.getTarget() + "  " + edge.getConfidence());
             }

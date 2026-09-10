@@ -270,6 +270,12 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     @Override
+    public synchronized InteractionRecord findByRecordId(String recordId) {
+        List<InteractionRecord> records = queryInteractions("SELECT * FROM interactions WHERE record_id = ?", recordId);
+        return records.isEmpty() ? null : records.get(0);
+    }
+
+    @Override
     public synchronized List<String> findAllSessionIds() {
         List<String> result = new ArrayList<>();
         String sql = "SELECT DISTINCT session_id FROM interactions";

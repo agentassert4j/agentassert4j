@@ -57,11 +57,32 @@ public final class ConfigLoader {
      * @return 主配置（永不为 null）
      */
     public static AgentAssert4jConfig loadAgentAssert4jConfig() {
-        String json = findAndRead(MAIN_CONFIG_FILE, CONFIG_PATH_PROPERTY, new StringBuilder());
+        StringBuilder origin = new StringBuilder();
+        String json = findAndRead(MAIN_CONFIG_FILE, CONFIG_PATH_PROPERTY, origin);
+        lastMainConfigDirectory = directoryOf(origin);
         if (json != null) {
             json = resolveEnvVars(json);
         }
         return AgentAssert4jConfig.fromJson(json);
+    }
+
+    /**
+     * 最近一次主配置解析出的所在目录（findAndRead 命中文件路径的父目录；
+     * classpath 或未找到时 null）。规则文件的发现链以此为最终回退——
+     * rules 的对外承诺是「与 agentassert4j.json 同目录」，长驻进程（MCP server）
+     * 的工作目录由宿主决定、不可依赖，必须锚在主配置被实际找到的位置。
+     */
+    private static String lastMainConfigDirectory;
+
+    private static String directoryOf(StringBuilder origin) {
+        String path = origin.toString();
+        if (path == null || path.isEmpty() || path.startsWith("classpath:") || !path.contains("/")) {
+            return null;
+        }
+        if (path.lastIndexOf('/') > 0) {
+            return path.substring(0, path.lastIndexOf('/'));
+        }
+        return null;
     }
 
     /**
@@ -84,7 +105,16 @@ public final class ConfigLoader {
      * @return 规则配置（永不为 null）
      */
     public static InvocationRulesConfig loadRulesConfig() {
-        String json = findAndRead(RULES_CONFIG_FILE, RULES_PATH_PROPERTY, new StringBuilder());
+        StringBuilder origin = new StringBuilder();
+        String json = findAndRead(RULES_CONFIG_FILE, RULES_PATH_PROPERTY, origin);
+        if (json == null && lastMainConfigDirectory != null) {
+            // 回退：与主配置同目录（rules 的对外承诺）。长驻进程的工作目录由
+            // 宿主决定，CWD 一站在该场景下天然失灵
+            json = loadFromFile(lastMainConfigDirectory + "/" + RULES_CONFIG_FILE);
+            if (json != null) {
+                origin.append(lastMainConfigDirectory).append('/').append(RULES_CONFIG_FILE);
+            }
+        }
         if (json != null) {
             json = resolveEnvVars(json);
         }

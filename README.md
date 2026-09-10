@@ -32,20 +32,20 @@ refund chain, and comparing two such chains by eye, line by line, is the most pa
 development.
 
 AgentAssert4j turns that ritual into one command: **recording establishes the baseline, replay after an
-edit produces the diff report, a real re-run is aligned automatically, and `approve` / `reject` closes
+edit produces the diff report, a real re-run is aligned automatically, and `accept` / `reject` closes
 the loop.** Zero business-code changes, a zero-dependency core, all state in a single SQLite file,
 fully offline behind firewalls.
 
 ## The core loop
 
-<img src="assets/hero-loop.en.png" alt="The core loop: your agent is recorded out-of-band into a single-file SQLite; baseline establishes fingerprints; after a prompt edit really runs, replay produces drift detection and a step-by-step alignment report; approve / reject adjudicate; export → verify delivers acceptance" width="880"/>
+<img src="assets/hero-loop.en.png" alt="The core loop: your agent is recorded out-of-band into a single-file SQLite; baseline establishes fingerprints; after a prompt edit really runs, replay produces drift detection and a step-by-step alignment report; accept / reject adjudicate; export → verify delivers acceptance" width="880"/>
 
 | Stage | Command | What happens |
 |-------|---------|--------------|
 | **Recording is the baseline** | (automatic) | The framework intercepts every real LLM call out-of-band; one `baseline` run stamps the fingerprints (idempotent), and `replay` auto-establishes newly seen invocations in dev mode |
 | **Change detection & alignment** | `replay` | Whole-project drift detection + per-task invocation alignment: missing steps / added steps / per-step structure diff, zero LLM calls |
 | **Controlled re-drive (optional)** | `replay --re-drive` | Replays recorded inputs per drifted point against its latest archived template, real calls capped by a budget pool |
-| **Adjudicate & gate** | `approve` / `reject` | Intended change gets promoted (old baseline archived, rollback-able); regression gets discarded; exit codes 0/1/2 gate CI directly |
+| **Adjudicate & gate** | `accept` / `reject` | Intended change gets promoted (old baseline archived, rollback-able); regression gets discarded; exit codes 0/1/2 gate CI directly |
 
 ## Quick start
 
@@ -110,7 +110,7 @@ Task "订单 1234 的物流太慢，我要退款": baseline chain (session demo-
   [1] 意图识别@854e05b8  PASS
   [2] 查询订单@b3e4b38c  PASS
   [3] 查询物流@8d9dbac2  score=0.80 verdict=CHANGED | tool calls match | added fields: [delivery.promise]
-Candidate registered: 查询物流@8d9dbac2 (behavior change awaiting adjudication; approve promotes to baseline, reject discards).
+Candidate registered: 查询物流@8d9dbac2 (behavior change awaiting adjudication; accept promotes to baseline, reject discards).
   [4] 提交退款@b47b21ea  missing step: baseline invoked '提交退款@b47b21ea', new chain did not
   [5] 组织答复@8fd8be58  PASS
   [6] 理赔查询@3e4c2031  added step: new chain invoked '理赔查询@3e4c2031', baseline did not
@@ -129,7 +129,7 @@ instead of pairing against the previous run only.
 **5. Adjudicate, then align the real re-run automatically**
 
 ```bash
-agentassert4j approve   # bare = adjudicate every pending candidate; intended: promote, old baseline archived
+agentassert4j accept   # bare = adjudicate every pending candidate; intended: promote, old baseline archived
 agentassert4j reject --invocation 查询物流   # regression: discard that candidate; prompt rollback is git's job
 
 # After the next real execution, run bare replay again: the new chain pairs automatically
@@ -227,7 +227,7 @@ verdict — see [OPERATIONS §2.3](OPERATIONS.md).
 | `baseline export` | Export the acceptance pack (`--task` to narrow; `--include-samples` appends force-masked samples) |
 | `status` | Invocation list and baseline status; `--diff` shows pending candidate diffs; `--invocation` narrows |
 | `replay` | Whole-project template-drift detection and task alignment (zero LLM calls by default); `--task`/`--invocation` narrowing; `--re-drive` controlled review |
-| `approve` / `reject` | Adjudicate candidate fingerprints (promote / discard). bare = every pending candidate; `--invocation <target>` narrows |
+| `accept` / `reject` | Adjudicate candidate fingerprints (promote / discard). bare = every pending candidate; `--invocation <target>` narrows |
 | `rollback` | Restore a baseline from the archive (`--invocation` and `--version` both required) |
 | `verify` | Delivery acceptance: pack × locally recorded chains (read-only); `--dry-run` previews the pairing, `--report` writes the markdown evidence |
 | `rules` | List built-in behavior checks and rules-file syntax |
@@ -248,7 +248,7 @@ identity, baseline status, version, candidate, archived versions, business label
 | Exit code | Meaning | CI action |
 |----------|---------|-----------|
 | `0` | No deviation | Pass |
-| `1` | Behavioral deviation (including missing/added steps) | Human adjudication: approve / reject |
+| `1` | Behavioral deviation (including missing/added steps) | Human adjudication: accept / reject |
 | `2` | Usage or infrastructure failure / incomplete evidence (budget exhausted, coverage gap, `--ci` with unbaselined invocations, judgment-semantics mismatch) | Fix the environment; not a regression |
 
 `--json` emits a single-line machine-readable report on stdout (one schema tag per command);
