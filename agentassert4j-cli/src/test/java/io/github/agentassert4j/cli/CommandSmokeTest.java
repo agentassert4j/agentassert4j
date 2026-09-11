@@ -12,6 +12,10 @@ import picocli.CommandLine;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -60,7 +64,7 @@ class CommandSmokeTest {
         r.setModelResponse("{\"orderId\":\"ORD-001\"}");
         r.setToolCalls(new ArrayList<>());
         r.setHasToolCalls(false);
-        repository.saveInteraction(r);
+        repository.saveInteractionIfAbsent(r);
     }
 
     @Test
@@ -253,9 +257,18 @@ class CommandSmokeTest {
         other2.setModelResponse("{\"verdict\":\"RETRY\"}");
         other2.setToolCalls(new ArrayList<>());
         other2.setHasToolCalls(false);
-        repository.saveInteraction(other2);
-        repository.saveInteraction(other);
-        repository.saveTemplateText("hash-old", "baseline template body for queryOrder");
+        repository.saveInteractionIfAbsent(other2);
+        repository.saveInteractionIfAbsent(other);
+        // 模板原文种子：saveTemplateText 已是存储实现私有，经同一 SQL 语义直插 prompt_texts
+        try (Connection seedConn = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
+             PreparedStatement seedPs = seedConn.prepareStatement("INSERT OR IGNORE INTO prompt_texts (prompt_hash, prompt_text, created_at) VALUES (?,?,?)")) {
+            seedPs.setString(1, "hash-old");
+            seedPs.setString(2, "baseline template body for queryOrder");
+            seedPs.setLong(3, 1L);
+            seedPs.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("template text seed failed", e);
+        }
         new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", null, false, null, null, null, null);
 
         ByteArrayOutputStream out = redirectStdout();

@@ -31,11 +31,6 @@ class InMemoryStorageRepository implements StorageRepository {
     }
 
     @Override
-    public String type() {
-        return "in-memory";
-    }
-
-    @Override
     public void initialize() {
     }
 
@@ -44,11 +39,12 @@ class InMemoryStorageRepository implements StorageRepository {
     }
 
     @Override
-    public void saveInteraction(InteractionRecord r) {
+    public boolean saveInteractionIfAbsent(InteractionRecord r) {
         if (throwOnSave) {
             throw new RuntimeException("Simulated DB failure");
         }
         store.add(r);
+        return true;
     }
 
     @Override
@@ -66,11 +62,6 @@ class InMemoryStorageRepository implements StorageRepository {
 
     @Override
     public List<InteractionRecord> findByInvocationKey(String invocationKey) {
-        return Collections.emptyList();
-    }
-
-    @Override
-    public List<InteractionRecord> findByTemplateHash(String hash) {
         return Collections.emptyList();
     }
 
@@ -100,10 +91,6 @@ class InMemoryStorageRepository implements StorageRepository {
     @Override
     public List<InvocationProfile> findAllInvocations() {
         return Collections.emptyList();
-    }
-
-    @Override
-    public void saveTemplateText(String hash, String templateText) {
     }
 
     @Override

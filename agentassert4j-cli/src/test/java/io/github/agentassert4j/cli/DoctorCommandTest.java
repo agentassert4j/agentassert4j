@@ -122,6 +122,6 @@ class DoctorCommandTest {
         if (taskKey != null) {
             r.setMetadata("{\"taskKey\":\"" + taskKey + "\"}");
         }
-        repository.saveInteraction(r);
+        repository.saveInteractionIfAbsent(r);
     }
 }

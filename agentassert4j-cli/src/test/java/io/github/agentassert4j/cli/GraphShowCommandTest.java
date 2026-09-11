@@ -109,6 +109,6 @@ class GraphShowCommandTest {
         }
         record.setToolCalls(calls);
         record.setHasToolCalls(!calls.isEmpty());
-        repository.saveInteraction(record);
+        repository.saveInteractionIfAbsent(record);
     }
 }

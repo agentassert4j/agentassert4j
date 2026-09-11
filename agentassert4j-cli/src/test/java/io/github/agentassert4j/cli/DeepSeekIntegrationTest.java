@@ -137,12 +137,6 @@ class DeepSeekIntegrationTest {
     class ClientBasicTests {
 
         @Test
-        @DisplayName("1.1 健康检查 isAvailable")
-        void testIsAvailable() {
-            assertTrue(client.isAvailable(), "DeepSeek API 应可达");
-        }
-
-        @Test
         @DisplayName("1.2 name() 返回模型名")
         void testName() {
             assertEquals("deepseek-chat", client.name());

@@ -138,11 +138,6 @@ class TaskChainViewTest {
         }
 
         @Override
-        public List<InteractionRecord> findByTemplateHash(String hash) {
-            return new ArrayList<>();
-        }
-
-        @Override
         public InteractionRecord findByRecordId(String recordId) {
         return null; // 测试桩不承载按 id 精确查询
     }

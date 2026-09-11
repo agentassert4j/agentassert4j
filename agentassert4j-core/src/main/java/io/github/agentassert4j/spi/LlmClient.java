@@ -33,9 +33,4 @@ public interface LlmClient {
      * 客户端名称
      */
     String name();
-
-    /**
-     * 健康检查
-     */
-    boolean isAvailable();
 }

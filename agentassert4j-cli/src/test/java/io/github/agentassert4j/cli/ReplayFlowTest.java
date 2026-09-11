@@ -62,7 +62,7 @@ class ReplayFlowTest {
         r.setModelResponse(response);
         r.setToolCalls(new ArrayList<>());
         r.setHasToolCalls(false);
-        repository.saveInteraction(r);
+        repository.saveInteractionIfAbsent(r);
         return r;
     }
 
@@ -215,7 +215,7 @@ class ReplayFlowTest {
             bare.setInvocationId("order");
             bare.setTemplateHash("hash-a");
             bare.setModelResponse("{\"result\":\"ok\"}");
-            repository.saveInteraction(bare);
+            repository.saveInteractionIfAbsent(bare);
             InteractionRecord bare2 = new InteractionRecord();
             bare2.setRecordId("raw-2");
             bare2.setSessionId("session-b");
@@ -224,7 +224,7 @@ class ReplayFlowTest {
             bare2.setInvocationId("order");
             bare2.setTemplateHash("hash-a");
             bare2.setModelResponse("{\"result\":\"ok\"}");
-            repository.saveInteraction(bare2);
+            repository.saveInteractionIfAbsent(bare2);
 
             assertEquals(0, runner().run(null, null, false, false, false, false, false, null, null), "键派生列空缺由解析器现算兜底");
             assertEquals("invocation:order:hash-a", InvocationResolver.resolve(repository.findBySessionId("session-a").get(0)).getInvocationKey());
@@ -251,11 +251,6 @@ class ReplayFlowTest {
         @Override
         public String name() {
             return "stub-model";
-        }
-
-        @Override
-        public boolean isAvailable() {
-            return false;
         }
     }
 }

@@ -199,24 +199,4 @@ public abstract class AbstractHttpLlmClient implements LlmClient {
         }
         return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
     }
-
-    @Override
-    public boolean isAvailable() {
-        HttpURLConnection conn = null;
-        try {
-            URL url = new URL(endpoint + "/v1/models");
-            conn = (HttpURLConnection) url.openConnection();
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
-            conn.setRequestMethod("GET");
-            decorateConnection(conn);
-            int code = conn.getResponseCode();
-            // 可达性而非鉴权校验：models 端点不存在的兼容端点回 404/405 也证明传输层在
-            return (code >= 200 && code < 300) || code == 404 || code == 405;
-        } catch (Exception e) {
-            return false;
-        } finally {
-            if (conn != null) conn.disconnect();
-        }
-    }
 }

@@ -82,7 +82,6 @@ final class Schema {
             // (session_id, seq) 是确定性排序键，复合索引前缀同时覆盖 session_id 单列查询
             "CREATE INDEX IF NOT EXISTS idx_session_seq ON interactions(session_id, seq)",
             "CREATE INDEX IF NOT EXISTS idx_invocation_id ON interactions(invocation_id)",
-            "CREATE INDEX IF NOT EXISTS idx_template_hash ON interactions(template_hash)",
             "CREATE INDEX IF NOT EXISTS idx_invocation_key ON interactions(invocation_key)",
             "CREATE INDEX IF NOT EXISTS idx_timestamp ON interactions(timestamp)",
 

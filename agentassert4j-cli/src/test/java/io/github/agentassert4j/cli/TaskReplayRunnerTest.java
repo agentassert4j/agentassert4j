@@ -16,6 +16,10 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -51,6 +55,23 @@ class TaskReplayRunnerTest {
         }
     }
 
+    /**
+     * 模板原文种子：saveTemplateText 已是存储实现私有，经同一 SQL 语义（INSERT OR
+     * IGNORE 首写为准）直插 prompt_texts——不走生产写入路径，避免为种文本引入
+     * 多余交互记录污染重驱计数。
+     */
+    private void saveTemplateText(String hash, String templateText) {
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempDir.resolve("task.db").toString());
+             PreparedStatement ps = conn.prepareStatement("INSERT OR IGNORE INTO prompt_texts (prompt_hash, prompt_text, created_at) VALUES (?,?,?)")) {
+            ps.setString(1, hash);
+            ps.setString(2, templateText);
+            ps.setLong(3, 1L);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("template text seed failed: " + hash, e);
+        }
+    }
+
     private TaskReplayRunner newRunner(boolean jsonMode) {
         return new TaskReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), jsonMode);
     }
@@ -71,7 +92,7 @@ class TaskReplayRunnerTest {
         r.setModelResponse(response);
         r.setServedModel(servedModel);
         r.setModel("stub-model");
-        repository.saveInteraction(r);
+        repository.saveInteractionIfAbsent(r);
         return r;
     }
 
@@ -91,7 +112,7 @@ class TaskReplayRunnerTest {
         r.setInvocationKey("invocation:" + label + ":" + skeletonHash);
         r.setModelResponse(response);
         r.setModel("stub-model");
-        repository.saveInteraction(r);
+        repository.saveInteractionIfAbsent(r);
         return r;
     }
 
@@ -110,7 +131,7 @@ class TaskReplayRunnerTest {
         r.setInvocationKey("invocation:order:hash-a");
         r.setModelResponse(response);
         r.setMetadata("{\"taskKey\":\"查订单\"}");
-        repository.saveInteraction(r);
+        repository.saveInteractionIfAbsent(r);
     }
 
     private InvocationProfile establishedProfile(String invocationKey, String label, String templateHash) {
@@ -502,8 +523,8 @@ class TaskReplayRunnerTest {
             saveSkeletonRecord("a-1", "session-a", 1000L, "查订单", "order", "skl-1", "hash-old", "{\"result\":\"ok\"}");
             saveSkeletonRecord("b-1", "session-b", 2000L, "查订单", "order", "skl-1", "hash-new", newResponse);
             establishedProfile("invocation:order:skl-1", "order", "hash-old");
-            repository.saveTemplateText("hash-new", "新模板全文");
-            repository.saveTemplateText("hash-old", "旧模板全文");
+            saveTemplateText("hash-new", "新模板全文");
+            saveTemplateText("hash-old", "旧模板全文");
         }
 
         @Test
@@ -534,7 +555,7 @@ class TaskReplayRunnerTest {
             saveSkeletonRecord("c-1", "session-c", 3000L, "写诗", "other", "skl-2", "hash-o2", "{\"result\":\"ok\"}");
             saveSkeletonRecord("c-2", "session-c2", 3100L, "写诗", "other", "skl-2", "hash-o2", "{\"result\":\"ok\"}");
             establishedProfile("invocation:other:skl-2", "other", "hash-old");
-            repository.saveTemplateText("hash-o2", "另一模板全文");
+            saveTemplateText("hash-o2", "另一模板全文");
 
             assertEquals(2, runner.run(null, null, false, false, false, true, false, 1, null));
             assertEquals(1, stubClient.calls);
@@ -570,7 +591,7 @@ class TaskReplayRunnerTest {
             saveRecord("x-1", "session-x", 1500L, "查订单", "plain", "hash-p", "{\"result\":\"ok\"}", null);
             saveRecord("x-2", "session-x2", 2500L, "查订单", "plain", "hash-p", "{\"result\":\"ok\"}", null);
             establishedProfile("invocation:plain:hash-p", "plain", "hash-p");
-            repository.saveTemplateText("hash-p", "普通模板全文");
+            saveTemplateText("hash-p", "普通模板全文");
 
             runner.run(null, null, false, false, false, true, true, null, null);
             assertTrue(stubClient.calls >= 2, "扩域后非漂移点也应重驱: " + stubClient.calls);
@@ -580,7 +601,7 @@ class TaskReplayRunnerTest {
         @DisplayName("缩域即重驱域：--re-drive --task 无漂移也重驱缩域内调用点")
         void reDrive_narrowedScope_drivesWithoutDrift() {
             saveIdenticalLabeledChains();
-            repository.saveTemplateText("hash-a", "归档模板全文");
+            saveTemplateText("hash-a", "归档模板全文");
             stubClient.setScriptedContent("{\"v\":1}");
 
             assertEquals(0, runner.run("查订单", null, false, false, false, true, false, null, null));
@@ -694,7 +715,7 @@ class TaskReplayRunnerTest {
         first.setTemplateHash("hash-a");
         first.setInvocationKey("invocation:stock:hash-a");
         first.setModelResponse("{\"stock\":1}");
-        repository.saveInteraction(first);
+        repository.saveInteractionIfAbsent(first);
         InteractionRecord second = new InteractionRecord();
         second.setRecordId(sessionId + "-2");
         second.setSessionId(sessionId);
@@ -704,7 +725,7 @@ class TaskReplayRunnerTest {
         second.setTemplateHash("hash-a");
         second.setInvocationKey("invocation:stock:hash-a");
         second.setModelResponse("{\"stock\":2}");
-        repository.saveInteraction(second);
+        repository.saveInteractionIfAbsent(second);
     }
 
     @Nested
@@ -892,11 +913,6 @@ class TaskReplayRunnerTest {
         @Override
         public String name() {
             return "stub-model";
-        }
-
-        @Override
-        public boolean isAvailable() {
-            return false;
         }
     }
 }

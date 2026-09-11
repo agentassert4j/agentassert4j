@@ -76,7 +76,7 @@ class VerifyExportTest {
         r.setTemplateHash(templateHash);
         r.setModelResponse(response);
         r.setServedModel(servedModel);
-        repository.saveInteraction(r);
+        repository.saveInteractionIfAbsent(r);
     }
 
     private void saveRecord(String recordId, StorageRepository repo, long timestamp, String userInput, String invocationKey, String label, String templateHash, String response, String servedModel) {
@@ -91,7 +91,7 @@ class VerifyExportTest {
         r.setTemplateHash(templateHash);
         r.setModelResponse(response);
         r.setServedModel(servedModel);
-        repo.saveInteraction(r);
+        repo.saveInteractionIfAbsent(r);
     }
 
     private String exportPack(String dbPath, boolean includeSamples) throws Exception {

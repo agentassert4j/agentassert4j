@@ -49,10 +49,12 @@ close(): 关连接置 null；与写路径共用实例监视器——flush 进行
    顺序颠倒会把半批脏数据落盘）。【测试钉】saveInteractions_runtimeExceptionMidBatch_rollsBackWholeBatch
 3. **并发安全**：多 flush 源并发进入全量落库（串行化正确性）。【测试钉】
    saveInteractions_concurrentBatches_allRowsPersisted
-4. **只追加幂等**：record_id 冲突（崩溃重放双写）`INSERT OR IGNORE` 静默跳过。【测试钉】
+4. **只追加幂等**：record_id 冲突（崩溃重放双写）`INSERT OR IGNORE` 静默跳过；单条写入面
+   `saveInteractionIfAbsent` 以返回值回告 saved/duplicate，摄取方据此如实报告。【测试钉】
    duplicateRecordIdIgnored
-5. **模板原文随行归档**：`saveInteraction` 逐条把记录携带的模板原文按 templateHash 写入
+5. **模板原文随行归档**：交互写入路径逐条把记录携带的模板原文按 templateHash 写入
    `prompt_texts`（`INSERT OR IGNORE` 首写为准）；原文写失败只降级不拖累交互主数据。
+   写入面为实现私有，SPI 只暴露 `findTemplateText` 读取。
    【测试钉】saveInteraction_carriesTemplateTextIntoPromptTexts / savePromptText_sameHash_firstWriteWins
 6. **确定性读序**：全部交互查询 `ORDER BY timestamp, seq, record_id`（平局可决胜）。
    【测试钉】saveAndFindInteraction / findBySessionId 等查询组的顺序断言
@@ -111,4 +113,5 @@ close(): 关连接置 null；与写路径共用实例监视器——flush 进行
 
 | 日期 | 方式 | 发现 |
 |---|---|---|
+| 2026-09-11 | 批B SPI 死面修剪（维护者「零兼容残留」指令）： SPI 删 `saveInteraction`/`type()`/`findByTemplateHash`/`saveTemplateText`/`isAvailable`，`saveInteractionIfAbsent` 升入 InteractionWriteStore； ②`idx_template_hash` 索引随唯一查询方消亡（删库重建承接）； ③McpRecordIngestion/CliSupport.openRepository 回归 StorageRepository 接口类型 | 契约 2 措辞更新（写入面私有化）；SPI 六接口瘦身为五域面；无行为变更，往返测试全绿为钉 |
 | 2026-09-03 | S2 成文：Schema/SchemaMigrator/SqliteStorageRepository/JsonMapper/SPI 六接口全量对账 + 测试指针核实 | ①导读「测试怎么钉住它」称「38 列与占位符逐一核对」有测试——实为 SQL 字面拼接逐列对齐（无独立列数断言），措辞过强，导读对账批顺修；②查询域 6 方法超接口隔离目标为既有阶段债（本 spec 契约 12 显式跟踪，随瘦身批回到 5）；③测试方法名 `skillProfileGovernanceColumnsRoundTrip` 保留 pre-B1' 的 skill 旧词（纯命名残留，语义正确）——随任一代码批顺修可选 |

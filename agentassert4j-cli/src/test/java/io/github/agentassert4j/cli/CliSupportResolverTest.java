@@ -59,7 +59,7 @@ class CliSupportResolverTest {
         r.setModelResponse("答");
         r.setToolCalls(new ArrayList<>());
         r.setHasToolCalls(false);
-        repository.saveInteraction(r);
+        repository.saveInteractionIfAbsent(r);
     }
 
     private void establishAll() {

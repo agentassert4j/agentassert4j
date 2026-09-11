@@ -79,8 +79,8 @@ class DriftDetectorTest {
         void latestByCanonicalOrder_notInsertionOrder() {
             String key = "invocation:order-flow:skl-1";
             repo.saveInvocationProfile(profile(key, "order-flow", "h1"));
-            repo.saveInteraction(skeletonRecord("r-new", "order-flow", "skl-1", "h2", 2000L));
-            repo.saveInteraction(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-new", "order-flow", "skl-1", "h2", 2000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
 
             DriftReport report = DriftDetector.detect(repo);
 
@@ -97,7 +97,7 @@ class DriftDetectorTest {
         void nullProfileHash_stillDrifts() {
             String key = "invocation:order-flow:skl-1";
             repo.saveInvocationProfile(profile(key, "order-flow", null));
-            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
 
             DriftReport report = DriftDetector.detect(repo);
 
@@ -111,7 +111,7 @@ class DriftDetectorTest {
         void identicalHashes_noDrift() {
             String key = "invocation:order-flow:skl-1";
             repo.saveInvocationProfile(profile(key, "order-flow", "h1"));
-            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
 
             DriftReport report = DriftDetector.detect(repo);
 
@@ -124,8 +124,8 @@ class DriftDetectorTest {
         void zeroTemplateLatest_excludedAndCounted() {
             String key = "invocation:order-flow:skl-1";
             repo.saveInvocationProfile(profile(key, "order-flow", "h1"));
-            repo.saveInteraction(skeletonRecord("r-new", "order-flow", "skl-1", null, 2000L));
-            repo.saveInteraction(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-new", "order-flow", "skl-1", null, 2000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
 
             DriftReport report = DriftDetector.detect(repo);
 
@@ -143,8 +143,8 @@ class DriftDetectorTest {
         void splitKey_reported() {
             InvocationProfile existing = profile("invocation:order-flow:h1", "order-flow", "h1");
             repo.saveInvocationProfile(existing);
-            repo.saveInteraction(fullTextRecord("r-old", "order-flow", "h1", 1000L));
-            repo.saveInteraction(fullTextRecord("r-new", "order-flow", "h2", 2000L));
+            repo.saveInteractionIfAbsent(fullTextRecord("r-old", "order-flow", "h1", 1000L));
+            repo.saveInteractionIfAbsent(fullTextRecord("r-new", "order-flow", "h2", 2000L));
 
             DriftReport report = DriftDetector.detect(repo);
 
@@ -161,7 +161,7 @@ class DriftDetectorTest {
         void establishedKeys_notReported() {
             InvocationProfile existing = profile("invocation:order-flow:h1", "order-flow", "h1");
             repo.saveInvocationProfile(existing);
-            repo.saveInteraction(fullTextRecord("r-1", "order-flow", "h1", 1000L));
+            repo.saveInteractionIfAbsent(fullTextRecord("r-1", "order-flow", "h1", 1000L));
 
             DriftReport report = DriftDetector.detect(repo);
 
@@ -176,7 +176,7 @@ class DriftDetectorTest {
             repo.saveInvocationProfile(existing);
             InteractionRecord blankKey = fullTextRecord("r-1", "order-flow", "h1", 1000L);
             blankKey.setInvocationKey("");
-            repo.saveInteraction(blankKey);
+            repo.saveInteractionIfAbsent(blankKey);
 
             DriftReport report = DriftDetector.detect(repo);
 
@@ -186,7 +186,7 @@ class DriftDetectorTest {
         @Test
         @DisplayName("全新标签（无画像）的记录不进漂移集")
         void unknownLabel_notDrift() {
-            repo.saveInteraction(fullTextRecord("r-1", "brand-new", "h9", 1000L));
+            repo.saveInteractionIfAbsent(fullTextRecord("r-1", "brand-new", "h9", 1000L));
 
             DriftReport report = DriftDetector.detect(repo);
 
@@ -213,8 +213,8 @@ class DriftDetectorTest {
             corrupt.setTimestamp(2000L);
             corrupt.setTemplateHash("h-corrupt");
             corrupt.setInvocationKey(key);
-            repo.saveInteraction(corrupt);
-            repo.saveInteraction(skeletonRecord("r-older", "order-flow", "skl-1", "h2", 1000L));
+            repo.saveInteractionIfAbsent(corrupt);
+            repo.saveInteractionIfAbsent(skeletonRecord("r-older", "order-flow", "skl-1", "h2", 1000L));
 
             DriftReport report = DriftDetector.detect(repo);
 
@@ -230,7 +230,7 @@ class DriftDetectorTest {
             InteractionRecord mismatched = skeletonRecord("r-mismatch", "other-flow", "skl-1", "h9", 2000L);
             // 存储键手工指到别的桶：现算键与存储键不一致，不得作为本桶身份凭据
             mismatched.setInvocationKey(key);
-            repo.saveInteraction(mismatched);
+            repo.saveInteractionIfAbsent(mismatched);
 
             DriftReport report = DriftDetector.detect(repo);
 
@@ -261,7 +261,7 @@ class DriftDetectorTest {
             String healthyKey = "invocation:healthy:skl-1";
             repo.saveInvocationProfile(profile(brokenKey, "broken", "h1"));
             repo.saveInvocationProfile(profile(healthyKey, "healthy", "h1"));
-            repo.saveInteraction(skeletonRecord("r-h", "healthy", "skl-1", "h2", 1000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-h", "healthy", "skl-1", "h2", 1000L));
 
             SimpleTestRepo partialRepo = new SimpleTestRepo() {
                 @Override

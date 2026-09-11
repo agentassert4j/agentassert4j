@@ -27,11 +27,6 @@ public interface InteractionQueryStore {
     List<InteractionRecord> findByInvocationKey(String invocationKey);
 
     /**
-     * 按模板 hash 查询使用该模板的全部交互记录
-     */
-    List<InteractionRecord> findByTemplateHash(String hash);
-
-    /**
      * 按 session 查询（依赖链重建用），返回按确定性排序键有序
      */
     List<InteractionRecord> findBySessionId(String sessionId);

@@ -10,7 +10,7 @@ import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.LlmWireProtocol;
 import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.model.TurnContext;
-import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
+import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.ArgTypeUtil;
 import io.github.agentassert4j.util.HashUtil;
 import io.github.agentassert4j.util.RecursiveJsonParser;
@@ -103,7 +103,7 @@ final class McpRecordIngestion {
         }
 
         List<String> warnings = new ArrayList<>();
-        SqliteStorageRepository repository = null;
+        StorageRepository repository = null;
         try {
             InteractionRecord record = buildRecord(sessionId, protocol, requestRaw, request, responseRaw, response, args, metadata, warnings);
             repository = CliSupport.openRepository(db, CliSupport.discardStream());

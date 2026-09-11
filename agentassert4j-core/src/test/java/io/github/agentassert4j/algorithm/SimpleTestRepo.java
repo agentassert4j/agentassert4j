@@ -23,11 +23,6 @@ class SimpleTestRepo implements StorageRepository {
     final List<ArchivedTemplateVersion> archivedBaselines = new ArrayList<>();
 
     @Override
-    public String type() {
-        return "test";
-    }
-
-    @Override
     public void initialize() {
     }
 
@@ -36,8 +31,14 @@ class SimpleTestRepo implements StorageRepository {
     }
 
     @Override
-    public void saveInteraction(InteractionRecord r) {
+    public boolean saveInteractionIfAbsent(InteractionRecord r) {
+        for (InteractionRecord existing : interactions) {
+            if (existing.getRecordId() != null && existing.getRecordId().equals(r.getRecordId())) {
+                return false;
+            }
+        }
         interactions.add(r);
+        return true;
     }
 
     @Override
@@ -48,11 +49,6 @@ class SimpleTestRepo implements StorageRepository {
     @Override
     public List<InteractionRecord> findByInvocationId(String invocationId) {
         return interactions.stream().filter(r -> invocationId.equals(r.getInvocationId())).collect(Collectors.toList());
-    }
-
-    @Override
-    public List<InteractionRecord> findByTemplateHash(String hash) {
-        return interactions.stream().filter(r -> hash.equals(r.getTemplateHash())).collect(Collectors.toList());
     }
 
     @Override
@@ -90,15 +86,9 @@ class SimpleTestRepo implements StorageRepository {
     }
 
     @Override
-    public void saveTemplateText(String hash, String templateText) {
-        promptTexts.put(hash, templateText);
-    }
-
-    @Override
     public String findTemplateText(String hash) {
         return promptTexts.get(hash);
     }
-
     @Override
     public void archiveTemplateVersion(ArchivedTemplateVersion archived) {
         archived.setArchivedAt(System.currentTimeMillis());

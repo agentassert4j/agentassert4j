@@ -56,9 +56,9 @@ public final class TaskAligner {
     }
 
     /**
-     * 基线链的指纹步骤化。
+     * 基线链的指纹步骤化（链形态对齐入口的内部步骤）。
      */
-    public static LinkedHashMap<String, List<BaselineStep>> baselineStepsOf(TaskChain baseline, InvocationRulesConfig rules) {
+    private static LinkedHashMap<String, List<BaselineStep>> baselineStepsOf(TaskChain baseline, InvocationRulesConfig rules) {
         LinkedHashMap<String, List<BaselineStep>> steps = new LinkedHashMap<>();
         for (InteractionRecord record : baseline.getRecords()) {
             String groupKey = groupKeyOfRecord(record);

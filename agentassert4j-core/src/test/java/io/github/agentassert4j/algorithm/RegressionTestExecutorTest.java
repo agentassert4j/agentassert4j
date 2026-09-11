@@ -733,11 +733,6 @@ class RegressionTestExecutorTest {
         public String name() {
             return "stub";
         }
-
-        @Override
-        public boolean isAvailable() {
-            return true;
-        }
     }
 
     static class StubLlmClient implements LlmClient {
@@ -761,11 +756,6 @@ class RegressionTestExecutorTest {
         @Override
         public String name() {
             return "stub";
-        }
-
-        @Override
-        public boolean isAvailable() {
-            return true;
         }
     }
 }

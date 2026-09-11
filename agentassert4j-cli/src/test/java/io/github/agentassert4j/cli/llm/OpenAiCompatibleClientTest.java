@@ -415,12 +415,6 @@ class OpenAiCompatibleClientTest {
     }
 
     @Test
-    void isAvailable_unreachableEndpoint_returnsFalse() {
-        OpenAiCompatibleClient c = new OpenAiCompatibleClient("http://localhost:1", "fake-key", "test", OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, null);
-        assertFalse(c.isAvailable());
-    }
-
-    @Test
     void parseResponse_argumentsWithNumberTypes() throws Exception {
         String json = "{\"choices\":[{\"message\":{\"tool_calls\":[" + "{\"id\":\"c1\",\"type\":\"function\",\"function\":{" + "\"name\":\"paginate\",\"arguments\":\"{\\\"page\\\":1,\\\"limit\\\":20,\\\"price\\\":9.99}\"}}" + "]}}]}";
 

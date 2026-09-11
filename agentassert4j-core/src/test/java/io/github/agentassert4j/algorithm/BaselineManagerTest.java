@@ -310,7 +310,7 @@ class BaselineManagerTest {
         @DisplayName("新 Skill → 自动建立基线")
         void newSkill_autoEstablishes() {
             InteractionRecord record = makeToolRecord("skill-new", "toolA");
-            repo.saveInteraction(record);
+            repo.saveInteractionIfAbsent(record);
 
             manager.autoEstablishBaseline(record, "tester", null, null);
 
@@ -329,7 +329,7 @@ class BaselineManagerTest {
         @DisplayName("已有基线 → 不覆盖（幂等）")
         void existingBaseline_noOverwrite() {
             InteractionRecord record = makeToolRecord("skill-exist", "toolA");
-            repo.saveInteraction(record);
+            repo.saveInteractionIfAbsent(record);
 
             // 首次建立
             manager.autoEstablishBaseline(record, "tester", null, null);
@@ -698,7 +698,7 @@ class BaselineManagerTest {
             InvocationProfile profile = makeProfileWithBaseline(KEY, "order-flow");
             profile.setTemplateHash("h1");
             repo.saveInvocationProfile(profile);
-            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
             DeterministicFingerprint activeFingerprint = profile.getFingerprint();
 
             boolean registered = manager.recordCandidate(repo.findByInvocationKey(KEY).get(0), activeFingerprint);
@@ -718,7 +718,7 @@ class BaselineManagerTest {
             profile.setCandidateFingerprint(pendingCandidate);
             profile.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveInvocationProfile(profile);
-            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
 
             DeterministicFingerprint activeFingerprint = profile.getFingerprint();
             boolean registered = manager.recordCandidate(repo.findByInvocationKey(KEY).get(0), activeFingerprint);
@@ -743,8 +743,8 @@ class BaselineManagerTest {
         @DisplayName("approve 把画像哈希前移到最新记录哈希，旧哈希随归档留痕")
         void approveAdvancesIdentity_oldHashArchived() {
             repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
-            repo.saveInteraction(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
-            repo.saveInteraction(skeletonRecord("r-new", "order-flow", "skl-1", "h2", 2000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-new", "order-flow", "skl-1", "h2", 2000L));
 
             manager.accept(KEY, null, "tester", null);
 
@@ -759,7 +759,7 @@ class BaselineManagerTest {
         @DisplayName("哈希一致时 approve 身份不变（幂等）")
         void approveWithSameHash_isIdentityNeutral() {
             repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h2"));
-            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
 
             manager.accept(KEY, null, "tester", null);
 
@@ -771,7 +771,7 @@ class BaselineManagerTest {
         @DisplayName("reject 不前移身份，检测仍命中")
         void rejectKeepsStaleIdentity_driftStillFires() {
             repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
-            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
 
             manager.reject(KEY, null);
 
@@ -783,8 +783,8 @@ class BaselineManagerTest {
         @DisplayName("rollback 把身份退回归档快照的模板哈希")
         void rollbackRestoresArchivedIdentity() {
             repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
-            repo.saveInteraction(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
-            repo.saveInteraction(skeletonRecord("r-new", "order-flow", "skl-1", "h2", 2000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-new", "order-flow", "skl-1", "h2", 2000L));
             manager.accept(KEY, null, "tester", null);
             assertEquals("h2", repo.findInvocationByKey(KEY).getTemplateHash());
 
@@ -799,7 +799,7 @@ class BaselineManagerTest {
         @DisplayName("显式收编前移一次后幂等，再次调用返回 false")
         void advanceTemplateIdentity_isIdempotent() {
             repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
-            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
 
             assertTrue(manager.advanceTemplateIdentity(KEY));
             assertEquals("h2", repo.findInvocationByKey(KEY).getTemplateHash());
@@ -820,8 +820,8 @@ class BaselineManagerTest {
             corrupt.setTimestamp(2000L);
             corrupt.setTemplateHash("h-corrupt");
             corrupt.setInvocationKey(KEY);
-            repo.saveInteraction(corrupt);
-            repo.saveInteraction(skeletonRecord("r-older", "order-flow", "skl-1", "h2", 1000L));
+            repo.saveInteractionIfAbsent(corrupt);
+            repo.saveInteractionIfAbsent(skeletonRecord("r-older", "order-flow", "skl-1", "h2", 1000L));
 
             assertTrue(manager.advanceTemplateIdentity(KEY));
             assertEquals("h2", repo.findInvocationByKey(KEY).getTemplateHash());
@@ -840,7 +840,7 @@ class BaselineManagerTest {
             corrupt.setRecordId("r-corrupt");
             corrupt.setTimestamp(1000L);
             corrupt.setInvocationKey(KEY);
-            repo.saveInteraction(corrupt);
+            repo.saveInteractionIfAbsent(corrupt);
 
             assertFalse(manager.advanceTemplateIdentity(KEY));
             assertEquals("h1", repo.findInvocationByKey(KEY).getTemplateHash());
@@ -850,8 +850,8 @@ class BaselineManagerTest {
         @DisplayName("最新可分组记录无模板哈希时保守保留原值")
         void advanceWithZeroTemplateLatest_keepsOriginal() {
             repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
-            repo.saveInteraction(skeletonRecord("r-new", "order-flow", "skl-1", null, 2000L));
-            repo.saveInteraction(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-new", "order-flow", "skl-1", null, 2000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-old", "order-flow", "skl-1", "h1", 1000L));
 
             assertFalse(manager.advanceTemplateIdentity(KEY));
             assertEquals("h1", repo.findInvocationByKey(KEY).getTemplateHash());
@@ -861,7 +861,7 @@ class BaselineManagerTest {
         @DisplayName("画像未携带模板哈希时收编补齐（null → 最新记录哈希）")
         void advanceFillsMissingProfileIdentity() {
             repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", null));
-            repo.saveInteraction(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
 
             assertTrue(manager.advanceTemplateIdentity(KEY));
             assertEquals("h2", repo.findInvocationByKey(KEY).getTemplateHash());

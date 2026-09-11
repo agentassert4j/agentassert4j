@@ -49,11 +49,6 @@ public final class ProtocolRoutingLlmClient implements LlmClient {
         return route(null).name();
     }
 
-    @Override
-    public boolean isAvailable() {
-        return route(null).isAvailable();
-    }
-
     private LlmClient route(String recordProtocolHint) {
         // 显式配置优先；配置值不在词表内（防御直接构造本类的调用方——CLI 装配点
         // 已先行校验报错）时按未配置处理，走记录提示与兜底，不抛错

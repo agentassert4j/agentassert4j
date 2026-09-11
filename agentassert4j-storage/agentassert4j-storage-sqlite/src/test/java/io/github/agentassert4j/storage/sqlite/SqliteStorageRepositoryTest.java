@@ -39,17 +39,12 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
-    void type_returnsSqlite() {
-        assertEquals("sqlite", repo.type());
-    }
-
-    @Test
     void nullModelResponse_withToolCalls_savesAndReloads() {
         // 纯工具调用的响应没有文本内容（content=null），必须可录入可重读
         InteractionRecord r = createSampleRecord("rec-toolonly", "session-1", "skill-1", "hash-abc");
         r.setModelResponse(null);
 
-        repo.saveInteraction(r);
+        repo.saveInteractionIfAbsent(r);
 
         InteractionRecord loaded = repo.findByInvocationId("skill-1").get(0);
         assertNull(loaded.getModelResponse());
@@ -59,7 +54,7 @@ class SqliteStorageRepositoryTest {
     @Test
     void saveAndFindInteraction() {
         InteractionRecord r = createSampleRecord("rec-1", "session-1", "skill-1", "hash-abc");
-        repo.saveInteraction(r);
+        repo.saveInteractionIfAbsent(r);
 
         List<InteractionRecord> results = repo.findByInvocationId("skill-1");
         assertEquals(1, results.size());
@@ -88,23 +83,12 @@ class SqliteStorageRepositoryTest {
     }
 
     @Test
-    void findByTemplateHash() {
-        repo.saveInteraction(createSampleRecord("r1", "s1", "sk1", "hash-xxx"));
-        repo.saveInteraction(createSampleRecord("r2", "s2", "sk2", "hash-xxx"));
-        repo.saveInteraction(createSampleRecord("r3", "s3", "sk3", "hash-yyy"));
-
-        List<InteractionRecord> results = repo.findByTemplateHash("hash-xxx");
-        assertEquals(2, results.size());
-    }
-
-
-    @Test
     void skeletonHash_roundTrip() {
         // 骨架哈希投影落列并映射回——落库记录重算调用点键的骨架凭据
         InteractionRecord r = createSampleRecord("rec-skl", "s1", "sk-1", "hash-skl");
         r.setTemplateSkeleton("客服助手。当前日期：{{date}}");
         r.setSkeletonHash("01a6620a2e2419bc01d23b63d658872d0d100544d3e073a3aab5bcf059665a27");
-        repo.saveInteraction(r);
+        repo.saveInteractionIfAbsent(r);
 
         InteractionRecord loaded = repo.findByInvocationId("sk-1").get(0);
         assertEquals("01a6620a2e2419bc01d23b63d658872d0d100544d3e073a3aab5bcf059665a27", loaded.getSkeletonHash());
@@ -114,7 +98,7 @@ class SqliteStorageRepositoryTest {
     void skeletonHash_nullStaysNull() {
         // 无骨架声明：列空、投影空——重算键退化到既有锚点，行为不变
         InteractionRecord r = createSampleRecord("rec-noskl", "s1", "sk-2", "hash-noskl");
-        repo.saveInteraction(r);
+        repo.saveInteractionIfAbsent(r);
 
         InteractionRecord loaded = repo.findByInvocationId("sk-2").get(0);
         assertNull(loaded.getSkeletonHash());
@@ -122,9 +106,9 @@ class SqliteStorageRepositoryTest {
 
     @Test
     void findBySessionId() {
-        repo.saveInteraction(createSampleRecord("r1", "sess-A", "sk1", "h1"));
-        repo.saveInteraction(createSampleRecord("r2", "sess-B", "sk2", "h2"));
-        repo.saveInteraction(createSampleRecord("r3", "sess-A", "sk3", "h3"));
+        repo.saveInteractionIfAbsent(createSampleRecord("r1", "sess-A", "sk1", "h1"));
+        repo.saveInteractionIfAbsent(createSampleRecord("r2", "sess-B", "sk2", "h2"));
+        repo.saveInteractionIfAbsent(createSampleRecord("r3", "sess-A", "sk3", "h3"));
 
         List<InteractionRecord> results = repo.findBySessionId("sess-A");
         assertEquals(2, results.size());
@@ -132,9 +116,9 @@ class SqliteStorageRepositoryTest {
 
     @Test
     void findAllSessionIds() {
-        repo.saveInteraction(createSampleRecord("r1", "sa", "sk1", "h1"));
-        repo.saveInteraction(createSampleRecord("r2", "sb", "sk2", "h2"));
-        repo.saveInteraction(createSampleRecord("r3", "sa", "sk3", "h3"));
+        repo.saveInteractionIfAbsent(createSampleRecord("r1", "sa", "sk1", "h1"));
+        repo.saveInteractionIfAbsent(createSampleRecord("r2", "sb", "sk2", "h2"));
+        repo.saveInteractionIfAbsent(createSampleRecord("r3", "sa", "sk3", "h3"));
 
         List<String> ids = repo.findAllSessionIds();
         assertEquals(2, ids.size());
@@ -217,12 +201,12 @@ class SqliteStorageRepositoryTest {
         // 交互写路径顺带把原文归档进 prompt_texts（status 巡检展示的数据源）
         InteractionRecord r = createSampleRecord("rec-tpl-1", "session-tpl", "skill-tpl", "hash-from-capture");
         r.setTemplateText("你是订单查询助手。");
-        repo.saveInteraction(r);
+        repo.saveInteractionIfAbsent(r);
         assertEquals("你是订单查询助手。", repo.findTemplateText("hash-from-capture"));
 
         // 缺一不可：有 hash 无文本时不落任何行
         InteractionRecord half = createSampleRecord("rec-tpl-2", "session-tpl", "skill-tpl", "hash-orphan");
-        repo.saveInteraction(half);
+        repo.saveInteractionIfAbsent(half);
         assertNull(repo.findTemplateText("hash-orphan"));
     }
 
@@ -332,11 +316,11 @@ class SqliteStorageRepositoryTest {
             private int calls = 0;
 
             @Override
-            public synchronized void saveInteraction(InteractionRecord r) {
+            public synchronized boolean saveInteractionIfAbsent(InteractionRecord r) {
                 if (++calls == 2) {
                     throw new IllegalStateException("second record exploded");
                 }
-                super.saveInteraction(r);
+                return super.saveInteractionIfAbsent(r);
             }
         };
         failing.initialize();
@@ -401,7 +385,7 @@ class SqliteStorageRepositoryTest {
         toolCalls.add(tc);
         r.setToolCalls(toolCalls);
 
-        repo.saveInteraction(r);
+        repo.saveInteractionIfAbsent(r);
 
         List<InteractionRecord> loaded = repo.findByInvocationId("sk1");
         assertEquals(1, loaded.size());
@@ -420,7 +404,7 @@ class SqliteStorageRepositoryTest {
         turns.add(new TurnContext("assistant", "hi there"));
         r.setPreviousTurns(turns);
 
-        repo.saveInteraction(r);
+        repo.saveInteractionIfAbsent(r);
 
         List<InteractionRecord> loaded = repo.findByInvocationId("sk1");
         assertEquals(1, loaded.size());
@@ -448,7 +432,7 @@ class SqliteStorageRepositoryTest {
         tc.setArguments(args);
         r.setToolCalls(new ArrayList<>(Collections.singletonList(tc)));
 
-        repo.saveInteraction(r);
+        repo.saveInteractionIfAbsent(r);
 
         List<ToolCall> loadedTc = repo.findByInvocationId("sk-e").get(0).getToolCalls();
         assertEquals(resultWithSpecials, loadedTc.get(0).getResult(), "tool result 读回必须与原文一致（真实换行/引号/反斜杠），不得残留转义序列");
@@ -458,7 +442,7 @@ class SqliteStorageRepositoryTest {
         turns.add(new TurnContext("user", "内容\"引号\"\n换行"));
         InteractionRecord r2 = createSampleRecord("esc-2", "sess-e", "sk-e", "h-e");
         r2.setPreviousTurns(turns);
-        repo.saveInteraction(r2);
+        repo.saveInteractionIfAbsent(r2);
         List<InteractionRecord> all = repo.findByInvocationId("sk-e");
         assertEquals(2, all.size(), "esc-2 是新 record_id，必须正常落库");
         TurnContext loadedTurn = all.stream().filter(x -> "esc-2".equals(x.getRecordId())).findFirst().get().getPreviousTurns().get(0);
@@ -552,7 +536,7 @@ class SqliteStorageRepositoryTest {
         r.setInvocationKey("queryOrder[orderId:string]");
         r.setMetadata("{\"agent.role\":\"build\"}");
         r.setRecorderVersion("1.0.0-SNAPSHOT");
-        repo.saveInteraction(r);
+        repo.saveInteractionIfAbsent(r);
 
         InteractionRecord loaded = repo.findByInvocationId("sk-v1").get(0);
         assertEquals(42L, loaded.getSeq());
@@ -582,9 +566,9 @@ class SqliteStorageRepositoryTest {
     @Test
     void duplicateRecordIdIgnored() {
         InteractionRecord r = createSampleRecord("dup-1", "s1", "sk1", "h1");
-        repo.saveInteraction(r);
+        repo.saveInteractionIfAbsent(r);
         r.setModelResponse("changed response");
-        repo.saveInteraction(r); // 崩溃重放双写场景：同 record_id 不得覆盖已有历史
+        repo.saveInteractionIfAbsent(r); // 崩溃重放双写场景：同 record_id 不得覆盖已有历史
 
         List<InteractionRecord> results = repo.findByInvocationId("sk1");
         assertEquals(1, results.size(), "只追加历史表：record_id 冲突必须静默跳过");
@@ -706,7 +690,7 @@ class SqliteStorageRepositoryTest {
             r.setInvocationId("sk");
             r.setModelResponse("m");
 
-            assertThrows(StorageException.class, () -> brokenRepo.saveInteraction(r));
+            assertThrows(StorageException.class, () -> brokenRepo.saveInteractionIfAbsent(r));
             assertThrows(StorageException.class, () -> brokenRepo.saveInteractions(Collections.singletonList(r)));
             assertThrows(StorageException.class, () -> brokenRepo.findAllSessionIds());
             assertThrows(StorageException.class, () -> brokenRepo.findAllInvocations());
@@ -754,7 +738,7 @@ class SqliteStorageRepositoryTest {
         t2.setToolName("tool\"");
         r.setPreviousTurns(Arrays.asList(t1, t2));
 
-        repo.saveInteraction(r);
+        repo.saveInteractionIfAbsent(r);
 
         List<InteractionRecord> found = repo.findBySessionId("sess-nasty");
         assertEquals(1, found.size());

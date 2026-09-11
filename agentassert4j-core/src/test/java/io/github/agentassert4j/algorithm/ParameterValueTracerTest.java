@@ -421,11 +421,6 @@ class ParameterValueTracerTest {
         }
 
         @Override
-        public String type() {
-            return "test";
-        }
-
-        @Override
         public void initialize() {
         }
 
@@ -434,7 +429,8 @@ class ParameterValueTracerTest {
         }
 
         @Override
-        public void saveInteraction(InteractionRecord r) {
+        public boolean saveInteractionIfAbsent(InteractionRecord r) {
+            return false;
         }
 
         @Override
@@ -448,11 +444,6 @@ class ParameterValueTracerTest {
 
         @Override
         public List<InteractionRecord> findByInvocationKey(String invocationKey) {
-            return Collections.emptyList();
-        }
-
-        @Override
-        public List<InteractionRecord> findByTemplateHash(String hash) {
             return Collections.emptyList();
         }
 
@@ -482,10 +473,6 @@ class ParameterValueTracerTest {
         @Override
         public List<InvocationProfile> findAllInvocations() {
             return Collections.emptyList();
-        }
-
-        @Override
-        public void saveTemplateText(String hash, String templateText) {
         }
 
         @Override

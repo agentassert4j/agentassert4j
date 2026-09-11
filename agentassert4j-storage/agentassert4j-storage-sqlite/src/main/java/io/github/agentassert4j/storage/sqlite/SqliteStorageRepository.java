@@ -14,8 +14,8 @@ import java.util.logging.Logger;
 /**
  * SQLite 默认存储实现 — 单文件存储，适合单机开发场景。
  *
- * <p>遵循 JDBC 模式：接口在 core，实现在独立模块。
- * 插件发现：ServiceLoader 自动发现。</p>
+ * <p>遵循 JDBC 模式：接口在 core，实现在独立模块；由组装根（CLI / starter）
+ * 显式装配，无运行时插件发现。</p>
  *
  * <p>错误契约：SQL 失败一律抛 {@link StorageException}，绝不静默吞掉——
  * 吞掉会把磁盘满/库锁死伪装成"成功"或"无数据"。录制管道在上层捕获并计入失败计数。</p>
@@ -64,11 +64,6 @@ public class SqliteStorageRepository implements StorageRepository {
         return rs.wasNull() ? null : value;
     }
 
-    @Override
-    public String type() {
-        return "sqlite";
-    }
-
     // initialize/close 与写路径共用实例监视器：flush 进行中不得关闭或置换连接，
     // 否则并发线程会在 prepareStatement 处踩到 null 连接
     @Override
@@ -108,15 +103,11 @@ public class SqliteStorageRepository implements StorageRepository {
         }
     }
 
-    @Override
-    public synchronized void saveInteraction(InteractionRecord r) {
-        doInsertInteraction(r);
-    }
-
     /**
      * INSERT OR IGNORE 并回告是否真正写入——record 摄取（MCP record 工具）以回告区分
-     * saved 与 duplicate；调用方据此如实报告，幂等语义与 {@link #saveInteraction} 同源。
+     * saved 与 duplicate；调用方据此如实报告，幂等语义与批量写入同源。
      */
+    @Override
     public synchronized boolean saveInteractionIfAbsent(InteractionRecord r) {
         return doInsertInteraction(r) == 1;
     }
@@ -204,7 +195,7 @@ public class SqliteStorageRepository implements StorageRepository {
         try {
             connection.setAutoCommit(false);
             for (InteractionRecord r : records) {
-                saveInteraction(r);
+                saveInteractionIfAbsent(r);
             }
             connection.commit();
         } catch (SQLException e) {
@@ -248,12 +239,6 @@ public class SqliteStorageRepository implements StorageRepository {
     public synchronized List<InteractionRecord> findByInvocationKey(String invocationKey) {
         return queryInteractions("SELECT * FROM interactions WHERE invocation_key = ?" + " ORDER BY timestamp ASC, seq ASC, record_id ASC", invocationKey);
     }
-
-    @Override
-    public synchronized List<InteractionRecord> findByTemplateHash(String hash) {
-        return queryInteractions("SELECT * FROM interactions WHERE template_hash = ?" + " ORDER BY timestamp ASC, seq ASC, record_id ASC", hash);
-    }
-
 
     @Override
     public synchronized List<InteractionRecord> findBySessionId(String sessionId) {
@@ -335,10 +320,12 @@ public class SqliteStorageRepository implements StorageRepository {
         return result;
     }
 
-    @Override
-    public synchronized void saveTemplateText(String hash, String templateText) {
-        // INSERT OR IGNORE：同 hash 首写为准（模板文本由内容哈希定键，覆盖写只会
-        // 带来逐批写放大与 created_at 漂移），交互主数据的落库不受影响
+    /**
+     * 模板原文落库（随交互记录写入同源触发）：INSERT OR IGNORE 同 hash 首写为准——
+     * 模板文本由内容哈希定键，覆盖写只会带来逐批写放大与 created_at 漂移；交互主
+     * 数据的落库不受影响。写入面不对 SPI 暴露（同包测试直测）。
+     */
+    synchronized void saveTemplateText(String hash, String templateText) {
         String sql = "INSERT OR IGNORE INTO prompt_texts (prompt_hash, prompt_text, created_at) VALUES (?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, hash);

@@ -50,7 +50,7 @@ class BaselineServiceTest {
     @Test
     @DisplayName("人读行回显已落库的申报锚：建档行与 exists 行都带 (ref X)")
     void humanLinesEchoStoredCodeRef() {
-        repository.saveInteraction(makeRecord("rec-1", "skill-1", 1000L, "{\"ok\":true}"));
+        repository.saveInteractionIfAbsent(makeRecord("rec-1", "skill-1", 1000L, "{\"ok\":true}"));
         PrintStream out = new PrintStream(output, true);
         BaselineService service = new BaselineService(repository);
 
@@ -66,8 +66,8 @@ class BaselineServiceTest {
     @Test
     @DisplayName("种子响应缺少必需关键词：建档完成但打印违规告警")
     void seedMissingRequiredKeyword_establishSucceedsWithWarning() {
-        repository.saveInteraction(makeRecord("rec-1", "skill-1", 1000L, "已为您查询订单状态。"));
-        repository.saveInteraction(makeRecord("rec-2", "skill-1", 2000L, "已为您查询订单状态。"));
+        repository.saveInteractionIfAbsent(makeRecord("rec-1", "skill-1", 1000L, "已为您查询订单状态。"));
+        repository.saveInteractionIfAbsent(makeRecord("rec-2", "skill-1", 2000L, "已为您查询订单状态。"));
         InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"requiredKeywords\":[\"订单号\"]}}}");
         PrintStream out = new PrintStream(output, true);
 
@@ -85,7 +85,7 @@ class BaselineServiceTest {
     @Test
     @DisplayName("种子响应满足全部声明：不输出告警")
     void seedSatisfiesRules_noWarning() {
-        repository.saveInteraction(makeRecord("rec-1", "skill-1", 1000L, "订单号 ORD-001 已出库"));
+        repository.saveInteractionIfAbsent(makeRecord("rec-1", "skill-1", 1000L, "订单号 ORD-001 已出库"));
         InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"requiredKeywords\":[\"订单号\"]}}}");
         PrintStream out = new PrintStream(output, true);
 
@@ -97,7 +97,7 @@ class BaselineServiceTest {
     @Test
     @DisplayName("禁用关键词与正则同样参与种子断言")
     void seedForbiddenAndRegex_checked() {
-        repository.saveInteraction(makeRecord("rec-1", "skill-1", 1000L, "订单号 ORD-001，抱歉给您带来困扰"));
+        repository.saveInteractionIfAbsent(makeRecord("rec-1", "skill-1", 1000L, "订单号 ORD-001，抱歉给您带来困扰"));
         InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"requiredKeywords\":[\"订单号\"]," + "\"forbiddenKeywords\":[\"抱歉\"]," + "\"regexPatterns\":[{\"pattern\":\"状态[:：]\\\\w+\",\"description\":\"状态行\"}]}}}");
         PrintStream out = new PrintStream(output, true);
 
@@ -113,8 +113,8 @@ class BaselineServiceTest {
     void seedIsCanonicalEarliest_regardlessOfInsertionOrder() {
         InteractionRecord late = makeRecord("rec-late", "skill-1", 2000L, "{\"late\":true}");
         InteractionRecord early = makeRecord("rec-early", "skill-1", 1000L, "{\"early\":true}");
-        repository.saveInteraction(late);
-        repository.saveInteraction(early);
+        repository.saveInteractionIfAbsent(late);
+        repository.saveInteractionIfAbsent(early);
         PrintStream out = new PrintStream(output, true);
 
         new BaselineService(repository).establishMissing(out, "tester", null, false, null, null, null, null);

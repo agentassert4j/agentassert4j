@@ -71,7 +71,7 @@ class JsonContractTest {
         r.setModelResponse("{\"orderId\":\"ORD-001\"}");
         r.setToolCalls(new ArrayList<>());
         r.setHasToolCalls(false);
-        repository.saveInteraction(r);
+        repository.saveInteractionIfAbsent(r);
         return r;
     }
 
@@ -101,7 +101,7 @@ class JsonContractTest {
         }
         record.setToolCalls(calls);
         record.setHasToolCalls(!calls.isEmpty());
-        repository.saveInteraction(record);
+        repository.saveInteractionIfAbsent(record);
     }
 
     private void seedCandidate(String invocationKey, InteractionRecord record) {
@@ -552,7 +552,7 @@ class JsonContractTest {
             record.setModelResponse("{\"orderId\":\"ORD-001\"}");
             record.setToolCalls(new ArrayList<>());
             record.setHasToolCalls(false);
-            repository.saveInteraction(record);
+            repository.saveInteractionIfAbsent(record);
         }
     }
 }

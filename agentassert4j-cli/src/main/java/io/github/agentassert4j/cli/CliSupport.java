@@ -69,14 +69,14 @@ final class CliSupport {
      * @param dbOverride 显式数据库路径（--db），null 时取 agentassert4j.json 的 storage.url
      * @return 已初始化的存储仓库（调用方负责 close）
      */
-    static SqliteStorageRepository openRepository(String dbOverride, PrintStream out) {
+    static StorageRepository openRepository(String dbOverride, PrintStream out) {
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
         // 隐式查找链（cwd → home → classpath）命中了哪个文件必须就地披露——
         // 错误目录下运行时旧配置静默生效是最难查的排障黑洞
         String configSource = ConfigLoader.describeMainConfigSource();
         out.println(configSource != null ? "Config: " + configSource : "Config: no agentassert4j.json found; using built-in defaults.");
         String url = dbOverride != null ? dbOverride : config.getStorage().getUrl();
-        SqliteStorageRepository repository = new SqliteStorageRepository(expandHome(url));
+        StorageRepository repository = new SqliteStorageRepository(expandHome(url));
         repository.initialize();
         return repository;
     }

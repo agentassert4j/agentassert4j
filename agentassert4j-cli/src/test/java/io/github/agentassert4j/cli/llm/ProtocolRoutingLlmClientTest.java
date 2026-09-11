@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProtocolRoutingLlmClientTest {
 
     /**
-     * 最小手写桩：记录被调协议标记（chat/name/isAvailable 透传标记）。
+     * 最小手写桩：记录被调协议标记（chat/name 透传标记）。
      */
     private static final class StubClient implements LlmClient {
         private final String protocol;
@@ -43,11 +43,6 @@ class ProtocolRoutingLlmClientTest {
         @Override
         public String name() {
             return protocol;
-        }
-
-        @Override
-        public boolean isAvailable() {
-            return true;
         }
     }
 
@@ -92,7 +87,6 @@ class ProtocolRoutingLlmClientTest {
         assertEquals("openai-chat", router.chat(requestWithProtocol(null), 1000).getContent());
         assertEquals("openai-chat", router.chat(requestWithProtocol("gemini-legacy-dirty"), 1000).getContent(), "历史脏 apiProtocol 值兜底而非抛错");
         assertEquals("openai-chat", router.name());
-        assertTrue(router.isAvailable(), "健康检查走配置/兜底协议的客户端");
     }
 
     @Test
