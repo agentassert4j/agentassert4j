@@ -44,13 +44,6 @@ final class McpVerbs {
     }
 
     /**
-     * 派生的包络通道化词表（CLI 命令路径 → MCP 工具名），供一致性测试对照。
-     */
-    static Map<String, String> commandToTool() {
-        return COMMAND_TO_TOOL;
-    }
-
-    /**
      * --ci 逃生舱是 CLI 旗标（MCP 的 check/diff 恒为 ci 语义），该子句在 MCP 面不可达，随映射一并摘除。
      */
     static String channelize(String text) {

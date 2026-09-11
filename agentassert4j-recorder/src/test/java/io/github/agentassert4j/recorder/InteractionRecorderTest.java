@@ -271,8 +271,7 @@ class InteractionRecorderTest {
     }
 
     @Test
-    void captureGate_filterMode_warnEmitsOnceThenEveryHundred() {
-        // 告警节律：首条被滤记录一次，此后每满 100 条重申一次累计数
+    void captureGate_filterMode_filtersAllBareInteractions() {
         RecorderConfig config = RecorderConfig.builder().recordUndeclaredChat(false).build();
 
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
@@ -288,7 +287,17 @@ class InteractionRecorderTest {
         recorder.stop();
 
         assertEquals(100, recorder.getFilteredCount());
-        assertEquals(2, recorder.getFilteredWarnEmissions(), "第 1 条与第 100 条各发一次告警");
+    }
+
+    @Test
+    void filteredWarnRhythm_firstThenEveryInterval() {
+        // 告警节律：首条被滤记录一次，此后每满 100 条重申一次
+        assertTrue(InteractionRecorder.shouldWarnOnFilter(1));
+        assertFalse(InteractionRecorder.shouldWarnOnFilter(2));
+        assertFalse(InteractionRecorder.shouldWarnOnFilter(99));
+        assertTrue(InteractionRecorder.shouldWarnOnFilter(100));
+        assertFalse(InteractionRecorder.shouldWarnOnFilter(101));
+        assertTrue(InteractionRecorder.shouldWarnOnFilter(200));
     }
 
     @Test

@@ -1,6 +1,6 @@
 package io.github.agentassert4j.model;
 
-import java.util.Map;
+import java.util.*;
 
 /**
  * 工具调用记录 — LLM 决策调用一个工具的完整信息。
@@ -74,5 +74,47 @@ public class ToolCall {
 
     public void setSuccess(boolean success) {
         this.success = success;
+    }
+
+    /**
+     * 深拷贝：arguments 值树逐层重建，上游事后修改嵌套结构不影响副本。
+     */
+    public ToolCall copy() {
+        ToolCall copy = new ToolCall();
+        copy.toolName = toolName;
+        copy.toolCallId = toolCallId;
+        if (arguments != null) {
+            copy.arguments = castArgumentTree(deepCopyValue(arguments));
+        }
+        copy.argTypes = argTypes != null ? new HashMap<>(argTypes) : null;
+        copy.result = result;
+        copy.success = success;
+        return copy;
+    }
+
+    private static Map<String, Object> castArgumentTree(Object copied) {
+        @SuppressWarnings("unchecked") Map<String, Object> typed = (Map<String, Object>) copied;
+        return typed;
+    }
+
+    /**
+     * 任意深度重建 Map/List 值树；标量值原样共享（不可变）。
+     */
+    private static Object deepCopyValue(Object value) {
+        if (value instanceof Map) {
+            Map<String, Object> out = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                out.put(String.valueOf(entry.getKey()), deepCopyValue(entry.getValue()));
+            }
+            return out;
+        }
+        if (value instanceof List) {
+            List<Object> out = new ArrayList<>();
+            for (Object item : (List<?>) value) {
+                out.add(deepCopyValue(item));
+            }
+            return out;
+        }
+        return value;
     }
 }

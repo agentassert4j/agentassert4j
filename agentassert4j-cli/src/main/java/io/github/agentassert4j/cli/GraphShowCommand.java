@@ -61,7 +61,7 @@ public class GraphShowCommand implements Callable<Integer> {
                     if (cyclesJson.length() > 0) cyclesJson.append(",");
                     cyclesJson.append("\"").append(RecursiveJsonParser.escape(node)).append("\"");
                 }
-                out.println("{\"schema\":\"agentassert4j.graph/1\",\"nodeCount\":" + nodes.size() + ",\"edgeCount\":" + edges.size() + ",\"edges\":[" + edgeJson + "],\"cycles\":[" + cyclesJson + "]" + (edges.isEmpty() ? ",\"note\":\"edges form when a recorded tool-call argument value traces back to an upstream response in the same session; non-overlapping or synthetic interactions produce no edges\"" : "") + "}");
+                out.println("{\"schema\":\"" + ReportSchemas.GRAPH + "\",\"nodeCount\":" + nodes.size() + ",\"edgeCount\":" + edges.size() + ",\"edges\":[" + edgeJson + "],\"cycles\":[" + cyclesJson + "]" + (edges.isEmpty() ? ",\"note\":\"edges form when a recorded tool-call argument value traces back to an upstream response in the same session; non-overlapping or synthetic interactions produce no edges\"" : "") + "}");
                 return 0;
             }
 

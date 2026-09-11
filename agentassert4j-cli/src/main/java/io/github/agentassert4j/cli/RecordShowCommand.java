@@ -85,7 +85,7 @@ public class RecordShowCommand implements Callable<Integer> {
     }
 
     private String recordViewJson(InteractionRecord record) {
-        StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.record-view/1\",\"recordId\":\"").append(RecursiveJsonParser.escape(record.getRecordId())).append('"');
+        StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.RECORD_VIEW + "\",\"recordId\":\"").append(RecursiveJsonParser.escape(record.getRecordId())).append('"');
         sb.append(",\"sessionId\":\"").append(RecursiveJsonParser.escape(record.getSessionId())).append('"');
         if (record.getInvocationId() != null) {
             sb.append(",\"invocationId\":\"").append(RecursiveJsonParser.escape(record.getInvocationId())).append('"');

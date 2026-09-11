@@ -35,16 +35,12 @@ final class ObservingToolCallback implements ToolCallback {
 
     @Override
     public String call(String toolInput) {
-        try {
-            String result = delegate.call(toolInput);
-            observer.record(toolName(), toolInput, result, true);
-            return result;
-        } catch (RuntimeException e) {
-            observer.record(toolName(), toolInput, null, false);
-            throw e;
-        }
+        return call(toolInput, null);
     }
 
+    /**
+     * 观察逻辑单点在本形态——Spring AI 的工具执行恒经 call(String, ToolContext) 进入。
+     */
     @Override
     public String call(String toolInput, ToolContext toolContext) {
         try {

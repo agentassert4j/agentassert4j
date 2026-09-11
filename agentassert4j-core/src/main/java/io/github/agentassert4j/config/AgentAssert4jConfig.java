@@ -3,13 +3,7 @@ package io.github.agentassert4j.config;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import io.github.agentassert4j.util.TextUtil;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.HashSet;
+import java.util.*;
 
 /**
  * AgentAssert4j 主配置模型 — 从 agentassert4j.json 加载。
@@ -100,11 +94,11 @@ public class AgentAssert4jConfig {
         return config;
     }
 
-    /** 已知根段与 llm 段键集——未知键检测的对照面。 */
-    private static final Set<String> ROOT_KEYS = new HashSet<>(
-            Arrays.asList("storage", "recorder", "regression", "llm", "tools"));
-    private static final Set<String> LLM_KEYS = new HashSet<>(
-            Arrays.asList("protocol", "apiKey", "endpoint", "model", "timeoutMs", "temperature", "extraBody"));
+    /**
+     * 已知根段与 llm 段键集——未知键检测的对照面，键必须与解析路径一一对应。
+     */
+    private static final Set<String> ROOT_KEYS = new HashSet<>(Arrays.asList("storage", "recorder", "regression", "llm"));
+    private static final Set<String> LLM_KEYS = new HashSet<>(Arrays.asList("protocol", "apiKey", "endpoint", "model", "timeoutMs", "temperature", "extraBody"));
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> getMap(Map<String, Object> parent, String key) {
@@ -169,7 +163,9 @@ public class AgentAssert4jConfig {
         return llm;
     }
 
-    /** 配置未知键告警（可能为空）。 */
+    /**
+     * 配置未知键告警（可能为空）。
+     */
     public List<String> getConfigNotes() {
         return configNotes;
     }

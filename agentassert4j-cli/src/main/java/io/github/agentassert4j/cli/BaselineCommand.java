@@ -69,7 +69,7 @@ public class BaselineCommand implements Callable<Integer> {
                     }
                     invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(outcome.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(outcome.getLabel())).append("\",\"action\":\"").append(outcome.getAction()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(outcome.getVersionTag() != null ? outcome.getVersionTag() : "")).append("\",\"codeRef\":\"").append(RecursiveJsonParser.escape(outcome.getCodeRef() != null ? outcome.getCodeRef() : "")).append("\"}");
                 }
-                out.println("{\"schema\":\"agentassert4j.baseline-report/1\",\"force\":" + force + ",\"established\":" + established + ",\"invocations\":[" + invocations + "]}");
+                out.println("{\"schema\":\"" + ReportSchemas.BASELINE_REPORT + "\",\"force\":" + force + ",\"established\":" + established + ",\"invocations\":[" + invocations + "]}");
             } else {
                 out.println(established > 0 ? "Done: " + CliSupport.plural(established, "invocation") + " " + (force ? "re-established" : "established") + "." : "Done: every invocation already has a baseline.");
             }

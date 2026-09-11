@@ -74,7 +74,6 @@ public class InteractionRecorder implements RecordingInterceptor {
      * 静默丢数据比丢数据本身更危险
      */
     private static final long FILTERED_WARN_INTERVAL = 100;
-    private final AtomicLong filteredWarnEmissions = new AtomicLong(0);
 
     /**
      * 创建录制器。
@@ -145,8 +144,7 @@ public class InteractionRecorder implements RecordingInterceptor {
         // 丢数据本身更危险
         if (!config.isRecordUndeclaredChat() && !isDeclared(record) && !hasVisibleToolCalls(record)) {
             long filtered = filteredCount.incrementAndGet();
-            if (filtered == 1 || filtered % FILTERED_WARN_INTERVAL == 0) {
-                filteredWarnEmissions.incrementAndGet();
+            if (shouldWarnOnFilter(filtered)) {
                 log.warn("Capture gate filtered undeclared interaction: declare invocationId/templateId or set recordUndeclaredChat=true to record; filtered total={}", filtered);
             }
             return;
@@ -259,10 +257,11 @@ public class InteractionRecorder implements RecordingInterceptor {
     }
 
     /**
-     * 过滤告警的发放次数（首条被滤记录一次，此后每满 100 条重申一次）。
+     * 过滤告警节律：首条被滤记录告警一次，此后每满 100 条重申一次。告警本体经
+     * SLF4J 发射，节律提取为纯函数以便确定性验证。
      */
-    long getFilteredWarnEmissions() {
-        return filteredWarnEmissions.get();
+    static boolean shouldWarnOnFilter(long filteredTotal) {
+        return filteredTotal == 1 || filteredTotal % FILTERED_WARN_INTERVAL == 0;
     }
 
     /**

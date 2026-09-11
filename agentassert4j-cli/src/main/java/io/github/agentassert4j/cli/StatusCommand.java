@@ -84,7 +84,7 @@ public class StatusCommand implements Callable<Integer> {
                     if (unestablishedJson.length() > 0) unestablishedJson.append(",");
                     unestablishedJson.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(footprint.invocationKey)).append("\",\"recordCount\":").append(footprint.recordCount).append("}");
                 }
-                out.println("{\"schema\":\"agentassert4j.status/1\",\"invocations\":[" + invocations + "],\"uncovered\":[" + uncoveredJson + "],\"unestablished\":[" + unestablishedJson + "],\"health\":" + new CliSupport.ExitHealth(drift, CliSupport.taskChains(repository)).jsonFragment() + "}");
+                out.println("{\"schema\":\"" + ReportSchemas.STATUS + "\",\"invocations\":[" + invocations + "],\"uncovered\":[" + uncoveredJson + "],\"unestablished\":[" + unestablishedJson + "],\"health\":" + new CliSupport.ExitHealth(drift, CliSupport.taskChains(repository)).jsonFragment() + "}");
                 return 0;
             }
 

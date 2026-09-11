@@ -1,8 +1,8 @@
 package io.github.agentassert4j.cli;
 
-import io.github.agentassert4j.algorithm.VersionMismatchException;
 import io.github.agentassert4j.algorithm.BaselineManager;
 import io.github.agentassert4j.algorithm.InvocationResolver;
+import io.github.agentassert4j.algorithm.VersionMismatchException;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
@@ -37,6 +37,7 @@ public class BaselineService {
      *
      * @param out              报告输出流
      * @param actor            操作者身份（审批留痕）
+     * @param codeRef          代码锚（申报制：随基线留痕，空缺合法）
      * @param force            以当前判定语义重建基线：已有基线也被当前算法新指纹覆盖
      *                         （判定语义版本升级后的恢复路径），版本标签按归档占用顺延
      * @param invocationFilter 仅处理该业务 invocationId 或分组键前缀（null = 全部；调用方经
@@ -44,12 +45,9 @@ public class BaselineService {
      * @param rules            规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
      * @param outcomes         逐调用点结果收集（null = 不收集；人类结果行已就地打印，
      *                         明细供 --json 报告组装）
+     * @param expectedVersion  乐观并发守卫的期望活跃版本标签，null = 不设守卫
      * @return 本次新建/重建基线的分组数
      */
-    public int establishMissing(PrintStream out, String actor, String codeRef, boolean force, String invocationFilter, InvocationRulesConfig rules, List<BaselineOutcome> outcomes) {
-        return establishMissing(out, actor, codeRef, force, invocationFilter, rules, outcomes, null);
-    }
-
     public int establishMissing(PrintStream out, String actor, String codeRef, boolean force, String invocationFilter, InvocationRulesConfig rules, List<BaselineOutcome> outcomes, String expectedVersion) {
         BaselineManager manager = new BaselineManager(repository);
         int established = 0;

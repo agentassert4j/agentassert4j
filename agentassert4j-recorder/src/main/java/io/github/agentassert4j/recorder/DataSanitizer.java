@@ -2,7 +2,6 @@ package io.github.agentassert4j.recorder;
 
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.ToolCall;
-import io.github.agentassert4j.model.TurnContext;
 
 import java.util.*;
 
@@ -71,7 +70,7 @@ public class DataSanitizer {
 
         // 无条件深拷贝：消费线程的 enrich/序列化与上游对原对象的任何后续读写
         // 之间不得共享可变状态——脱敏配置只决定内容是否改写，不决定是否拷贝
-        InteractionRecord copy = copyRecord(original);
+        InteractionRecord copy = original.copy();
 
         // 脱敏 userInput
         if (sanitizeUserInput && copy.getUserInput() != null) {
@@ -426,107 +425,5 @@ public class DataSanitizer {
      */
     private String applyStrategy(String value) {
         return strategy.apply(value);
-    }
-
-    /**
-     * 深拷贝任意值树（Map/List 递归，其余原样——String/Number 不可变）。
-     */
-    private static Object deepCopyValue(Object value) {
-        if (value instanceof Map) {
-            Map<String, Object> out = new LinkedHashMap<>();
-            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
-                out.put(String.valueOf(entry.getKey()), deepCopyValue(entry.getValue()));
-            }
-            return out;
-        }
-        if (value instanceof List) {
-            List<Object> out = new ArrayList<>();
-            for (Object item : (List<?>) value) {
-                out.add(deepCopyValue(item));
-            }
-            return out;
-        }
-        return value;
-    }
-
-
-    InteractionRecord copyRecord(InteractionRecord original) {
-        InteractionRecord copy = new InteractionRecord();
-        copy.setRecordId(original.getRecordId());
-        copy.setTimestamp(original.getTimestamp());
-        copy.setSeq(original.getSeq());
-        copy.setTemplateId(original.getTemplateId());
-        copy.setTemplateHash(original.getTemplateHash());
-        copy.setTemplateText(original.getTemplateText());
-        copy.setTemplateSkeleton(original.getTemplateSkeleton());
-        copy.setSkeletonHash(original.getSkeletonHash());
-        copy.setApiProtocol(original.getApiProtocol());
-        copy.setProvider(original.getProvider());
-        copy.setModel(original.getModel());
-        copy.setServedModel(original.getServedModel());
-        copy.setEndpoint(original.getEndpoint());
-        copy.setUserInput(original.getUserInput());
-        copy.setTurnIndex(original.getTurnIndex());
-        copy.setToolsDefinition(original.getToolsDefinition());
-        copy.setSamplingParams(original.getSamplingParams());
-        copy.setModelRequestRaw(original.getModelRequestRaw());
-        copy.setFinishReason(original.getFinishReason());
-        copy.setModelResponse(original.getModelResponse());
-        copy.setModelResponseRaw(original.getModelResponseRaw());
-        copy.setInputTokens(original.getInputTokens());
-        copy.setOutputTokens(original.getOutputTokens());
-        copy.setCacheReadTokens(original.getCacheReadTokens());
-        copy.setCacheWriteTokens(original.getCacheWriteTokens());
-        copy.setReasoningTokens(original.getReasoningTokens());
-        copy.setUsageRaw(original.getUsageRaw());
-        copy.setLatencyMs(original.getLatencyMs());
-        copy.setTtftMs(original.getTtftMs());
-        copy.setCostUsd(original.getCostUsd());
-        copy.setHasToolCalls(original.isHasToolCalls());
-        copy.setSessionId(original.getSessionId());
-        copy.setInvocationId(original.getInvocationId());
-        copy.setInvocationKey(original.getInvocationKey());
-        copy.setMultimodalInput(original.isMultimodalInput());
-        copy.setMultimodalContent(original.getMultimodalContent());
-        copy.setMetadata(original.getMetadata());
-        copy.setRecorderVersion(original.getRecorderVersion());
-
-        // 深拷贝 toolCalls（null 元素跳过——与 sanitize 主循环的检查标准一致）
-        if (original.getToolCalls() != null) {
-            List<ToolCall> callsCopy = new ArrayList<>();
-            for (ToolCall tc : original.getToolCalls()) {
-                if (tc == null) {
-                    continue;
-                }
-                ToolCall tcCopy = new ToolCall();
-                tcCopy.setToolName(tc.getToolName());
-                tcCopy.setToolCallId(tc.getToolCallId());
-                tcCopy.setSuccess(tc.isSuccess());
-                tcCopy.setArgTypes(tc.getArgTypes() != null ? new HashMap<>(tc.getArgTypes()) : null);
-                tcCopy.setArguments(tc.getArguments() != null ? (Map<String, Object>) deepCopyValue(tc.getArguments()) : null);
-                tcCopy.setResult(tc.getResult());
-                callsCopy.add(tcCopy);
-            }
-            copy.setToolCalls(callsCopy);
-        }
-
-        // 深拷贝 previousTurns（元素级：上游事后修改轮次对象不得影响已入队的副本）
-        if (original.getPreviousTurns() != null) {
-            List<TurnContext> turnsCopy = new ArrayList<>(original.getPreviousTurns().size());
-            for (TurnContext turn : original.getPreviousTurns()) {
-                if (turn == null) {
-                    turnsCopy.add(null);
-                    continue;
-                }
-                TurnContext turnCopy = new TurnContext(turn.getRole(), turn.getContent());
-                turnCopy.setToolCallId(turn.getToolCallId());
-                turnCopy.setToolName(turn.getToolName());
-                turnCopy.setToolArguments(turn.getToolArguments());
-                turnsCopy.add(turnCopy);
-            }
-            copy.setPreviousTurns(turnsCopy);
-        }
-
-        return copy;
     }
 }

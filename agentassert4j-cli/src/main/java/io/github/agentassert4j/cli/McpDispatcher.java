@@ -134,7 +134,7 @@ final class McpDispatcher implements StdioTransport.MessageHandler {
 
     /**
      * 工具清单：注册序呈现（静态确定性）；inputSchema 原样拼接。分页不支持——
-     * cursor 参数忽略、不返回 nextCursor（工具面恒 ≤ 12 个）。
+     * cursor 参数忽略、不返回 nextCursor（工具面小而封闭，分页无意义）。
      */
     private String toolsList(Object id) {
         StringBuilder sb = new StringBuilder("{\"tools\":[");
@@ -231,7 +231,7 @@ final class McpDispatcher implements StdioTransport.MessageHandler {
                 continue;
             }
             Map<?, ?> object = (Map<?, ?>) parsed;
-            if (isError && "agentassert4j.error/1".equals(object.get("schema"))) {
+            if (isError && ReportSchemas.ERROR.equals(object.get("schema"))) {
                 envelope = castArguments(object);
             }
             if (firstObject == null) {

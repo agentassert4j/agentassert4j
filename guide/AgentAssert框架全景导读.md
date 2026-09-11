@@ -893,7 +893,7 @@ recorded（到达即计数） = written（批量写成功）
   1. 系统属性显式路径——**不可读时抛 `IllegalStateException` 而非静默换源**（fail-fast：用户会以为配置已生效）；
   2. 当前工作目录；3. `~/.agentassert4j/`；4. classpath；5. 都没有 → 安全默认值。
   `${ENV_VAR}` 引用在读取后统一替换（未设置的变量替换为空串）。`describeMainConfigSource` 返回实际命中的来源供命令披露。
-- 主配置五段（`AgentAssert4jConfig`，全部字段带安全默认值）：`storage.url`（默认 `~/.agentassert4j/agentassert4j.db`）、`recorder.{batchSize, flushIntervalMs}`、`regression.ignorableFields`、`llm.{apiKey(${ENV} 引用), endpoint, model, extraBody, timeoutMs, temperature}`、`tools.excludeFromGraph`。
+- 主配置四段（`AgentAssert4jConfig`，全部字段带安全默认值）：`storage.url`（默认 `~/.agentassert4j/agentassert4j.db`）、`recorder.{batchSize, flushIntervalMs}`、`regression.ignorableFields`、`llm.{apiKey(${ENV} 引用), endpoint, model, extraBody, timeoutMs, temperature, protocol}`；未知根段/未知 llm 键由 doctor 就近告警。
 
 **表结构**：无——CLI 是无状态的进程，一切状态在库里。
 

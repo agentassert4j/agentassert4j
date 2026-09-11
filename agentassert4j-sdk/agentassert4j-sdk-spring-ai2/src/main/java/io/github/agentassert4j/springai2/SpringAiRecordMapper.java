@@ -1,11 +1,10 @@
 package io.github.agentassert4j.springai2;
 
 import io.github.agentassert4j.algorithm.CostEstimator;
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.ToolCall;
-import io.github.agentassert4j.model.TurnContext;
+import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.util.ArgTypeUtil;
 import io.github.agentassert4j.util.HashUtil;
+import io.github.agentassert4j.util.LlmProviderUtil;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import org.springframework.ai.chat.messages.*;
 import org.springframework.ai.chat.metadata.Usage;
@@ -91,7 +90,7 @@ final class SpringAiRecordMapper {
     private static void mapRequest(Prompt prompt, InteractionRecord record) {
         // 记录本身即 OpenAI chat 形状（system/user/tool 帧与多模态 content 数组）：
         // apiProtocol 描述的是落库数据协议而非上游供应商
-        record.setApiProtocol("openai-chat");
+        record.setApiProtocol(LlmWireProtocol.OPENAI_CHAT.wireName());
 
         List<Message> instructions = prompt.getInstructions() != null ? prompt.getInstructions() : new ArrayList<Message>();
 
@@ -224,7 +223,7 @@ final class SpringAiRecordMapper {
         }
         String model = options.getModel();
         record.setModel(model);
-        record.setProvider(guessProvider(model));
+        record.setProvider(LlmProviderUtil.inferFromModel(model));
 
         Map<String, Object> sampling = new LinkedHashMap<>();
         if (options.getTemperature() != null) {
@@ -346,7 +345,7 @@ final class SpringAiRecordMapper {
     }
 
     /**
-     * 结束原因归一为框架枚举词表；provider 未报告（NULL）返回 null。
+     * 结束原因归一为规范词表（{@link LlmFinishReason}）；provider 未报告返回 null。
      */
     private static String normalizeFinishReason(String finishReason) {
         if (finishReason == null) {
@@ -354,17 +353,17 @@ final class SpringAiRecordMapper {
         }
         switch (finishReason) {
             case "STOP":
-                return "stop";
+                return LlmFinishReason.STOP.wireName();
             case "TOOL_EXECUTION":
-                return "tool_calls";
+                return LlmFinishReason.TOOL_CALLS.wireName();
             case "LENGTH":
-                return "max_tokens";
+                return LlmFinishReason.MAX_TOKENS.wireName();
             case "CONTENT_FILTER":
-                return "content_filter";
+                return LlmFinishReason.CONTENT_FILTER.wireName();
             case "NULL":
                 return null;
             default:
-                return "other";
+                return LlmFinishReason.OTHER.wireName();
         }
     }
 
@@ -420,31 +419,5 @@ final class SpringAiRecordMapper {
         } catch (Exception e) {
             return null;
         }
-    }
-
-    private static String guessProvider(String model) {
-        if (model == null) {
-            return null;
-        }
-        String lower = model.toLowerCase(Locale.ROOT);
-        if (lower.startsWith("deepseek")) {
-            return "deepseek";
-        }
-        if (lower.startsWith("gpt") || lower.startsWith("o1") || lower.startsWith("o3") || lower.startsWith("o4")) {
-            return "openai";
-        }
-        if (lower.startsWith("claude")) {
-            return "anthropic";
-        }
-        if (lower.startsWith("qwen") || lower.startsWith("qwq")) {
-            return "qwen";
-        }
-        if (lower.startsWith("gemini")) {
-            return "gemini";
-        }
-        if (lower.startsWith("llama")) {
-            return "ollama";
-        }
-        return "custom";
     }
 }

@@ -68,7 +68,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
                 }
             }
             if (jsonOutput) {
-                out.println("{\"schema\":\"agentassert4j.adjudication/1\",\"action\":\"" + action() + "\",\"invocations\":[" + String.join(",", results) + "]}");
+                out.println("{\"schema\":\"" + ReportSchemas.ADJUDICATION + "\",\"action\":\"" + action() + "\",\"invocations\":[" + String.join(",", results) + "]}");
             }
             return 0;
         } catch (CliFailureException e) {

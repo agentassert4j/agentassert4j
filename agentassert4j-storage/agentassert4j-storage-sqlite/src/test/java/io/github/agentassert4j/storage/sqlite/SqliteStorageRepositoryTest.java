@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.*;
@@ -465,9 +467,19 @@ class SqliteStorageRepositoryTest {
 
     @Test
     void schemaVersionStamped() throws Exception {
-        try (Statement stmt = repo.getConnection().createStatement(); ResultSet rs = stmt.executeQuery("PRAGMA user_version")) {
-            rs.next();
-            assertEquals(Schema.USER_VERSION, rs.getInt(1), "initialize 后必须盖戳 user_version");
+        // user_version 是跨连接可见的落盘语义：用独立连接读文件库验证，不借仓库内部连接
+        Path db = Files.createTempFile("agentassert4j-version", ".db");
+        SqliteStorageRepository fileRepo = new SqliteStorageRepository(db.toString());
+        try {
+            fileRepo.initialize();
+            fileRepo.close();
+            try (Connection external = DriverManager.getConnection("jdbc:sqlite:" + db.toString()); Statement stmt = external.createStatement(); ResultSet rs = stmt.executeQuery("PRAGMA user_version")) {
+                rs.next();
+                assertEquals(Schema.USER_VERSION, rs.getInt(1), "initialize 后必须盖戳 user_version");
+            }
+        } finally {
+            fileRepo.close();
+            Files.deleteIfExists(db);
         }
     }
 
@@ -486,7 +498,7 @@ class SqliteStorageRepositoryTest {
         try {
             SqliteStorageRepository futureRepo = new SqliteStorageRepository(db.toString());
             futureRepo.initialize();
-            try (Statement stmt = futureRepo.getConnection().createStatement()) {
+            try (Connection external = DriverManager.getConnection("jdbc:sqlite:" + db.toString()); Statement stmt = external.createStatement()) {
                 stmt.execute("PRAGMA user_version = " + (Schema.USER_VERSION + 1));
             }
             futureRepo.close();
@@ -494,6 +506,23 @@ class SqliteStorageRepositoryTest {
             assertThrows(RuntimeException.class, futureRepo::initialize, "高于支持版本的库必须被拒绝，不得静默打开");
             futureRepo.close();
         } finally {
+            Files.deleteIfExists(db);
+        }
+    }
+
+    @Test
+    void leftoverDatabaseWithMatchingVersionStamp_rejected() throws Exception {
+        // 版本戳齐但必需表缺席 = 早期开发构建的遗留库：必须给出可行动错误，不得静默打开
+        Path db = Files.createTempFile("agentassert4j-leftover", ".db");
+        try (Connection external = DriverManager.getConnection("jdbc:sqlite:" + db.toString()); Statement stmt = external.createStatement()) {
+            stmt.execute("PRAGMA user_version = " + Schema.USER_VERSION);
+        }
+        SqliteStorageRepository leftoverRepo = new SqliteStorageRepository(db.toString());
+        try {
+            StorageException e = assertThrows(StorageException.class, leftoverRepo::initialize, "版本戳齐但缺表的遗留库必须被拒绝");
+            assertTrue(e.getCause() != null && e.getCause().getMessage().contains("missing required table"), "错误须指明缺表语义，实为: " + e.getMessage());
+        } finally {
+            leftoverRepo.close();
             Files.deleteIfExists(db);
         }
     }
@@ -657,23 +686,38 @@ class SqliteStorageRepositoryTest {
 
     @Test
     void storageFailure_throwsStorageException_neverSwallowed() throws Exception {
-        // 底层连接失效（库锁死/磁盘满的等价模拟）：读写必须上抛，不得伪装成成功或空结果
-        repo.getConnection().close();
+        // 存储底层损坏（表被外力拆除，库锁死/磁盘满的同级故障形态）：读写必须
+        // 上抛 StorageException，不得伪装成成功或空结果
+        Path db = Files.createTempFile("agentassert4j-broken", ".db");
+        SqliteStorageRepository brokenRepo = new SqliteStorageRepository(db.toString());
+        Connection outsider = null;
+        try {
+            brokenRepo.initialize();
+            outsider = DriverManager.getConnection("jdbc:sqlite:" + db.toString());
+            try (Statement s = outsider.createStatement()) {
+                s.execute("DROP TABLE interactions");
+                s.execute("DROP TABLE invocations");
+            }
 
-        InteractionRecord r = new InteractionRecord();
-        r.setRecordId("rec-closed");
-        r.setSessionId("s");
-        r.setTimestamp(1L);
-        r.setInvocationId("sk");
-        r.setModelResponse("m");
+            InteractionRecord r = new InteractionRecord();
+            r.setRecordId("rec-broken");
+            r.setSessionId("s");
+            r.setTimestamp(1L);
+            r.setInvocationId("sk");
+            r.setModelResponse("m");
 
-        assertThrows(StorageException.class, () -> repo.saveInteraction(r));
-        assertThrows(StorageException.class, () -> repo.saveInteractions(Collections.singletonList(r)));
-        assertThrows(StorageException.class, () -> repo.findAllSessionIds());
-        assertThrows(StorageException.class, () -> repo.findAllInvocations());
-        assertThrows(StorageException.class, () -> repo.saveInvocationProfile(new InvocationProfile()));
-
-        // tearDown 会对已关连接再 close，保持幂等
+            assertThrows(StorageException.class, () -> brokenRepo.saveInteraction(r));
+            assertThrows(StorageException.class, () -> brokenRepo.saveInteractions(Collections.singletonList(r)));
+            assertThrows(StorageException.class, () -> brokenRepo.findAllSessionIds());
+            assertThrows(StorageException.class, () -> brokenRepo.findAllInvocations());
+            assertThrows(StorageException.class, () -> brokenRepo.saveInvocationProfile(new InvocationProfile()));
+        } finally {
+            if (outsider != null) {
+                outsider.close();
+            }
+            brokenRepo.close();
+            Files.deleteIfExists(db);
+        }
     }
 
     @Test

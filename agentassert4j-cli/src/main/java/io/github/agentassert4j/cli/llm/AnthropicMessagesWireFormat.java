@@ -1,5 +1,7 @@
 package io.github.agentassert4j.cli.llm;
 
+import io.github.agentassert4j.model.LlmFinishReason;
+
 import java.util.Map;
 
 /**
@@ -25,15 +27,15 @@ public final class AnthropicMessagesWireFormat {
         switch (stopReason) {
             case "end_turn":
             case "stop_sequence":
-                return "stop";
+                return LlmFinishReason.STOP.wireName();
             case "tool_use":
-                return "tool_calls";
+                return LlmFinishReason.TOOL_CALLS.wireName();
             case "max_tokens":
-                return "max_tokens";
+                return LlmFinishReason.MAX_TOKENS.wireName();
             case "refusal":
-                return "content_filter";
+                return LlmFinishReason.CONTENT_FILTER.wireName();
             default:
-                return "other";
+                return LlmFinishReason.OTHER.wireName();
         }
     }
 

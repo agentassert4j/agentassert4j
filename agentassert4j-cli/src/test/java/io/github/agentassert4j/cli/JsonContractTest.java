@@ -381,7 +381,7 @@ class JsonContractTest {
             seedOneRecord();
             // 经 core 以 null 操作者建档：CLI 路径审批人恒有 OS 用户兜底，
             // approvedBy=null 只能来自 API 侧，属「未经审批链盖章」的合法形态
-            new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), null, "abc1234", false, null, null, null);
+            new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), null, "abc1234", false, null, null, null, null);
             execute("baseline", "--db", dbPath, "--force", "--ref", "def5678");
 
             assertEquals(0, execute("rollback", "--db", dbPath, "--invocation", "queryOrder", "--version", "v1"));

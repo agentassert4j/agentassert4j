@@ -22,23 +22,34 @@ import java.util.function.BiFunction;
 public final class BehaviorChecker {
 
     private static final Map<String, BiFunction<DeterministicFingerprint, String, Boolean>> BUILTINS;
+    private static final Map<String, String> DESCRIPTIONS;
 
     static {
         Map<String, BiFunction<DeterministicFingerprint, String, Boolean>> builtins = new LinkedHashMap<>();
+        Map<String, String> descriptions = new LinkedHashMap<>();
         // 语言类判定用码点扫描而非正则：`.` 默认不匹配换行，LLM 输出几乎必然多行，
         // 正则全串匹配会把多行中文输出误判为不含中文
         builtins.put("mustUseChinese", (fp, out) -> out != null && containsScript(out, ScriptRange.CJK));
+        descriptions.put("mustUseChinese", "output contains Chinese characters (multiline-safe)");
         builtins.put("mustUseEnglish", (fp, out) -> out != null && containsScript(out, ScriptRange.LATIN) && !containsScript(out, ScriptRange.CJK));
+        descriptions.put("mustUseEnglish", "output contains Latin letters and no Chinese characters");
         builtins.put("returnsEmptyOnError", (fp, out) -> !fp.isHasError() || out == null || out.trim().isEmpty() || out.contains("[]"));
+        descriptions.put("returnsEmptyOnError", "output is empty on error");
         // TODO: [空数组判定宽泛] returnsEmptyOnError 的 out.contains("[]") 会把含空数组字面量的
         //       正常输出（如 {"data":[],"message":"成功"}）误判为空输出；待改为 RecursiveJsonParser
         //       解析后按结构判空数组/空对象
         builtins.put("returnsErrorCode", (fp, out) -> fp.isHasError());
+        descriptions.put("returnsErrorCode", "output contains an error-code field");
         builtins.put("noError", (fp, out) -> !fp.isHasError());
+        descriptions.put("noError", "no error field appeared in this interaction");
         builtins.put("jsonOutput", (fp, out) -> out != null && (out.trim().startsWith("{") || out.trim().startsWith("[")));
+        descriptions.put("jsonOutput", "output is JSON-shaped (starts with { or [)");
         builtins.put("nonEmptyOutput", (fp, out) -> out != null && !out.trim().isEmpty());
+        descriptions.put("nonEmptyOutput", "output is not empty");
         builtins.put("containsCjk", (fp, out) -> out != null && (containsScript(out, ScriptRange.CJK) || containsScript(out, ScriptRange.KANA)));
+        descriptions.put("containsCjk", "output contains CJK characters (including Japanese kana)");
         BUILTINS = Collections.unmodifiableMap(builtins);
+        DESCRIPTIONS = Collections.unmodifiableMap(descriptions);
     }
 
     private enum ScriptRange {
@@ -107,5 +118,13 @@ public final class BehaviorChecker {
      */
     public static Set<String> getBuiltinBehaviorNames() {
         return BUILTINS.keySet();
+    }
+
+    /**
+     * behavior 的用户目录说明——与词表同址声明，新增 behavior 时漏写说明会在
+     * 本方法返回 null 处显式可见，而不是消费方 switch 的静默兜底。
+     */
+    public static String describeBehavior(String behavior) {
+        return DESCRIPTIONS.get(behavior);
     }
 }

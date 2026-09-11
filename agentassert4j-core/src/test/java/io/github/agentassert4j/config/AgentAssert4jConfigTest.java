@@ -182,4 +182,39 @@ class AgentAssert4jConfigTest {
         AgentAssert4jConfig.LlmConfig o = AgentAssert4jConfig.fromJson(nullJson).getLlm();
         assertNull(o.getTemperature(), "显式 null 必须区别于缺省——重放请求省略该成员");
     }
+
+    @Nested
+    @DisplayName("未知键检测对照面（键集 ↔ 解析路径契约钉）")
+    class UnknownKeyDetection {
+
+        @Test
+        @DisplayName("全部合法根段就位 → 无未知键告警")
+        void allKnownRootSections_produceNoNotes() {
+            String json = "{\"storage\":{},\"recorder\":{},\"regression\":{},\"llm\":{}}";
+            AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
+            assertTrue(config.getConfigNotes().isEmpty(), "合法根段不得触发告警: " + config.getConfigNotes());
+        }
+
+        @Test
+        @DisplayName("llm 段全部合法键被解析路径真实消费（哨兵值逐字段吸收）")
+        void everyLlmKey_isActuallyConsumed() {
+            String json = "{\"llm\":{\"protocol\":\"openai-chat\",\"apiKey\":\"k\",\"endpoint\":\"http://e\"," + "\"model\":\"m\",\"timeoutMs\":1234,\"temperature\":0.7,\"extraBody\":\"{\\\"a\\\":1}\"}}";
+            AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
+            assertTrue(config.getConfigNotes().isEmpty(), "合法 llm 键不得触发告警: " + config.getConfigNotes());
+            assertEquals("openai-chat", config.getLlm().getProtocol());
+            assertEquals("k", config.getLlm().getApiKey());
+            assertEquals("http://e", config.getLlm().getEndpoint());
+            assertEquals("m", config.getLlm().getModel());
+            assertEquals(1234, config.getLlm().getTimeoutMs());
+            assertEquals(0.7, config.getLlm().getTemperature(), 1e-9);
+            assertEquals("{\"a\":1}", config.getLlm().getExtraBody());
+        }
+
+        @Test
+        @DisplayName("未知根键与未知 llm 键 → 告警就近可见")
+        void unknownKeys_produceVisibleNotes() {
+            AgentAssert4jConfig config = AgentAssert4jConfig.fromJson("{\"storag\":{},\"llm\":{\"endPoint\":\"http://e\"}}");
+            assertEquals(2, config.getConfigNotes().size(), "两个未知键各出一条告警: " + config.getConfigNotes());
+        }
+    }
 }

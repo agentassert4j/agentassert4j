@@ -72,9 +72,6 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
     "timeoutMs": 30000,
     "temperature": 0.0,
     "extraBody": ""
-  },
-  "tools": {
-    "excludeFromGraph": []
   }
 }
 ```

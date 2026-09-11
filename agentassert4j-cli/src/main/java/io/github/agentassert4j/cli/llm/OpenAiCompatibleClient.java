@@ -1,5 +1,6 @@
 package io.github.agentassert4j.cli.llm;
 
+import io.github.agentassert4j.model.LlmFinishReason;
 import io.github.agentassert4j.model.LlmRequest;
 import io.github.agentassert4j.model.LlmResponse;
 import io.github.agentassert4j.model.ToolCallResult;
@@ -65,17 +66,17 @@ public class OpenAiCompatibleClient extends AbstractHttpLlmClient {
         if (raw == null || raw.isEmpty()) return null;
         switch (raw) {
             case "stop":
-                return "stop";
+                return LlmFinishReason.STOP.wireName();
             case "tool_calls":
             case "function_call":
-                return "tool_calls";
+                return LlmFinishReason.TOOL_CALLS.wireName();
             case "max_tokens":
             case "length":
-                return "max_tokens";
+                return LlmFinishReason.MAX_TOKENS.wireName();
             case "content_filter":
-                return "content_filter";
+                return LlmFinishReason.CONTENT_FILTER.wireName();
             default:
-                return "other";
+                return LlmFinishReason.OTHER.wireName();
         }
     }
 

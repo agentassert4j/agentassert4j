@@ -1,8 +1,6 @@
 package io.github.agentassert4j.storage.sqlite;
 
-import io.github.agentassert4j.model.ArchivedTemplateVersion;
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.InvocationProfile;
+import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.spi.StorageException;
 import io.github.agentassert4j.spi.StorageRepository;
 
@@ -69,13 +67,6 @@ public class SqliteStorageRepository implements StorageRepository {
     @Override
     public String type() {
         return "sqlite";
-    }
-
-    /**
-     * 包级可见：供同包测试校验 PRAGMA user_version 等底层状态
-     */
-    Connection getConnection() {
-        return connection;
     }
 
     // initialize/close 与写路径共用实例监视器：flush 进行中不得关闭或置换连接，
@@ -297,10 +288,10 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setString(i++, p.getLabel());
             ps.setString(i++, p.getTemplateHash());
             ps.setString(i++, p.getInvocationName());
-            ps.setString(i++, p.getInvocationType() != null ? p.getInvocationType().name() : "TOOL");
+            ps.setString(i++, p.getInvocationType() != null ? p.getInvocationType().name() : InvocationType.TOOL.name());
             ps.setString(i++, JsonMapper.fingerprintToJson(p.getFingerprint()));
             ps.setString(i++, JsonMapper.fingerprintToJson(p.getCandidateFingerprint()));
-            ps.setString(i++, p.getBaselineStatus() != null ? p.getBaselineStatus().name() : "BASELINE");
+            ps.setString(i++, p.getBaselineStatus() != null ? p.getBaselineStatus().name() : BaselineStatus.BASELINE.name());
             ps.setString(i++, p.getVersionTag());
             ps.setString(i++, p.getAlgoVersion());
             ps.setString(i++, p.getParamSignature());

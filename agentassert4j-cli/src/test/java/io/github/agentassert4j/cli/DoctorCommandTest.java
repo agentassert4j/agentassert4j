@@ -70,7 +70,7 @@ class DoctorCommandTest {
     @DisplayName("零声明事实：多步零标签链与重复请求族给声明建议，未建档版本可见")
     void zeroDeclarationFacts_suggestions() {
         save("r1", "s1", 1000L, "查订单", "invocation:q:h1", "q", "h1");
-        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", null, false, null, null, null);
+        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", null, false, null, null, null, null);
 
         save("r2", "s2", 2000L, "查订单", "invocation:q:h2", "q", "h2");
         save("r3", "s3", 3000L, "修东西", "template:aaa", null, "h3");

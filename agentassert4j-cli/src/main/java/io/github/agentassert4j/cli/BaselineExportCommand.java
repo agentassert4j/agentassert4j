@@ -158,7 +158,7 @@ public class BaselineExportCommand implements Callable<Integer> {
                     if (excludedJson.length() > 0) excludedJson.append(",");
                     excludedJson.append("\"").append(RecursiveJsonParser.escape(excludedChain)).append("\"");
                 }
-                out.println("{\"schema\":\"agentassert4j.export-report/1\",\"out\":\"" + RecursiveJsonParser.escape(outPath) + "\",\"taskCount\":" + pack.getTasks().size() + ",\"stepCount\":" + stepCount + ",\"sha256\":\"" + HashUtil.sha256(json) + "\",\"codeRef\":\"" + RecursiveJsonParser.escape(meta.getCodeRef() != null ? meta.getCodeRef() : "") + "\",\"excluded\":[" + excludedJson + "]}");
+                out.println("{\"schema\":\"" + ReportSchemas.EXPORT_REPORT + "\",\"out\":\"" + RecursiveJsonParser.escape(outPath) + "\",\"taskCount\":" + pack.getTasks().size() + ",\"stepCount\":" + stepCount + ",\"sha256\":\"" + HashUtil.sha256(json) + "\",\"codeRef\":\"" + RecursiveJsonParser.escape(meta.getCodeRef() != null ? meta.getCodeRef() : "") + "\",\"excluded\":[" + excludedJson + "]}");
                 return 0;
             }
             out.println("Acceptance pack written: " + outPath);

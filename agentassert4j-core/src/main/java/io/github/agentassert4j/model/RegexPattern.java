@@ -15,9 +15,6 @@ public class RegexPattern {
     private String pattern;
     private String description;
 
-    public RegexPattern() {
-    }
-
     public RegexPattern(String pattern, String description) {
         this.pattern = pattern;
         this.description = description;

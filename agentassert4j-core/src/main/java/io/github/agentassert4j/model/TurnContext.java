@@ -31,12 +31,12 @@ public class TurnContext {
      */
     private String toolArguments;
 
-    public TurnContext() {
-    }
-
     public TurnContext(String role, String content) {
         this.role = role;
         this.content = content;
+    }
+
+    private TurnContext() {
     }
 
     public String getRole() {
@@ -77,5 +77,18 @@ public class TurnContext {
 
     public void setToolArguments(String toolArguments) {
         this.toolArguments = toolArguments;
+    }
+
+    /**
+     * 拷贝：字段全为不可变 String，直接赋值即为完整拷贝。
+     */
+    public TurnContext copy() {
+        TurnContext copy = new TurnContext();
+        copy.role = role;
+        copy.content = content;
+        copy.toolCallId = toolCallId;
+        copy.toolName = toolName;
+        copy.toolArguments = toolArguments;
+        return copy;
     }
 }

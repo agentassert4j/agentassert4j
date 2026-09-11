@@ -67,7 +67,7 @@ class ReplayFlowTest {
     }
 
     private void establishAll() {
-        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", null, false, null, null, null);
+        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", null, false, null, null, null, null);
     }
 
     @Nested
@@ -107,7 +107,7 @@ class ReplayFlowTest {
             InvocationProfile profile = repository.findInvocationByKey("invocation:order:hash-a");
             assertEquals(BaselineStatus.CANDIDATE, profile.getBaselineStatus());
 
-            new BaselineManager(repository).accept("invocation:order:hash-a", "tester", null);
+            new BaselineManager(repository).accept("invocation:order:hash-a", null, "tester", null);
 
             InvocationProfile settled = repository.findInvocationByKey("invocation:order:hash-a");
             assertEquals(BaselineStatus.BASELINE, settled.getBaselineStatus(), "accept 必须清候选转正");
@@ -126,7 +126,7 @@ class ReplayFlowTest {
             establishAll();
             runner().run(null, null, false, false, false, false, false, null, null);
 
-            new BaselineManager(repository).reject("invocation:order:hash-a");
+            new BaselineManager(repository).reject("invocation:order:hash-a", null);
 
             InvocationProfile profile = repository.findInvocationByKey("invocation:order:hash-a");
             assertNull(profile.getCandidateFingerprint(), "reject 必须丢弃候选");
@@ -144,10 +144,10 @@ class ReplayFlowTest {
             engine.run(null, null, false, false, false, false, false, null, null);
             DeterministicFingerprint oldBaseline = repository.findInvocationByKey("invocation:order:hash-a").getFingerprint();
 
-            new BaselineManager(repository).accept("invocation:order:hash-a", "tester", null);
+            new BaselineManager(repository).accept("invocation:order:hash-a", null, "tester", null);
             assertEquals("v2", repository.findInvocationByKey("invocation:order:hash-a").getVersionTag());
 
-            new BaselineManager(repository).rollback("invocation:order:hash-a", "v1");
+            new BaselineManager(repository).rollback("invocation:order:hash-a", "v1", null);
 
             InvocationProfile restored = repository.findInvocationByKey("invocation:order:hash-a");
             assertEquals(oldBaseline, restored.getFingerprint(), "回滚必须恢复旧基线指纹");
@@ -199,7 +199,7 @@ class ReplayFlowTest {
             assertEquals(2, runner().run(null, null, false, false, false, false, false, null, null));
             assertTrue(output.toString().contains("Judgment semantics version mismatch"));
 
-            new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", null, true, null, null, null);
+            new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", null, true, null, null, null, null);
             assertEquals(JudgmentSemantics.VERSION, repository.findInvocationByKey(key).getAlgoVersion());
             assertEquals(0, runner().run(null, null, false, false, false, false, false, null, null));
         }

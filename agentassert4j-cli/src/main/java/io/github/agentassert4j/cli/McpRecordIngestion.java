@@ -1068,7 +1068,7 @@ final class McpRecordIngestion {
     }
 
     private static String reportLine(InteractionRecord record, boolean saved, String storedSessionId) {
-        StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.record/1\",\"status\":\"").append(saved ? "saved" : "duplicate").append('"');
+        StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.RECORD + "\",\"status\":\"").append(saved ? "saved" : "duplicate").append('"');
         sb.append(",\"recordId\":\"").append(RecursiveJsonParser.escape(record.getRecordId())).append('"');
         sb.append(",\"sessionId\":\"").append(RecursiveJsonParser.escape(record.getSessionId())).append('"');
         sb.append(",\"invocationKey\":\"").append(RecursiveJsonParser.escape(record.getInvocationKey())).append('"');

@@ -227,7 +227,7 @@ public class DoctorCommand implements Callable<Integer> {
      * 规则告警清单全量携带（数量级受规则文件约束）。
      */
     private String doctorJson(DoctorFindings findings) {
-        StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.doctor/1\",\"identity\":{\"skeletonCount\":").append(findings.skeletons.size()).append(",\"skeletonSamples\":[");
+        StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.DOCTOR + "\",\"identity\":{\"skeletonCount\":").append(findings.skeletons.size()).append(",\"skeletonSamples\":[");
         List<String> skeletonJsons = new ArrayList<>();
         for (Map.Entry<String, SkeletonStat> entry : samples(new ArrayList<>(findings.skeletons.entrySet()))) {
             skeletonJsons.add("{\"key\":\"" + RecursiveJsonParser.escape(entry.getKey()) + "\",\"records\":" + entry.getValue().records + ",\"fullTextVariants\":" + entry.getValue().fullTextVariants + "}");

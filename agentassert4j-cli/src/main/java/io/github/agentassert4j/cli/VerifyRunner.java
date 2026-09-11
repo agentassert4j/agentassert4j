@@ -250,7 +250,7 @@ public class VerifyRunner {
             info("Cross-model note: pack served " + pack.getMeta().getServedModel() + " differs from local served " + crossModel + "; structural fingerprints are the primary evidence for cross-model verdicts.");
         }
         if (jsonMode) {
-            out.println("{\"schema\":\"agentassert4j.verify-report/1\",\"mode\":\"dry-run\",\"summary\":{\"tasks\":" + tasks.size() + ",\"localChains\":" + localChains.size() + ",\"uncovered\":" + uncoveredCount(tasks, localChains) + "},\"pairings\":[" + pairingsJson + "],\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}");
+            out.println("{\"schema\":\"" + ReportSchemas.VERIFY_REPORT + "\",\"mode\":\"dry-run\",\"summary\":{\"tasks\":" + tasks.size() + ",\"localChains\":" + localChains.size() + ",\"uncovered\":" + uncoveredCount(tasks, localChains) + "},\"pairings\":[" + pairingsJson + "],\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}");
         }
         return 0;
     }
@@ -423,7 +423,7 @@ public class VerifyRunner {
     }
 
     private String verifyJson(AcceptancePack pack, String digest, int pass, int changed, int missing, int added, int uncovered, int unmatchedLocal, boolean crossModel, List<String> taskJsons, List<String> uncoveredKeys, List<String> hints, String healthFragment) {
-        StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.verify-report/1\",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
+        StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.VERIFY_REPORT + "\",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
         sb.append(",\"pack\":{\"digest\":\"").append(RecursiveJsonParser.escape(digest)).append("\",\"servedModel\":\"").append(RecursiveJsonParser.escape(pack.getMeta().getServedModel() != null ? pack.getMeta().getServedModel() : "")).append("\"}");
         sb.append(",\"summary\":{\"tasks\":").append(taskJsons.size()).append(",\"pass\":").append(pass).append(",\"changed\":").append(changed).append(",\"missing\":").append(missing).append(",\"added\":").append(added).append(",\"uncovered\":").append(uncovered).append(",\"unmatchedLocal\":").append(unmatchedLocal).append(",\"crossModel\":").append(crossModel).append("}");
         sb.append(",\"tasks\":[").append(String.join(",", taskJsons)).append("]");
@@ -454,15 +454,7 @@ public class VerifyRunner {
                 ss.append(",\"verdict\":\"").append(step.getVerdict()).append('"');
             }
             if (step.getComparison() != null) {
-                ss.append(",\"similarity\":").append(step.getComparison().getScore());
-                ss.append(",\"dims\":{\"toolSet\":").append(step.getComparison().isToolCallMatch());
-                ss.append(",\"paramTypes\":").append(step.getComparison().isParamTypeMatch());
-                ss.append(",\"outputStructure\":").append(step.getComparison().isStructureMatch());
-                ss.append(",\"contentRules\":").append(step.getComparison().isKeywordMatch() && step.getComparison().isRegexMatch());
-                ss.append(",\"behaviors\":").append(step.getComparison().isBehaviorMatch()).append("}");
-                if (step.getComparison().getSummary() != null) {
-                    ss.append(",\"summary\":\"").append(RecursiveJsonParser.escape(step.getComparison().getSummary())).append('"');
-                }
+                ss.append(CliSupport.comparisonMetricsFragment(step.getComparison()));
             }
             if (step.getSurplusCount() > 0) {
                 ss.append(",\"surplusCount\":").append(step.getSurplusCount());

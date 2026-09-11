@@ -1,5 +1,7 @@
 package io.github.agentassert4j.cli.llm;
 
+import io.github.agentassert4j.model.LlmFinishReason;
+
 /**
  * OpenAI Responses 方言的 wire 归一 — finish 语义派生。Responses 响应没有
  * finish_reason 字段，语义由 status 与 output 形态派生；wire 摄取（MCP record）
@@ -21,14 +23,14 @@ public final class OpenAiResponsesWireFormat {
      */
     public static String deriveFinishReason(String status, String incompleteReason, boolean outputHasFunctionCall) {
         if (outputHasFunctionCall) {
-            return "tool_calls";
+            return LlmFinishReason.TOOL_CALLS.wireName();
         }
         if ("completed".equals(status)) {
-            return "stop";
+            return LlmFinishReason.STOP.wireName();
         }
         if ("incomplete".equals(status)) {
-            return "max_output_tokens".equals(incompleteReason) ? "max_tokens" : "content_filter";
+            return "max_output_tokens".equals(incompleteReason) ? LlmFinishReason.MAX_TOKENS.wireName() : LlmFinishReason.CONTENT_FILTER.wireName();
         }
-        return "other";
+        return LlmFinishReason.OTHER.wireName();
     }
 }

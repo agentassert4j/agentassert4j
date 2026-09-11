@@ -63,14 +63,14 @@ public class AuditCommand implements Callable<Integer> {
             }
             if (rows.isEmpty()) {
                 if (jsonOutput) {
-                    out.println("{\"schema\":\"agentassert4j.audit/1\",\"writes\":[]}");
+                    out.println("{\"schema\":\"" + ReportSchemas.AUDIT + "\",\"writes\":[]}");
                 } else {
                     out.println("No agent-driven governance writes found.");
                 }
                 return 0;
             }
             if (jsonOutput) {
-                out.println("{\"schema\":\"agentassert4j.audit/1\",\"writes\":[" + String.join(",", rows) + "]}");
+                out.println("{\"schema\":\"" + ReportSchemas.AUDIT + "\",\"writes\":[" + String.join(",", rows) + "]}");
             } else {
                 out.println("Agent-driven governance writes (" + rows.size() + "):");
                 for (String line : lines) {

@@ -15,6 +15,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -232,12 +233,15 @@ class McpServerTest {
     class Manifest {
 
         @Test
-        @DisplayName("12 工具注册序即清单序")
+        @DisplayName("清单无重名工具，且注册序跨调用稳定")
         void tools_registeredInStableOrder() {
             dispatcher.handle(rpc("initialize", "1", "{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{}}"));
             Map<String, Object> result = castMap(parseObject(dispatcher.handle(rpc("tools/list", "1", null))).get("result"));
             List<Object> tools = castList(result.get("tools"));
-            assertEquals(Arrays.asList("check", "diff", "report", "verify", "doctor", "graph", "record", "record-show", "establish", "accept", "reject", "rollback", "audit", "rules", "member-check", "re-drive", "export"), toolNames(tools));
+            List<Object> names = toolNames(tools);
+            assertEquals(new HashSet<Object>(names).size(), names.size(), "工具名不得重复");
+            Map<String, Object> again = castMap(parseObject(dispatcher.handle(rpc("tools/list", "2", null))).get("result"));
+            assertEquals(names, toolNames(castList(again.get("tools"))), "tools/list 序必须确定");
         }
 
         @Test

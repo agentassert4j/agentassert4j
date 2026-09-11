@@ -256,7 +256,7 @@ class CommandSmokeTest {
         repository.saveInteraction(other2);
         repository.saveInteraction(other);
         repository.saveTemplateText("hash-old", "baseline template body for queryOrder");
-        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", null, false, null, null, null);
+        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", null, false, null, null, null, null);
 
         ByteArrayOutputStream out = redirectStdout();
         int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--invocation", "queryOrder", "--db", dbPath);

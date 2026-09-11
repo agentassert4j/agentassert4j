@@ -5,8 +5,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
-import java.util.Arrays;
-
 /**
  * schema 契约版本管理（PRAGMA user_version）。
  *
@@ -28,9 +26,7 @@ final class SchemaMigrator {
         int current = readUserVersion(connection);
 
         if (current > Schema.USER_VERSION) {
-            throw new SQLException("Database schema version " + current
-                    + " is newer than supported version " + Schema.USER_VERSION
-                    + "; please upgrade agentassert4j");
+            throw new SQLException("Database schema version " + current + " is newer than supported version " + Schema.USER_VERSION + "; please upgrade agentassert4j");
         }
 
         if (current == Schema.USER_VERSION) {
@@ -44,7 +40,6 @@ final class SchemaMigrator {
             }
             stmt.execute("PRAGMA user_version = " + Schema.USER_VERSION);
         }
-        verifyRequiredTables(connection);
     }
 
     /**
@@ -53,20 +48,17 @@ final class SchemaMigrator {
      * SQLITE_ERROR 失败。
      */
     private static void verifyRequiredTables(Connection connection) throws SQLException {
-        for (String table : Arrays.asList("interactions", "prompt_texts", "invocations", "invocation_template_versions")) {
+        for (String table : Schema.tableNames()) {
             try (ResultSet rs = connection.getMetaData().getTables(null, null, table, null)) {
                 if (!rs.next()) {
-                    throw new SQLException("Database file is missing required table '" + table
-                            + "' (a leftover database from an earlier development build; development builds do not migrate old schemas). "
-                            + "Delete the file or point --db at a fresh path.");
+                    throw new SQLException("Database file is missing required table '" + table + "' (a leftover database from an earlier development build; development builds do not migrate old schemas). " + "Delete the file or point --db at a fresh path.");
                 }
             }
         }
     }
 
     private static int readUserVersion(Connection connection) throws SQLException {
-        try (Statement stmt = connection.createStatement();
-             ResultSet rs = stmt.executeQuery("PRAGMA user_version")) {
+        try (Statement stmt = connection.createStatement(); ResultSet rs = stmt.executeQuery("PRAGMA user_version")) {
             rs.next();
             return rs.getInt(1);
         }

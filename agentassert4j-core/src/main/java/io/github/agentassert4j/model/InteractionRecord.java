@@ -1,5 +1,6 @@
 package io.github.agentassert4j.model;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -53,8 +54,8 @@ public class InteractionRecord {
     private String skeletonHash;
 
     /**
-     * 协议枚举（TEXT）：openai-chat / anthropic-messages / openai-responses / gemini-native。
-     * 由 SDK 捕获侧按适配线写入（Spring AI 记录即 OpenAI chat 形状）
+     * 协议枚举（TEXT）：取值即 {@link LlmWireProtocol} 的线上值，由 SDK 捕获侧
+     * 按适配线写入（Spring AI 记录即 OpenAI chat 形状）
      */
     private String apiProtocol;
     /**
@@ -493,5 +494,68 @@ public class InteractionRecord {
 
     public void setRecorderVersion(String recorderVersion) {
         this.recorderVersion = recorderVersion;
+    }
+
+    /**
+     * 深拷贝：toolCalls 与 previousTurns 逐元素重建（含 null 元素，保持序列形状），
+     * 标量与 String 字段直接赋值——脱敏、入队等消费方据此与上游对原对象的后续
+     * 读写互不共享可变状态。新增字段必须同步补进本方法，拷贝完整性由
+     * InteractionRecordCopyTest 以反射全字段比对兜底。
+     */
+    public InteractionRecord copy() {
+        InteractionRecord copy = new InteractionRecord();
+        copy.recordId = recordId;
+        copy.timestamp = timestamp;
+        copy.seq = seq;
+        copy.templateId = templateId;
+        copy.templateHash = templateHash;
+        copy.templateText = templateText;
+        copy.templateSkeleton = templateSkeleton;
+        copy.skeletonHash = skeletonHash;
+        copy.apiProtocol = apiProtocol;
+        copy.provider = provider;
+        copy.model = model;
+        copy.servedModel = servedModel;
+        copy.endpoint = endpoint;
+        copy.userInput = userInput;
+        copy.turnIndex = turnIndex;
+        copy.toolsDefinition = toolsDefinition;
+        copy.samplingParams = samplingParams;
+        copy.modelRequestRaw = modelRequestRaw;
+        copy.finishReason = finishReason;
+        copy.modelResponse = modelResponse;
+        copy.modelResponseRaw = modelResponseRaw;
+        copy.inputTokens = inputTokens;
+        copy.outputTokens = outputTokens;
+        copy.cacheReadTokens = cacheReadTokens;
+        copy.cacheWriteTokens = cacheWriteTokens;
+        copy.reasoningTokens = reasoningTokens;
+        copy.usageRaw = usageRaw;
+        copy.latencyMs = latencyMs;
+        copy.ttftMs = ttftMs;
+        copy.costUsd = costUsd;
+        copy.hasToolCalls = hasToolCalls;
+        copy.sessionId = sessionId;
+        copy.invocationId = invocationId;
+        copy.invocationKey = invocationKey;
+        copy.multimodalInput = multimodalInput;
+        copy.multimodalContent = multimodalContent;
+        copy.metadata = metadata;
+        copy.recorderVersion = recorderVersion;
+        if (toolCalls != null) {
+            List<ToolCall> callsCopy = new ArrayList<>(toolCalls.size());
+            for (ToolCall tc : toolCalls) {
+                callsCopy.add(tc != null ? tc.copy() : null);
+            }
+            copy.toolCalls = callsCopy;
+        }
+        if (previousTurns != null) {
+            List<TurnContext> turnsCopy = new ArrayList<>(previousTurns.size());
+            for (TurnContext turn : previousTurns) {
+                turnsCopy.add(turn != null ? turn.copy() : null);
+            }
+            copy.previousTurns = turnsCopy;
+        }
+        return copy;
     }
 }

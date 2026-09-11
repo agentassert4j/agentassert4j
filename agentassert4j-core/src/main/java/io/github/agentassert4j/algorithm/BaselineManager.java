@@ -34,20 +34,16 @@ public class BaselineManager {
      * <p>归档与保存是两步独立写入，无跨表事务：保存失败经 StorageException 向上可见，
      * 重试时归档去重守卫保证不产生重复归档行， accept 可安全重放。</p>
      *
-     * @param invocationKey 调用点键（InvocationResolver 派生）
-     * @param approver      审批人身份，随活跃画像与归档行留痕（纯治理元数据，永不参与判定）
-     * @param codeRef       代码锚（申报制：调用方声明的代码参照如 git 提交号，随活跃画像留痕；
-     *                      空缺合法，永不参与判定）
+     * <p>expectedActiveVersion 非空时执行乐观并发守卫：多宿主共享同一库时，
+     * 判定/巡检所见与裁决写入之间活跃版本可能已被并行改写，不匹配即
+     * {@link VersionMismatchException} 就近拒绝。</p>
+     *
+     * @param invocationKey         调用点键（InvocationResolver 派生）
+     * @param expectedActiveVersion 乐观守卫的期望活跃版本标签，null = 不设守卫
+     * @param approver              审批人身份，随活跃画像与归档行留痕（纯治理元数据，永不参与判定）
+     * @param codeRef               代码锚（申报制：调用方声明的代码参照如 git 提交号，随活跃画像留痕；
+     *                              空缺合法，永不参与判定）
      * @throws IllegalStateException 无候选指纹时抛出
-     */
-    public synchronized void accept(String invocationKey, String approver, String codeRef) {
-        accept(invocationKey, null, approver, codeRef);
-    }
-
-    /**
-     * 接受候选（带乐观并发守卫）。expectedActiveVersion 非空时，写入前校验活跃
-     * 版本标签：多宿主共享同一库时，判定/巡检所见与裁决写入之间活跃版本可能
-     * 已被并行改写，不匹配即 {@link VersionMismatchException} 就近拒绝。
      */
     public synchronized void accept(String invocationKey, String expectedActiveVersion, String approver, String codeRef) {
         InvocationProfile profile = repository.findInvocationByKey(invocationKey);
@@ -82,15 +78,12 @@ public class BaselineManager {
     /**
      * 否决候选：丢弃候选，保留旧基线。
      * 开发者需自行回滚 Prompt（回滚是 git 的职责，不是测试框架的职责）。
+     * expectedActiveVersion 非空时执行乐观并发守卫（语义同 {@link #accept}）。
      *
-     * @param invocationKey 调用点键
+     * @param invocationKey         调用点键
+     * @param expectedActiveVersion 乐观守卫的期望活跃版本标签，null = 不设守卫
      * @throws IllegalStateException 无候选指纹时抛出（与 accept 对称）
      */
-    public synchronized void reject(String invocationKey) {
-        reject(invocationKey, null);
-    }
-
-    /** 否决候选（带乐观并发守卫，语义同 {@link #accept} 的守卫说明）。 */
     public synchronized void reject(String invocationKey, String expectedActiveVersion) {
         InvocationProfile profile = repository.findInvocationByKey(invocationKey);
         if (profile == null) {
@@ -129,17 +122,14 @@ public class BaselineManager {
     }
 
     /**
-     * 回滚到指定版本的归档基线。
+     * 回滚到指定版本的归档基线。expectedActiveVersion 非空时执行乐观并发守卫
+     * （语义同 {@link #accept}）。
      *
-     * @param invocationKey 调用点键
-     * @param versionTag    目标版本标签
+     * @param invocationKey         调用点键
+     * @param versionTag            目标版本标签
+     * @param expectedActiveVersion 乐观守卫的期望活跃版本标签，null = 不设守卫
      * @throws IllegalStateException 无归档基线时抛出
      */
-    public synchronized void rollback(String invocationKey, String versionTag) {
-        rollback(invocationKey, versionTag, null);
-    }
-
-    /** 回滚（带乐观并发守卫，语义同 {@link #accept} 的守卫说明）。 */
     public synchronized void rollback(String invocationKey, String versionTag, String expectedActiveVersion) {
         ArchivedTemplateVersion archived = repository.findArchivedVersion(invocationKey, versionTag);
         if (archived == null) {
@@ -219,6 +209,16 @@ public class BaselineManager {
     }
 
     /**
+     * 乐观并发守卫：期望版本非空且与活跃版本不符时就地拒绝——
+     * 多宿主并发改写的违约在此可见，不推迟到裁决落地之后。
+     */
+    private void checkExpectedVersion(InvocationProfile profile, String expectedActiveVersion) {
+        if (expectedActiveVersion != null && !expectedActiveVersion.equals(profile.getVersionTag())) {
+            throw new VersionMismatchException("Invocation " + profile.getInvocationKey() + " active baseline is " + profile.getVersionTag() + ", not the expected " + expectedActiveVersion + "; a concurrent actor may have changed it. Re-read with report, then retry or drop the guard.");
+        }
+    }
+
+    /**
      * 以当前判定语义重建基线——判定语义版本升级后的恢复路径。
      * 用当前算法对既有录制重新提指纹并覆盖活跃画像，版本标签按归档占用顺延；
      * 被替换的旧基线先归档留痕（含其治理事实），rollback 可恢复——恢复出的
@@ -229,15 +229,6 @@ public class BaselineManager {
      * @param rules    规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
      * @throws IllegalStateException 该调用点无画像且无录制数据可解析时抛出
      */
-    private void checkExpectedVersion(InvocationProfile profile, String expectedActiveVersion) {
-        if (expectedActiveVersion != null && !expectedActiveVersion.equals(profile.getVersionTag())) {
-            throw new VersionMismatchException("Invocation " + profile.getInvocationKey()
-                    + " active baseline is " + profile.getVersionTag()
-                    + ", not the expected " + expectedActiveVersion
-                    + "; a concurrent actor may have changed it. Re-read with report, then retry or drop the guard.");
-        }
-    }
-
     public synchronized void reestablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef) {
         establish(record, approver, true, rules, codeRef);
     }

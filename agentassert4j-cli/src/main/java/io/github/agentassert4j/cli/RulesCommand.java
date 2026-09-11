@@ -36,14 +36,14 @@ public class RulesCommand implements Callable<Integer> {
             StringBuilder items = new StringBuilder();
             for (String name : builtins) {
                 if (items.length() > 0) items.append(",");
-                items.append("{\"name\":\"").append(name).append("\",\"description\":\"").append(describe(name)).append("\"}");
+                items.append("{\"name\":\"").append(name).append("\",\"description\":\"").append(BehaviorChecker.describeBehavior(name)).append("\"}");
             }
-            out.println("{\"schema\":\"agentassert4j.rules/1\",\"behaviors\":[" + items + "]}");
+            out.println("{\"schema\":\"" + ReportSchemas.RULES + "\",\"behaviors\":[" + items + "]}");
             return 0;
         }
         out.println("Built-in constraint behaviors (all names accepted by the behaviors field in agentassert4j-rules.json):");
         for (String name : builtins) {
-            out.println("  " + name + " — " + describe(name));
+            out.println("  " + name + " — " + BehaviorChecker.describeBehavior(name));
         }
         out.println();
         out.println("Rules file example (agentassert4j-rules.json; looked up next to agentassert4j.json, then working directory, then ~/.agentassert4j/):");
@@ -58,28 +58,5 @@ public class RulesCommand implements Callable<Integer> {
         out.println("  }");
         out.println("}");
         return 0;
-    }
-
-    private static String describe(String name) {
-        switch (name) {
-            case "mustUseChinese":
-                return "output contains Chinese characters (multiline-safe)";
-            case "mustUseEnglish":
-                return "output contains Latin letters and no Chinese characters";
-            case "containsCjk":
-                return "output contains CJK characters (including Japanese kana)";
-            case "jsonOutput":
-                return "output is JSON-shaped (starts with { or [)";
-            case "nonEmptyOutput":
-                return "output is not empty";
-            case "noError":
-                return "no error field appeared in this interaction";
-            case "returnsErrorCode":
-                return "output contains an error-code field";
-            case "returnsEmptyOnError":
-                return "output is empty on error";
-            default:
-                return "see the BehaviorChecker javadoc in core";
-        }
     }
 }

@@ -13,6 +13,7 @@ import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.model.LlmWireProtocol;
 import io.github.agentassert4j.model.TaskChain;
+import io.github.agentassert4j.result.ComparisonResult;
 import io.github.agentassert4j.result.DriftReport;
 import io.github.agentassert4j.spi.InteractionQueryStore;
 import io.github.agentassert4j.spi.LlmClient;
@@ -666,7 +667,26 @@ final class CliSupport {
      */
     static String errorEnvelope(CliErrorCode errorCode, String message, String hint, String nextAction) {
         String safeHint = hint == null || hint.isEmpty() ? "Fix the reported problem, then retry." : hint;
-        return "{\"schema\":\"agentassert4j.error/1\",\"status\":\"error\",\"errorCode\":\"" + errorCode.wireName() + "\",\"message\":\"" + RecursiveJsonParser.escape(message != null ? message : "") + "\",\"hints\":[\"" + RecursiveJsonParser.escape(safeHint) + "\"],\"nextAction\":\"" + RecursiveJsonParser.escape(nextAction != null ? nextAction : "") + "\"}";
+        return "{\"schema\":\"" + ReportSchemas.ERROR + "\",\"status\":\"error\",\"errorCode\":\"" + errorCode.wireName() + "\",\"message\":\"" + RecursiveJsonParser.escape(message != null ? message : "") + "\",\"hints\":[\"" + RecursiveJsonParser.escape(safeHint) + "\"],\"nextAction\":\"" + RecursiveJsonParser.escape(nextAction != null ? nextAction : "") + "\"}";
+    }
+
+    /**
+     * 步骤级判定度量 JSON 片段（similarity + dims 五维 + 可选 summary）。task-report
+     * 与 verify-report 两个报告面共用——维度词表与 contentRules 的合成规则只此一份，
+     * 两个报告面对同一判定必须报出完全一致的度量形态。
+     */
+    static String comparisonMetricsFragment(ComparisonResult comparison) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(",\"similarity\":").append(comparison.getScore());
+        sb.append(",\"dims\":{\"toolSet\":").append(comparison.isToolCallMatch());
+        sb.append(",\"paramTypes\":").append(comparison.isParamTypeMatch());
+        sb.append(",\"outputStructure\":").append(comparison.isStructureMatch());
+        sb.append(",\"contentRules\":").append(comparison.isKeywordMatch() && comparison.isRegexMatch());
+        sb.append(",\"behaviors\":").append(comparison.isBehaviorMatch()).append("}");
+        if (comparison.getSummary() != null) {
+            sb.append(",\"summary\":\"").append(RecursiveJsonParser.escape(comparison.getSummary())).append('"');
+        }
+        return sb.toString();
     }
 
     /**

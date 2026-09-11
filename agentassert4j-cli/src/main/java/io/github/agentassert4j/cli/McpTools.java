@@ -37,8 +37,8 @@ final class McpTools {
      */
     static List<McpTool> tools(String db) {
         List<McpTool> tools = new ArrayList<>();
-        tools.add(McpTool.of("check", "Project-wide behavior check with zero LLM calls: template drift detection plus per-task chain alignment. " + "Precondition: recorded interactions in the database (starter SDK in-app recording, or the record tool). " + "Runs CI semantics: invocations without baselines are refused with a pointer to establish, and no governance state is written. " + "PASS means no behavioral regression since the baselines; CHANGED means a behavioral difference, reported per task with per-step diffs.", "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}", CliCommands("replay"), args -> runReplay(db, args, true, false)));
-        tools.add(McpTool.of("diff", "Behavioral difference for a narrowed scope, same zero-call engine as check: per-step alignment of each task's latest chain " + "against its previous chain, plus template drift, scoped by task request-text prefix and/or invocation selector. " + "CI semantics like check: refuses when the scope holds unbaselined invocations.", "{\"type\":\"object\",\"properties\":{" + "\"task\":{\"type\":\"string\",\"description\":\"Task chain request-text prefix\"}," + "\"invocation\":{\"type\":\"string\",\"description\":\"Invocation selector: business label, invocationKey, unique prefix, or the status display form\"}}," + "\"additionalProperties\":false}", CliCommands("replay"), args -> runReplay(db, args, true, false)));
+        tools.add(McpTool.of("check", "Project-wide behavior check with zero LLM calls: template drift detection plus per-task chain alignment. " + "Precondition: recorded interactions in the database (starter SDK in-app recording, or the record tool). " + "Runs CI semantics: invocations without baselines are refused with a pointer to establish, and no governance state is written. " + "PASS means no behavioral regression since the baselines; CHANGED means a behavioral difference, reported per task with per-step diffs.", "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}", CliCommands("replay"), args -> runReplay(db, args, true, false, false)));
+        tools.add(McpTool.of("diff", "Behavioral difference for a narrowed scope, same zero-call engine as check: per-step alignment of each task's latest chain " + "against its previous chain, plus template drift, scoped by task request-text prefix and/or invocation selector. " + "CI semantics like check: refuses when the scope holds unbaselined invocations.", "{\"type\":\"object\",\"properties\":{" + "\"task\":{\"type\":\"string\",\"description\":\"Task chain request-text prefix\"}," + "\"invocation\":{\"type\":\"string\",\"description\":\"Invocation selector: business label, invocationKey, unique prefix, or the status display form\"}}," + "\"additionalProperties\":false}", CliCommands("replay"), args -> runReplay(db, args, true, false, false)));
         tools.add(McpTool.of("report", "Snapshot of recorded invocations and baselines: version tags, pending candidate fingerprints, stability view over repeated runs, " + "and exit-health counts. Read-only. Default output is the status/1 JSON report (always full-project); " + "diff=true switches to the full human inspection view with per-dimension candidate vs baseline diffs.", "{\"type\":\"object\",\"properties\":{" + "\"invocation\":{\"type\":\"string\",\"description\":\"Narrow the view to one invocation: business label, invocationKey prefix, or the status display form (human view only)\"}," + "\"diff\":{\"type\":\"boolean\",\"description\":\"Render the human inspection view including candidate diffs instead of the JSON report\"}}," + "\"additionalProperties\":false}", CliCommands("status"), args -> runCommand(capture -> {
             StatusCommand command = new StatusCommand();
             command.out = capture.out;
@@ -149,7 +149,7 @@ final class McpTools {
                 command.db = db;
                 command.invocation = invocation;
                 command.version = version;
-            command.expectedVersion = optionalString(args, "expectedVersion");
+                command.expectedVersion = optionalString(args, "expectedVersion");
                 command.jsonOutput = true;
                 return command;
             });
@@ -170,7 +170,7 @@ final class McpTools {
             return command;
         })));
         tools.add(McpTool.of("member-check", "Member determination: the latest chain of each task is checked against its most recent chains (bounded window 5) — matching any of them passes. " + "Use it to judge whether a new execution still belongs to the known behavior cluster under fluctuating real model behavior. Read-only judgment: no governance writes.", "{\"type\":\"object\",\"properties\":{" + "\"task\":{\"type\":\"string\",\"description\":\"Task chain request-text prefix\"}," + "\"invocation\":{\"type\":\"string\",\"description\":\"Invocation selector\"}}," + "\"additionalProperties\":false}", CliCommands("replay"), args -> runReplay(db, args, true, false, true)));
-        tools.add(McpTool.of("re-drive", "Controlled re-drive (long-running, spends real LLM calls): re-runs recorded inputs through each point's latest archived template " + "to confirm drift with fresh evidence. Set a generous client timeout; pass maxTotalCalls/maxTotalTokens budgets; " + "prefer dryRun first for a cost estimate. CI semantics: no governance writes.", "{\"type\":\"object\",\"properties\":{" + "\"task\":{\"type\":\"string\",\"description\":\"Task chain request-text prefix\"}," + "\"invocation\":{\"type\":\"string\",\"description\":\"Invocation selector\"}," + "\"fullChain\":{\"type\":\"boolean\",\"description\":\"Re-drive every record in scope, not only drift points\"}," + "\"maxTotalCalls\":{\"type\":\"integer\",\"description\":\"Budget cap on real re-drive calls\"}," + "\"maxTotalTokens\":{\"type\":\"integer\",\"description\":\"Budget cap on total re-drive tokens\"}," + "\"dryRun\":{\"type\":\"boolean\",\"description\":\"Read-only cost estimate; no calls, no writes\"}}," + "\"additionalProperties\":false}", CliCommands("replay"), args -> runReplay(db, args, true, true)));
+        tools.add(McpTool.of("re-drive", "Controlled re-drive (long-running, spends real LLM calls): re-runs recorded inputs through each point's latest archived template " + "to confirm drift with fresh evidence. Set a generous client timeout; pass maxTotalCalls/maxTotalTokens budgets; " + "prefer dryRun first for a cost estimate. CI semantics: no governance writes.", "{\"type\":\"object\",\"properties\":{" + "\"task\":{\"type\":\"string\",\"description\":\"Task chain request-text prefix\"}," + "\"invocation\":{\"type\":\"string\",\"description\":\"Invocation selector\"}," + "\"fullChain\":{\"type\":\"boolean\",\"description\":\"Re-drive every record in scope, not only drift points\"}," + "\"maxTotalCalls\":{\"type\":\"integer\",\"description\":\"Budget cap on real re-drive calls\"}," + "\"maxTotalTokens\":{\"type\":\"integer\",\"description\":\"Budget cap on total re-drive tokens\"}," + "\"dryRun\":{\"type\":\"boolean\",\"description\":\"Read-only cost estimate; no calls, no writes\"}}," + "\"additionalProperties\":false}", CliCommands("replay"), args -> runReplay(db, args, true, true, false)));
         tools.add(McpTool.of("export", "Write an acceptance pack (JSON file) from current baselines for delivery verification with verify — the cross-model or offline acceptance path. " + "Optional ref stamps the code reference (e.g. a git commit) the pack corresponds to; declared, not verified.", "{\"type\":\"object\",\"properties\":{" + "\"task\":{\"type\":\"string\",\"description\":\"Export only task chains matching this request-text prefix\"}," + "\"out\":{\"type\":\"string\",\"description\":\"Output file path (default acceptance-pack.json)\"}," + "\"includeSamples\":{\"type\":\"boolean\",\"description\":\"Attach masked per-step input/output samples\"}," + "\"ref\":{\"type\":\"string\",\"description\":\"Code reference recorded in the pack metadata\"}}," + "\"additionalProperties\":false}", CliCommands("baseline export"), args -> runCommand(capture -> {
             BaselineExportCommand command = new BaselineExportCommand();
             command.out = capture.out;
@@ -189,17 +189,17 @@ final class McpTools {
     }
 
     /**
-     * replay 形工具的共用适配：缩域选择器 + ci 语义（读动词零治理写）；re-drive 模式叠加。
+     * 工具封装的 CLI 命令路径声明（面一致性真源，见 McpTool.cliCommands）。
      */
-    /** 工具封装的 CLI 命令路径声明（面一致性真源，见 McpTool.cliCommands）。 */
     private static List<String> CliCommands(String... paths) {
         return Arrays.asList(paths);
     }
 
-    private static McpToolOutcome runReplay(String db, Map<String, Object> args, boolean ciMode, boolean reDrive) {
-        return runReplay(db, args, ciMode, reDrive, false);
-    }
-
+    /**
+     * replay 形工具的共用适配：缩域选择器 + ci 语义（读动词零治理写）；re-drive
+     * 模式叠加；memberCheck 切成员判定报告。三个模式旗标逐调用点显式给定，
+     * 不设默认重载。
+     */
     private static McpToolOutcome runReplay(String db, Map<String, Object> args, boolean ciMode, boolean reDrive, boolean memberCheck) {
         return runCommand(capture -> {
             ReplayCommand command = new ReplayCommand();

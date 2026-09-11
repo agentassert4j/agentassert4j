@@ -1,5 +1,10 @@
 package io.github.agentassert4j.storage.sqlite;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * SQLite schema 定义（契约版本 1）。
  *
@@ -127,5 +132,21 @@ final class Schema {
     };
 
     private Schema() {
+    }
+
+    /**
+     * 必需表名清单——从 ALL_DDL 推导（只取 CREATE TABLE 语句，索引不在其列），
+     * 缺表守卫与本清单同源，新增表只需改 ALL_DDL 一处。
+     */
+    static List<String> tableNames() {
+        List<String> tables = new ArrayList<>();
+        Pattern createTable = Pattern.compile("CREATE TABLE IF NOT EXISTS (\\w+)");
+        for (String ddl : ALL_DDL) {
+            Matcher matcher = createTable.matcher(ddl);
+            if (matcher.find()) {
+                tables.add(matcher.group(1));
+            }
+        }
+        return tables;
     }
 }

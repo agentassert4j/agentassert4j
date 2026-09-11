@@ -178,7 +178,7 @@ public class TaskReplayRunner {
             }
         } else {
             // 自动建档（开发态自动化，报告可见）：裂键新档与全新键在此收编
-            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), null, false, null, rules, null);
+            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), null, false, null, rules, null, null);
         }
 
         // 判定语义守卫：任何画像由其他版本（含未标记历史行）批准即拒绝判定——
@@ -248,7 +248,7 @@ public class TaskReplayRunner {
                 info(healthLine);
             }
         } else {
-            out.println("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.EXIT_HEALTH.wireName() + "\",\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\",\"health\":" + health.jsonFragment() + (rulesBlind ? ",\"notes\":[\"" + RecursiveJsonParser.escape(contentNote) + "\"]" : "") + "}");
+            out.println("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.EXIT_HEALTH.wireName() + "\",\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\",\"health\":" + health.jsonFragment() + (rulesBlind ? ",\"notes\":[\"" + RecursiveJsonParser.escape(contentNote) + "\"]" : "") + "}");
         }
 
         // 退出码复合：行为差异或证据缺口（没跑够）→ 1；环境/预算截断 → 2；否则 0
@@ -404,7 +404,7 @@ public class TaskReplayRunner {
         }
         info("Re-drive summary: PASS " + rd.pass + " | CHANGED " + rd.changed + " | failed " + rd.failed + " | skipped " + rd.skipped + " (" + CliSupport.plural(rd.callsUsed, "real re-drive call") + (rd.tokensUsed > 0 ? ", " + CliSupport.plural(rd.tokensUsed, "token") : "") + ")");
         if (jsonMode) {
-            StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.TASK_RE_DRIVE.wireName() + "\"");
+            StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.TASK_RE_DRIVE.wireName() + "\"");
             sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
             sb.append(",\"summary\":{\"total\":").append(rd.pass + rd.changed + rd.failed).append(",\"pass\":").append(rd.pass).append(",\"changed\":").append(rd.changed).append(",\"failed\":").append(rd.failed).append(",\"skipped\":").append(rd.skipped).append(",\"callsUsed\":").append(rd.callsUsed).append("}");
             sb.append(",\"steps\":[").append(String.join(",", stepJsons)).append("]}");
@@ -525,7 +525,7 @@ public class TaskReplayRunner {
     }
 
     /**
-     * task-report/1 报告的 mode 封闭词表（wire 值冻结；与 guide/spec/cli.md 契约 6 同源）。
+     * task-report/1 报告的 mode 封闭词表（wire 值冻结；变更须同步 cli spec 与各出口）。
      */
     private enum TaskReportMode {
         DRIFT_DETECTION("drift-detection"), TASK_ALIGN("task-align"), TASK_DRY_RUN("task-dry-run"), DRIFT_DISPOSITION("drift-disposition"), TASK_RE_DRIVE("task-re-drive"), MEMBER_CHECK("member-check"), EXIT_HEALTH("exit-health"), RE_DRIVE_DRY_RUN("re-drive-dry-run");
@@ -620,7 +620,7 @@ public class TaskReplayRunner {
         Stability stability = stabilityOf(group);
         AlignmentRender render = renderAlignment(evidence, evidenceSample, newChain, outcomes, totals, manager, stability);
         if (jsonMode) {
-            StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.MEMBER_CHECK.wireName() + "\"");
+            StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.MEMBER_CHECK.wireName() + "\"");
             sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
             sb.append(",\"task\":{\"request\":\"").append(RecursiveJsonParser.escape(newChain.getRequestText())).append("\",\"sessionId\":\"").append(RecursiveJsonParser.escape(newChain.getSessionId())).append("\"}");
             sb.append(",\"member\":{\"checked\":").append(checked).append(",\"window\":").append(MEMBER_SAMPLE_LIMIT).append(",\"isMember\":").append(member);
@@ -924,7 +924,7 @@ public class TaskReplayRunner {
             disposeOne(point, DriftKind.LABEL_SPLIT, scopedKeys, ciMode, outcomes, manager, totals, dispositionJsons);
         }
         if (jsonMode) {
-            StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.DRIFT_DISPOSITION.wireName() + "\"");
+            StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.DRIFT_DISPOSITION.wireName() + "\"");
             sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
             sb.append(",\"summary\":{\"collected\":").append(totals.collected).append(",\"candidatePoints\":").append(totals.candidates).append(",\"hung\":").append(totals.hung).append(",\"external\":").append(totals.external).append(",\"uncollected\":").append(totals.uncollected).append("}");
             sb.append(",\"dispositions\":[").append(String.join(",", dispositionJsons)).append("]}");
@@ -1191,7 +1191,7 @@ public class TaskReplayRunner {
         }
         info("Re-run this command after the next real execution to pair against this baseline and produce an alignment report.");
         if (jsonMode) {
-            StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.TASK_ALIGN.wireName() + "\",\"selfEstablished\":true,\"task\":{\"request\":\"" + RecursiveJsonParser.escape(only.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(only.getSessionId()) + "\"},\"summary\":{\"total\":" + only.getRecords().size() + ",\"pass\":" + only.getRecords().size() + ",\"changed\":0,\"skipped\":0,\"missing\":0,\"added\":0,\"comparedPairs\":0,\"skippedPairs\":0}");
+            StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.TASK_ALIGN.wireName() + "\",\"selfEstablished\":true,\"task\":{\"request\":\"" + RecursiveJsonParser.escape(only.getRequestText()) + "\",\"sessionId\":\"" + RecursiveJsonParser.escape(only.getSessionId()) + "\"},\"summary\":{\"total\":" + only.getRecords().size() + ",\"pass\":" + only.getRecords().size() + ",\"changed\":0,\"skipped\":0,\"missing\":0,\"added\":0,\"comparedPairs\":0,\"skippedPairs\":0}");
             if (!violations.isEmpty()) {
                 sb.append(",\"ruleViolations\":[");
                 List<String> violationJsons = new ArrayList<>();
@@ -1298,7 +1298,7 @@ public class TaskReplayRunner {
     }
 
     private static String driftJson(DriftReport drift) {
-        StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.DRIFT_DETECTION.wireName() + "\"");
+        StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.DRIFT_DETECTION.wireName() + "\"");
         sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
         sb.append(",\"summary\":{\"sameKey\":").append(drift.getSameKeyDrifts().size()).append(",\"labelSplits\":").append(drift.getLabelSplits().size()).append(",\"zeroTemplate\":").append(drift.getZeroTemplateProfiles()).append(",\"skippedQueries\":").append(drift.getSkippedQueries()).append("}");
         sb.append(",\"drifts\":[");
@@ -1360,11 +1360,11 @@ public class TaskReplayRunner {
     }
 
     private static String dryRunAlignJson(String request, String baselineSession, Integer baselineSteps, String newSession, int newSteps, boolean memberCheck) {
-        return "{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"" + TaskReportMode.TASK_DRY_RUN.wireName() + "\",\"alignPlan\":{\"request\":\"" + RecursiveJsonParser.escape(request) + "\",\"baselineSession\":" + (baselineSession != null ? "\"" + RecursiveJsonParser.escape(baselineSession) + "\"" : "null") + ",\"baselineSteps\":" + (baselineSteps != null ? baselineSteps.toString() : "null") + ",\"newSession\":\"" + RecursiveJsonParser.escape(newSession) + "\"" + ",\"newSteps\":" + newSteps + (memberCheck ? ",\"memberCheck\":true" : "") + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}";
+        return "{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.TASK_DRY_RUN.wireName() + "\",\"alignPlan\":{\"request\":\"" + RecursiveJsonParser.escape(request) + "\",\"baselineSession\":" + (baselineSession != null ? "\"" + RecursiveJsonParser.escape(baselineSession) + "\"" : "null") + ",\"baselineSteps\":" + (baselineSteps != null ? baselineSteps.toString() : "null") + ",\"newSession\":\"" + RecursiveJsonParser.escape(newSession) + "\"" + ",\"newSteps\":" + newSteps + (memberCheck ? ",\"memberCheck\":true" : "") + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}";
     }
 
     private String taskJson(TaskReportMode mode, String request, String sessionId, int total, AlignmentRender render, int crossVersion, long baselineTime, Long newChainTime, boolean prefixDependent) {
-        StringBuilder sb = new StringBuilder("{\"schema\":\"agentassert4j.task-report/1\",\"mode\":\"").append(mode.wireName()).append('"');
+        StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"").append(mode.wireName()).append('"');
         sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
         sb.append(",\"task\":{\"request\":\"").append(RecursiveJsonParser.escape(request)).append("\",\"sessionId\":\"").append(RecursiveJsonParser.escape(sessionId)).append("\"}");
         appendCommonReport(sb, request, sessionId, total, render, crossVersion, baselineTime, newChainTime, prefixDependent);
@@ -1444,15 +1444,7 @@ public class TaskReplayRunner {
             sb.append(",\"verdict\":\"").append(step.getVerdict()).append('"');
         }
         if (step.getComparison() != null) {
-            sb.append(",\"similarity\":").append(step.getComparison().getScore());
-            sb.append(",\"dims\":{\"toolSet\":").append(step.getComparison().isToolCallMatch());
-            sb.append(",\"paramTypes\":").append(step.getComparison().isParamTypeMatch());
-            sb.append(",\"outputStructure\":").append(step.getComparison().isStructureMatch());
-            sb.append(",\"contentRules\":").append(step.getComparison().isKeywordMatch() && step.getComparison().isRegexMatch());
-            sb.append(",\"behaviors\":").append(step.getComparison().isBehaviorMatch()).append("}");
-            if (step.getComparison().getSummary() != null) {
-                sb.append(",\"summary\":\"").append(RecursiveJsonParser.escape(step.getComparison().getSummary())).append('"');
-            }
+            sb.append(CliSupport.comparisonMetricsFragment(step.getComparison()));
         }
         if (step.getSurplusCount() > 0) {
             sb.append(",\"surplusCount\":").append(step.getSurplusCount());
