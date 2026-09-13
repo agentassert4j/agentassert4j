@@ -21,7 +21,7 @@ schema、退出码契约、help 终态。
 
 | 命令 | bare 语义 | 主要参数 |
 |---|---|---|
-| `status` | 全部画像巡检 | `--diff`（候选差异+模板原文渲染）、`--invocation` 缩域（人读视图专属，`--json` 恒全量）、`--json`、`--db` |
+| `status` | 全部画像巡检 | `--diff`（候选差异+模板原文渲染）、`--invocation` 缩域（两通道一致生效；缺省=全量快照）、`--json`、`--db` |
 | `baseline` | 全部调用点建档（幂等） | `--force`（判定语义重建恢复路径）、`--invocation` 缩域、`--ref`（代码锚，申报制）、`--json` |
 | `replay` | 全项目漂移检测+逐任务对齐（零 LLM 调用） | `--task`/`--invocation` 复合缩域、`--ci`、`--re-drive`、`--member-check`（成员判定：最新链匹配任一最近链即通过）、`--full-chain`、`--max-total-calls`/`--max-total-tokens`、`--dry-run`、`--json` |
 | `accept` / `reject` | 裁决全部待裁决候选 | `--invocation` 缩域、`--json`；accept 另有 `--ref`（代码锚，申报制） |

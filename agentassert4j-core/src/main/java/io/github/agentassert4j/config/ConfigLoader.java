@@ -147,6 +147,60 @@ public final class ConfigLoader {
     }
 
     /**
+     * 解析规则文件的生效路径（查找链与 {@link #loadRulesConfig} 一致；classpath
+     * 命中无文件系统路径返回 null）。doctor 披露该路径——规则「生效与否、生效的是
+     * 哪个文件」必须从黑盒可见（长驻 server 与 CLI 的判定分叉曾因此无法归因）。
+     */
+    public static String resolveRulesPath() {
+        String explicit = System.getProperty(RULES_PATH_PROPERTY);
+        if (explicit != null) {
+            return explicit;
+        }
+        String cwd = System.getProperty("user.dir");
+        if (cwd != null && Files.isRegularFile(Paths.get(cwd, RULES_CONFIG_FILE))) {
+            return Paths.get(cwd, RULES_CONFIG_FILE).toString();
+        }
+        String home = System.getProperty("user.home");
+        if (home != null && Files.isRegularFile(Paths.get(home, ".agentassert4j", RULES_CONFIG_FILE))) {
+            return Paths.get(home, ".agentassert4j", RULES_CONFIG_FILE).toString();
+        }
+        if (lastMainConfigDirectory != null) {
+            String fallback = lastMainConfigDirectory + "/" + RULES_CONFIG_FILE;
+            if (Files.isRegularFile(Paths.get(fallback))) {
+                return fallback;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 解析价格覆盖文件的生效路径（查找链与 {@link #loadPriceOverrides} 一致；classpath
+     * 命中无文件系统路径，返回 null）。供计价层做 mtime 热读缓存——长驻进程（MCP
+     * server）必须能看到进程启动之后写入/修改的覆盖文件。
+     */
+    public static String resolvePriceOverridesPath() {
+        String explicit = System.getProperty(PRICES_PATH_PROPERTY);
+        if (explicit != null) {
+            return explicit;
+        }
+        String cwd = System.getProperty("user.dir");
+        if (cwd != null && Files.isRegularFile(Paths.get(cwd, PRICES_CONFIG_FILE))) {
+            return Paths.get(cwd, PRICES_CONFIG_FILE).toString();
+        }
+        String home = System.getProperty("user.home");
+        if (home != null && Files.isRegularFile(Paths.get(home, ".agentassert4j", PRICES_CONFIG_FILE))) {
+            return Paths.get(home, ".agentassert4j", PRICES_CONFIG_FILE).toString();
+        }
+        if (lastMainConfigDirectory != null) {
+            String fallback = lastMainConfigDirectory + "/" + PRICES_CONFIG_FILE;
+            if (Files.isRegularFile(Paths.get(fallback))) {
+                return fallback;
+            }
+        }
+        return null;
+    }
+
+    /**
      * 替换字符串中的环境变量引用。
      * {@code ${ENV_VAR}} → 环境变量值，未设置时替换为空字符串。
      *

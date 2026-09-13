@@ -30,7 +30,7 @@ final class McpDispatcher implements StdioTransport.MessageHandler {
     private static final String DEFAULT_PROTOCOL_VERSION = "2025-11-25";
 
     private static final String SERVER_NAME = "agentassert4j";
-    private static final String INSTRUCTIONS = "Behavior regression for AI agents: record interactions first (starter SDK in-app, or the record tool), " + "establish baselines, then check/diff after prompt or model changes. " + "PASS means no behavioral change since the baseline; CHANGED findings land candidate fingerprints awaiting accept/reject. " + "Mutation tools (establish, accept, reject) write governance state: call them on human instruction " + "and declare agent identity via approver \"agent:<name>\".";
+    private static final String INSTRUCTIONS = "Behavior regression for AI agents: record interactions first (starter SDK in-app, or the record tool), " + "establish baselines, then check/diff after prompt or model changes. " + "Alignment pairs each task's latest chain with its previous chain; accept updates governance baselines and drift detection but does not flip existing chain history to PASS. " + "PASS compares structure and declared rules only — answer wording is not fingerprinted. " + "CHANGED findings land candidate fingerprints awaiting accept/reject. " + "Mutation tools (establish, accept, reject) write governance state: call them on human instruction " + "and declare agent identity via approver \"agent:<name>\".";
 
     /**
      * 文本块证据预算（字符）：超出截断并标注——AI 可缩域重取；structuredContent 恒全量。

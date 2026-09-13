@@ -167,6 +167,15 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
 
 ## 复核台账
 
+- 2026-09-13 Round 3 双宿主实测 + 批 C 修复批（剧本 v3）：①HIGH-1 规则分叉定性=环境级
+  （陈旧 server 进程；当前 jar 复现三相位全对[写→CHANGED/删→PASS]），doctor/1 rules 区新增
+  `rulesFile` 溯源字段；②HIGH-2 价格覆盖静态一次加载→**mtime 热读**（长驻进程改价即生效）；
+  ③status/1 `--invocation` 缩域两通道一致生效（原「JSON 恒全量」语义废止，工具描述同步）；
+  ④record-view/1 增 latencyMs/metadata；⑤rules/1 增 example；⑥HTTP 错误附端点+路径
+  （anthropic 打 OpenAI 端点的 404 可归因）；⑦费用亚分 6 位小数；⑧check/diff/member-check
+  描述与 initialize instructions 补判定基准（最新链 vs 次新链、accept 关系、措辞不指纹、
+  prefixDependent 释义）。timestamp 字符串「强转」=宿主客户端层行为（裸 JSON-RPC 复现服务端
+  精确拒绝），非缺陷。明细=docs/阶段性 通道2双宿主实测报告Round3。
 - 2026-09-08 成文（MCP 批）：五方法面、12 工具（2026-09-09 增 audit 只读工具至 13）、错误分类法（含 unknown tool -32602
   规范修正——规划原文与规范冲突，判规范侧成立并就地收窄）、record 幂等三层、ci 语义
   读动词、双形态结果、stdout 纯净性。实现与测试同批交付，通道 2 双宿主实测为 1.0.0

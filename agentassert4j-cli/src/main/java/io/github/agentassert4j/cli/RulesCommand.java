@@ -38,7 +38,7 @@ public class RulesCommand implements Callable<Integer> {
                 if (items.length() > 0) items.append(",");
                 items.append("{\"name\":\"").append(name).append("\",\"description\":\"").append(BehaviorChecker.describeBehavior(name)).append("\"}");
             }
-            out.println("{\"schema\":\"" + ReportSchemas.RULES + "\",\"behaviors\":[" + items + "]}");
+            out.println("{\"schema\":\"" + ReportSchemas.RULES + "\",\"example\":{\"invocations\":{\"<business invocationId>\":{\"requiredKeywords\":[\"order\"],\"forbiddenKeywords\":[\"sorry\"],\"regexPatterns\":[\"\\\\d{6,}\"],\"behaviors\":[\"mustUseChinese\",\"jsonOutput\"]}}},\"behaviors\":[" + items + "]}");
             return 0;
         }
         out.println("Built-in constraint behaviors (all names accepted by the behaviors field in agentassert4j-rules.json):");

@@ -104,6 +104,12 @@ public class RecordShowCommand implements Callable<Integer> {
         }
         sb.append(",\"turnIndex\":").append(record.getTurnIndex());
         sb.append(",\"timestamp\":").append(record.getTimestamp());
+        if (record.getLatencyMs() != 0L) {
+            sb.append(",\"latencyMs\":").append(record.getLatencyMs());
+        }
+        if (record.getMetadata() != null) {
+            sb.append(",\"metadata\":").append(record.getMetadata());
+        }
         sb.append(",\"inputTokens\":").append(record.getInputTokens());
         sb.append(",\"outputTokens\":").append(record.getOutputTokens());
         sb.append(",\"hasToolCalls\":").append(record.isHasToolCalls());

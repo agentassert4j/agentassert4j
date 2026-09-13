@@ -1403,7 +1403,7 @@ public class TaskReplayRunner {
     }
 
     private static String formatCost(Double costUsd) {
-        return costUsd == null ? "" : "/$" + String.format("%.4f", costUsd);
+        return costUsd == null ? "" : "/" + io.github.agentassert4j.algorithm.CostEstimator.formatUsd(costUsd);
     }
 
     /**

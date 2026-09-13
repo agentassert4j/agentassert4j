@@ -5,6 +5,7 @@ import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -40,15 +41,78 @@ public final class CostEstimator {
     private static final long PREVIEW_OUTPUT_TOKENS = 500;
 
     /**
-     * 模型族名 → [每输入 token 单价, 每输出 token 单价]（美元）
+     * 不可变价格表（模型族 → 单价 + 长度降序键）。覆盖文件可能被长驻进程存活期间
+     * 修改，整表以单个不可变引用发布——读取方永远看到自洽的一对（表与键序）。
      */
-    private static final Map<String, double[]> TOKEN_PRICES = loadPrices();
+    private static final class PriceTable {
+        final Map<String, double[]> prices;
+        final List<String> keysByLengthDesc;
+
+        PriceTable(Map<String, double[]> prices) {
+            this.prices = Collections.unmodifiableMap(prices);
+            List<String> keys = new ArrayList<>(prices.keySet());
+            keys.sort((a, b) -> Integer.compare(b.length(), a.length()));
+            this.keysByLengthDesc = Collections.unmodifiableList(keys);
+        }
+    }
+
     /**
-     * 价格表键按长度降序——包含匹配时 "gpt-4o-mini" 必须先于 "gpt-4o" 参与
+     * 快照部分静态加载（随 jar 分发、进程生命周期内不变）。
      */
-    private static final List<String> PRICE_KEYS_BY_LENGTH_DESC = buildKeysByLengthDesc();
+    private static final Map<String, double[]> SNAPSHOT_PRICES = loadSnapshot();
+
+    /**
+     * 当前生效价格表：快照 + 覆盖文件（按文件 mtime 热读——长驻 server 存活期间
+     * 写入/修改的 agentassert4j-prices.json 必须对后续计价可见，静态一次加载曾让
+     * 覆盖在黑盒视角等于不存在）。
+     */
+    private static volatile PriceTable table = new PriceTable(SNAPSHOT_PRICES);
+    /**
+     * 已加载覆盖的文件 mtime；null = 尚未加载过（含无覆盖文件的常态）
+     */
+    private static final Object OVERRIDE_LOCK = new Object();
+    private static volatile Long loadedOverrideStamp;
+    private static final String OVERRIDE_PATH = ConfigLoader.resolvePriceOverridesPath();
 
     private CostEstimator() {
+    }
+
+    /**
+     * 覆盖文件的 mtime 变化时（含从无到有、删除）重建生效价格表；快照恒为基底。
+     * 双检锁 + 不可变整表发布，读取方无锁。
+     */
+    private static void refreshOverridesIfChanged() {
+        if (OVERRIDE_PATH == null) {
+            return;
+        }
+        long stamp = new File(OVERRIDE_PATH).lastModified();
+        Long loaded = loadedOverrideStamp;
+        if (loaded != null && loaded == stamp) {
+            return;
+        }
+        synchronized (OVERRIDE_LOCK) {
+            stamp = new File(OVERRIDE_PATH).lastModified();
+            loaded = loadedOverrideStamp;
+            if (loaded != null && loaded == stamp) {
+                return;
+            }
+            Map<String, double[]> merged = new LinkedHashMap<>(SNAPSHOT_PRICES);
+            if (stamp != 0) {
+                String overrideJson = null;
+                try {
+                    overrideJson = ConfigLoader.loadPriceOverrides();
+                } catch (RuntimeException e) {
+                    // 显式 prices.path 不可读等加载失败必须降级为快照兜底并就近可见：
+                    // 价格配置问题不允许穿透录制隔离防线杀死业务调用
+                    LOG.log(Level.SEVERE, "Failed to load price overrides (agentassert4j-prices.json); falling back to the bundled snapshot.", e);
+                }
+                if (overrideJson != null) {
+                    applyPriceOverrides(merged, overrideJson);
+                }
+            }
+            table = new PriceTable(merged);
+            loadedOverrideStamp = stamp;
+        }
     }
 
     /**
@@ -70,7 +134,15 @@ public final class CostEstimator {
             return String.format("Estimated %s (model %s not in the price snapshot; cost unknown)", calls, model);
         }
         double estimatedCost = totalCalls * costPerCall;
-        return String.format("Estimated %s, approx. $%.4f (model: %s)", calls, estimatedCost, model);
+        return "Estimated " + calls + ", approx. " + formatUsd(estimatedCost) + " (model: " + model + ")";
+    }
+
+    /**
+     * 费用文案：亚分金额保留 6 位小数（%.4f 会把 $0.000003 级的微额调用格式化成
+     * $0.0000，信息丢失）；1 分以上 4 位足够。
+     */
+    public static String formatUsd(double usd) {
+        return String.format(usd != 0 && Math.abs(usd) < 0.01 ? "$%.6f" : "$%.4f", usd);
     }
 
     /**
@@ -94,35 +166,25 @@ public final class CostEstimator {
         if (model == null || model.isEmpty()) {
             return null;
         }
+        refreshOverridesIfChanged();
+        PriceTable current = table;
         String lower = model.toLowerCase(Locale.ROOT);
-        double[] exact = TOKEN_PRICES.get(lower);
+        double[] exact = current.prices.get(lower);
         if (exact != null) {
             return exact;
         }
-        for (String key : PRICE_KEYS_BY_LENGTH_DESC) {
+        for (String key : current.keysByLengthDesc) {
             if (lower.contains(key)) {
-                return TOKEN_PRICES.get(key);
+                return current.prices.get(key);
             }
         }
         return null;
     }
 
-    private static Map<String, double[]> loadPrices() {
+    private static Map<String, double[]> loadSnapshot() {
         Map<String, double[]> prices = new LinkedHashMap<>();
         loadSnapshotInto(prices);
-        String overrideJson = null;
-        try {
-            overrideJson = ConfigLoader.loadPriceOverrides();
-        } catch (RuntimeException e) {
-            // 显式 prices.path 不可读等加载失败在静态初始化里必须降级为快照兜底：
-            // 本类的初始化被录制热路径触碰，Error 逃逸会穿透录制隔离防线、
-            // 让价格配置问题杀死业务调用
-            LOG.log(Level.SEVERE, "Failed to load price overrides (agentassert4j-prices.json); falling back to the bundled snapshot.", e);
-        }
-        if (overrideJson != null) {
-            applyPriceOverrides(prices, overrideJson);
-        }
-        return Collections.unmodifiableMap(prices);
+        return prices;
     }
 
     /**
@@ -216,9 +278,4 @@ public final class CostEstimator {
         return null;
     }
 
-    private static List<String> buildKeysByLengthDesc() {
-        List<String> keys = new ArrayList<>(TOKEN_PRICES.keySet());
-        keys.sort((a, b) -> Integer.compare(b.length(), a.length()));
-        return Collections.unmodifiableList(keys);
-    }
 }

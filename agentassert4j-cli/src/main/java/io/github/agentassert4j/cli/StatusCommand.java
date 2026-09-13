@@ -55,8 +55,9 @@ public class StatusCommand implements Callable<Integer> {
             DriftReport drift = DriftDetector.detect(repository);
             Map<String, TemplateDriftState> driftByInvocationKey = templateDriftByInvocationKey(drift, allProfiles);
             Map<String, String> labelsByInvocationKey = businessLabelsByInvocationKey(repository);
-            // 缩域是人读巡检特性：--json 通道恒全量（机器消费方自行过滤），换算只在人读路径发生
-            String labelFilter = jsonOutput ? null : CliSupport.resolveInvocationFilter(repository, invocation, out);
+            // 缩域两通道一致生效（v3 实测：JSON 静默忽略缩域被双宿主点名为排障黑洞）；
+            // 全量快照 = 不传 --invocation 时的缺省形态
+            String labelFilter = CliSupport.resolveInvocationFilter(repository, invocation, out);
             int totalCount = allProfiles.size();
             if (labelFilter != null) {
                 profiles = new ArrayList<>();

@@ -208,7 +208,9 @@ public class DoctorCommand implements Callable<Integer> {
      * 规则段：解析注记回放与期望错位（配了键但库内从未出现声明链）。
      */
     private void printRulesSection(DoctorFindings findings) {
+        String rulesPath = ConfigLoader.resolveRulesPath();
         out.println("Rules check:");
+        out.println("  rules file: " + (rulesPath != null ? rulesPath : "none found (structure/rules dimensions run without declarations)"));
         for (String warning : findings.ruleWarnings) {
             out.println("Warning: " + warning);
         }
@@ -247,7 +249,8 @@ public class DoctorCommand implements Callable<Integer> {
         for (InvocationFootprint footprint : samples(findings.unestablished)) {
             unestablishedJsons.add("{\"invocationKey\":\"" + RecursiveJsonParser.escape(footprint.invocationKey) + "\",\"label\":\"" + RecursiveJsonParser.escape(footprint.label != null ? footprint.label : "") + "\",\"recordCount\":" + footprint.recordCount + "}");
         }
-        sb.append(String.join(",", unestablishedJsons)).append("],\"recordsMissingTemplateHash\":").append(findings.recordsMissingTemplateHash).append("},\"rules\":{\"ruleWarnings\":[");
+        String rulesPath = ConfigLoader.resolveRulesPath();
+        sb.append(String.join(",", unestablishedJsons)).append("],\"recordsMissingTemplateHash\":").append(findings.recordsMissingTemplateHash).append("},\"rules\":{\"rulesFile\":").append(rulesPath != null ? "\"" + RecursiveJsonParser.escape(rulesPath) + "\"" : "null").append(",\"ruleWarnings\":[");
         List<String> warningJsons = new ArrayList<>();
         for (String warning : findings.ruleWarnings) {
             warningJsons.add("\"" + RecursiveJsonParser.escape(warning) + "\"");

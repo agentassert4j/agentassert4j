@@ -138,14 +138,18 @@ public abstract class AbstractHttpLlmClient implements LlmClient {
                     return parsed;
                 }
 
+                // 诊断三要素随行：协议端点不匹配（anthropic 载荷打到 OpenAI 兼容端点
+                // 的 404）曾因错误串只有状态码与空响应体而无法归因
+                String httpError = "HTTP " + statusCode + " from " + endpoint + requestPath() + ": " + responseBody;
+
                 // 可重试的状态码
                 if (statusCode == 429 || statusCode >= 500) {
-                    lastException = new LlmApiException("HTTP " + statusCode + ": " + responseBody);
+                    lastException = new LlmApiException(httpError);
                     continue;
                 }
 
                 // 不可重试的客户端错误
-                throw new LlmApiException("HTTP " + statusCode + ": " + responseBody);
+                throw new LlmApiException(httpError);
 
             } catch (SocketTimeoutException e) {
                 // 单次尝试的超时预算已耗尽：立即判超时，不重试

@@ -423,6 +423,54 @@ class JsonContractTest {
         }
 
         @Test
+        @DisplayName("status --json --invocation：缩域两通道一致生效（命中保留、未命中排除）")
+        void statusJson_invocationNarrows() throws Exception {
+            seedOneRecord();
+            InteractionRecord other = new InteractionRecord();
+            other.setRecordId("rec-other");
+            other.setSessionId("session-other");
+            other.setTimestamp(2000L);
+            other.setSeq(2L);
+            other.setInvocationId("refund");
+            other.setTemplateHash("hash-refund");
+            other.setUserInput("退款");
+            other.setTurnIndex(0);
+            other.setModelResponse("ok");
+            other.setToolCalls(new ArrayList<>());
+            repository.saveInteractionIfAbsent(other);
+            execute("baseline", "--db", dbPath);
+
+            int hit = execute("status", "--db", dbPath, "--json", "--invocation", "queryOrder");
+            assertEquals(0, hit);
+            String narrowed = singleLineReport();
+            assertTrue(narrowed.contains("\"label\":\"queryOrder\""), "命中标签必须在场: " + narrowed);
+            assertFalse(narrowed.contains("\"label\":\"refund\""), "未命中标签必须被排除: " + narrowed);
+
+            int all = execute("status", "--db", dbPath, "--json");
+            assertEquals(0, all);
+            assertTrue(singleLineReport().contains("\"label\":\"refund\""), "缺省仍为全量快照");
+        }
+
+        @Test
+        @DisplayName("record show --json：latencyMs 与 metadata（含 taskKey）随视图回显")
+        void recordShow_projectsLatencyAndMetadata() throws Exception {
+            // 全字段就位后再落库——INSERT OR IGNORE 幂等会让「先存后改」静默无效
+            InteractionRecord r = seedOneRecord();
+            r.setRecordId("rec-meta");
+            r.setLatencyMs(1234L);
+            r.setMetadata("{\"taskKey\":\"order-probe\",\"env\":\"staging\"}");
+            repository.saveInteractionIfAbsent(r);
+
+            int exit = execute("record", "show", "--db", dbPath, "--record-id", "rec-meta", "--json");
+
+            assertEquals(0, exit);
+            String report = singleLineReport();
+            assertTrue(report.startsWith("{\"schema\":\"agentassert4j.record-view/1\""), report);
+            assertTrue(report.contains("\"latencyMs\":1234"), report);
+            assertTrue(report.contains("\"taskKey\":\"order-probe\""), "metadata 必须原样投影（taskKey 住里面）: " + report);
+        }
+
+        @Test
         @DisplayName("status --json 覆盖缺口：已录制未建档的标签进 uncovered 清单")
         void statusJson_uncoveredListed() throws Exception {
             seedOneRecord();
