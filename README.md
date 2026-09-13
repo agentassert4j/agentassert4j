@@ -229,13 +229,16 @@ verdict — see [OPERATIONS §2.3](OPERATIONS.md).
 | `replay` | Whole-project template-drift detection and task alignment (zero LLM calls by default); `--task`/`--invocation` narrowing; `--re-drive` controlled review |
 | `accept` / `reject` | Adjudicate candidate fingerprints (promote / discard). bare = every pending candidate; `--invocation <target>` narrows |
 | `rollback` | Restore a baseline from the archive (`--invocation` and `--version` both required) |
+| `record show` | Echo one stored interaction's raw wire payloads (troubleshooting/forensics) |
 | `verify` | Delivery acceptance: pack × locally recorded chains (read-only); `--dry-run` previews the pairing, `--report` writes the markdown evidence |
 | `rules` | List built-in behavior checks and rules-file syntax |
 | `graph show` | Read-only dependency graph (rebuilt from recordings on the spot) |
+| `audit` | List agent:* governance writes (approver/time/code ref) for human review |
+| `mcp` | Run as a stdio MCP server (17 tools mirroring CLI verbs, for non-Java AI hosts) |
 | `doctor` | Read-only health check in three deterministic sections: identity (skeleton families, unlabeled multi-step chains, repeated request-text families worth declaring), coverage (unestablished invocations, records missing template_hash), rules (malformed declarations, expectation mismatches); advisory only (exit 0 in normal operation; not a gate) |
 | `completion` | Emit a shell completion script (bash style) |
 
-Every command also has a short alias (`s`, `b`, `a`, `g`, `v`, `d`, `c`, `rp`, `rj`, `rb`, `ru` — full names
+Every command also has a short alias (`s`, `b`, `a`, `g`, `v`, `d`, `c`, `rp`, `rj`, `rb`, `ru`, `au`, `m` — full names
 always kept, visible in `--help`); the `completion` script registers them in your shell.
 
 The inspection surface looks like this (genuine CLI output on the demo database — one row per invocation:

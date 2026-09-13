@@ -114,4 +114,5 @@ close(): 关连接置 null；与写路径共用实例监视器——flush 进行
 | 日期 | 方式 | 发现 |
 |---|---|---|
 | 2026-09-11 | 批B SPI 死面修剪（维护者「零兼容残留」指令）： SPI 删 `saveInteraction`/`type()`/`findByTemplateHash`/`saveTemplateText`/`isAvailable`，`saveInteractionIfAbsent` 升入 InteractionWriteStore； ②`idx_template_hash` 索引随唯一查询方消亡（删库重建承接）； ③McpRecordIngestion/CliSupport.openRepository 回归 StorageRepository 接口类型 | 契约 2 措辞更新（写入面私有化）；SPI 六接口瘦身为五域面；无行为变更，往返测试全绿为钉 |
+| 2026-09-12 | 批3 N6 首跑 + 义务登记 | ①LOW：`FingerprintJson.asStringMap`（core util，private）与 `JsonMapper.asStringMap`（storage，private）同一 Map→Map<String,String> 小工具双份——storage 依赖 core 可单点化（FingerprintJson 出包级公共或挪 TextUtil），列 1.0.x；②契约张力登记：三 raw 列的「未来一切新概念列的回填来源」承诺对 **SDK 采集记录不成立**（ChatModel 抽象层拿不到线上原文，raw 恒 null，两 mapper 注记在案）——raw 回填仅覆盖 CLI 重驱记录与 MCP 摄取记录（wire 原文全量），SDK 面新增概念列的回填来源需届时单独设计 |
 | 2026-09-03 | S2 成文：Schema/SchemaMigrator/SqliteStorageRepository/JsonMapper/SPI 六接口全量对账 + 测试指针核实 | ①导读「测试怎么钉住它」称「38 列与占位符逐一核对」有测试——实为 SQL 字面拼接逐列对齐（无独立列数断言），措辞过强，导读对账批顺修；②查询域 6 方法超接口隔离目标为既有阶段债（本 spec 契约 12 显式跟踪，随瘦身批回到 5）；③测试方法名 `skillProfileGovernanceColumnsRoundTrip` 保留 pre-B1' 的 skill 旧词（纯命名残留，语义正确）——随任一代码批顺修可选 |

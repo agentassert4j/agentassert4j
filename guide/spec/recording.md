@@ -54,7 +54,9 @@
 8. **record_id 身份与 session_id 兜底**：record_id 身份真源 = LLM 响应 id（SDK mapper 取
    `ChatResponseMetadata.getId()`、MCP 摄取面同源——跨面去重依赖其全局唯一）；捕获侧未携带
    （无 id 的 provider/mock/stream 聚合缺失）时以 UUID 兜底（仅覆盖同一记录对象重复拦截场景）。
-   缺失 session_id 退化为独立会话（每条自成一组）——保住录制不整批失败。endpoint 部署身份：
+   缺失 session_id 退化为独立会话（每条自成一组）——保住录制不整批失败。采集保真边界：SDK 捕获
+   面（ChatModel 抽象层）拿不到线上原文，`model_request_raw`/`model_response_raw`/`usage_raw`
+   对 SDK 采集记录恒 null（raw 回填承诺仅覆盖 MCP 摄取与 CLI 重驱记录）；endpoint 部署身份：
    per-call `RecordingContext.withEndpoint` 优先，录制器级默认（builder/yml）兜底，皆缺留空；
    MCP 摄取面无端点声明位，经该面入库的记录 endpoint 恒空（wire JSON 不携带传输元数据）。
    【测试钉】`SpringAiRecordMapperTest`（响应 id/端点声明）、`InteractionRecorderTest`（兜底与

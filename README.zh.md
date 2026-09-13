@@ -209,13 +209,16 @@ stage('AgentAssert 行为回归') {
 | `replay` | 全项目模板漂移检测与任务对齐（缺省零 LLM 调用）；`--task`/`--invocation` 复合缩域；`--re-drive` 受控复核 |
 | `accept` / `reject` | 裁决候选指纹（转正 / 丢弃）。bare = 全部待裁决候选；`--invocation <目标>` 缩域 |
 | `rollback` | 把基线回滚到归档版本（`--invocation` `--version` 均必填） |
+| `record show` | 回显单条交互记录的原始请求/响应 wire 载荷（排障/取证） |
 | `verify` | 交付验收：验收包 × 本机真实执行链（只读）；`--dry-run` 配对预演，`--report` 产出 markdown 交付证据 |
 | `rules` | 查看内置约束行为目录与规则文件写法 |
 | `graph show` | 依赖图谱只读视图（从录制数据现场重建） |
+| `audit` | 列出 agent:* 申报的治理写（审批人/时间/代码锚）供人工对账 |
+| `mcp` | 以 stdio MCP server 运行（17 工具镜像 CLI 动词，供非 Java 栈 AI 宿主接入） |
 | `doctor` | 只读库体检，三段确定性事实：身份（骨架族、多步零标签链、值得声明任务键的重复请求族）、覆盖（未建档调用点、缺 template_hash 的记录）、规则（畸形声明、期望错位）；仅陈述事实，正常执行恒出 0（不承载门禁语义） |
 | `completion` | 生成 shell 补全脚本（bash 风格） |
 
-每个命令另有短别名（`s`、`b`、`a`、`g`、`v`、`d`、`c`、`rp`、`rj`、`rb`、`ru`——完整名永远保留，
+每个命令另有短别名（`s`、`b`、`a`、`g`、`v`、`d`、`c`、`rp`、`rj`、`rb`、`ru`、`au`、`m`——完整名永远保留，
 `--help` 可见）；`completion` 生成脚本会一并注册到 shell。
 
 巡检界面长这样（演示库真实输出——每行一个调用点：身份、基线状态、版本、候选、归档、业务标签）：

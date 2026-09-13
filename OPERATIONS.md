@@ -33,7 +33,7 @@
 | Maven 依赖引用 | 平台工程统一管理工具链 | pom 引入 `agentassert4j-cli`，传递依赖自动就位 |
 | 源码构建 | 开发调试 | 见 [README.zh.md](README.zh.md)「模块结构」折叠节 |
 
-每个子命令内置短别名（`s`/`b`/`a`/`g`/`v`/`d`/`c`/`rp`/`rj`/`rb`/`ru`，完整名永远保留，`--help` 可见；
+每个子命令内置短别名（`s`/`b`/`a`/`g`/`v`/`d`/`c`/`rp`/`rj`/`rb`/`ru`/`au`/`m`，完整名永远保留，`--help` 可见；
 `completion` 生成脚本会一并注册），`agentassert4j --version` 报出框架版本。单机常驻使用建议设别名
 （示例以 Bash 为例；Windows 直接用完整命令）：
 
