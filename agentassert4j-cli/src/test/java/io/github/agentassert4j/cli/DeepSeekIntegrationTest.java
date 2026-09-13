@@ -57,7 +57,7 @@ class DeepSeekIntegrationTest {
     static void setUp() {
         String apiKey = System.getProperty("deepseek.api.key");
         assumeTrue(apiKey != null && !apiKey.trim().isEmpty(), "跳过：未提供 -Ddeepseek.api.key");
-        client = new OpenAiCompatibleClient(ENDPOINT, apiKey, "deepseek-chat", OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, null);
+        client = new OpenAiCompatibleClient(ENDPOINT, apiKey, "deepseek-chat", 2, null);
     }
 
     private LlmResponse callLlm(String systemPrompt, String userInput) throws Exception {

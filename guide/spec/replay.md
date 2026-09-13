@@ -119,7 +119,7 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
     请求；文法要求显式发起帧而录制侧无独立载体时，从结果帧的关联键合成最小合法发起帧
     且同一配对只合成一次；system 恒走协议的 system 位（chat 首消息 / anthropic 顶层
     system / responses instructions），历史 system 帧一律跳过。方言特化：anthropic 的
-    max_tokens 必填兜定常量 4096、tool_result 逐对重建（发起帧与结果帧相邻、配对键一致）
+    max_tokens 必填、请求未携带时按 llm.maxTokens（未配置兜定 4096）、tool_result 逐对重建（发起帧与结果帧相邻、配对键一致）
     且相邻同角色消息合并为单条消息的 content 块数组（规范交替形——官方服务端对连续同角色
     静默合并、严格旧实现直接拒绝；user 消息内 tool_result 块按文法要求前置于文本块；
     LangChain/Vercel AI SDK 同款合并实践）、

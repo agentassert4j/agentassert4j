@@ -71,9 +71,10 @@ public class InteractionRecord {
      */
     private String servedModel;
     /**
-     * API base URL——同模型不同部署点行为可不同
+     * API base URL——同模型不同部署点行为可不同（基线跨部署可比的部署身份）。
+     * 由捕获侧声明写入：per-call 声明（RecordingContext）优先，录制器级默认兜底，
+     * 两者皆缺为 null（框架不编造——端点是传输元数据，raw 原文层无法回填）
      */
-    // TODO: 捕获侧未接线——该列暂恒为 null，待 SDK 捕获层从请求配置提取端点地址，接线后移除本标注
     private String endpoint;
 
     private String userInput;

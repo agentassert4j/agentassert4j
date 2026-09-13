@@ -37,6 +37,11 @@ public class LlmRequest {
      * 显式配置的 llm.protocol 优先级更高（跨协议重放是显式用户意图）。
      */
     private String wireProtocol;
+    /**
+     * 发射请求的 max_tokens 兜底上限。Anthropic Messages 文法必填、基线记录未携带
+     * 时按此值填充；null = 客户端内置默认。OpenAI 系文法可选、不发送
+     */
+    private Integer maxTokens;
 
     public String getSystemPrompt() {
         return systemPrompt;
@@ -109,5 +114,13 @@ public class LlmRequest {
 
     public void setWireProtocol(String wireProtocol) {
         this.wireProtocol = wireProtocol;
+    }
+
+    public Integer getMaxTokens() {
+        return maxTokens;
+    }
+
+    public void setMaxTokens(Integer maxTokens) {
+        this.maxTokens = maxTokens;
     }
 }

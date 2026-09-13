@@ -18,7 +18,7 @@ JDK8 手动接入方的记录构造（OPERATIONS 最小录制契约承载，非�
 | 语义状态 | 真源 | 派生链 |
 |---|---|---|
 | 交互记录 | 容器内 `ChatModel` 的真实调用 | `RecordingChatModel` 计时捕获上下文 → 透传调用 → `SpringAiRecordMapper` 映射为 InteractionRecord → `recorder.intercept()` |
-| 声明位 | `RecordingContext` 栈式 ThreadLocal（声明线程可见） | `withInvocationId/withTemplateId/withMetadata` 随请求合并进记录 |
+| 声明位 | `RecordingContext` 栈式 ThreadLocal（声明线程可见） | `withInvocationId/withTemplateId/withTemplateSkeleton/withEndpoint/withMetadata` 随请求合并进记录 |
 | 工具编排事实 | 内部工具回路的真实执行 | 观察装饰器把每轮名称/参数原文/结果原文按序记入缓冲，合并进该条记录的 toolCalls |
 | `recorder_version` | SDK 构件标识串 | 每条记录携带，写入 interactions 列 |
 | `provider` | 模型名前缀启发 | deepseek→deepseek、gpt/o1/o3/o4→openai、claude→anthropic、qwen/qwq→qwen、gemini→gemini、llama→ollama、其余 custom |

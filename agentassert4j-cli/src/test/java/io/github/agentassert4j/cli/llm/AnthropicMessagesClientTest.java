@@ -36,7 +36,7 @@ class AnthropicMessagesClientTest {
 
     @BeforeEach
     void setUp() {
-        client = new AnthropicMessagesClient("https://api.anthropic.com", "test-key", "claude-3-5", AnthropicMessagesClient.DEFAULT_MAX_TOKENS, null);
+        client = new AnthropicMessagesClient("https://api.anthropic.com", "test-key", "claude-3-5", 0, null);
         // 捕获 System.err 验证跳帧告警的可见性（还原于 afterEach）
         savedErr = System.err;
         errBuffer = new ByteArrayOutputStream();
@@ -79,6 +79,17 @@ class AnthropicMessagesClientTest {
             assertEquals("user", user.get("role"));
             assertEquals("What is the capital of France?", user.get("content"));
             assertNull(parsed.get("tools"), "无工具定义不携带 tools 成员");
+        }
+
+        @Test
+        @DisplayName("请求携带 maxTokens 时覆盖内置兜底（llm.maxTokens 配置链）")
+        void requestMaxTokensOverridesDefault() {
+            LlmRequest request = baseRequest();
+            request.setMaxTokens(8192);
+
+            String body = client.buildRequestBody(request, "claude-3-5");
+            Map<?, ?> parsed = (Map<?, ?>) RecursiveJsonParser.parse(body);
+            assertEquals(8192, ((Number) parsed.get("max_tokens")).intValue(), "显式 maxTokens 必须覆盖内置兜底");
         }
 
         @Test

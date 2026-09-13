@@ -14,12 +14,13 @@ import java.util.*;
  * Anthropic Messages 方言 LLM 客户端 — HTTP 管道与超时/重试契约见共享基座。
  *
  * <p>请求组装要点：system 恒走顶层 {@code system} 成员（历史 system 帧跳过防双 system）；
- * {@code max_tokens} 是该文法必填项，客户端兜定 {@link #DEFAULT_MAX_TOKENS} 常量（不开放
- * 配置——真实需求出现走 issue）；工具历史帧按逐对重建——assistant 携带 tool_use 块发起、
- * 紧随的 user 消息携带配对 tool_use_id 的 tool_result 块（该文法硬约束，违规 400），
- * 录制侧无发起帧载体时按已知 id/name 合成最小合法发起帧且同一配对只合成一次；范式
- * 多模态的 data-URI 图像拆解回 base64 source（http URL 形该文法不收，丢弃并告警——
- * 宁缺勿非法）。响应解析与 MCP 摄取共用 {@link AnthropicMessagesWireFormat} 归一器。</p>
+ * {@code max_tokens} 是该文法必填项——基线记录未携带时取请求的 {@code maxTokens}
+ * （配置键 llm.maxTokens，null = 内置 {@link #DEFAULT_MAX_TOKENS} 默认）；工具历史帧
+ * 按逐对重建——assistant 携带 tool_use 块发起、紧随的 user 消息携带配对 tool_use_id
+ * 的 tool_result 块（该文法硬约束，违规 400），录制侧无发起帧载体时按已知 id/name
+ * 合成最小合法发起帧且同一配对只合成一次；范式多模态的 data-URI 图像拆解回
+ * base64 source（http URL 形该文法不收，丢弃并告警——宁缺勿非法）。响应解析与
+ * MCP 摄取共用 {@link AnthropicMessagesWireFormat} 归一器。</p>
  *
  * @author axy-yxa
  * @since 2026-09-09
@@ -63,8 +64,8 @@ public class AnthropicMessagesClient extends AbstractHttpLlmClient {
     protected String buildRequestBody(LlmRequest request, String model) {
         StringBuilder sb = new StringBuilder(512);
         sb.append("{\"model\":\"").append(RecursiveJsonParser.escape(model)).append("\"");
-        // 该文法必填成员：缺省即 400，兜定保守常量
-        sb.append(",\"max_tokens\":").append(DEFAULT_MAX_TOKENS);
+        // 该文法必填成员：缺省即 400——请求未携带（配置 llm.maxTokens 未设）时兜定保守常量
+        sb.append(",\"max_tokens\":").append(request.getMaxTokens() != null ? request.getMaxTokens() : DEFAULT_MAX_TOKENS);
 
         // system 恒走顶层成员；温度与 chat 同规则——null/非 finite 省略（发出即非法请求）
         if (request.getSystemPrompt() != null && !request.getSystemPrompt().isEmpty()) {

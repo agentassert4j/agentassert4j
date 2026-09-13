@@ -31,10 +31,6 @@ public class OpenAiCompatibleClient extends AbstractHttpLlmClient {
     private static final Logger LOG = LoggerFactory.getLogger(OpenAiCompatibleClient.class);
 
     /**
-     * 默认重试次数（传输层失败的最大重试），供组装根构造客户端时引用
-     */
-    public static final int DEFAULT_MAX_RETRIES = 2;
-    /**
      * 内置方言裁剪规则（数据文件驱动）：命中模型省略「发送即报错」的标准参数
      */
     private static final ProviderDialects DIALECTS = ProviderDialects.load();

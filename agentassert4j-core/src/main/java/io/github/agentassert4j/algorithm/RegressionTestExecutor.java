@@ -185,6 +185,7 @@ public class RegressionTestExecutor {
 
         // 温度和模型
         request.setTemperature(config.getTemperature());
+        request.setMaxTokens(config.getMaxTokens());
         if (config.getModel() != null) {
             request.setModel(config.getModel());
         }

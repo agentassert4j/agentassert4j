@@ -154,8 +154,10 @@ public class InteractionRecorder implements RecordingInterceptor {
         // RingBuffer——记录永久滞留且计数不闭合。无竞争锁开销纳秒级，
         // 相比 tryNext 本身可忽略
         try {
-            // TODO: [record_id UUID 兜底] 上游 SDK 未接线前在此兜底生成全局唯一 ID；
-            //       INSERT OR IGNORE 的防重放语义依赖其全局唯一性
+            // record_id 身份真源 = LLM 响应 id（SDK 捕获侧与 MCP 摄取侧同源写入，
+            // INSERT OR IGNORE 的跨面去重依赖其全局唯一）；捕获侧未携带（无 id 的
+            // provider、mock、stream 聚合元数据缺失）时回退 UUID——仅覆盖同一记录
+            // 对象重复拦截的去重场景
             if (record.getRecordId() == null || record.getRecordId().isEmpty()) {
                 record.setRecordId(UUID.randomUUID().toString());
             }
@@ -163,6 +165,11 @@ public class InteractionRecorder implements RecordingInterceptor {
             // （每条自成一组，依赖链为空），保住录制不整批失败
             if (record.getSessionId() == null || record.getSessionId().isEmpty()) {
                 record.setSessionId(record.getRecordId());
+            }
+            // endpoint 是基线跨部署可比的部署身份（指纹可比性前提）：per-call 声明
+            // 优先，缺失时以录制器级默认兜底——两者皆缺则该列留空（不编造）
+            if (record.getEndpoint() == null || record.getEndpoint().isEmpty()) {
+                record.setEndpoint(config.getEndpoint());
             }
 
             // 到达即计数（含后续丢弃）：written + dropped 闭合到本计数
@@ -209,7 +216,8 @@ public class InteractionRecorder implements RecordingInterceptor {
     }
 
     /**
-     * 手动触发 flush，将缓冲区中的记录立即写入存储。
+     * 手动触发 flush，立即排干缓冲写入存储（不停止管道）。定时 flush 间隔内的
+     * 持久化验证（嵌入方与测试在管道存活期的确定性断言）经此入口完成。
      */
     public void flush() {
         if (batchHandler != null) {
@@ -280,6 +288,10 @@ public class InteractionRecorder implements RecordingInterceptor {
         return failedCount.get();
     }
 
+    /**
+     * 生命周期状态：start() 与 stop() 之间为 true；enabled=false 的录制器恒为
+     * false（整体 no-op）。生命周期断言与嵌入方的状态探视经此查询。
+     */
     public boolean isStarted() {
         return started;
     }

@@ -63,8 +63,8 @@ Spring Boot 3 + Spring AI 1.x shown (for Boot 4 + Spring AI 2.x use
 ```
 
 It works on startup: the framework wraps every `ChatModel` and records each call out-of-band — no
-business-code changes, no added latency. The database defaults to `./agentassert4j.db`
-(`agentassert4j.database` to relocate; full configuration in [OPERATIONS.md](OPERATIONS.md)).
+business-code changes, no added latency. The database defaults to `~/.agentassert4j/agentassert4j.db`
+(`agentassert4j.storage.url` to relocate; full configuration in [OPERATIONS.md](OPERATIONS.md)).
 To declare a business identity for specific calls (optional):
 
 ```java
@@ -278,7 +278,7 @@ Invocation identity is derived deterministically from each record, in priority o
 > skeleton hash > template hash > request anchor**.
 
 - **Declarations survive prompt edits**: every prompt edit changes the template hash; a declared label
-  (`withInvocationId("refund")`, or app-wide `agentassert4j.invocation-id=tavern`) is the only anchor
+  (`withInvocationId("refund")`, or app-wide `agentassert4j.recorder.default-invocation-id=tavern`) is the only anchor
   that survives;
 - **Dynamic prompts freeze on the skeleton**: when the assembled prompt embeds volatile segments
   (dates, environment), declare a template skeleton (`withTemplateSkeleton(...)`, volatile parts

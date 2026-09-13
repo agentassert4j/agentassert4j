@@ -522,4 +522,29 @@ class InteractionRecorderTest {
         long recorded = recorder.getRecordedCount();
         assertEquals(recorded, recorder.getWrittenCount() + recorder.getDroppedCount(), "关停窗口的并发发布不得破坏计数闭合");
     }
+
+    @Test
+    void captureFillsEndpointFromRecorderDefault_perCallWins() {
+        // endpoint 部署身份：录制器级默认在采集管道兜底填列，per-call 声明优先
+        RecorderConfig config = RecorderConfig.builder().endpoint("http://ep-default:8000").build();
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        InteractionRecord defaulted = new InteractionRecord();
+        defaulted.setRecordId("ep-1");
+        defaulted.setSessionId("s-ep");
+        defaulted.setTimestamp(System.currentTimeMillis());
+        recorder.intercept(defaulted);
+        assertEquals("http://ep-default:8000", defaulted.getEndpoint(), "未声明记录由录制器级默认兜底");
+
+        InteractionRecord declared = new InteractionRecord();
+        declared.setRecordId("ep-2");
+        declared.setSessionId("s-ep2");
+        declared.setTimestamp(System.currentTimeMillis());
+        declared.setEndpoint("http://per-call:9999");
+        recorder.intercept(declared);
+        assertEquals("http://per-call:9999", declared.getEndpoint(), "per-call 声明优先于录制器级默认");
+
+        recorder.stop();
+    }
 }

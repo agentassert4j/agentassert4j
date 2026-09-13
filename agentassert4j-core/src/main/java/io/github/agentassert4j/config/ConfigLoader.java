@@ -37,6 +37,10 @@ public final class ConfigLoader {
      */
     public static final String RULES_CONFIG_FILE = "agentassert4j-rules.json";
     /**
+     * 价格覆盖文件名（模型族 → {input, output}，对随 jar 分发的价格快照做并集覆盖）
+     */
+    public static final String PRICES_CONFIG_FILE = "agentassert4j-prices.json";
+    /**
      * 系统属性键：显式配置路径
      */
     public static final String CONFIG_PATH_PROPERTY = "agentassert4j.config.path";
@@ -44,6 +48,10 @@ public final class ConfigLoader {
      * 规则配置路径系统属性键
      */
     public static final String RULES_PATH_PROPERTY = "agentassert4j.rules.path";
+    /**
+     * 价格覆盖路径系统属性键
+     */
+    public static final String PRICES_PATH_PROPERTY = "agentassert4j.prices.path";
 
     private static final Pattern ENV_VAR_PATTERN = Pattern.compile("\\$\\{(\\w+)\\}");
 
@@ -119,6 +127,23 @@ public final class ConfigLoader {
             json = resolveEnvVars(json);
         }
         return InvocationRulesConfig.fromJson(json);
+    }
+
+    /**
+     * 加载价格覆盖文件。查找链与规则配置同构：系统属性 → 工作目录 → 用户主目录
+     * ~/.agentassert4j/ → classpath → 主配置同目录回退（仅当主配置已被加载且命中的
+     * 是文件路径）。文件缺席是常态（返回 null，用随 jar 的快照即可）；显式系统属性
+     * 指定的路径不可读时抛 {@link IllegalStateException}，与主配置同语义。
+     *
+     * @return 覆盖文件原文；未找到返回 null
+     */
+    public static String loadPriceOverrides() {
+        StringBuilder origin = new StringBuilder();
+        String json = findAndRead(PRICES_CONFIG_FILE, PRICES_PATH_PROPERTY, origin);
+        if (json == null && lastMainConfigDirectory != null) {
+            json = loadFromFile(lastMainConfigDirectory + "/" + PRICES_CONFIG_FILE);
+        }
+        return json != null ? resolveEnvVars(json) : null;
     }
 
     /**

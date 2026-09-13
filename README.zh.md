@@ -59,7 +59,7 @@ accept / reject 一键裁决。** 业务代码零改动，core 零外部依赖�
 ```
 
 启动即生效：框架自动包装所有 `ChatModel`，旁路录制每次调用——业务代码一行不改，接口时延无感。
-库文件默认 `./agentassert4j.db`（`agentassert4j.database` 可改，[全量配置](OPERATIONS.md#2-配置参考)）。
+库文件默认 `~/.agentassert4j/agentassert4j.db`（`agentassert4j.storage.url` 可改，[全量配置](OPERATIONS.md#2-配置参考)）。
 需要给某次调用声明业务身份时（可选）：
 
 ```java
@@ -253,7 +253,7 @@ Spring AI 默认在模型侧内部执行完整工具回路的，框架通过**�
 调用点（invocation）身份从记录确定性派生，优先级：**声明锚点 > 骨架锚点 > 模板锚点 > 请求锚点兜底**。
 
 - **声明跨编辑稳定**：提示词一改模板指纹就变；`withInvocationId("refund")` 或应用级
-  `agentassert4j.invocation-id=tavern` 是唯一跨提示词编辑稳定的身份锚；
+  `agentassert4j.recorder.default-invocation-id=tavern` 是唯一跨提示词编辑稳定的身份锚；
 - **动态模板按骨架定格**：组装后提示词内嵌日期/环境等动态段时，声明模板骨架
   （`withTemplateSkeleton(...)`，动态段换成稳定占位符）——同骨架异全文同键，
   身份不再随每次运行漂移裂键；受控重驱仍以归档全文为准；

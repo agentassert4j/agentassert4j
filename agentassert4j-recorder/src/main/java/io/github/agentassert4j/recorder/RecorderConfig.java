@@ -66,6 +66,14 @@ public final class RecorderConfig {
      * 空串 = 无默认（默认值）；显式 per-call 声明（RecordingContext）优先级更高
      */
     private final String defaultInvocationId;
+    /**
+     * 录制器级默认端点地址：捕获侧框架抽象（如 Spring AI 的 ChatModel）不暴露
+     * base URL，端点由应用声明——单模型 JVM 配置一次即得全量记录的部署身份
+     * （endpoint 列是基线跨部署可比的前提）；多模型 JVM 用 per-call
+     * RecordingContext 声明覆盖。null = 不记录端点（默认值），
+     * per-call 声明优先级更高
+     */
+    private final String endpoint;
 
     private RecorderConfig(Builder builder) {
         // 钳位：batchSize/maxBufferSize <= 0（如意图立即刷盘的 0 配置）会让
@@ -85,6 +93,11 @@ public final class RecorderConfig {
         this.recordUndeclaredChat = builder.recordUndeclaredChat;
         this.enabled = builder.enabled;
         this.defaultInvocationId = builder.defaultInvocationId;
+        this.endpoint = emptyToNull(builder.endpoint);
+    }
+
+    private static String emptyToNull(String value) {
+        return value == null || value.isEmpty() ? null : value;
     }
 
     /**
@@ -157,6 +170,10 @@ public final class RecorderConfig {
         return defaultInvocationId;
     }
 
+    public String getEndpoint() {
+        return endpoint;
+    }
+
     public static final class Builder {
         private int batchSize = 100;
         private long flushIntervalMs = 5000;
@@ -169,6 +186,7 @@ public final class RecorderConfig {
         private boolean recordUndeclaredChat = true;
         private boolean enabled = true;
         private String defaultInvocationId = "";
+        private String endpoint;
 
         private Builder() {
         }
@@ -225,6 +243,11 @@ public final class RecorderConfig {
 
         public Builder defaultInvocationId(String defaultInvocationId) {
             this.defaultInvocationId = defaultInvocationId != null ? defaultInvocationId : "";
+            return this;
+        }
+
+        public Builder endpoint(String endpoint) {
+            this.endpoint = endpoint;
             return this;
         }
 

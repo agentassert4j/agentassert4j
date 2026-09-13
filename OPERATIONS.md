@@ -58,10 +58,6 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
   "storage": {
     "url": "~/.agentassert4j/agentassert4j.db"
   },
-  "recorder": {
-    "batchSize": 100,
-    "flushIntervalMs": 5000
-  },
   "regression": {
     "ignorableFields": []
   },
@@ -79,17 +75,25 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 | 段 | 键 | 默认 | 说明 |
 |----|----|------|------|
 | storage.url | — | `~/.agentassert4j/agentassert4j.db` | SQLite 文件路径，`~` 自动展开；开库命令（status/baseline/replay/accept/reject/rollback/verify/doctor/graph show/export）的 `--db` 可逐次覆盖 |
-| recorder.batchSize | — | 100 | 批量落库批大小 |
-| recorder.flushIntervalMs | — | 5000 | 定时冲刷间隔（毫秒） |
 | regression.ignorableFields | — | 空列表 | 已知噪声字段白名单（归一化后仍不同才构成差异） |
 | llm.protocol | — | 自动推导 | 重放端点的 wire 协议。不配置时自动推导：按基线记录的原摄取方言发射（同协议原样重放零配置），无记录提示时回退 `openai-chat`；显式配置 `openai-chat`/`anthropic-messages`/`openai-responses` 覆盖推导（跨协议重放）；未知值启动时报错并列全部合法值 |
 | llm.apiKey | — | 空 | 重放用；支持 `${ENV}` 引用；缺失时 `--re-drive` 打印警告（bare 对齐零调用，不检查 Key） |
 | llm.endpoint | — | `https://api.openai.com` | OpenAI 兼容端点（DeepSeek/通义等同协议端点均可） |
 | llm.model | — | `gpt-4o` | 重放请求的模型；与录制模型不一致时命令行告警 |
 | llm.timeoutMs | — | 30000 | **单次尝试**预算（下限钳 1000）；超时不重试 |
+| llm.maxRetries | — | 2 | 传输层失败（429/5xx/连接被拒）的最大重试次数——直接决定重驱成本与时长 |
+| llm.maxTokens | — | 空 | 发射请求的 max_tokens 兜底上限。Anthropic Messages 文法必填、基线记录未携带时按此值填充；空 = 客户端内置 4096。OpenAI 系文法可选、不发送 |
 | llm.temperature | — | 0.0 | 钳位 0–2；推理模型方言下不携带（见故障排查 §7.3） |
 | llm.extraBody | — | 空 | 追加到请求体顶层的原样 JSON 片段（厂商方言逃生舱，如 `"thinking":{"type":"disabled"}`） |
 
+> 录制侧旋钮不在本文件——本文件是 CLI/MCP 操作面配置；录制旋钮见 §2.2 starter
+> 属性（Boot 应用）与 `RecorderConfig.builder()`（非 Boot 应用）。写了 `recorder`
+> 段会收到未知键告警。
+
+价格快照缺模型族（或需要改价）时，在 `agentassert4j.json` 同目录放 `agentassert4j-prices.json`
+覆盖（格式与快照一致：模型族 → `{"input": 每token价, "output": 每token价}`，美元）：
+同族改价、新族补充；文件损坏会被 SEVERE 告警而非静默失效。也可用系统属性
+`agentassert4j.prices.path` 显式指定路径。
 三协议的端点与鉴权形态：
 
 | protocol | 端点示例 | 鉴权 |
@@ -100,13 +104,28 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 
 ### 2.2 starter 属性（`application.yml`，前缀 `agentassert4j`）
 
+属性树镜像 agentassert4j.json 的命名（storage.url），录制域全旋钮开放——同一旋钮跨通道同语义同形：
+
 | 属性 | 默认 | 说明 |
 |------|------|------|
-| `agentassert4j.enabled` | `true` | `false` 时自动装配整体退出、录制 API no-op（**生产打包形态**，见 §5） |
-| `agentassert4j.database` | `agentassert4j.db` | 库文件路径 |
-| `agentassert4j.invocation-id` | 空 | 应用级默认调用点标签——单技能应用一行完成身份声明 |
+| `agentassert4j.enabled` | `true` | `false` 时自动装配整体退出、不创建任何 Bean（**生产打包形态**，见 §5） |
+| `agentassert4j.storage.url` | `~/.agentassert4j/agentassert4j.db` | 库文件路径，`~` 自动展开；与 json 通道同名同义 |
+| `agentassert4j.recorder.default-invocation-id` | 空 | 应用级默认调用点标签——单技能应用一行完成身份声明 |
+| `agentassert4j.recorder.endpoint` | 空 | 录制器级默认端点地址（endpoint 列，基线跨部署可比的部署身份）；多模型 JVM 用逐调用 `RecordingContext.withEndpoint` 覆盖 |
+| `agentassert4j.recorder.batch-size` | 100 | 批量落库批大小 |
+| `agentassert4j.recorder.flush-interval-ms` | 5000 | 定时冲刷间隔（毫秒） |
+| `agentassert4j.recorder.max-buffer-size` | 500 | 缓冲上限（超限丢弃并计数） |
+| `agentassert4j.recorder.ring-buffer-size` | 16384 | Disruptor RingBuffer 大小（向上钳位到 2 的幂） |
+| `agentassert4j.recorder.sensitive-fields` | 空列表 | 敏感字段名（脱敏匹配，忽略大小写） |
+| `agentassert4j.recorder.sanitize-strategy` | `MASK` | 脱敏策略：`MASK` / `HASH` / `DROP` |
+| `agentassert4j.recorder.sanitize-user-input` | `false` | 脱敏 userInput（影响回归重放，默认关） |
+| `agentassert4j.recorder.sanitize-model-response` | `false` | 脱敏 modelResponse |
+| `agentassert4j.recorder.record-undeclared-chat` | `true` | `false` 时未声明且无可见工具调用的纯对话被过滤（量级卫生选项） |
+| `agentassert4j.recorder.enabled` | `true` | 录制器开关：`false` 时管道不启动（自动装配仍在，与总开关构成两层防线） |
 
-配置项是发布后的永久契约，刻意保持最小面。
+非 Boot 应用（原生 Java / 非 Boot Spring）：程序化装配 `RecorderConfig.builder()`——
+旋钮与上表一一对应；Spring Java Config 姿势：`@Bean` 方法内经 builder 映射宿主自己的
+配置源，框架不自带第二份文件格式。
 
 ### 2.3 规则文件 `agentassert4j-rules.json`（可选精修）
 
@@ -414,7 +433,7 @@ try {
 按提示逐层补声明即可。三步各解决一个问题：
 
 1. **调用点标签（`invocationId`）**——「这个调用点叫什么」。SDK 侧在适配注解/装配处声明；
-   starter 单技能应用一行完成（`agentassert4j.invocation-id=tavern`）；最小录制契约直接填
+   starter 单技能应用一行完成（`agentassert4j.recorder.default-invocation-id=tavern`）；最小录制契约直接填
    `r.setInvocationId("refund")`。声明标签后：调用点身份可跨模板版本稳定配对、任务规则有
    步骤名可依。多步全无标签的链会出现在 doctor「multi-step unlabeled chains」计数里。
 2. **任务键（`taskKey`）**——「这条链属于哪个业务场景」。录制时在 `metadata` 写

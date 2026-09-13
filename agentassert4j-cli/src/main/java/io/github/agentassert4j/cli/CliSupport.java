@@ -530,7 +530,8 @@ final class CliSupport {
         String apiKey = config.getLlm().getApiKey();
         String model = config.getLlm().getModel();
         String extraBody = config.getLlm().getExtraBody();
-        return new ProtocolRoutingLlmClient(protocol, new OpenAiCompatibleClient(endpoint, apiKey, model, OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, extraBody), new AnthropicMessagesClient(endpoint, apiKey, model, OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, extraBody), new OpenAiResponsesClient(endpoint, apiKey, model, OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, extraBody));
+        int maxRetries = config.getLlm().getMaxRetries();
+        return new ProtocolRoutingLlmClient(protocol, new OpenAiCompatibleClient(endpoint, apiKey, model, maxRetries, extraBody), new AnthropicMessagesClient(endpoint, apiKey, model, maxRetries, extraBody), new OpenAiResponsesClient(endpoint, apiKey, model, maxRetries, extraBody));
     }
 
     /**

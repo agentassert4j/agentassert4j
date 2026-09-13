@@ -24,7 +24,6 @@ class AgentAssert4jConfigTest {
             AgentAssert4jConfig config = AgentAssert4jConfig.defaults();
 
             assertNotNull(config.getStorage());
-            assertNotNull(config.getRecorder());
             assertNotNull(config.getRegression());
             assertNotNull(config.getLlm());
         }
@@ -34,14 +33,6 @@ class AgentAssert4jConfigTest {
         void storageDefaults() {
             AgentAssert4jConfig.StorageConfig s = AgentAssert4jConfig.defaults().getStorage();
             assertNotNull(s.getUrl());
-        }
-
-        @Test
-        @DisplayName("Recorder 默认 batch=100, flush=5000")
-        void recorderDefaults() {
-            AgentAssert4jConfig.RecorderConfig r = AgentAssert4jConfig.defaults().getRecorder();
-            assertEquals(100, r.getBatchSize());
-            assertEquals(5000, r.getFlushIntervalMs());
         }
 
         @Test
@@ -84,13 +75,11 @@ class AgentAssert4jConfigTest {
         @Test
         @DisplayName("完整 JSON 解析")
         void fullJson() {
-            String json = "{\n" + "  \"storage\": {\"url\": \"/data/agentassert4j.db\"},\n" + "  \"recorder\": {\"batchSize\": 200, \"flushIntervalMs\": 10000},\n" + "  \"regression\": {\"ignorableFields\": [\"debugInfo\", \"timestamp\"]},\n" + "  \"llm\": {\"apiKey\": \"sk-test\", \"endpoint\": \"https://api.deepseek.com\", \"model\": \"deepseek-chat\", \"timeoutMs\": 60000}\n" + "}";
+            String json = "{\n" + "  \"storage\": {\"url\": \"/data/agentassert4j.db\"},\n" + "  \"regression\": {\"ignorableFields\": [\"debugInfo\", \"timestamp\"]},\n" + "  \"llm\": {\"apiKey\": \"sk-test\", \"endpoint\": \"https://api.deepseek.com\", \"model\": \"deepseek-chat\", \"timeoutMs\": 60000}\n" + "}";
 
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
 
             assertEquals("/data/agentassert4j.db", config.getStorage().getUrl());
-            assertEquals(200, config.getRecorder().getBatchSize());
-            assertEquals(10000, config.getRecorder().getFlushIntervalMs());
             assertEquals(2, config.getRegression().getIgnorableFields().size());
             assertEquals("sk-test", config.getLlm().getApiKey());
             assertEquals("https://api.deepseek.com", config.getLlm().getEndpoint());
@@ -107,7 +96,6 @@ class AgentAssert4jConfigTest {
 
             assertEquals("/custom/path.db", config.getStorage().getUrl());
             // 其他字段使用默认值
-            assertEquals(100, config.getRecorder().getBatchSize());
             assertEquals("gpt-4o", config.getLlm().getModel());
         }
 
@@ -135,17 +123,17 @@ class AgentAssert4jConfigTest {
         @Test
         @DisplayName("数字字符串的 int 字段解析")
         void intField_fromString() {
-            String json = "{\"recorder\": {\"batchSize\": \"50\"}}";
+            String json = "{\"llm\": {\"timeoutMs\": \"60000\"}}";
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
-            assertEquals(50, config.getRecorder().getBatchSize());
+            assertEquals(60000, config.getLlm().getTimeoutMs());
         }
 
         @Test
         @DisplayName("非数字字符串的 int 字段退化为默认值")
         void intField_invalidString_defaults() {
-            String json = "{\"recorder\": {\"batchSize\": \"abc\"}}";
+            String json = "{\"llm\": {\"timeoutMs\": \"abc\"}}";
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
-            assertEquals(100, config.getRecorder().getBatchSize());
+            assertEquals(30000, config.getLlm().getTimeoutMs());
         }
     }
 
@@ -190,7 +178,7 @@ class AgentAssert4jConfigTest {
         @Test
         @DisplayName("全部合法根段就位 → 无未知键告警")
         void allKnownRootSections_produceNoNotes() {
-            String json = "{\"storage\":{},\"recorder\":{},\"regression\":{},\"llm\":{}}";
+            String json = "{\"storage\":{},\"regression\":{},\"llm\":{}}";
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
             assertTrue(config.getConfigNotes().isEmpty(), "合法根段不得触发告警: " + config.getConfigNotes());
         }
@@ -198,7 +186,7 @@ class AgentAssert4jConfigTest {
         @Test
         @DisplayName("llm 段全部合法键被解析路径真实消费（哨兵值逐字段吸收）")
         void everyLlmKey_isActuallyConsumed() {
-            String json = "{\"llm\":{\"protocol\":\"openai-chat\",\"apiKey\":\"k\",\"endpoint\":\"http://e\"," + "\"model\":\"m\",\"timeoutMs\":1234,\"temperature\":0.7,\"extraBody\":\"{\\\"a\\\":1}\"}}";
+            String json = "{\"llm\":{\"protocol\":\"openai-chat\",\"apiKey\":\"k\",\"endpoint\":\"http://e\"," + "\"model\":\"m\",\"timeoutMs\":1234,\"maxRetries\":5,\"maxTokens\":8192,\"temperature\":0.7,\"extraBody\":\"{\\\"a\\\":1}\"}}";
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson(json);
             assertTrue(config.getConfigNotes().isEmpty(), "合法 llm 键不得触发告警: " + config.getConfigNotes());
             assertEquals("openai-chat", config.getLlm().getProtocol());
@@ -206,8 +194,18 @@ class AgentAssert4jConfigTest {
             assertEquals("http://e", config.getLlm().getEndpoint());
             assertEquals("m", config.getLlm().getModel());
             assertEquals(1234, config.getLlm().getTimeoutMs());
+            assertEquals(5, config.getLlm().getMaxRetries());
+            assertEquals(8192, config.getLlm().getMaxTokens());
             assertEquals(0.7, config.getLlm().getTemperature(), 1e-9);
             assertEquals("{\"a\":1}", config.getLlm().getExtraBody());
+        }
+
+        @Test
+        @DisplayName("maxRetries/maxTokens 缺省值：重试 2 次、max_tokens 交客户端兜底")
+        void retryAndMaxTokensDefaults() {
+            AgentAssert4jConfig.LlmConfig llm = AgentAssert4jConfig.fromJson("{\"llm\":{\"apiKey\":\"k\"}}").getLlm();
+            assertEquals(2, llm.getMaxRetries());
+            assertNull(llm.getMaxTokens(), "maxTokens 缺省 null——客户端按内置 4096 兜底");
         }
 
         @Test

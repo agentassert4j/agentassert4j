@@ -37,7 +37,7 @@ class OpenAiCompatibleClientTest {
 
     @BeforeEach
     void setUp() {
-        client = new OpenAiCompatibleClient("https://api.openai.com", "test-key", "gpt-4o", OpenAiCompatibleClient.DEFAULT_MAX_RETRIES, null);
+        client = new OpenAiCompatibleClient("https://api.openai.com", "test-key", "gpt-4o", 2, null);
     }
 
     @Test

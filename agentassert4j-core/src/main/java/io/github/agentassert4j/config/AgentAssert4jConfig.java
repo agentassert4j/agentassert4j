@@ -16,12 +16,13 @@ import java.util.*;
  * <pre>
  * {
  *   "storage": { "url": "~/.agentassert4j/agentassert4j.db" },
- *   "recorder": { "batchSize": 100, "flushIntervalMs": 5000 },
  *   "regression": { "ignorableFields": ["debugInfo", "timestamp"] },
  *   "llm": { "protocol": "openai-chat", "apiKey": "${AGENTASSERT_API_KEY}", "endpoint": "...", "model": "gpt-4o",
  *            "extraBody": "\"thinking\":{\"type\":\"disabled\"}" }
  * }
  * </pre>
+ * 录制侧旋钮不走本文件：Boot 应用经 application.yml（starter 绑定），非 Boot 应用
+ * 经 {@code RecorderConfig.builder()} 程序化装配——本文件是 CLI/MCP 操作面的配置。
  *
  * @author axy-yxa
  * @since 2026-08-26
@@ -29,7 +30,6 @@ import java.util.*;
 public class AgentAssert4jConfig {
 
     private StorageConfig storage;
-    private RecorderConfig recorder;
     private RegressionConfig regression;
     private LlmConfig llm;
 
@@ -41,7 +41,6 @@ public class AgentAssert4jConfig {
 
     public AgentAssert4jConfig() {
         this.storage = new StorageConfig();
-        this.recorder = new RecorderConfig();
         this.regression = new RegressionConfig();
         this.llm = new LlmConfig();
     }
@@ -69,7 +68,6 @@ public class AgentAssert4jConfig {
 
         Map<String, Object> root = (Map<String, Object>) parsed;
         config.storage = StorageConfig.fromJson(getMap(root, "storage"), config.storage);
-        config.recorder = RecorderConfig.fromJson(getMap(root, "recorder"), config.recorder);
         config.regression = RegressionConfig.fromJson(getMap(root, "regression"), config.regression);
         config.llm = LlmConfig.fromJson(getMap(root, "llm"), config.llm);
 
@@ -97,8 +95,8 @@ public class AgentAssert4jConfig {
     /**
      * 已知根段与 llm 段键集——未知键检测的对照面，键必须与解析路径一一对应。
      */
-    private static final Set<String> ROOT_KEYS = new HashSet<>(Arrays.asList("storage", "recorder", "regression", "llm"));
-    private static final Set<String> LLM_KEYS = new HashSet<>(Arrays.asList("protocol", "apiKey", "endpoint", "model", "timeoutMs", "temperature", "extraBody"));
+    private static final Set<String> ROOT_KEYS = new HashSet<>(Arrays.asList("storage", "regression", "llm"));
+    private static final Set<String> LLM_KEYS = new HashSet<>(Arrays.asList("protocol", "apiKey", "endpoint", "model", "timeoutMs", "maxRetries", "maxTokens", "temperature", "extraBody"));
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> getMap(Map<String, Object> parent, String key) {
@@ -113,6 +111,20 @@ public class AgentAssert4jConfig {
 
     private static int getInt(Map<String, Object> map, String key, int defaultValue) {
         Object val = map.get(key);
+        if (val instanceof Number) return ((Number) val).intValue();
+        if (val instanceof String) {
+            try {
+                return Integer.parseInt((String) val);
+            } catch (NumberFormatException e) {
+                return defaultValue;
+            }
+        }
+        return defaultValue;
+    }
+
+    private static Integer getNullableInt(Map<String, Object> map, String key, Integer defaultValue) {
+        Object val = map.get(key);
+        if (val == null) return defaultValue;
         if (val instanceof Number) return ((Number) val).intValue();
         if (val instanceof String) {
             try {
@@ -141,14 +153,6 @@ public class AgentAssert4jConfig {
 
     public void setStorage(StorageConfig storage) {
         this.storage = storage;
-    }
-
-    public RecorderConfig getRecorder() {
-        return recorder;
-    }
-
-    public void setRecorder(RecorderConfig recorder) {
-        this.recorder = recorder;
     }
 
     public RegressionConfig getRegression() {
@@ -200,44 +204,6 @@ public class AgentAssert4jConfig {
 
         public void setUrl(String url) {
             this.url = url;
-        }
-    }
-
-    /**
-     * 录制器配置。
-     */
-    public static class RecorderConfig {
-        /**
-         * 批量写入大小
-         */
-        private int batchSize = 100;
-        /**
-         * 刷新间隔（毫秒）
-         */
-        private int flushIntervalMs = 5000;
-
-        static RecorderConfig fromJson(Map<String, Object> map, RecorderConfig defaults) {
-            if (map == null) return defaults;
-            RecorderConfig c = new RecorderConfig();
-            c.batchSize = getInt(map, "batchSize", defaults.batchSize);
-            c.flushIntervalMs = getInt(map, "flushIntervalMs", defaults.flushIntervalMs);
-            return c;
-        }
-
-        public int getBatchSize() {
-            return batchSize;
-        }
-
-        public void setBatchSize(int batchSize) {
-            this.batchSize = batchSize;
-        }
-
-        public int getFlushIntervalMs() {
-            return flushIntervalMs;
-        }
-
-        public void setFlushIntervalMs(int flushIntervalMs) {
-            this.flushIntervalMs = flushIntervalMs;
         }
     }
 
@@ -294,6 +260,16 @@ public class AgentAssert4jConfig {
          */
         private int timeoutMs = 30000;
         /**
+         * 传输层失败（HTTP 429/5xx/连接被拒）的最大重试次数；负数按 0 处理。
+         * 默认 2——重试直接决定重驱成本与时长，网络环境差异大，暴露给用户
+         */
+        private int maxRetries = 2;
+        /**
+         * 发射请求的 max_tokens 兜底上限。Anthropic Messages 的 max_tokens 必填、
+         * 基线记录未携带时按此值填充；null = 客户端内置默认（4096）
+         */
+        private Integer maxTokens;
+        /**
          * 采样温度（默认 0.0 确定性输出）；显式配置 null 表示请求体不携带该参数
          * ——OpenAI o 系等推理模型只接受默认温度，发送 0.0 会被 400 拒绝
          */
@@ -313,6 +289,8 @@ public class AgentAssert4jConfig {
             c.endpoint = getString(map, "endpoint", defaults.endpoint);
             c.model = getString(map, "model", defaults.model);
             c.timeoutMs = getInt(map, "timeoutMs", defaults.timeoutMs);
+            c.maxRetries = getInt(map, "maxRetries", defaults.maxRetries);
+            c.maxTokens = getNullableInt(map, "maxTokens", defaults.maxTokens);
             // 显式 "temperature": null 与缺省不同：null=不发送该参数，缺省=默认 0.0
             if (map.containsKey("temperature")) {
                 Object raw = map.get("temperature");
@@ -360,16 +338,32 @@ public class AgentAssert4jConfig {
             return timeoutMs;
         }
 
+        public void setTimeoutMs(int timeoutMs) {
+            this.timeoutMs = timeoutMs;
+        }
+
+        public int getMaxRetries() {
+            return maxRetries;
+        }
+
+        public void setMaxRetries(int maxRetries) {
+            this.maxRetries = maxRetries;
+        }
+
+        public Integer getMaxTokens() {
+            return maxTokens;
+        }
+
+        public void setMaxTokens(Integer maxTokens) {
+            this.maxTokens = maxTokens;
+        }
+
         public Double getTemperature() {
             return temperature;
         }
 
         public void setTemperature(Double temperature) {
             this.temperature = temperature;
-        }
-
-        public void setTimeoutMs(int timeoutMs) {
-            this.timeoutMs = timeoutMs;
         }
 
         public String getExtraBody() {

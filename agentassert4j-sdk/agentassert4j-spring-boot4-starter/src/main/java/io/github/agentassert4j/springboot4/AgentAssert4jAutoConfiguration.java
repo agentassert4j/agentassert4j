@@ -50,7 +50,7 @@ public class AgentAssert4jAutoConfiguration {
     @Bean(destroyMethod = "close")
     @ConditionalOnMissingBean(StorageRepository.class)
     public SqliteStorageRepository agentAssert4jStorageRepository(AgentAssert4jProperties properties) {
-        SqliteStorageRepository repository = new SqliteStorageRepository(properties.getDatabase());
+        SqliteStorageRepository repository = new SqliteStorageRepository(expandHome(properties.getStorage().getUrl()));
         repository.initialize();
         return repository;
     }
@@ -58,9 +58,29 @@ public class AgentAssert4jAutoConfiguration {
     @Bean(destroyMethod = "stop")
     @ConditionalOnMissingBean(InteractionRecorder.class)
     public InteractionRecorder agentAssert4jInteractionRecorder(StorageRepository repository, AgentAssert4jProperties properties) {
-        InteractionRecorder recorder = new InteractionRecorder(repository, RecorderConfig.builder().defaultInvocationId(properties.getInvocationId()).build());
+        AgentAssert4jProperties.Recorder recorderProperties = properties.getRecorder();
+        RecorderConfig recorderConfig = RecorderConfig.builder().defaultInvocationId(recorderProperties.getDefaultInvocationId()).endpoint(recorderProperties.getEndpoint()).batchSize(recorderProperties.getBatchSize()).flushIntervalMs(recorderProperties.getFlushIntervalMs()).maxBufferSize(recorderProperties.getMaxBufferSize()).ringBufferSize(recorderProperties.getRingBufferSize()).sensitiveFields(recorderProperties.getSensitiveFields()).sanitizeStrategy(recorderProperties.getSanitizeStrategy()).sanitizeUserInput(recorderProperties.isSanitizeUserInput()).sanitizeModelResponse(recorderProperties.isSanitizeModelResponse()).recordUndeclaredChat(recorderProperties.isRecordUndeclaredChat()).enabled(recorderProperties.isEnabled()).build();
+        InteractionRecorder recorder = new InteractionRecorder(repository, recorderConfig);
         recorder.start();
         return recorder;
+    }
+
+    /**
+     * 与 agentassert4j.json 的 storage.url 同语义：~ 与 ~/ 前缀展开为用户主目录，
+     * ~user 形态（其他用户主目录）不支持、原样保留。
+     */
+    private static String expandHome(String path) {
+        if (path == null || !path.startsWith("~")) {
+            return path;
+        }
+        String home = System.getProperty("user.home", "");
+        if (path.length() == 1) {
+            return home;
+        }
+        if (path.charAt(1) == '/' || path.charAt(1) == '\\') {
+            return home + path.substring(1);
+        }
+        return path;
     }
 
     /**

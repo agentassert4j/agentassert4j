@@ -9,6 +9,7 @@ package io.github.agentassert4j.config;
  * <ul>
  *   <li>{@code timeoutMs} — 单次 LLM 调用超时（毫秒）</li>
  *   <li>{@code temperature} — LLM 采样温度（建议 0.0 确定性输出）</li>
+ *   <li>{@code maxTokens} — 发射请求的 max_tokens 兜底上限（null 时客户端按内置默认兜底）</li>
  *   <li>{@code dryRun} — 干跑模式（不调 LLM，只输出会用哪些用例）</li>
  *   <li>{@code model} — 覆盖默认模型（null 时使用 LlmClient 配置的默认模型）</li>
  * </ul>
@@ -27,6 +28,11 @@ public class TestExecutionConfig {
      * 显式发送 0.0 会被服务端 400 拒绝
      */
     private Double temperature = 0.0;
+    /**
+     * 发射请求的 max_tokens 兜底上限。Anthropic Messages 文法必填、基线记录未携带
+     * 时按此值填充；null = 客户端内置默认（4096）。OpenAI 系文法可选、不发送
+     */
+    private Integer maxTokens;
     private boolean dryRun = false;
     private String model;
 
@@ -52,6 +58,11 @@ public class TestExecutionConfig {
         } else if (temperature != null) {
             temperature = Math.max(0.0, Math.min(2.0, temperature));
         }
+        // 非正数 max_tokens 是配置笔误（API 必 400）——置回 null 走客户端内置兜底，
+        // 而不是把必然失败的请求发给端点
+        if (maxTokens != null && maxTokens < 1) {
+            maxTokens = null;
+        }
     }
 
     public TestExecutionConfig timeoutMs(long timeoutMs) {
@@ -62,6 +73,19 @@ public class TestExecutionConfig {
     public TestExecutionConfig temperature(Double temperature) {
         this.temperature = temperature;
         return this;
+    }
+
+    public TestExecutionConfig maxTokens(Integer maxTokens) {
+        this.maxTokens = maxTokens;
+        return this;
+    }
+
+    public Integer getMaxTokens() {
+        return maxTokens;
+    }
+
+    public void setMaxTokens(Integer maxTokens) {
+        this.maxTokens = maxTokens;
     }
 
     public TestExecutionConfig dryRun(boolean dryRun) {

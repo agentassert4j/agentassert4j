@@ -83,7 +83,7 @@ token 数（连缓存命中和思考 token 都分列）、端到端时延、首�
 正是「组织最终答复」的纯文本调用，按「有没有调工具」筛掉它们，任务链就天生缺了终点。超大流量的团队
 可以关掉它，被滤掉多少条，账本上单独记一笔（这叫 **filtered**，和「缓冲满被挤掉」的 dropped 是两
 回事：后者是故障，前者是策略）。小王还顺手给小店通配了一行
-`agentassert4j.invocation-id=tavern`，所有调用就以这个身份入账；将来小店通拆出多个调用点，再在代码里逐个
+`agentassert4j.recorder.default-invocation-id=tavern`，所有调用就以这个身份入账；将来小店通拆出多个调用点，再在代码里逐个
 声明。
 
 > **伏笔去向**：记录是怎么被抄走的 → 第 3 章；脱敏与采集门 → 第 3 章；丢弃与账本 → 第 3 章。
@@ -545,7 +545,7 @@ recorded（到达即计数） = written（批量写成功）
 
 **测试怎么钉住它**：recorder 模块全套（计数闭合、采集门、intercept 与 stop 并发、批写失败不丢账、脱敏往返、错配钳位、深拷贝隔离等）。代表性契约：计数闭合（阻塞仓库 + 大批量突发验证 written+dropped+failed==recorded，filtered 另列）。
 
-**采集门**：默认全量录制（`recordUndeclaredChat=true`——任务链完整性优先于流量卫生，链条终点的最终回答组装往往正是纯文本调用）。设为 `false` 时（超大流量场景的量级卫生选项）只放行「声明了 invocationId 或 templateId」或「响应含可见工具调用」的记录，滤了多少条计入独立的 `filtered` 计数器，与 dropped 严格分列（dropped 是故障，filtered 是策略决策），且首条被滤记录与每满 100 条各发一次 WARN——静默丢数据比丢数据本身更危险。配置了应用级默认调用点标签（`RecorderConfig.defaultInvocationId`，starter 属性 `agentassert4j.invocation-id`）时，未声明记录先落到默认声明位（不受门状态影响）。总到达闭合为 `recorded + filtered`。另有录制总开关 `enabled=false`：录制器不启动管道、不消费记录（生产打包形态；starter 侧 `agentassert4j.enabled` 条件装配同语义）。
+**采集门**：默认全量录制（`recordUndeclaredChat=true`——任务链完整性优先于流量卫生，链条终点的最终回答组装往往正是纯文本调用）。设为 `false` 时（超大流量场景的量级卫生选项）只放行「声明了 invocationId 或 templateId」或「响应含可见工具调用」的记录，滤了多少条计入独立的 `filtered` 计数器，与 dropped 严格分列（dropped 是故障，filtered 是策略决策），且首条被滤记录与每满 100 条各发一次 WARN——静默丢数据比丢数据本身更危险。配置了应用级默认调用点标签（`RecorderConfig.defaultInvocationId`，starter 属性 `agentassert4j.recorder.default-invocation-id`）时，未声明记录先落到默认声明位（不受门状态影响）。总到达闭合为 `recorded + filtered`。另有录制总开关 `enabled=false`：录制器不启动管道、不消费记录（生产打包形态；starter 侧 `agentassert4j.enabled` 条件装配同语义）。
 
 ---
 
@@ -755,13 +755,13 @@ recorded（到达即计数） = written（批量写成功）
   6. **双侧都用三参提取**（基线记录与当前记录各自带规则提指纹）→ `comparator.compare`（第三参数是当前输出文本，供内容规则校验）；
   7. 非 PASS → `recordCandidate` 落候选（落库失败 SEVERE 留痕不中断批量）；`replayOutput` 透传候选原文（只存活于重放现场，裁决侧没有原文）。
 - `OpenAiCompatibleClient`（cli，`llm/` 子包）：基于 JDK `HttpURLConnection`（Java 8 可用、零 SDK 依赖），兼容 OpenAI/DeepSeek/通义等 chat 格式。要点：
-  - 端点尾斜杠归一；请求路径 `/v1/chat/completions`；重试 `DEFAULT_MAX_RETRIES=2`，指数退避 1s/2s；可重试集合 = 429/5xx/ConnectException，**其余 IO 故障直接抛 `LlmApiException`**（重试洗白只会放大耗时并让故障形态失真）；`SocketTimeoutException` → `LlmTimeoutException` 不重试。
+  - 端点尾斜杠归一；请求路径 `/v1/chat/completions`；重试次数 `llm.maxRetries`（默认 2），指数退避 1s/2s；可重试集合 = 429/5xx/ConnectException，**其余 IO 故障直接抛 `LlmApiException`**（重试洗白只会放大耗时并让故障形态失真）；`SocketTimeoutException` → `LlmTimeoutException` 不重试。
   - 请求体手拼（转义统一走 `RecursiveJsonParser.escape`）：消息序列 system → previousTurns → user（多模态时 content 是原样注入的 JSON 数组）；**tool 消息前若缺「assistant 发起调用」帧则按已知 id/toolName 合成最小合法帧**（历史录制没有该轮的独立载体，arguments 以空对象占位）；缺失 callId 的 tool 帧跳过该轮并告警（保住其余用例）；`temperature` 为 null/非 finite 时不携带该成员（推理模型方言：发送 0.0 会被 400 拒绝）；`extraBodyFields` 作为顶层成员原样追加（DeepSeek 思考态等方言逃生舱）。
   - 响应解析统一走 `RecursiveJsonParser` 导航（choices[0].message.content / tool_calls / usage 子树 / 顶层 model / finish_reason）；usage 子树原文逐字存 `usageRaw`；缓存 token 取 `prompt_tokens_details.cached_tokens`、思考 token 取 `completion_tokens_details.reasoning_tokens`（**input_tokens 语义钉死为总处理输入 token**）；`finish_reason` 归一为枚举词表 stop/tool_calls/max_tokens/content_filter/other。
   - `ProviderDialects`（数据注册表，资源文件 `provider-dialects.json`）：规则 = `matchModelPrefix` + `dropParams`，当前仅收录「发送即报错」的方言（o1/o3/o4/gpt-5 → drop temperature）；命中时显式配置的参数被裁掉并**一次性 WARN**（点名 extraBody 逃生舱，防静默丢配置的排障黑洞）；快照损坏等同缺席，退化不中断。
 - `TaskReplayRunner`（cli，统一重放引擎）——bare 命令即全项目完整默认能力，三层判定模型：**身份检测**（DriftDetector 全库只读巡检画像模板身份 vs 最新记录，检测报告全项目零调用）→ **真实对齐**（逐任务最新链 vs 次新链按调用点对齐，零调用，退出码载体）→ **受控重驱**（`--re-drive` 显式开启：逐漂移点以该点最新归档模板重驱录制输入，预算池合计封顶，`--full-chain` 扩为缩域内全部记录）。漂移处置状态机把每个漂移点收敛到三出口之一：对齐 PASS → 开发态自动收编（`--ci` 不落治理写、附警告）；CHANGED → 现场重提指纹落候选等人工裁决；证据缺口（缺步骤/新增/规则违规/无可对齐证据）→ 挂起。守卫五项在引擎入口：判定语义版本、`--ci` 未建档拒绝、换模型告警（含默认模型盲区）、全败按基础设施故障出 2（重驱层）、served 模型就地标注。**本块是地图不是规格**——编排细节、退出码复合与行为矩阵以 `guide/spec/replay.md` 为基准（该 spec 以落地代码成文）。
   - **输出通道契约**（全命令统一）：`--json` 模式 stdout 只产报告本体（replay 为 `agentassert4j.task-report/1`，逐行分段：drift-detection / task-align / drift-disposition / task-re-drive / task-dry-run），进度静默、诊断走 stderr；失败的运行以 `agentassert4j.error/1` 包络收尾 stdout（错误码四族 E-USAGE/E-NO-DATA/E-GUARD/E-ENV + hints + nextAction），人读失败路径 stdout 零产出；配置披露与告警改走 stderr。报告 schema 总表见 `guide/spec/cli.md`。
-- `CostEstimator`（core）：价格真源是随 jar 分发的精选快照 `model_prices.json`（LiteLLM MIT 库裁剪，发布前再生成；`_meta` 前缀键是元信息非价格行），查找 = 精确命中后按最长包含匹配归入模型族。两个入口同一张表：`estimate`（执行前预估文案，固定 1000 输入/500 输出口径；**模型无价格时只报调用次数、不编造货币数**）与 `estimateCallCostUsd`（捕获时刻按实际 token 计价，查不到返回 null）；快照缺席/损坏等同无价格表。
+- `CostEstimator`（core）：价格真源是随 jar 分发的精选快照 `model_prices.json`（LiteLLM MIT 库裁剪，发布前再生成；`_meta` 前缀键是元信息非价格行），查找 = 精确命中后按最长包含匹配归入模型族。两个入口同一张表：`estimate`（执行前预估文案，固定 1000 输入/500 输出口径；**模型无价格时只报调用次数、不编造货币数**）与 `estimateCallCostUsd`（捕获时刻按实际 token 计价，查不到返回 null）；快照缺席/损坏等同无价格表；快照外的模型族经 `agentassert4j-prices.json` 覆盖文件补充（并集覆盖，同族改价/新族补充），价格表随进程首次使用加载一次、改价需重启。
 
 **表结构**：重放不新增表——它的持久化后果只有候选指纹写入 `invocations.candidate_fingerprint`（第 7 章）。
 
@@ -893,7 +893,7 @@ recorded（到达即计数） = written（批量写成功）
   1. 系统属性显式路径——**不可读时抛 `IllegalStateException` 而非静默换源**（fail-fast：用户会以为配置已生效）；
   2. 当前工作目录；3. `~/.agentassert4j/`；4. classpath；5. 都没有 → 安全默认值。
   `${ENV_VAR}` 引用在读取后统一替换（未设置的变量替换为空串）。`describeMainConfigSource` 返回实际命中的来源供命令披露。
-- 主配置四段（`AgentAssert4jConfig`，全部字段带安全默认值）：`storage.url`（默认 `~/.agentassert4j/agentassert4j.db`）、`recorder.{batchSize, flushIntervalMs}`、`regression.ignorableFields`、`llm.{apiKey(${ENV} 引用), endpoint, model, extraBody, timeoutMs, temperature, protocol}`；未知根段/未知 llm 键由 doctor 就近告警。
+- 主配置三段（`AgentAssert4jConfig`，全部字段带安全默认值）：`storage.url`（默认 `~/.agentassert4j/agentassert4j.db`）、`regression.ignorableFields`、`llm.{apiKey(${ENV} 引用), endpoint, model, extraBody, timeoutMs, maxRetries, maxTokens, temperature, protocol}`；未知根段/未知 llm 键由 doctor 就近告警。录制旋钮不走本文件——Boot 应用经 application.yml 的 `agentassert4j.recorder.*`（属性树镜像 json 命名），非 Boot 应用经 `RecorderConfig.builder()`；写了 `recorder` 段会收到未知键告警。
 
 **表结构**：无——CLI 是无状态的进程，一切状态在库里。
 

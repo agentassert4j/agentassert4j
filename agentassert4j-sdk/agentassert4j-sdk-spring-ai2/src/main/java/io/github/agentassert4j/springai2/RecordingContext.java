@@ -33,6 +33,7 @@ public final class RecordingContext implements AutoCloseable {
     private String invocationId;
     private String templateId;
     private String templateSkeleton;
+    private String endpoint;
     private final Map<String, String> metadata = new LinkedHashMap<>();
 
     private RecordingContext(RecordingContext previous, String sessionId) {
@@ -79,6 +80,15 @@ public final class RecordingContext implements AutoCloseable {
     }
 
     /**
+     * 声明本次调用的端点地址（记录的 endpoint 列，基线跨部署可比的部署身份）。
+     * 多模型 JVM 用逐调用声明区分部署点；单模型 JVM 配录制器级默认即可。
+     */
+    public RecordingContext withEndpoint(String endpoint) {
+        this.endpoint = endpoint;
+        return this;
+    }
+
+    /**
      * 附加自由元数据键值（序列化进记录的 metadata 列）。
      */
     public RecordingContext withMetadata(String key, String value) {
@@ -102,6 +112,10 @@ public final class RecordingContext implements AutoCloseable {
 
     String templateSkeleton() {
         return templateSkeleton;
+    }
+
+    String endpoint() {
+        return endpoint;
     }
 
     Map<String, String> metadata() {

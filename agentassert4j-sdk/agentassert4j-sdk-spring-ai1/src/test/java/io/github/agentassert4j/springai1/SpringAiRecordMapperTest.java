@@ -282,6 +282,34 @@ class SpringAiRecordMapperTest {
         }
 
         @Test
+        @DisplayName("响应 id 成为 record_id 身份真源（与 MCP 摄取面同源）；缺失留空回退录制管道")
+        void responseIdBecomesRecordId() {
+            ChatResponse withId = new ChatResponse(List.of(new Generation(new AssistantMessage("ok"))),
+                    ChatResponseMetadata.builder().id("chatcmpl-pin-1").build());
+            InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), withId, 1, null, null, List.of());
+            assertEquals("chatcmpl-pin-1", record.getRecordId(), "响应 id 必须原样落 record_id");
+
+            ChatResponse withoutId = chatResponse("ok", "STOP", 1, 1, null);
+            InteractionRecord fallback = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), withoutId, 1, null, null, List.of());
+            assertNull(fallback.getRecordId(), "无 id 时留空——录制管道以 UUID 兜底，不在此伪造");
+        }
+
+        @Test
+        @DisplayName("RecordingContext 声明的端点写入 endpoint 列；未声明为 null")
+        void contextEndpointMapped() {
+            RecordingContext declared = RecordingContext.start("s").withEndpoint("http://localhost:11434");
+            try {
+                InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), null, 1, null, declared, List.of());
+                assertEquals("http://localhost:11434", record.getEndpoint(), "per-call 端点声明优先");
+            } finally {
+                declared.close();
+            }
+
+            InteractionRecord undeclared = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), null, 1, null, null, List.of());
+            assertNull(undeclared.getEndpoint(), "未声明留空——录制器级默认在管道兜底");
+        }
+
+        @Test
         @DisplayName("结束原因归一词表全覆盖")
         void finishReasonNormalization() {
             assertEquals("stop", finishReasonOf("STOP"));

@@ -1,5 +1,6 @@
 package io.github.agentassert4j.algorithm;
 
+import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 
@@ -8,14 +9,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * 成本估算 — 价格快照驱动的执行前预估与调用计价。
  *
  * <p>价格真源是随 jar 分发的精选快照（model_prices.json，按主流模型族裁剪，
  * 发布前从 LiteLLM 的 MIT 价格库重新生成），键为模型族名，查找按最长包含
- * 匹配把带日期的变体归入族价。查不到的模型不做货币估算——价格只是 token
- * 统计之上的装饰层，缺失时只报 token 消耗，不编造费用，也永不参与判定。</p>
+ * 匹配把带日期的变体归入族价。快照外的模型族经 {@code agentassert4j-prices.json}
+ * 覆盖文件补充（查找链同规则文件，格式同快照，并集覆盖：同族改价、新族补充）。
+ * 查不到的模型不做货币估算——价格只是 token 统计之上的装饰层，缺失时只报
+ * token 消耗，不编造费用，也永不参与判定。</p>
  *
  * <p>两个入口共用同一张表：{@link #estimate} 用「假设 1000 输入
  * 500 输出 token」的固定口径做执行前预估文案；{@link #estimateCallCostUsd}
@@ -25,6 +30,8 @@ import java.util.*;
  * @since 2026-08-26
  */
 public final class CostEstimator {
+
+    private static final Logger LOG = Logger.getLogger(CostEstimator.class.getName());
 
     /**
      * 预估口径的假设 token 量：单次调用 1000 输入 / 500 输出
@@ -101,39 +108,91 @@ public final class CostEstimator {
     }
 
     private static Map<String, double[]> loadPrices() {
+        Map<String, double[]> prices = new LinkedHashMap<>();
+        loadSnapshotInto(prices);
+        String overrideJson = null;
+        try {
+            overrideJson = ConfigLoader.loadPriceOverrides();
+        } catch (RuntimeException e) {
+            // 显式 prices.path 不可读等加载失败在静态初始化里必须降级为快照兜底：
+            // 本类的初始化被录制热路径触碰，Error 逃逸会穿透录制隔离防线、
+            // 让价格配置问题杀死业务调用
+            LOG.log(Level.SEVERE, "Failed to load price overrides (agentassert4j-prices.json); falling back to the bundled snapshot.", e);
+        }
+        if (overrideJson != null) {
+            applyPriceOverrides(prices, overrideJson);
+        }
+        return Collections.unmodifiableMap(prices);
+    }
+
+    /**
+     * 随 jar 分发的价格快照。缺席/损坏按空表处理，退化不中断。
+     */
+    private static void loadSnapshotInto(Map<String, double[]> prices) {
         InputStream in = CostEstimator.class.getResourceAsStream("model_prices.json");
         if (in == null) {
-            // 快照缺席按无价格表处理：预估走兜底单价，捕获计价返回 null
-            return Collections.emptyMap();
+            return;
         }
         try {
             Object parsed = RecursiveJsonParser.parse(readAll(in));
-            if (!(parsed instanceof Map)) {
-                return Collections.emptyMap();
+            if (parsed instanceof Map) {
+                parseInto((Map<?, ?>) parsed, prices);
             }
-            Map<String, double[]> prices = new LinkedHashMap<>();
-            for (Map.Entry<?, ?> entry : ((Map<?, ?>) parsed).entrySet()) {
-                String key = String.valueOf(entry.getKey());
-                // 下划线前缀键是快照元信息，非价格行
-                if (key.startsWith("_") || !(entry.getValue() instanceof Map)) {
-                    continue;
-                }
-                Double input = asDouble(((Map<?, ?>) entry.getValue()).get("input"));
-                Double output = asDouble(((Map<?, ?>) entry.getValue()).get("output"));
-                if (input != null && output != null) {
-                    prices.put(key.toLowerCase(Locale.ROOT), new double[]{input, output});
-                }
-            }
-            return Collections.unmodifiableMap(prices);
         } catch (RuntimeException e) {
             // 快照损坏等同缺席，退化不中断
-            return Collections.emptyMap();
         } finally {
             try {
                 in.close();
             } catch (Exception ignored) {
             }
         }
+    }
+
+    /**
+     * 用户覆盖文件（agentassert4j-prices.json）的并集覆盖：同族改价、新族补充。
+     * 损坏的覆盖文件必须就近可见（SEVERE）而不是静默失效——用户写了价格文件却
+     * 看不到生效，比没有文件更难排查。包级可见供合并语义的确定性验证。
+     */
+    static void applyPriceOverrides(Map<String, double[]> prices, String overrideJson) {
+        if (overrideJson == null || overrideJson.trim().isEmpty()) {
+            return;
+        }
+        Object parsed;
+        try {
+            parsed = RecursiveJsonParser.parse(overrideJson);
+        } catch (RuntimeException e) {
+            LOG.log(Level.SEVERE, "Price override file (agentassert4j-prices.json) is not valid JSON; ignoring it.");
+            return;
+        }
+        if (!(parsed instanceof Map)) {
+            LOG.log(Level.SEVERE, "Price override file (agentassert4j-prices.json) is not a JSON object; ignoring it.");
+            return;
+        }
+        if (parseInto((Map<?, ?>) parsed, prices) == 0) {
+            LOG.log(Level.SEVERE, "Price override file (agentassert4j-prices.json) contained no usable price rows; ignoring it.");
+        }
+    }
+
+    /**
+     * 把「模型族 → {input, output}」形态的 JSON 对象吸收进价格表，返回可用行数
+     * （同族改价也计入）；下划线前缀键是元信息非价格行，缺 input/output 的行跳过。
+     * 价格值不校验符号——覆盖文件由使用者自控，价格是装饰层、永不参与判定。
+     */
+    private static int parseInto(Map<?, ?> source, Map<String, double[]> prices) {
+        int rows = 0;
+        for (Map.Entry<?, ?> entry : source.entrySet()) {
+            String key = String.valueOf(entry.getKey());
+            if (key.startsWith("_") || !(entry.getValue() instanceof Map)) {
+                continue;
+            }
+            Double input = asDouble(((Map<?, ?>) entry.getValue()).get("input"));
+            Double output = asDouble(((Map<?, ?>) entry.getValue()).get("output"));
+            if (input != null && output != null) {
+                prices.put(key.toLowerCase(Locale.ROOT), new double[]{input, output});
+                rows++;
+            }
+        }
+        return rows;
     }
 
     private static String readAll(InputStream in) {

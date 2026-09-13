@@ -44,6 +44,18 @@ class TestExecutionConfigTest {
     }
 
     @Test
+    void validate_nonPositiveMaxTokens_resetsToNull() {
+        // 非正数 max_tokens 是配置笔误（API 必 400）——置回 null 走客户端内置兜底
+        TestExecutionConfig config = new TestExecutionConfig().maxTokens(-5);
+        config.validate();
+        assertNull(config.getMaxTokens());
+
+        TestExecutionConfig valid = new TestExecutionConfig().maxTokens(8192);
+        valid.validate();
+        assertEquals(8192, valid.getMaxTokens(), "合法值必须原样保留");
+    }
+
+    @Test
     void validate_clampsTemperatureUpperBound() {
         TestExecutionConfig config = new TestExecutionConfig().temperature(3.0);
         config.validate();

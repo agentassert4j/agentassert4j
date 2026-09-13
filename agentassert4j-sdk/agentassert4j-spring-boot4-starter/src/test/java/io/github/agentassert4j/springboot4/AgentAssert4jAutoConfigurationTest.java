@@ -3,6 +3,7 @@ package io.github.agentassert4j.springboot4;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.recorder.InteractionRecorder;
 import io.github.agentassert4j.recorder.RecorderConfig;
+import io.github.agentassert4j.recorder.SanitizeStrategy;
 import io.github.agentassert4j.spi.RecordingInterceptor;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.springai2.RecordingChatModel;
@@ -59,6 +60,51 @@ class AgentAssert4jAutoConfigurationTest {
     private String tempDbPath() {
         return tempDir.resolve("starter-" + System.nanoTime() + ".db").toString();
     }
+    @Test
+    @DisplayName("recorder 段全合法键哨兵值绑定（yml 通道键集 ↔ 属性字段逐项吸收）")
+    void recorderProperties_sentinelBinding() {
+        String url = tempDbPath();
+        runner.withBean("chatModel", StubChatModel.class).withPropertyValues(
+                "agentassert4j.storage.url=" + url,
+                "agentassert4j.recorder.default-invocation-id=inv-sentinel",
+                "agentassert4j.recorder.endpoint=http://ep-sentinel:1234",
+                "agentassert4j.recorder.batch-size=7",
+                "agentassert4j.recorder.flush-interval-ms=1234",
+                "agentassert4j.recorder.max-buffer-size=77",
+                "agentassert4j.recorder.ring-buffer-size=2048",
+                "agentassert4j.recorder.sensitive-fields=apiKey,password",
+                "agentassert4j.recorder.sanitize-strategy=DROP",
+                "agentassert4j.recorder.sanitize-user-input=true",
+                "agentassert4j.recorder.sanitize-model-response=true",
+                "agentassert4j.recorder.record-undeclared-chat=false",
+                "agentassert4j.recorder.enabled=true").run(context -> {
+            AgentAssert4jProperties properties = context.getBean(AgentAssert4jProperties.class);
+            AgentAssert4jProperties.Recorder p = properties.getRecorder();
+            assertEquals("inv-sentinel", p.getDefaultInvocationId());
+            assertEquals("http://ep-sentinel:1234", p.getEndpoint());
+            assertEquals(7, p.getBatchSize());
+            assertEquals(1234, p.getFlushIntervalMs());
+            assertEquals(77, p.getMaxBufferSize());
+            assertEquals(2048, p.getRingBufferSize());
+            assertEquals(List.of("apiKey", "password"), p.getSensitiveFields());
+            assertEquals(SanitizeStrategy.DROP, p.getSanitizeStrategy());
+            assertTrue(p.isSanitizeUserInput());
+            assertTrue(p.isSanitizeModelResponse());
+            assertFalse(p.isRecordUndeclaredChat());
+            assertTrue(p.isEnabled());
+
+            // 消费映射行为钉：yml 值必须流经 builder 进入录制器行为
+            // （绑定钉只证 Properties 字段吸收，证明不了 AutoConfig 的 12 连调没漏）
+            InteractionRecorder recorder = context.getBean(InteractionRecorder.class);
+            InteractionRecord probe = new InteractionRecord();
+            probe.setRecordId("sentinel-ep");
+            probe.setSessionId("sentinel-ep-session");
+            probe.setTimestamp(System.currentTimeMillis());
+            recorder.intercept(probe);
+            assertEquals("http://ep-sentinel:1234", probe.getEndpoint(), "recorder.endpoint 必须经 builder 映射在采集兜底中生效");
+        });
+    }
+
 
     /**
      * RingBuffer 发布是异步的，flush 只排空消费线程已积累的批次——
@@ -75,7 +121,7 @@ class AgentAssert4jAutoConfigurationTest {
     @DisplayName("应用级默认 invocationId：未声明调用按默认身份录制")
     void defaultInvocationId_recordsUndeclaredCalls() {
         String dbPath = tempDbPath();
-        runner.withBean("chatModel", StubChatModel.class).withPropertyValues("agentassert4j.database=" + dbPath, "agentassert4j.invocation-id=order-flow").run(context -> {
+        runner.withBean("chatModel", StubChatModel.class).withPropertyValues("agentassert4j.storage.url=" + dbPath, "agentassert4j.recorder.default-invocation-id=order-flow").run(context -> {
             ChatModel model = context.getBean("chatModel", ChatModel.class);
             model.call(new Prompt(List.of(new UserMessage("订单 SO-1 在哪"))));
 
@@ -94,7 +140,7 @@ class AgentAssert4jAutoConfigurationTest {
     @Test
     @DisplayName("容器内 ChatModel 被包装，录制器与存储就绪")
     void wrapsChatModelBean() {
-        runner.withBean("chatModel", StubChatModel.class).withPropertyValues("agentassert4j.database=" + tempDbPath()).run(context -> {
+        runner.withBean("chatModel", StubChatModel.class).withPropertyValues("agentassert4j.storage.url=" + tempDbPath()).run(context -> {
             assertTrue(context.getBean("chatModel") instanceof RecordingChatModel, "ChatModel Bean 必须被录制装饰器替换");
             assertNotNull(context.getBean(InteractionRecorder.class));
             assertNotNull(context.getBean(StorageRepository.class));
@@ -105,7 +151,7 @@ class AgentAssert4jAutoConfigurationTest {
     @DisplayName("全链路：包装后的调用经 Disruptor 管道落 SQLite 可查")
     void recordedCallReachesStorage() {
         String dbPath = tempDbPath();
-        runner.withBean("chatModel", StubChatModel.class).withPropertyValues("agentassert4j.database=" + dbPath).run(context -> {
+        runner.withBean("chatModel", StubChatModel.class).withPropertyValues("agentassert4j.storage.url=" + dbPath).run(context -> {
             ChatModel model = context.getBean("chatModel", ChatModel.class);
             ChatResponse response;
             // 采集门：未声明且无工具调用的纯对话不录——管道测试走标准声明姿势。
@@ -156,14 +202,14 @@ class AgentAssert4jAutoConfigurationTest {
     void doesNotDoubleWrap() {
         List<InteractionRecord> sink = new CopyOnWriteArrayList<>();
         RecordingChatModel prewrapped = RecordingChatModel.wrap(new StubChatModel(), (RecordingInterceptor) sink::add);
-        runner.withBean("prewrapped", RecordingChatModel.class, () -> prewrapped).withPropertyValues("agentassert4j.database=" + tempDbPath()).run(context -> assertSame(prewrapped, context.getBean("prewrapped"), "已是 RecordingChatModel 的 Bean 必须原样保留"));
+        runner.withBean("prewrapped", RecordingChatModel.class, () -> prewrapped).withPropertyValues("agentassert4j.storage.url=" + tempDbPath()).run(context -> assertSame(prewrapped, context.getBean("prewrapped"), "已是 RecordingChatModel 的 Bean 必须原样保留"));
     }
 
     @Test
     @DisplayName("自定义数据库路径生效（建库即建文件）")
     void customDatabasePathHonored() {
         Path dbFile = tempDir.resolve("custom/where.db");
-        runner.withBean("chatModel", StubChatModel.class).withPropertyValues("agentassert4j.database=" + dbFile).run(context -> assertTrue(dbFile.toFile().exists(), "initialize 必须落出库文件"));
+        runner.withBean("chatModel", StubChatModel.class).withPropertyValues("agentassert4j.storage.url=" + dbFile).run(context -> assertTrue(dbFile.toFile().exists(), "initialize 必须落出库文件"));
     }
 
     @Test
