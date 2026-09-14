@@ -22,14 +22,17 @@ import java.util.*;
  * <ul>
  *   <li><b>身份检测</b>：DriftDetector 全库只读巡检画像模板身份 vs 最新记录，
  *       漂移键经依赖图扩散为下游波及集，检测报告全项目、不随缩域收窄；</li>
- *   <li><b>真实对齐</b>：逐任务（同名请求链）最新 vs 次新按调用点对齐，步级产出
- *       PASS/CHANGED/缺步骤/新增步骤与任务纪律违规；</li>
+ *   <li><b>真实对齐</b>：本地模式逐任务（同名请求链）最新 vs 次新按调用点对齐；
+ *       {@code --ci} 模式改为基线对照——每任务最新链逐记录对照其调用点画像的
+ *       活跃指纹（批准真相的单份定格投影，BaselineSides.fromProfiles），
+ *       单链任务同判（首航即批改）；步级产出 PASS/CHANGED 与任务纪律违规；</li>
  *   <li><b>受控重驱</b>：花 LLM 钱的显式复核层（--re-drive 开启，逐漂移点注入
  *       最新归档模板）。</li>
  * </ul>
  *
  * <p>漂移处置状态机把每个漂移点收敛到三个出口之一：对齐 PASS → 开发态自动收编
- * （{@code --ci} 模式不落治理写、附警告）；CHANGED → 落候选等待人工裁决；
+ * （{@code --ci} 模式不收编漂移身份、附警告——CHANGED 候选照落等裁决，除候选
+ * 登记外流水线无治理写）；CHANGED → 落候选等待人工裁决；
  * 证据缺口（缺步骤/新增/规则违规/无可对齐证据）→ 挂起。缩域命中的键才处置，
  * 域外漂移只进检测报告。</p>
  *
@@ -157,11 +160,11 @@ public class TaskReplayRunner {
         if (scoped.isEmpty()) {
             return fail(CliErrorCode.E_NO_DATA, "No task chains matched the scope.", "Record interactions first, or check invocation keys and task prefixes with `status`.", "agentassert4j status");
         }
-        info("Alignment basis: each task's latest chain is judged against its previous chain (same request text; declared taskKey groups first).");
+        info(alignmentBasisLine(ciMode, memberCheck));
         boolean narrowed = taskPrefix != null || invocationKey != null;
 
         if (dryRun) {
-            return dryRunPlan(scoped, reDrive, drift, narrowed, memberCheck, invocationKey);
+            return dryRunPlan(scoped, reDrive, drift, narrowed, ciMode, memberCheck, invocationKey);
         }
 
         // --ci 未建档守卫：缩域内存在未建档调用点即拒绝判定——
@@ -199,6 +202,10 @@ public class TaskReplayRunner {
 
         List<List<TaskChain>> groups = groupByRequestText(scoped);
         for (List<TaskChain> group : groups) {
+            if (ciMode && !memberCheck) {
+                alignCiGroup(group, outcomes, totals, manager);
+                continue;
+            }
             if (group.size() == 1) {
                 printSelfEstablished(group.get(0), totals);
                 continue;
@@ -257,7 +264,7 @@ public class TaskReplayRunner {
             return 1;
         }
         if (reDriveTotals.failed > 0 && reDriveTotals.pass == 0) {
-            return fail(CliErrorCode.E_ENV, "All re-drive calls failed (no comparisons).", "Check llm config, credentials and network, then retry.", "");
+            return fail(CliErrorCode.E_ENV, "All re-drive calls failed (no comparisons).", "Check llm config, credentials and network, then retry.", "agentassert4j doctor");
         }
         if (reDriveTotals.skipped > 0) {
             return fail(CliErrorCode.E_USAGE, "Re-drive truncated by the budget caps: " + reDriveTotals.callsUsed + " call(s), " + reDriveTotals.tokensUsed + " tokens used; " + CliSupport.plural(reDriveTotals.skipped, "record") + " skipped.", "Raise --max-total-calls/--max-total-tokens, narrow the scope with --task/--invocation, or drop the caps.", "");
@@ -528,7 +535,7 @@ public class TaskReplayRunner {
      * task-report/1 报告的 mode 封闭词表（wire 值冻结；变更须同步 cli spec 与各出口）。
      */
     private enum TaskReportMode {
-        DRIFT_DETECTION("drift-detection"), TASK_ALIGN("task-align"), TASK_DRY_RUN("task-dry-run"), DRIFT_DISPOSITION("drift-disposition"), TASK_RE_DRIVE("task-re-drive"), MEMBER_CHECK("member-check"), EXIT_HEALTH("exit-health"), RE_DRIVE_DRY_RUN("re-drive-dry-run");
+        DRIFT_DETECTION("drift-detection"), TASK_ALIGN("task-align"), TASK_DRY_RUN("task-dry-run"), DRIFT_DISPOSITION("drift-disposition"), TASK_RE_DRIVE("task-re-drive"), MEMBER_CHECK("member-check"), EXIT_HEALTH("exit-health"), RE_DRIVE_DRY_RUN("re-drive-dry-run"), CI_ALIGN("ci-align");
 
         private final String wireName;
 
@@ -570,6 +577,69 @@ public class TaskReplayRunner {
         if (jsonMode) {
             out.println(taskJson(TaskReportMode.TASK_ALIGN, newChain.getRequestText(), newChain.getSessionId(), alignment.getSteps().size(), render, alignment.getCrossVersionCount(), alignment.getBaselineTime(), alignment.getNewChainTime(), alignment.isPrefixDependent()));
         }
+    }
+
+    /**
+     * 判定基准行（三轨）：--ci 基线对照（最新链 vs 画像活跃指纹）、成员判定
+     * （最新链 vs 最近链采样）、本地链对链（最新 vs 次新差分）。用户以本行对齐
+     * 自己的心智模型——通道写错基准是双宿主实测点名的认知断点源头。
+     */
+    private static String alignmentBasisLine(boolean ciMode, boolean memberCheck) {
+        if (ciMode && !memberCheck) {
+            return "Alignment basis: --ci judges each task's latest chain against its approved baseline fingerprints (the profiles promoted by establish/accept).";
+        }
+        if (memberCheck) {
+            return "Alignment basis: member check judges the latest chain against the most recent chains of the same task (bounded sample window).";
+        }
+        return "Alignment basis: each task's latest chain is judged against its previous chain (same request text; declared taskKey groups first).";
+    }
+
+    /**
+     * --ci 基线对照：每任务（含单链）最新链逐记录对照其调用点画像的活跃指纹。
+     * 每执行一份步骤（BaselineSides.fromProfiles），paired = 新链记录数——
+     * 同会话多轮迭代全部进判定，无 surplus 盲区；accept 提升指纹后同证据即 PASS，
+     * 裁决对门禁立即生效。基线侧无记录：成本只出 current 侧、baselineTime 取画像
+     * approvedAt（在场拼接）。member-check 即使在 ciMode 语义下也走链采样（不进本
+     * 分支）。
+     */
+    private void alignCiGroup(List<TaskChain> group, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager) {
+        TaskChain newChain = group.get(group.size() - 1);
+        Map<String, InvocationProfile> profiles = new LinkedHashMap<>();
+        for (InteractionRecord record : newChain.getRecords()) {
+            String key = CliSupport.invocationKeyOfRecord(record);
+            if (key != null) {
+                profiles.putIfAbsent(key, repository.findInvocationByKey(key));
+            }
+        }
+        TaskAlignment alignment = TaskAligner.align(BaselineSides.fromProfiles(newChain.getRecords(), profiles::get), newChain, comparator, rules);
+        Long baselineTime = latestApprovedAt(profiles.values());
+        alignment.setBaselineTime(baselineTime);
+        alignment.setNewChainTime(newChain.firstTimestamp());
+
+        String versionNote = newChain.getRecords().size() == 1 ? "" : " (" + CliSupport.plural(newChain.getRecords().size(), "step") + ")";
+        info("Task \"" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "\": baseline comparison (--ci) — new chain (session " + newChain.getSessionId() + ")" + versionNote + " against approved baselines" + (baselineTime != null ? " (latest approval on this chain's invocations)" : ""));
+        if (rules != null && rules.hasTaskRules() && !newChain.isDeclared()) {
+            info("Note: task has no declared taskKey; task rules do not apply.");
+        }
+        Stability stability = stabilityOf(group);
+        AlignmentRender render = renderAlignment(alignment, null, newChain, outcomes, totals, manager, stability);
+        if (jsonMode) {
+            out.println(taskJson(TaskReportMode.CI_ALIGN, newChain.getRequestText(), newChain.getSessionId(), alignment.getSteps().size(), render, alignment.getCrossVersionCount(), baselineTime, alignment.getNewChainTime(), alignment.isPrefixDependent()));
+        }
+    }
+
+    /**
+     * 链内各调用点画像的最新审批时刻——基线对照报告的 baselineTime 语义
+     * （对照的是何时批准的真相）；全部未盖章（null）时返回 null，报告按在场省略。
+     */
+    private static Long latestApprovedAt(Collection<InvocationProfile> profiles) {
+        Long latest = null;
+        for (InvocationProfile profile : profiles) {
+            if (profile != null && profile.getApprovedAt() != null && (latest == null || profile.getApprovedAt() > latest)) {
+                latest = profile.getApprovedAt();
+            }
+        }
+        return latest;
     }
 
     /**
@@ -658,6 +728,9 @@ public class TaskReplayRunner {
      * 渲染并累计一条对齐：逐步报告、任务纪律违规行、汇总行、成本与注记、
      * 优化信号行、稳定性注记；键级结果与聚合计数就地入账。JSON 组装件随返回，
      * 由各模式的报告方法自行成形。
+     *
+     * <p>baseline 传 null = 基线侧为画像对照（ci-align）：无基线记录，served
+     * 标注自然退化、模型对偶与基线成本省略、Cost 行只出 current 侧。</p>
      */
     private AlignmentRender renderAlignment(TaskAlignment alignment, TaskChain baseline, TaskChain newChain, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager, Stability stability) {
         AlignmentRender render = new AlignmentRender();
@@ -670,7 +743,7 @@ public class TaskReplayRunner {
             }
         }
 
-        Map<String, InteractionRecord> baselineRecords = recordsById(baseline);
+        Map<String, InteractionRecord> baselineRecords = baseline != null ? recordsById(baseline) : Collections.<String, InteractionRecord>emptyMap();
         Map<String, InteractionRecord> newRecords = recordsById(newChain);
 
         int index = 0;
@@ -718,7 +791,7 @@ public class TaskReplayRunner {
                     worstOutcome(outcomes, step.getInvocationKey(), StepOutcome.PASS);
                 }
                 if (step.getSurplusCount() > 0) {
-                    info("    (uneven record counts on this invocation; " + step.getSurplusCount() + " surplus unpaired, excluded from judgment)");
+                    info("    (uneven record counts on this invocation; " + step.getSurplusCount() + " surplus unpaired, excluded from judgment; run the task in a new session to bring these records into judgment)");
                 }
             }
             render.comparedPairs += step.getComparedPairs();
@@ -735,16 +808,20 @@ public class TaskReplayRunner {
         if (render.signalSteps > 0) {
             info("Optimization signal: similarity " + String.format(Locale.ROOT, "%.2f", render.signalScoreSum / render.signalSteps) + " over " + CliSupport.plural(render.signalSteps, "compared step") + " (" + CliSupport.plural(render.comparedPairs, "pair") + " compared, " + render.skippedPairs + " skipped; informational, not a verdict)");
         }
-        ChainCost baselineCost = new ChainCost(baseline);
+        ChainCost baselineCost = baseline != null ? new ChainCost(baseline) : null;
         ChainCost currentCost = new ChainCost(newChain);
-        info("Cost: baseline " + formatTokens(baselineCost.tokens) + formatCost(baselineCost.costUsd) + " → current " + formatTokens(currentCost.tokens) + formatCost(currentCost.costUsd));
+        if (baselineCost != null) {
+            info("Cost: baseline " + formatTokens(baselineCost.tokens) + formatCost(baselineCost.costUsd) + " → current " + formatTokens(currentCost.tokens) + formatCost(currentCost.costUsd));
+        } else {
+            info("Cost: current " + formatTokens(currentCost.tokens) + formatCost(currentCost.costUsd) + " (baseline side: approved fingerprints, no recorded cost)");
+        }
         if (alignment.getCrossVersionCount() > 0) {
             info("Note: cross-version pairs mix template versions; treat the verdict as a behavioral signal and use --re-drive for controlled per-point re-checks.");
         }
         if (alignment.isPrefixDependent()) {
             info("Note: chain carries a session prefix; real re-execution must replay the whole session up to this question, otherwise differences come from missing context rather than regression.");
         }
-        String modelShift = servedModelPairNote(baseline, newChain);
+        String modelShift = baseline != null ? servedModelPairNote(baseline, newChain) : "";
         if (!modelShift.isEmpty()) {
             info(modelShift);
         }
@@ -770,16 +847,17 @@ public class TaskReplayRunner {
             render.violationJsons.add("{\"type\":\"" + violation.getType() + "\",\"label\":\"" + RecursiveJsonParser.escape(violation.getLabel()) + "\",\"detail\":\"" + RecursiveJsonParser.escape(violation.getDetail()) + "\"}");
         }
         render.violations = violations;
-        render.costJson = costJson(baselineCost, currentCost);
+        render.costJson = baselineCost != null ? costJson(baselineCost, currentCost) : currentCostJson(currentCost);
         render.stabilityJson = stability.jsonFragment();
         return render;
     }
 
     /**
      * 各模式共享的报告尾段（summary/signal/stability/steps/ruleViolations/时间/成本/前缀），
-     * 附加到已含 schema/mode/task 头部的构建器上。
+     * 附加到已含 schema/mode/task 头部的构建器上。baselineTime 为 Long：画像对照
+     * 的 approvedAt 缺席（未经审批链盖章）时整体省略该字段。
      */
-    private void appendCommonReport(StringBuilder sb, String request, String sessionId, int total, AlignmentRender render, int crossVersion, long baselineTime, Long newChainTime, boolean prefixDependent) {
+    private void appendCommonReport(StringBuilder sb, String request, String sessionId, int total, AlignmentRender render, int crossVersion, Long baselineTime, Long newChainTime, boolean prefixDependent) {
         sb.append(",\"summary\":{\"total\":").append(total).append(",\"pass\":").append(render.pass).append(",\"changed\":").append(render.changed).append(",\"inherited\":0,\"postDivergence\":0,\"skipped\":0,\"missing\":").append(render.missing).append(",\"added\":").append(render.added).append(",\"crossVersion\":").append(crossVersion);
         if (render.violations != null && !render.violations.isEmpty()) {
             sb.append(",\"ruleViolations\":").append(render.violations.size());
@@ -795,7 +873,9 @@ public class TaskReplayRunner {
         if (render.violationJsons != null && !render.violationJsons.isEmpty()) {
             sb.append(",\"ruleViolations\":[").append(String.join(",", render.violationJsons)).append(']');
         }
-        sb.append(",\"baselineTime\":").append(baselineTime);
+        if (baselineTime != null) {
+            sb.append(",\"baselineTime\":").append(baselineTime);
+        }
         if (newChainTime != null) {
             sb.append(",\"newChainTime\":").append(newChainTime);
         }
@@ -1209,7 +1289,7 @@ public class TaskReplayRunner {
      * 只读预演：漂移集已在上文报告，这里列出将发生的任务配对与规则适用性，
      * 供 CI 在执行前核对选链是否如愿。
      */
-    private int dryRunPlan(List<TaskChain> scoped, boolean reDrive, DriftReport drift, boolean narrowed, boolean memberCheck, String invocationKey) {
+    private int dryRunPlan(List<TaskChain> scoped, boolean reDrive, DriftReport drift, boolean narrowed, boolean ciMode, boolean memberCheck, String invocationKey) {
         List<List<TaskChain>> groups = groupByRequestText(scoped);
         info("Alignment plan (dry-run; no judgments, no baselines, no dispositions): " + CliSupport.plural(groups.size(), "task") + ", zero LLM calls.");
         if (reDrive) {
@@ -1225,9 +1305,15 @@ public class TaskReplayRunner {
                 out.println(reDrivePlanJson(planned, llmClient.name()));
             }
         }
+        boolean ciAlign = ciMode && !memberCheck;
+        if (ciAlign) {
+            info("Judgment basis: each task's latest chain against its approved baselines (--ci).");
+        }
         for (List<TaskChain> group : groups) {
             TaskChain latest = group.get(group.size() - 1);
-            if (group.size() == 1) {
+            if (ciAlign) {
+                info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": latest chain session " + latest.getSessionId() + " (" + CliSupport.plural(latest.getRecords().size(), "step") + ") judged against approved baselines. Task rules: " + ruleApplicability(latest));
+            } else if (group.size() == 1) {
                 info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": single chain (" + CliSupport.plural(latest.getRecords().size(), "step") + ") → first recording self-establishes the baseline.");
             } else if (memberCheck) {
                 int checked = Math.min(MEMBER_SAMPLE_LIMIT, group.size() - 1);
@@ -1237,7 +1323,7 @@ public class TaskReplayRunner {
                 info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": baseline session " + baseline.getSessionId() + " (" + CliSupport.plural(baseline.getRecords().size(), "step") + ") → new chain session " + latest.getSessionId() + " (" + CliSupport.plural(latest.getRecords().size(), "step") + "). Task rules: " + ruleApplicability(latest));
             }
             if (jsonMode) {
-                out.println(dryRunAlignJson(latest.getRequestText(), group.size() > 1 ? baselineSessionOf(group) : null, group.size() > 1 ? group.get(group.size() - 2).getRecords().size() : null, latest.getSessionId(), latest.getRecords().size(), memberCheck && group.size() > 1));
+                out.println(dryRunAlignJson(latest.getRequestText(), !ciAlign && group.size() > 1 ? baselineSessionOf(group) : null, !ciAlign && group.size() > 1 ? group.get(group.size() - 2).getRecords().size() : null, latest.getSessionId(), latest.getRecords().size(), memberCheck && group.size() > 1, ciAlign));
             }
         }
         return 0;
@@ -1359,11 +1445,11 @@ public class TaskReplayRunner {
         return note.length() <= TEXT_DIFF_BUDGET ? note : note.substring(0, TEXT_DIFF_BUDGET) + "...";
     }
 
-    private static String dryRunAlignJson(String request, String baselineSession, Integer baselineSteps, String newSession, int newSteps, boolean memberCheck) {
-        return "{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.TASK_DRY_RUN.wireName() + "\",\"alignPlan\":{\"request\":\"" + RecursiveJsonParser.escape(request) + "\",\"baselineSession\":" + (baselineSession != null ? "\"" + RecursiveJsonParser.escape(baselineSession) + "\"" : "null") + ",\"baselineSteps\":" + (baselineSteps != null ? baselineSteps.toString() : "null") + ",\"newSession\":\"" + RecursiveJsonParser.escape(newSession) + "\"" + ",\"newSteps\":" + newSteps + (memberCheck ? ",\"memberCheck\":true" : "") + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}";
+    private static String dryRunAlignJson(String request, String baselineSession, Integer baselineSteps, String newSession, int newSteps, boolean memberCheck, boolean ciAlign) {
+        return "{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.TASK_DRY_RUN.wireName() + "\",\"alignPlan\":{\"request\":\"" + RecursiveJsonParser.escape(request) + "\",\"baselineSession\":" + (baselineSession != null ? "\"" + RecursiveJsonParser.escape(baselineSession) + "\"" : "null") + ",\"baselineSteps\":" + (baselineSteps != null ? baselineSteps.toString() : "null") + ",\"newSession\":\"" + RecursiveJsonParser.escape(newSession) + "\"" + ",\"newSteps\":" + newSteps + (memberCheck ? ",\"memberCheck\":true" : "") + (ciAlign ? ",\"ciAlign\":true" : "") + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}";
     }
 
-    private String taskJson(TaskReportMode mode, String request, String sessionId, int total, AlignmentRender render, int crossVersion, long baselineTime, Long newChainTime, boolean prefixDependent) {
+    private String taskJson(TaskReportMode mode, String request, String sessionId, int total, AlignmentRender render, int crossVersion, Long baselineTime, Long newChainTime, boolean prefixDependent) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"").append(mode.wireName()).append('"');
         sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
         sb.append(",\"task\":{\"request\":\"").append(RecursiveJsonParser.escape(request)).append("\",\"sessionId\":\"").append(RecursiveJsonParser.escape(sessionId)).append("\"}");
@@ -1434,6 +1520,17 @@ public class TaskReplayRunner {
         return sb.append("}").toString();
     }
 
+    /**
+     * 画像对照（ci-align）的成本片段——基线侧无记录，只出 current 侧。
+     */
+    private static String currentCostJson(ChainCost current) {
+        StringBuilder sb = new StringBuilder(",\"current\":{\"tokens\":").append(current.tokens);
+        if (current.costUsd != null) {
+            sb.append(",\"costUsd\":").append(plainDecimal(current.costUsd));
+        }
+        return sb.append("}").toString();
+    }
+
     private static String alignedStepJson(String action, TaskAlignment.StepAlignment step) {
         StringBuilder sb = new StringBuilder("{");
         String recordId = step.getNewRecordId() != null ? step.getNewRecordId() : step.getBaselineRecordId();
@@ -1451,6 +1548,9 @@ public class TaskReplayRunner {
         }
         if (step.getInvocationLabel() != null) {
             sb.append(",\"invocationLabel\":\"").append(RecursiveJsonParser.escape(step.getInvocationLabel())).append('"');
+        }
+        if (step.getBaselineVersionTag() != null) {
+            sb.append(",\"baselineVersion\":\"").append(RecursiveJsonParser.escape(step.getBaselineVersionTag())).append('"');
         }
         if (step.isVersionSwitch()) {
             sb.append(",\"versionSwitch\":true");

@@ -23,8 +23,9 @@ import java.util.*;
  * 可跨模板版本配对（版本差异记入 versionSwitch 注记，判定照常——提示词版本
  * 是调用点的治理史，不是另一个调用点）；无标签步骤按完整 invocationKey 分组
  * （无业务身份则版本即身份，跨版本不配对）。组内规范序 1:1 配对（较少侧配对，
- * 富余计数进报告不判差异），每对两侧指纹现场重提后经注入的对比器判定——不
- * 消费任何存档指纹。缺步骤/新增步骤是行为差异，与配对 CHANGED 同归入链级
+ * 富余计数进报告不判差异），每对新链侧指纹现场重提，基线侧指纹由调用方投影
+ * （{@link BaselineSides} 三源：链记录现场重提 / 验收包定格 / 画像活跃指纹定格），
+ * 经注入的对比器判定。缺步骤/新增步骤是行为差异，与配对 CHANGED 同归入链级
  * CHANGED。</p>
  *
  * <p>对齐收尾评 rules.tasks 任务纪律（必备步骤/次数范围/有序子序列，只对声明
@@ -213,6 +214,7 @@ public final class TaskAligner {
         step.setBaselineRecordId(baseSteps.get(0).getRecordId());
         step.setNewRecordId(newRecords.get(0).getRecordId());
         step.setInvocationKey(newRecords.get(0).getInvocationKey());
+        step.setBaselineVersionTag(baseSteps.get(0).getVersionTag());
         // 版本注记取首个配对为代表：两侧细分哈希不同即「同一调用点跨模板版本」，
         // 判定照常进行，混杂变量由报告尾提示披露
         String baselineSubdivision = subdivisionOf(baseSteps.get(0).getInvocationKey());

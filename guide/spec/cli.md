@@ -7,7 +7,7 @@
 
 ## 职责与边界
 
-**管**：命令注册与参数解析、选择器两档标准、输出通道契约（人类/--json/--dry-run）、报告
+**管**：命令注册与参数解析、选择器统一阶梯、输出通道契约（人类/--json/--dry-run）、报告
 schema、退出码契约、help 终态。
 
 **不管**：引擎编排语义（replay）、治理写（governance）、指纹与判定（judgment）、键文法
@@ -24,22 +24,31 @@ schema、退出码契约、help 终态。
 | `status` | 全部画像巡检 | `--diff`（候选差异+模板原文渲染）、`--invocation` 缩域（两通道一致生效；缺省=全量快照）、`--json`、`--db` |
 | `baseline` | 全部调用点建档（幂等） | `--force`（判定语义重建恢复路径）、`--invocation` 缩域、`--ref`（代码锚，申报制）、`--json` |
 | `replay` | 全项目漂移检测+逐任务对齐（零 LLM 调用） | `--task`/`--invocation` 复合缩域、`--ci`、`--re-drive`、`--member-check`（成员判定：最新链匹配任一最近链即通过）、`--full-chain`、`--max-total-calls`/`--max-total-tokens`、`--dry-run`、`--json` |
-| `accept` / `reject` | 裁决全部待裁决候选 | `--invocation` 缩域、`--json`；accept 另有 `--ref`（代码锚，申报制） |
-| `rollback` | 无缺省（--version 是操作宾语） | `--invocation`、`--version` |
+| `accept` / `reject` | 裁决全部待裁决候选 | `--invocation` 缩域、`--approver`（治理事件留痕）、`--json`；accept 另有 `--ref`（代码锚，申报制） |
+| `rollback` | 无缺省（--version 是操作宾语） | `--invocation`、`--version`、`--approver`（治理事件留痕） |
 | `verify` | 无缺省（--pack 是操作宾语） | `--pack`、`--task` 前缀、`--dry-run`、`--report`、`--json` |
 | `record show` | 按 recordId 回显一条交互的 raw wire 双列与关键元数据 | `--record-id`（必填）、`--db`、`--json` |
 | `rules` | 列内置行为目录与规则文件加载结果 | — |
-| `audit` | 列出 agent 驱动的治理写（审批人 `agent:` 前缀申报；活跃+归档，含代码锚） | `--json` |
+| `audit` | 列出 agent 驱动的治理写（治理事件时间线按 actor=`agent:` 过滤，六动词含 reject/rollback） | `--json` |
 | `mcp` | 起 stdio MCP server（工具面=CLI 动词薄壳+record 摄取，契约见 mcp.md） | `--db`、`--diag`（逐消息诊断日志） |
 | `graph show` | 现场重建依赖图 | — |
 | `doctor` | 全库体检 | `--json` |
 | `completion` | 生成 bash 补全脚本 | `--shell`（仅 bash 风格；动态值补全不做——既定裁决） |
 
-**选择器两档标准**：目标选择器（accept/reject 的 --invocation、rollback/verify 的宾语）=
-完整键精确 > 业务标签唯一 > 显示短形 > 唯一前缀，多命中报错列候选；缩域选择器（replay 的
---task/--invocation、status 的 --invocation）= 前缀过滤，两档处理完全对称、不分叉。status 的
---invocation 经目标选择器换算器解析为业务标签后过滤**人读视图**（一标签多模板桶并排显示，
-零声明键按键前缀兜底），`--json` 通道恒全量。
+**选择器统一阶梯**：--invocation 值经单一解析核心（`CliSupport.resolveInvocationKeys`）解析为
+调用点键集合——阶梯高档短路低档：① 完整 invocationKey 精确命中（即使是他键前缀）＞ ② 业务
+标签 → 该标签下全部键 ＞ ③ 显示短形直返键（不做键→标签往返——裂键下首记录几乎总在最老键
+上，往返是有损投影）＞ ④ 唯一前缀（多命中报错列候选）＞ ⑤ 零命中 E-NO-DATA 响亮报错并列
+全部合法写法（不静默裸返回、不出假成功话术）。键空间 = 已录键全集（与建档分桶同键同源；
+未建档裂键同样可解析，target 族消费方的画像存在性由既有守卫承接）。两族策略仅多键处理
+不同：**target 族**（accept/reject/rollback/replay 的 --invocation）= singular——标签多键报错列
+候选；**filter 族**（establish/status 的 --invocation）= plural——标签扇出全部键（establish 是
+治理写动词：写前披露目标集与逐键建档状态；status 两通道一致缩域，换算 Note 行走诊断通道
+保 --json 的 stdout 单行契约）。replay 的 --task 是请求文本前缀选择器（精确相等优先、唯一
+前缀采用、多候选歧义报错），不属本阶梯；verify/export 的 --task 为前缀过滤。【测试钉】
+`CliSupportResolverTest`（阶梯等价/标签扇出/未建档键可解析/响亮零命中）+
+`CommandSmokeTest`（显示短形 establish/扇出披露/假成功消灭）+ `JsonContractTest`（Note 行
+路由 err）
 
 ## 契约
 
@@ -64,14 +73,16 @@ schema、退出码契约、help 终态。
    informational）。【测试钉】`VerifyExportTest` 缩域抑制与全量封顶两钉
 6. **报告 schema**：status=agentassert4j.status/1（画像含 templateDrift 三态；versionTag 为调用点键内版本计数——label-split 产生的新键各自从 v1 起计，跨键同号无血缘含义；`health` 对象=
    出口健康三计数）；replay=agentassert4j.task-report/1（mode: drift-detection / task-align /
-   task-dry-run / drift-disposition / task-re-drive / member-check / exit-health / re-drive-dry-run）；裁决=
+   task-dry-run / drift-disposition / task-re-drive / member-check / exit-health / re-drive-dry-run /
+   ci-align——--ci 基线对照的报告形态：步骤携带 baselineVersion（画像活跃版本）、成本只出
+   current 侧、baselineTime=链内画像最新 approvedAt 缺席整体省略）；裁决=
    agentassert4j.adjudication/1；验收=agentassert4j.verify-report/1（含 dry-run mode；判定
    报告携带 `health` 对象同 status，dry-run 预演报告不携带）；导出=acceptance-pack/1（内嵌声明规则段：
    invocations/tasks 断言原文随包出境，verify 以包内规则对本地记录**对称**评估维度 3/4 与
    任务纪律——补齐参照源抽象的双路径同语义（库内路径用本地规则，包路径用包内规则）；
    无规则段的包降级跳过维度 3/4 并在报告注记）；record show=agentassert4j.record-view/1（按 recordId 回显 raw 双列与关键元数据，未命中 E-NO-DATA）；audit=agentassert4j.audit/1（agent 治理写
-   清单：state=active/archived、invocationKey、versionTag、approvedBy、approvedAt 恒在，
-   codeRef 缺省省略；读动词恒 exit 0，空清单 writes=[]）；record 摄取（MCP record 工具）=
+   清单=治理事件时间线过滤：verb（六动词）、invocationKey、versionTag、actor、happenedAt
+   恒在，codeRef 缺省省略；读动词恒 exit 0，空清单 writes=[]）；record 摄取（MCP record 工具）=
    agentassert4j.record/1（status=saved/duplicate、recordId、sessionId、invocationKey、
    protocol（实际采用的 wire 方言，含自动识别结果）、turnIndex、token 计数、hasToolCalls；
    声明标签时另带 invocationId）；doctor=agentassert4j.doctor/1（三段体检：
@@ -162,6 +173,7 @@ re-drive/missing/added。句式 sentence case；全角标点与「」不出现�
 - 新增子命令先补本文件再补码；报告 schema 演进按版本纪律（开发期恒定）。
 
 ## 复核台账
+| 2026-09-14 | A4 修复批（批 2）：--invocation 解析统一为单源阶梯 + R12/R13 顺修 | ①「选择器两档标准」节重写为统一阶梯（resolveInvocationKeys 单源：精确键/标签/显示短形/唯一前缀/响亮零命中；键空间=已录键全集，未建档裂键可解析）；②勘误：replay --invocation 实走 target 族解析器（原文误归缩域前缀过滤族、「两档完全对称」失实）；③establishMissing 参数标签→键集合、bucketCoversFilter 退役；establish 零命中 E-NO-DATA（假成功话术消灭）、标签扇出写前披露；④status --json 换算 Note 行路由 err（stdout 单行契约）+ 工具参数描述「human view only」陈旧残留顺修；⑤模式词表增 ci-align（批 1 骑乘） |
 
 | 日期 | 方式 | 发现 |
 |---|---|---|

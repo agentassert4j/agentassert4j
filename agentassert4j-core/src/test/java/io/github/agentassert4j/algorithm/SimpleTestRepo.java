@@ -1,6 +1,7 @@
 package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.model.ArchivedTemplateVersion;
+import io.github.agentassert4j.model.GovernanceEvent;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.StorageRepository;
@@ -21,6 +22,7 @@ class SimpleTestRepo implements StorageRepository {
     final Map<String, InvocationProfile> invocationProfiles = new HashMap<>();
     final Map<String, String> promptTexts = new HashMap<>();
     final List<ArchivedTemplateVersion> archivedBaselines = new ArrayList<>();
+    final List<GovernanceEvent> governanceEvents = new ArrayList<>();
 
     @Override
     public void initialize() {
@@ -119,6 +121,17 @@ class SimpleTestRepo implements StorageRepository {
             }
         }
         return result;
+    }
+
+    @Override
+    public void appendGovernanceEvent(GovernanceEvent event) {
+        event.setHappenedAt(System.currentTimeMillis());
+        governanceEvents.add(event);
+    }
+
+    @Override
+    public List<GovernanceEvent> findGovernanceEvents() {
+        return new ArrayList<>(governanceEvents);
     }
 
 }

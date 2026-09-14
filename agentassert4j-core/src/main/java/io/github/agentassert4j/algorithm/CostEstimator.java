@@ -72,32 +72,34 @@ public final class CostEstimator {
      */
     private static final Object OVERRIDE_LOCK = new Object();
     private static volatile Long loadedOverrideStamp;
-    private static final String OVERRIDE_PATH = ConfigLoader.resolvePriceOverridesPath();
 
     private CostEstimator() {
     }
 
     /**
      * 覆盖文件的 mtime 变化时（含从无到有、删除）重建生效价格表；快照恒为基底。
-     * 双检锁 + 不可变整表发布，读取方无锁。
+     * 覆盖路径每次刷新时重新解析——路径若在类初始化时解析一次，进程启动后才创建的
+     * 覆盖文件将永久不可见（Round 4 双宿主实测的确切病灶）。双检锁 + 不可变整表
+     * 发布，读取方无锁。
      */
     private static void refreshOverridesIfChanged() {
-        if (OVERRIDE_PATH == null) {
-            return;
-        }
-        long stamp = new File(OVERRIDE_PATH).lastModified();
+        String overridePath = ConfigLoader.resolvePriceOverridesPath();
+        long stamp = overridePath != null ? new File(overridePath).lastModified() : 0L;
         Long loaded = loadedOverrideStamp;
         if (loaded != null && loaded == stamp) {
             return;
         }
         synchronized (OVERRIDE_LOCK) {
-            stamp = new File(OVERRIDE_PATH).lastModified();
+            overridePath = ConfigLoader.resolvePriceOverridesPath();
+            // 删除覆盖文件（路径解析为 null）同样是一类状态变化：必须重建回快照，
+            // 否则已吸收的覆盖价会在文件删除后继续生效
+            stamp = overridePath != null ? new File(overridePath).lastModified() : 0L;
             loaded = loadedOverrideStamp;
             if (loaded != null && loaded == stamp) {
                 return;
             }
             Map<String, double[]> merged = new LinkedHashMap<>(SNAPSHOT_PRICES);
-            if (stamp != 0) {
+            if (overridePath != null) {
                 String overrideJson = null;
                 try {
                     overrideJson = ConfigLoader.loadPriceOverrides();

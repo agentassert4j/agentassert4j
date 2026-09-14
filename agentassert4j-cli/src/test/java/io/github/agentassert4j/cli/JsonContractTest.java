@@ -247,10 +247,10 @@ class JsonContractTest {
         }
 
         @Test
-        @DisplayName("accept 以 agent: 身份申报 → audit 列出该治理写")
+        @DisplayName("accept 以 agent: 身份申报 → audit 时间线列出该治理写（人类 actor 不进清单）")
         void acceptAgentMarked_listedInAudit() throws Exception {
             InteractionRecord record = seedOneRecord();
-            execute("baseline", "--db", dbPath);
+            execute("baseline", "--db", dbPath, "--approver", "agent:setup");
             seedCandidate("invocation:queryOrder:hash-old", record);
 
             int exit = execute("accept", "--db", dbPath, "--invocation", "queryOrder", "--approver", "agent:codex", "--ref", "def5678", "--json");
@@ -259,15 +259,36 @@ class JsonContractTest {
 
             assertEquals(0, execute("audit", "--db", dbPath));
             String audit = stdout();
-            assertTrue(audit.contains("[active]"), audit);
+            assertTrue(audit.contains("[establish]"), "agent 建档事件必须在时间线: " + audit);
+            assertTrue(audit.contains("[accept]"), audit);
             assertTrue(audit.contains("agent:codex"), audit);
             assertTrue(audit.contains("(ref def5678)"), audit);
 
             assertEquals(0, execute("audit", "--db", dbPath, "--json"));
             String json = singleLineReport();
             assertTrue(json.startsWith("{\"schema\":\"agentassert4j.audit/1\""), json);
-            assertTrue(json.contains("\"state\":\"active\""), json);
-            assertTrue(json.contains("\"approvedBy\":\"agent:codex\""), json);
+            assertTrue(json.contains("\"verb\":\"accept\""), json);
+            assertTrue(json.contains("\"actor\":\"agent:codex\""), json);
+            assertTrue(json.contains("\"happenedAt\":"), json);
+        }
+
+        @Test
+        @DisplayName("reject/rollback 的 agent 事件进 audit 时间线（此前不可见）")
+        void rejectAndRollback_eventsListedInAudit() throws Exception {
+            InteractionRecord record = seedOneRecord();
+            execute("baseline", "--db", dbPath);
+            seedCandidate("invocation:queryOrder:hash-old", record);
+            execute("reject", "--db", dbPath, "--invocation", "queryOrder", "--approver", "agent:codex", "--json");
+            seedCandidate("invocation:queryOrder:hash-old", record);
+            execute("accept", "--db", dbPath, "--invocation", "queryOrder", "--approver", "agent:codex", "--json");
+            execute("rollback", "--db", dbPath, "--invocation", "queryOrder", "--version", "v1", "--approver", "agent:codex", "--json");
+
+            assertEquals(0, execute("audit", "--db", dbPath));
+            String audit = stdout();
+            assertTrue(audit.contains("[reject]") && audit.contains("[rollback]"), "reject/rollback 事件必须可见: " + audit);
+            assertTrue(audit.contains("[accept]"), audit);
+            assertTrue(audit.contains("v1"), audit);
+            assertFalse(audit.contains("[establish]"), "人类 actor（默认 OS 身份建档）不进 agent 透镜: " + audit);
         }
 
         @Test
@@ -449,6 +470,22 @@ class JsonContractTest {
             int all = execute("status", "--db", dbPath, "--json");
             assertEquals(0, all);
             assertTrue(singleLineReport().contains("\"label\":\"refund\""), "缺省仍为全量快照");
+        }
+
+        @Test
+        @DisplayName("status --json --invocation 换算：Note 行走 err，stdout 恒单行 JSON（通道纯净性钉）")
+        void statusJson_conversionNoteRoutesToStderr() throws Exception {
+            seedOneRecord();
+            execute("baseline", "--db", dbPath);
+
+            int exit = execute("status", "--db", dbPath, "--json", "--invocation", "invocation:queryOrder");
+
+            assertEquals(0, exit);
+            String report = singleLineReport();
+            assertTrue(report.startsWith("{\"schema\":\"agentassert4j.status/1\""), report);
+            assertFalse(report.contains("Note:"), "换算提示不得污染 stdout: " + report);
+            assertFalse(stdout().contains("Config:"), "配置披露不得污染 stdout");
+            assertTrue(stderr().contains("matched invocationKey prefix"), "换算提示必须走 err: " + stderr());
         }
 
         @Test

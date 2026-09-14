@@ -407,6 +407,66 @@ public class SqliteStorageRepository implements StorageRepository {
         return result;
     }
 
+    /**
+     * 治理事件追加：happened_at 由本实现写入时刻盖章（调用方不携带时钟）；
+     * 自增主键即写入序，同刻事件的读取序由 rowid 决胜。
+     */
+    @Override
+    public synchronized void appendGovernanceEvent(GovernanceEvent event) {
+        String sql = "INSERT INTO governance_events (happened_at, actor, verb, invocation_key, version_tag, code_ref, note) VALUES (?,?,?,?,?,?,?)";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setLong(1, System.currentTimeMillis());
+            ps.setString(2, event.getActor());
+            ps.setString(3, event.getVerb() != null ? event.getVerb().wireName() : null);
+            ps.setString(4, event.getInvocationKey());
+            ps.setString(5, event.getVersionTag());
+            ps.setString(6, event.getCodeRef());
+            ps.setString(7, event.getNote());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            LOG.log(Level.SEVERE, "appendGovernanceEvent failed", e);
+            throw new StorageException("appendGovernanceEvent", e);
+        }
+    }
+
+    @Override
+    public synchronized List<GovernanceEvent> findGovernanceEvents() {
+        List<GovernanceEvent> result = new ArrayList<>();
+        String sql = "SELECT * FROM governance_events ORDER BY happened_at ASC, rowid ASC";
+        try (Statement stmt = connection.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                GovernanceEvent event = new GovernanceEvent();
+                event.setHappenedAt(rs.getLong("happened_at"));
+                event.setActor(rs.getString("actor"));
+                event.setVerb(governanceVerbOf(rs.getString("verb")));
+                event.setInvocationKey(rs.getString("invocation_key"));
+                event.setVersionTag(rs.getString("version_tag"));
+                event.setCodeRef(rs.getString("code_ref"));
+                event.setNote(rs.getString("note"));
+                result.add(event);
+            }
+        } catch (SQLException e) {
+            LOG.log(Level.SEVERE, "findGovernanceEvents failed", e);
+            throw new StorageException("findGovernanceEvents", e);
+        }
+        return result;
+    }
+
+    /**
+     * verb 列反解——未知线上值按 null 退化（宁缺勿错注记），不抛错中断时间线读取。
+     */
+    private static GovernanceVerb governanceVerbOf(String wireName) {
+        if (wireName == null) {
+            return null;
+        }
+        for (GovernanceVerb verb : GovernanceVerb.values()) {
+            if (verb.wireName().equals(wireName)) {
+                return verb;
+            }
+        }
+        return null;
+    }
+
     private List<InteractionRecord> queryInteractions(String sql, String param) {
         List<InteractionRecord> result = new ArrayList<>();
         try (PreparedStatement ps = connection.prepareStatement(sql)) {

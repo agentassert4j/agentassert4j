@@ -1,7 +1,9 @@
 package io.github.agentassert4j.cli;
 
+import io.github.agentassert4j.algorithm.BaselineManager;
 import io.github.agentassert4j.algorithm.ComparatorConfig;
 import io.github.agentassert4j.algorithm.DeterministicComparator;
+import io.github.agentassert4j.algorithm.FingerprintExtractor;
 import io.github.agentassert4j.algorithm.JudgmentSemantics;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
@@ -119,7 +121,7 @@ class TaskReplayRunnerTest {
     /**
      * 声明任务键的记录：metadata 携带 taskKey（任务规则只对声明链生效）。
      */
-    private void saveDeclaredTaskRecord(String recordId, String sessionId, long ts, String response) {
+    private InteractionRecord saveDeclaredTaskRecord(String recordId, String sessionId, long ts, String response) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(recordId);
         r.setSessionId(sessionId);
@@ -132,6 +134,7 @@ class TaskReplayRunnerTest {
         r.setModelResponse(response);
         r.setMetadata("{\"taskKey\":\"查订单\"}");
         repository.saveInteractionIfAbsent(r);
+        return r;
     }
 
     private InvocationProfile establishedProfile(String invocationKey, String label, String templateHash) {
@@ -145,6 +148,18 @@ class TaskReplayRunnerTest {
         p.setBaselineStatus(BaselineStatus.BASELINE);
         p.setVersionTag("v1");
         p.setAlgoVersion(JudgmentSemantics.VERSION);
+        repository.saveInvocationProfile(p);
+        return p;
+    }
+
+    /**
+     * 以真实记录行为建档（指纹现场提取）——CI 基线对照消费画像活跃指纹，
+     * 空指纹画像在 ci-align 下恒 CHANGED；PASS 场景的画像必须与记录行为一致。
+     */
+    private InvocationProfile establishFromRecord(InteractionRecord seed) {
+        InvocationProfile p = establishedProfile(seed.getInvocationKey(), seed.getInvocationId(), seed.getTemplateHash());
+        p.setFingerprint(FingerprintExtractor.extract(seed, new InvocationRulesConfig(), seed.getInvocationId()));
+        p.setApprovedAt(12345L);
         repository.saveInvocationProfile(p);
         return p;
     }
@@ -312,9 +327,10 @@ class TaskReplayRunnerTest {
          * 骨架键画像（哈希停留在旧全文）+ 两条骨架链（新链全文哈希已变、行为一致）。
          */
         private void seedSkeletonDrift(String newResponse) {
-            saveSkeletonRecord("a-1", "session-a", 1000L, "查订单", "order", "skl-1", "hash-old", "{\"result\":\"ok\"}");
+            InteractionRecord seed = saveSkeletonRecord("a-1", "session-a", 1000L, "查订单", "order", "skl-1", "hash-old", "{\"result\":\"ok\"}");
             saveSkeletonRecord("b-1", "session-b", 2000L, "查订单", "order", "skl-1", "hash-new", newResponse);
-            establishedProfile("invocation:order:skl-1", "order", "hash-old");
+            // CI 基线对照消费画像活跃指纹：种子取真实行为提取，行为一致时 PASS 才成立
+            establishFromRecord(seed);
         }
 
         @Test
@@ -456,8 +472,9 @@ class TaskReplayRunnerTest {
         @Test
         @DisplayName("--ci 基线齐备时正常判定放行")
         void ciPassesWhenAllEstablished() {
-            saveIdenticalLabeledChains();
-            establishedProfile("invocation:order:hash-a", "order", "hash-a");
+            InteractionRecord seed = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+            saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+            establishFromRecord(seed);
 
             assertEquals(0, runner.run(null, null, true, false, false, false, false, null, null));
         }
@@ -513,6 +530,153 @@ class TaskReplayRunnerTest {
     private void saveIdenticalLabeledChains() {
         saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
         saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+    }
+
+    /**
+     * 从多行输出中取出含指定片段的报告行（JSON 钉的共用提取器）。
+     */
+    private static String reportLine(String output, String marker) {
+        for (String line : output.split("\r?\n")) {
+            String trimmed = line.trim();
+            if (trimmed.contains(marker)) {
+                return trimmed;
+            }
+        }
+        return null;
+    }
+
+    @Nested
+    @DisplayName("CI 基线对照：最新链 vs 画像活跃指纹")
+    class CiAlign {
+
+        @Test
+        @DisplayName("A2 闭环：行为变更 CI 出 1 → accept → 同库再跑 CI 出 0")
+        void changedThenAccept_ciTurnsGreen() {
+            InteractionRecord seed = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            establishFromRecord(seed);
+            saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
+
+            assertEquals(1, runner.run(null, null, true, false, false, false, false, null, null), "行为差异必须让 CI 变红");
+            assertNotNull(repository.findInvocationByKey("invocation:order:hash-a").getCandidateFingerprint(), "CI 的 CHANGED 步照落候选");
+
+            new BaselineManager(repository).accept("invocation:order:hash-a", null, "tester", null);
+
+            assertEquals(0, runner.run(null, null, true, false, false, false, false, null, null), "accept 后同一证据必须转绿（裁决对门禁生效）");
+        }
+
+        @Test
+        @DisplayName("A1 闭环：同会话好在前坏在后 → CI 判 CHANGED，无 surplus 逃逸")
+        void sameSessionIteration_allJudged() {
+            InteractionRecord seed = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            establishFromRecord(seed);
+            saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
+
+            int exit = runner.run(null, null, true, false, false, false, false, null, null);
+
+            assertEquals(1, exit, "同链后续记录必须进判定（基线对照无 surplus 盲区）");
+            String out = output.toString();
+            assertFalse(out.contains("surplus unpaired"), "每执行一份步骤，不得有富余排除: " + out);
+            assertTrue(out.contains("CHANGED"));
+        }
+
+        @Test
+        @DisplayName("坏记录在前：首配对即 CHANGED，comparedPairs=1（首 CHANGED 即停）")
+        void badFirst_comparesOnePair() {
+            saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
+            InteractionRecord good = saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            establishFromRecord(good);
+
+            TaskReplayRunner jsonRunner = newRunner(true);
+            output.reset();
+            jsonRunner.run(null, null, true, false, false, false, false, null, null);
+
+            String ciLine = reportLine(output.toString(), "\"mode\":\"ci-align\"");
+            assertNotNull(ciLine, "必须有 ci-align 报告行");
+            assertTrue(ciLine.contains("\"comparedPairs\":1"), "首配对即 CHANGED 停止: " + ciLine);
+            assertNotNull(repository.findInvocationByKey(good.getInvocationKey()).getCandidateFingerprint());
+        }
+
+        @Test
+        @DisplayName("幂等：画像建立后旧证据 CI 判 PASS")
+        void establishedProfile_oldEvidence_passes() {
+            InteractionRecord seed = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            establishFromRecord(seed);
+
+            assertEquals(0, runner.run(null, null, true, false, false, false, false, null, null));
+        }
+
+        @Test
+        @DisplayName("首航：单链任务 CI 也判定（不再 selfEstablished 跳过）；任务规则违规折 exit 1")
+        void singleChain_judged_andTaskRulesFold() {
+            InteractionRecord seed = saveDeclaredTaskRecord("a-1", "session-a", 1000L, "{\"result\":\"ok\"}");
+            establishFromRecord(seed);
+            InvocationRulesConfig taskRules = InvocationRulesConfig.fromJson("{\"tasks\":{\"查订单\":{\"requiredSteps\":[\"confirm\"]}}}");
+
+            TaskReplayRunner ruleRunner = new TaskReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), taskRules, TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), false);
+            output.reset();
+            int exit = ruleRunner.run(null, null, true, false, false, false, false, null, null);
+
+            assertEquals(1, exit, "requiredSteps 缺失在 CI 首航即批改");
+            assertTrue(output.toString().contains("baseline comparison (--ci)"), "单链任务必须发生基线对照: " + output);
+            assertFalse(output.toString().contains("first recording becomes the baseline"), "CI 模式不得走 selfEstablished 跳过");
+        }
+
+        @Test
+        @DisplayName("报告钉：mode=ci-align 可区分，步骤显示 baselineVersion，成本只出 current 侧")
+        void reportShape_ciAlign() {
+            InteractionRecord seed = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            establishFromRecord(seed);
+            saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
+
+            runner.run(null, null, true, false, false, false, false, null, null);
+            assertTrue(output.toString().contains("approved fingerprints, no recorded cost"), "Cost 行只出 current 侧并就地说明");
+            assertFalse(output.toString().contains("Cost: baseline"), "不得出基线侧成本");
+
+            TaskReplayRunner jsonRunner = newRunner(true);
+            output.reset();
+            jsonRunner.run(null, null, true, false, false, false, false, null, null);
+
+            String ciLine = reportLine(output.toString(), "\"mode\":\"ci-align\"");
+            assertNotNull(ciLine);
+            assertTrue(ciLine.contains("\"baselineVersion\":\"v1\""), "步骤必须显示画像版本: " + ciLine);
+            assertFalse(ciLine.contains("\"baseline\":{\"tokens\""), "基线侧无记录，不得出基线成本对象");
+            assertTrue(ciLine.contains("\"current\":{\"tokens\""), "current 侧成本在场");
+            assertTrue(ciLine.contains("\"baselineTime\":"), "baselineTime=approvedAt 在场");
+        }
+
+        @Test
+        @DisplayName("member-check 守护：ciMode 语义下成员判定仍走链采样（mode=member-check）")
+        void memberCheck_keepsChainSampling() {
+            InteractionRecord seed = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            establishFromRecord(seed);
+            saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+
+            TaskReplayRunner jsonRunner = newRunner(true);
+            output.reset();
+            jsonRunner.run(null, null, true, false, true, false, false, null, null);
+
+            String out = output.toString();
+            assertNotNull(reportLine(out, "\"mode\":\"member-check\""), "成员判定不得被基线对照改写: " + out);
+            assertNull(reportLine(out, "\"mode\":\"ci-align\""), "member-check 与 ci-align 互斥");
+        }
+
+        @Test
+        @DisplayName("两链窗口钉：C2 vs C3 链对链 PASS，而 CI 对照画像 CHANGED（窗口外漂移被点破）")
+        void twoChainWindow_ciExposesUnadjudicatedDrift() {
+            InteractionRecord seed = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            establishFromRecord(seed);
+            saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
+            saveRecord("c-1", "session-c", 3000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
+
+            int devExit = runner.run(null, null, false, false, false, false, false, null, null);
+
+            assertEquals(0, devExit, "链对链（C2 vs C3 同行为）PASS——两链窗口看不见历史漂移");
+
+            TaskReplayRunner ciRunner = newRunner(false);
+            output.reset();
+            assertEquals(1, ciRunner.run(null, null, true, false, false, false, false, null, null), "CI 对照批准指纹点破窗口外漂移");
+        }
     }
 
     @Nested
@@ -821,7 +985,7 @@ class TaskReplayRunnerTest {
 
         @Test
         @DisplayName("出口健康摘要：--json 模式以 exit-health 报告行收尾")
-        void exitHealth_jsonLine() {
+        void exitHealth_reportLine() {
             seedUnlabeledMultiStepChain("session-a", 1000L);
 
             ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();

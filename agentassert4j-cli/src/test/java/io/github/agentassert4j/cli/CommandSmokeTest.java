@@ -34,6 +34,7 @@ class CommandSmokeTest {
     private String dbPath;
     private SqliteStorageRepository repository;
     private final PrintStream originalStdout = System.out;
+    private final PrintStream originalStderr = System.err;
 
     @BeforeEach
     void setUp() {
@@ -45,6 +46,7 @@ class CommandSmokeTest {
     @AfterEach
     void tearDown() {
         System.setOut(originalStdout);
+        System.setErr(originalStderr);
         if (repository != null) {
             repository.close();
         }
@@ -65,6 +67,55 @@ class CommandSmokeTest {
         r.setToolCalls(new ArrayList<>());
         r.setHasToolCalls(false);
         repository.saveInteractionIfAbsent(r);
+    }
+
+    @Test
+    @DisplayName("显示短形 establish 未建档裂键：命中目标键并建档（W11.9a 反例转正）")
+    void baseline_displayForm_hitsUnestablishedSplitKey() {
+        seedOneRecord("session-1", 1000L, "aaaabbbb00000001");
+        new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
+        seedOneRecord("s-2", 2000L, "ccccdddd00000002");
+
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath, "--invocation", "queryOrder@ccccdddd");
+
+        assertEquals(0, exit);
+        String text = out.toString();
+        assertTrue(text.contains("queryOrder@ccccdddd") && text.contains("baseline established"), "短形必须命中目标键并建档: " + text);
+        assertNotNull(repository.findInvocationByKey("invocation:queryOrder:ccccdddd00000002"));
+    }
+
+    @Test
+    @DisplayName("裸标签扇出 establish：写前披露目标集，仅未建档键被建")
+    void baseline_labelFanOut_disclosesAndEstablishesOnlyNew() {
+        seedOneRecord("session-1", 1000L, "aaaabbbb00000001");
+        new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
+        seedOneRecord("s-2", 2000L, "ccccdddd00000002");
+
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath, "--invocation", "queryOrder");
+
+        assertEquals(0, exit);
+        String text = out.toString();
+        assertTrue(text.contains("the selection covers 2 invocations"), "写前必须披露扇出目标集: " + text);
+        assertTrue(text.contains("exists v1") && text.contains("no baseline"), "披露逐键列出建档状态");
+        assertNotNull(repository.findInvocationByKey("invocation:queryOrder:ccccdddd00000002"), "仅未建档键被建（非 force）");
+    }
+
+    @Test
+    @DisplayName("乱写显示短形 establish：E-NO-DATA 响亮报错，非假成功")
+    void baseline_bogusDisplayForm_loudZeroHit() {
+        seedOneRecord("session-1", 1000L, "aaaabbbb00000001");
+
+        ByteArrayOutputStream out = redirectStdout();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(err, true));
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath, "--invocation", "queryOrder@zzzzzzzz");
+
+        assertEquals(2, exit);
+        String failure = err.toString();
+        assertTrue(failure.contains("No invocation matching"), "零命中必须响亮（失败行走 stderr）: " + failure);
+        assertFalse(out.toString().contains("already has a baseline"), "不得出现假成功话术");
     }
 
     @Test

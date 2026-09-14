@@ -18,15 +18,16 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
 | 语义状态 | 真源 | 派生链 |
 |---|---|---|
 | 任务链 | interactions 交互历史（派生视图，无实体表） | 按 session 分组、请求文本切片；metadata 显式 `taskKey` 声明优先于 userInput 派生（损坏 metadata 按未声明退化，不中断） |
-| 对齐结果 | 基线链 × 新链现场指纹 | TaskAligner 逐调用点配对、两侧现场重提指纹比对，不消费任何存档指纹 |
+| 对齐结果 | 基线侧 × 新链：本地模式 = 基线链记录（两侧现场重提）；CI 对照 = 画像活跃指纹定格投影（BaselineSides.fromProfiles） | TaskAligner 逐调用点配对；候选侧（新链）恒现场重提，基线侧按路径三源投影（链记录/验收包/画像，见 judgment 契约 11） |
 | 漂移处置输入 | DriftReport（只读巡检产出） | 引擎按对齐步结果驱动三出口（出口语义归 governance） |
 | 图 | interactions 全量重建的内存邻接表 | 每次重放现场重建；快照落盘供 status 巡检（dry-run 不落盘） |
 
 ## 状态机与生命周期
 
 本域无自身状态机；漂移处置状态机（收编/候选/挂起三出口）见 governance 域，引擎是执行器。
-一次 bare 重放的编排顺序钉死：检测报告（全项目）→ 缩域 → `--ci` 未建档守卫 → 开发态自动
-建档 → 判定语义守卫 → 逐任务对齐 → 漂移处置 → 退出码复合。
+一次重放的编排顺序钉死：检测报告（全项目）→ 缩域 → `--ci` 未建档守卫 → 开发态自动
+建档 → 判定语义守卫 → 逐任务对齐（本地 = 最新链 vs 次新链；`--ci` = 基线对照，
+member-check 无论 ci 与否走链采样）→ 漂移处置 → 退出码复合。
 
 ## 契约
 
@@ -38,8 +39,8 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
    恰好打开的其他任务链）；同文本多链是同一任务的多轮执行（升序全保留，对齐取最新 vs 次新）。【测试钉】`TaskChainViewTest`
 3. **对齐配对**：有声明标签的步骤按标签分组、跨模板版本配对（细分哈希差异记 versionSwitch
    注记，判定照常）；无标签按完整键分组（版本即身份，不跨版本）；组内规范序 1:1 配对、
-   较少侧配对、富余计数进报告不判差异；缺步骤/新增步骤是行为差异。【测试钉】
-   `TaskAlignerTest`
+   较少侧配对、富余计数进报告不判差异（人读行附「换新会话再录可入判」指路）；缺步骤/新增步骤
+   是行为差异（本地链模式）。【测试钉】`TaskAlignerTest`
 4. **任务纪律**：rules.tasks 只对声明 taskKey 的链生效（键=声明值精确相等）、按新链侧评估
    必备步骤/顺序子序列/次数范围；违规折叠为链级 CHANGED，不新增 verdict 值。【测试钉】
    `TaskAlignerTest` + `TaskReplayRunnerTest.Alignment.taskRuleViolation_exits1`
@@ -53,9 +54,9 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
    键缩域/空交集）
 7. **JSON 报告 task-report/1**：逐行分段——drift-detection（漂移集/零模板计数）→
    task-align（逐步 action/verdict/dims/cost）或 selfEstablished → drift-disposition（逐漂移
-   点 action: collected/candidate/hung/external/uncollected）；dry-run 为 task-dry-run。键名
-   稳定、单行、null 缺省即契约；报告头钉判定语义版本。【测试钉】
-   `TaskReplayRunnerTest.JsonContract`
+   点 action: collected/candidate/hung/external/uncollected）；dry-run 为 task-dry-run；CI 基线
+   对照为 ci-align（见契约 19）。键名稳定、单行、null 缺省即契约；报告头钉判定语义版本。
+   【测试钉】`TaskReplayRunnerTest.JsonContract`
 8. **守卫五项**：判定语义版本守卫（任一画像版本不符拒绝判定）；`--ci` 未建档拒绝判定
    （缩域名单）+ 漂移 PASS 不收编；换模型告警（配置缺省时比对客户端实际生效模型）；
    全败按基础设施故障退出（重驱层）；served 模型不一致逐步标注。【测试钉】`TaskReplayRunnerTest.Guards` 全组
@@ -133,6 +134,19 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
     `RegressionTestExecutorTest`（记录方言提示装配）+ `OpenAiCompatibleClientTest`（归位行为零变更回归）+
     `AnthropicMessagesClientTest` / `OpenAiResponsesClientTest`（组装逐字段钉/帧守卫敌对/
     协议头）+ `ThreeProtocolDeepSeekIntegrationTest`（三协议 DeepSeek 真机连通，key 门控）
+19. **CI 基线对照（--ci 的判定基准）**：`--ci` 的对齐 = 缩域内每任务（含单链）**最新链逐记录
+    对照其调用点画像活跃指纹**（BaselineSides.fromProfiles 单源投影，候选侧恒现场重提）——
+    不是链对链。每执行一份步骤（paired = 新链记录数），surplus 盲区结构性消失；accept 提升
+    指纹后同证据即 PASS（裁决对门禁立即生效）。member-check 无论 ci 与否保持链采样（实现钉
+    `ciMode && !memberCheck` 分支）。渲染：Cost 行只出 current 侧（基线侧无记录）；baselineTime
+    = 链内画像最新 approvedAt（全部未盖章则整体省略）；步骤携带 `baselineVersion`（画像活跃
+    版本）；mode=ci-align。模式语义边界（意图后果）：①缺步骤/新增步骤结构性不可能（基线组键
+    ≡ 新链组键），「任务不再调用某调用点」在 CI 面只剩任务纪律能抓；②两链记忆窗口缺口就此
+    可见——链对链只看最新两条链，滑过窗口的未裁决漂移链模式永远 PASS 而 CI 对照画像 CHANGED
+    （长期只跑开发态的库首次切 CI 可能立即翻红，这是正确语义）；③规则收紧滞后到 re-baseline
+    （维度 3/4 = 基线声明当前答卷，与 verify 包规则随包走同构）。【测试钉】
+    `TaskReplayRunnerTest.CiAlign`（A2 闭环/A1 同会话迭代/幂等/首航/报告形态/member-check
+    守护/两链窗口八场景）+ `BaselineSidesTest`（投影属性）
 
 ## 行为矩阵
 
@@ -141,7 +155,10 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
 | bare、全库无录制 | exit 2 + 录制引导（stderr in --json；机器包络见 cli 契约 7） |
 | bare、全部任务单链 | 逐任务自建基线，exit 0；声明任务有规则违例时首航即批改 exit 1（契约 14） |
 | bare、任务两链同构 | 对齐 PASS；无漂移出 0；有漂移按处置出口 |
-| 任一对齐 CHANGED / 缺步骤 / 新增 / 规则违规 | exit 1（CHANGED 步落候选） |
+| `--ci`、基线齐备 | 逐任务（含单链）最新链 vs 画像活跃指纹；行为一致 exit 0，差异 exit 1 落候选（契约 19） |
+| `--ci`、行为变更后 accept | 下一轮 CI 对新基线 PASS → exit 0（裁决对门禁生效） |
+| `--ci`、长期开发态库首次切换 | 滑过两链窗口的未裁决漂移当场 CHANGED（契约 19 语义边界②，正确行为） |
+| 任一对齐 CHANGED / 缺步骤 / 新增 / 规则违规（本地模式） | exit 1（CHANGED 步落候选） |
 | --member-check、新链匹配任一最近链 | 成员 PASS，exit 0，报告 matchedSession（契约 13） |
 | --member-check、全样本不匹配 | exit 1，按最接近样本报差异并落候选（契约 13） |
 | 漂移 + 步骤 PASS（开发态 / --ci） | 收编前移身份 / 不收编附警告；均 exit 0 |
@@ -174,6 +191,7 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
 
 | 日期 | 方式 | 发现 |
 |---|---|---|
+| 2026-09-14 | A1/A2 修复批（批 1）：--ci 判定基准从链对链改为基线对照，基线侧投影单源化为 BaselineSides | ①真源表与契约 3/7 双轨化（本地链模式不变）；②新契约 19（判定基准/渲染三决策/模式语义边界三条）；③verify 的包投影收编进 fromPackSteps（行为等价，VerifyExportTest 20 钉回归网）；④判定基线真源模型同批修订 judgment 契约 11；⑤模式词表增 ci-align；member-check 守护钉防基线对照误伤（McpTools 恒 ciMode=true） |
 | 2026-09-12 | 批3 N6 首跑（doc-tools 三扫描器）+ 义务登记 | ①LOW：TaskReplayRunner↔VerifyRunner 步骤外围 JSON 渲染（verdict/surplusCount/invocationLabel/versionSwitch 拼装）双份 ×24 窗口——dims 度量已单源（comparisonMetricsFragment），外围收编为 stepEnvelope 单源列 1.0.x（两报告面各被契约钉独立看守，漂移可测，不阻塞发布）；②LOW（承接既有 TODO）：BehaviorChecker.returnsEmptyOnError 的 `contains("[]")` 把含空数组字面量的正常输出误判为空输出——修复需动判定路径（RecursiveJsonParser 结构判空），列 1.0.x，发布前不动判定语义；③N6 豁免类别沉淀：import 样板/POJO getter-setter/方言客户端 buildRequestBody 本体/JSON 导航守卫/测试桩夹具/SDK 与 boot 配对线镜像 |
 | 2026-09-09 | 通道 2 决策批：契约 2 增中间态记录请求文本回退（previousTurns 首个 user 轮）——粘链与 task 域失明同源解决；回放/文档动词 approve 全局更名 accept（含 adjudication/1 action 值） | 根因链：无请求文本记录附着到打开链（F2/F3 温床）+ 任务域对中间态不可见（F5）；维护者裁决采纳「父级 user 文本回填」而非裸键链概念——零 schema 变更、纯派生视图层、符合 R11（previousTurns 即真源） |
 | 2026-09-09 | 通道 2 修复批：re-drive 缩域失效修复（invocation 域限定+每键最新=契约 12 原文兑现；dry-run 计划与真跑目标同源单点 reDriveTargets）+ dry-run 报价兑现（re-drive-dry-run 模式行）+ 步级 protocol 字段 + score→similarity 改名（summary/signal/verify 同步，代码注释早已自认「score 与判定自相矛盾误导排查」）+ split 键 label 失名修复（status 巡检 label 改逐记录登记）+ 遗留 schema 守卫（版本戳齐但必需表缺席→可行动 StorageException） | 全部来自通道 2 双宿主实测发现（F2/F3/F8/F18/F14/F12/F6/F17）；行为验证=invocation 域真驱从 4 调用收敛到 1 调用且 dry-run 报价与真跑同源 |

@@ -829,4 +829,35 @@ class SqliteStorageRepositoryTest {
         assertNull(back.getFingerprint());
         assertNull(back.getCandidateFingerprint());
     }
+
+    @Test
+    void governanceEvents_roundTripHostileContent_orderedAscending() {
+        GovernanceEvent hostile = new GovernanceEvent();
+        hostile.setVerb(GovernanceVerb.FORCE_REBUILD);
+        hostile.setActor("agent:小机器人\u0007" + String.join("", Collections.nCopies(200, "长")));
+        hostile.setInvocationKey("invocation:标签\u0001:hash\u0002");
+        hostile.setVersionTag("v1");
+        hostile.setCodeRef("commit\"quote'\\slash\nline");
+        hostile.setNote("note\u007F");
+        GovernanceEvent collect = new GovernanceEvent();
+        collect.setVerb(GovernanceVerb.COLLECT);
+        collect.setActor(null);
+        collect.setInvocationKey("invocation:x:y");
+        collect.setVersionTag("v3");
+
+        repo.appendGovernanceEvent(hostile);
+        repo.appendGovernanceEvent(collect);
+
+        List<GovernanceEvent> events = repo.findGovernanceEvents();
+        assertEquals(2, events.size());
+        assertEquals(GovernanceVerb.FORCE_REBUILD, events.get(0).getVerb());
+        assertEquals(hostile.getActor(), events.get(0).getActor(), "中文/控制符/超长 actor 逐字往返");
+        assertEquals(hostile.getInvocationKey(), events.get(0).getInvocationKey());
+        assertEquals(hostile.getCodeRef(), events.get(0).getCodeRef());
+        assertEquals(hostile.getNote(), events.get(0).getNote());
+        assertNotNull(events.get(0).getHappenedAt(), "happenedAt 由实现方盖章");
+        assertEquals(GovernanceVerb.COLLECT, events.get(1).getVerb());
+        assertNull(events.get(1).getActor());
+        assertTrue(events.get(0).getHappenedAt() <= events.get(1).getHappenedAt(), "时间升序");
+    }
 }

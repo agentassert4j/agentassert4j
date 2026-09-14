@@ -7,6 +7,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -157,7 +159,7 @@ class BaselineManagerTest {
             DeterministicFingerprint oldBaseline = profile.getFingerprint();
             repo.saveInvocationProfile(profile);
 
-            manager.reject("gk-1", null);
+            manager.reject("gk-1", null, "tester");
 
             InvocationProfile updated = repo.findInvocationByKey("gk-1");
             assertEquals(BaselineStatus.BASELINE, updated.getBaselineStatus());
@@ -170,7 +172,7 @@ class BaselineManagerTest {
         @Test
         @DisplayName("Skill profile 不存在 → 抛出 IllegalStateException")
         void profileNotFound_throwsException() {
-            assertThrows(IllegalStateException.class, () -> manager.reject("nonexistent", null));
+            assertThrows(IllegalStateException.class, () -> manager.reject("nonexistent", null, "tester"));
         }
 
         @Test
@@ -179,7 +181,7 @@ class BaselineManagerTest {
             InvocationProfile profile = makeProfileWithBaseline("gk-1", "order-flow");
             repo.saveInvocationProfile(profile);
 
-            assertThrows(IllegalStateException.class, () -> manager.reject("gk-1", null));
+            assertThrows(IllegalStateException.class, () -> manager.reject("gk-1", null, "tester"));
         }
     }
 
@@ -204,7 +206,7 @@ class BaselineManagerTest {
             repo.saveInvocationProfile(v2Profile);
 
             // 回滚到 v1
-            manager.rollback("gk-1", "v1", null);
+            manager.rollback("gk-1", "v1", null, "tester");
 
             InvocationProfile rolled = repo.findInvocationByKey("gk-1");
             assertEquals(BaselineStatus.BASELINE, rolled.getBaselineStatus());
@@ -219,13 +221,13 @@ class BaselineManagerTest {
             InvocationProfile profile = makeProfileWithBaseline("gk-1", "order-flow");
             repo.saveInvocationProfile(profile);
 
-            assertThrows(IllegalStateException.class, () -> manager.rollback("gk-1", "v99", null));
+            assertThrows(IllegalStateException.class, () -> manager.rollback("gk-1", "v99", null, "tester"));
         }
 
         @Test
         @DisplayName("Skill profile 不存在 → 抛出 IllegalStateException")
         void profileNotFound_throwsException() {
-            assertThrows(IllegalStateException.class, () -> manager.rollback("nonexistent", "v1", null));
+            assertThrows(IllegalStateException.class, () -> manager.rollback("nonexistent", "v1", null, "tester"));
         }
 
         @Test
@@ -242,7 +244,7 @@ class BaselineManagerTest {
             repo.saveInvocationProfile(v2);
 
             // 回滚到 v1
-            manager.rollback("gk-1", "v1", null);
+            manager.rollback("gk-1", "v1", null, "tester");
 
             // 应该有两条归档：v1（approve 时的）和 v2（rollback 时的）
             assertEquals(2, repo.archivedBaselines.size());
@@ -261,7 +263,7 @@ class BaselineManagerTest {
             repo.saveInvocationProfile(v2);
             manager.accept("gk-1", null, "tester", null); // v2 归档，活跃 v3
 
-            manager.rollback("gk-1", "v1", null); // 活跃恢复 v1，v3 归档
+            manager.rollback("gk-1", "v1", null, "tester"); // 活跃恢复 v1，v3 归档
 
             InvocationProfile rolled = repo.findInvocationByKey("gk-1");
             rolled.setCandidateFingerprint(new DeterministicFingerprint());
@@ -523,7 +525,7 @@ class BaselineManagerTest {
             repo.saveInvocationProfile(p);
             manager.accept(invocationKey, null, "bob", null);
 
-            manager.rollback(invocationKey, firstVersion, null);
+            manager.rollback(invocationKey, firstVersion, null, "tester");
 
             InvocationProfile restored = repo.findInvocationByKey(invocationKey);
             assertEquals("alice", restored.getApprovedBy());
@@ -584,7 +586,7 @@ class BaselineManagerTest {
             Long aliceAt = repo.findInvocationByKey(invocationKey).getApprovedAt();
 
             manager.reestablishBaseline(record, "bob", null, null);
-            manager.rollback(invocationKey, firstVersion, null);
+            manager.rollback(invocationKey, firstVersion, null, "tester");
 
             InvocationProfile restored = repo.findInvocationByKey(invocationKey);
             assertEquals(firstVersion, restored.getVersionTag());
@@ -773,7 +775,7 @@ class BaselineManagerTest {
             repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
             repo.saveInteractionIfAbsent(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
 
-            manager.reject(KEY, null);
+            manager.reject(KEY, null, "tester");
 
             assertEquals("h1", repo.findInvocationByKey(KEY).getTemplateHash());
             assertTrue(DriftDetector.detect(repo).hasDrift());
@@ -788,7 +790,7 @@ class BaselineManagerTest {
             manager.accept(KEY, null, "tester", null);
             assertEquals("h2", repo.findInvocationByKey(KEY).getTemplateHash());
 
-            manager.rollback(KEY, "v1", null);
+            manager.rollback(KEY, "v1", null, "tester");
 
             assertEquals("h1", repo.findInvocationByKey(KEY).getTemplateHash(), "回滚必须把身份一并退回旧模板");
             // 身份回拨后与新模板记录重新构成漂移——状态机下轮再收编，属预期可见行为
@@ -902,7 +904,7 @@ class BaselineManagerTest {
             repo.saveInvocationProfile(profile);
 
             manager.accept("gk-1", null, "tester", "def5678");
-            manager.rollback("gk-1", "v1", null);
+            manager.rollback("gk-1", "v1", null, "tester");
 
             InvocationProfile rolled = repo.findInvocationByKey("gk-1");
             assertEquals("abc1234", rolled.getCodeRef());
@@ -918,6 +920,100 @@ class BaselineManagerTest {
             manager.accept("gk-1", null, "tester", "   ");
 
             assertNull(repo.findInvocationByKey("gk-1").getCodeRef());
+        }
+    }
+
+    @Nested
+    @DisplayName("治理事件 - 六动词时间线")
+    class GovernanceEvents {
+
+        @Test
+        @DisplayName("六动词全事件：时间线完整可重建（verb/actor/versionTag/happenedAt 全在场）")
+        void sixVerbs_fullTimeline() {
+            String key = "invocation:skill-1:hashA";
+            InteractionRecord seed = makeToolRecord("skill-1", "toolA");
+            seed.setTemplateHash("hashA");
+            seed.setInvocationKey(key);
+            repo.interactions.add(seed);
+
+            manager.autoEstablishBaseline(seed, "tester", null, null);
+            InvocationProfile profile = repo.findInvocationByKey(key);
+            profile.setCandidateFingerprint(new DeterministicFingerprint());
+            repo.saveInvocationProfile(profile);
+            manager.accept(key, null, "agent:codex", null);
+            profile = repo.findInvocationByKey(key);
+            profile.setCandidateFingerprint(new DeterministicFingerprint());
+            repo.saveInvocationProfile(profile);
+            manager.reject(key, null, "agent:codex");
+            manager.rollback(key, "v1", null, "agent:codex");
+            // 漂移收编的凭据：画像模板哈希落后于最新同键记录
+            InvocationProfile stale = repo.findInvocationByKey(key);
+            stale.setTemplateHash("stale-hash");
+            repo.saveInvocationProfile(stale);
+            manager.advanceTemplateIdentity(key);
+            manager.reestablishBaseline(seed, "agent:rebuilder", null, null);
+
+            List<GovernanceVerb> verbs = new ArrayList<>();
+            for (GovernanceEvent event : repo.governanceEvents) {
+                verbs.add(event.getVerb());
+                assertNotNull(event.getHappenedAt(), "happenedAt 由实现方盖章");
+            }
+            assertEquals(Arrays.asList(GovernanceVerb.ESTABLISH, GovernanceVerb.ACCEPT, GovernanceVerb.REJECT,
+                    GovernanceVerb.ROLLBACK, GovernanceVerb.COLLECT, GovernanceVerb.FORCE_REBUILD), verbs);
+            assertEquals("tester", repo.governanceEvents.get(0).getActor());
+            assertEquals("agent:codex", repo.governanceEvents.get(1).getActor());
+            assertNull(repo.governanceEvents.get(4).getActor(), "收编是框架自动化，actor 恒 null");
+        }
+
+        @Test
+        @DisplayName("reject 事件：verb/actor/invocationKey/保留版本在场（此前后不可见）")
+        void rejectEvent_recorded() {
+            repo.saveInvocationProfile(makeProfileWithCandidate("gk-1", "skill-1"));
+
+            manager.reject("gk-1", null, "agent:codex");
+
+            assertEquals(1, repo.governanceEvents.size());
+            GovernanceEvent event = repo.governanceEvents.get(0);
+            assertEquals(GovernanceVerb.REJECT, event.getVerb());
+            assertEquals("agent:codex", event.getActor());
+            assertEquals("gk-1", event.getInvocationKey());
+            assertEquals("v1", event.getVersionTag(), "versionTag = 保留的当前版本");
+        }
+
+        @Test
+        @DisplayName("rollback 事件：目标版本与执行者在场（此前后不可见）")
+        void rollbackEvent_recorded() {
+            repo.saveInvocationProfile(makeProfileWithCandidate("gk-1", "skill-1"));
+            manager.accept("gk-1", null, "tester", null);
+
+            manager.rollback("gk-1", "v1", null, "agent:ops");
+
+            assertEquals(2, repo.governanceEvents.size(), "accept 与 rollback 各一条");
+            GovernanceEvent event = repo.governanceEvents.get(1);
+            assertEquals(GovernanceVerb.ROLLBACK, event.getVerb());
+            assertEquals("agent:ops", event.getActor(), "执行者经事件表可见");
+            assertEquals("v1", event.getVersionTag(), "versionTag = 目标版本");
+        }
+
+        @Test
+        @DisplayName("幂等不落事件：重复建档/哈希一致收编/前置失败路径零事件")
+        void idempotentPaths_noEvents() {
+            InteractionRecord seed = makeToolRecord("skill-1", "toolA");
+            manager.autoEstablishBaseline(seed, "tester", null, null);
+            assertEquals(1, repo.governanceEvents.size());
+
+            // 已有指纹早退：重复建档不落事件
+            manager.autoEstablishBaseline(seed, "tester", null, null);
+            assertEquals(1, repo.governanceEvents.size());
+
+            // 哈希一致返回 false：收编不落事件
+            String key = repo.invocationProfiles.keySet().iterator().next();
+            assertFalse(manager.advanceTemplateIdentity(key));
+            assertEquals(1, repo.governanceEvents.size());
+
+            // 前置不满足抛异常：无候选 reject 不落事件
+            assertThrows(IllegalStateException.class, () -> manager.reject(key, null, "tester"));
+            assertEquals(1, repo.governanceEvents.size());
         }
     }
 

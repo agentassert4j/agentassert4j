@@ -282,16 +282,17 @@ requiredSteps/order/counts 的包，编排纪律同样参与判定——跨模�
 
 框架是纯能力提供方，agent 能调用什么由 harness 权限系统决定；框架承担透明与事后审计。
 约定：agent 驱动治理写时以 `--approver agent:<名称>` 申报机器身份（自由字符串，人类用
-默认 OS 身份）。全部 agent 申报的治理写（活跃画像 + 归档行）用一条命令回溯：
+默认 OS 身份；reject/rollback 同样支持）。六个治理动词（establish/force-rebuild/accept/
+reject/rollback/collect）发生时落入治理事件时间线，agent 申报的治理写用一条命令回溯：
 
 ```bash
-agentassert4j audit              # 人类清单：[active]/[archived] + 代码锚
+agentassert4j audit              # 人类清单：[动词] 键 版本 + 主体/代码锚
 agentassert4j audit --json       # agentassert4j.audit/1 机器报告（writes 数组）
 ```
 
-边界如实：rollback 恢复历史行不产生新审批痕迹、reject 不盖章，均不进 audit 清单；
-MCP 工具清单的 description 声明各变异动词的使用要求（如 accept 应在人类指示后调用），
-授权确认由 harness 权限系统执行。
+reject 与 rollback 不在画像上留状态痕迹，事件时间线是其唯一审计载体；MCP 工具清单的
+description 声明各变异动词的使用要求（如 accept 应在人类指示后调用），授权确认由
+harness 权限系统执行。
 
 ## 6.2 MCP 接入（AI 自主验证回路）
 

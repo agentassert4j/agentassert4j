@@ -136,11 +136,7 @@ public class VerifyRunner {
                 uncovered.add(task.getTaskKey());
                 continue;
             }
-            Map<String, List<BaselineStep>> baselineSteps = new LinkedHashMap<>();
-            for (BaselineStep step : task.getSteps()) {
-                step.setInvocationId(TaskAligner.declaredLabelOfKey(step.getInvocationKey()));
-                baselineSteps.computeIfAbsent(step.getInvocationKey(), k -> new ArrayList<>()).add(step);
-            }
+            Map<String, List<BaselineStep>> baselineSteps = BaselineSides.fromPackSteps(task.getSteps());
             TaskAlignment alignment = TaskAligner.align(baselineSteps, local, comparator, packRules);
             alignment.setBaselineTime(task.getBaselineTime());
             alignment.setNewChainTime(local.firstTimestamp());

@@ -38,7 +38,7 @@ public class RulesCommand implements Callable<Integer> {
                 if (items.length() > 0) items.append(",");
                 items.append("{\"name\":\"").append(name).append("\",\"description\":\"").append(BehaviorChecker.describeBehavior(name)).append("\"}");
             }
-            out.println("{\"schema\":\"" + ReportSchemas.RULES + "\",\"example\":{\"invocations\":{\"<business invocationId>\":{\"requiredKeywords\":[\"order\"],\"forbiddenKeywords\":[\"sorry\"],\"regexPatterns\":[\"\\\\d{6,}\"],\"behaviors\":[\"mustUseChinese\",\"jsonOutput\"]}}},\"behaviors\":[" + items + "]}");
+            out.println("{\"schema\":\"" + ReportSchemas.RULES + "\",\"example\":{\"invocations\":{\"<business invocationId>\":{\"requiredKeywords\":[\"order\"],\"forbiddenKeywords\":[\"sorry\"],\"regexPatterns\":[\"\\\\d{6,}\"],\"behaviors\":[\"mustUseChinese\",\"jsonOutput\"]}},\"tasks\":{\"<declared taskKey>\":{\"requiredSteps\":[\"<invocationId>\",\"<invocationId>\"],\"requiredOrder\":[\"<invocationId>\",\"<invocationId>\"],\"steps\":{\"<invocationId>\":{\"min\":1,\"max\":2}}}}},\"behaviors\":[" + items + "]}");
             return 0;
         }
         out.println("Built-in constraint behaviors (all names accepted by the behaviors field in agentassert4j-rules.json):");
@@ -55,8 +55,16 @@ public class RulesCommand implements Callable<Integer> {
         out.println("      \"regexPatterns\": [\"\\\\d{6,}\"],");
         out.println("      \"behaviors\": [\"mustUseChinese\", \"jsonOutput\"]");
         out.println("    }");
+        out.println("  },");
+        out.println("  \"tasks\": {");
+        out.println("    \"<declared taskKey>\": {");
+        out.println("      \"requiredSteps\": [\"<invocationId>\", \"<invocationId>\"],");
+        out.println("      \"requiredOrder\": [\"<invocationId>\", \"<invocationId>\"],");
+        out.println("      \"steps\": { \"<invocationId>\": { \"min\": 1, \"max\": 2 } }");
+        out.println("    }");
         out.println("  }");
         out.println("}");
+        out.println("Task rules: requiredSteps = invocations the chain must include; requiredOrder = ordered sub-sequence that must appear in this order; steps = per-invocation occurrence range (min/max). Violations fold into CHANGED.");
         return 0;
     }
 }

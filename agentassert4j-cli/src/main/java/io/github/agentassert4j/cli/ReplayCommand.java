@@ -40,7 +40,7 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--invocation"}, description = "Narrow the scope: target invocation by business invocationId, invocationKey, unique prefix, or the status display form (combinable with --task)")
     String invocation;
 
-    @Option(names = {"--ci"}, description = "CI mode: no auto-establish; refuses to judge when the scope holds unestablished invocations (exit 2), drift identities are not collected (exit 0 with a warning); no governance writes from the pipeline")
+    @Option(names = {"--ci"}, description = "CI mode: judges the latest chain of each task against its approved baselines; no auto-establish (refuses to judge when the scope holds unestablished invocations, exit 2); drift identity PASS is not collected (exit 0 with a warning); CHANGED findings still land candidates awaiting adjudication — no other governance writes")
     boolean ciMode;
 
     @Option(names = {"--member-check"}, description = "Member determination: the latest chain of each task is checked against the most recent chains (bounded window) and passes if its behavior matches any of them; default pairing compares the latest chain against the previous one only")

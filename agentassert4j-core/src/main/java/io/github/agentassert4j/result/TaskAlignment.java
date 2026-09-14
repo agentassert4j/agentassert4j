@@ -4,10 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 任务对齐结果 — 基线链 × 新链按调用点对齐的逐步判定（纯比较，零 LLM 调用）。
+ * 任务对齐结果 — 基线侧 × 新链按调用点对齐的逐步判定（纯比较，零 LLM 调用）。
  *
- * <p>两侧指纹现场重提后经确定性对比器得出配对判定；缺步骤/新增步骤是行为差异，
- * 与配对 CHANGED 同归入链级 CHANGED。对齐不消费任何存档指纹。</p>
+ * <p>新链侧（候选侧）指纹恒现场重提，基线侧指纹由调用方投影（链记录现场重提 /
+ * 验收包定格 / 画像活跃指纹定格，见 BaselineSides）；缺步骤/新增步骤是行为差异，
+ * 与配对 CHANGED 同归入链级 CHANGED。</p>
  *
  * @author axy-yxa
  * @since 2026-08-30
@@ -135,6 +136,11 @@ public class TaskAlignment {
          */
         private String invocationLabel;
         /**
+         * 基线侧步骤携带的画像版本标签（仅 CI 画像投影路径非 null）——报告
+         * 显示「vs baseline v3」的数据源；链/包路径恒 null
+         */
+        private String baselineVersionTag;
+        /**
          * MATCHED 且首个配对两侧细分哈希不同 = 同一调用点跨模板版本配对
          * （行为对照含提示词混杂变量，报告尾提示受控实验口径）
          */
@@ -148,6 +154,14 @@ public class TaskAlignment {
 
         public void setInvocationLabel(String invocationLabel) {
             this.invocationLabel = invocationLabel;
+        }
+
+        public String getBaselineVersionTag() {
+            return baselineVersionTag;
+        }
+
+        public void setBaselineVersionTag(String baselineVersionTag) {
+            this.baselineVersionTag = baselineVersionTag;
         }
 
         public boolean isVersionSwitch() {

@@ -16,6 +16,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -45,6 +47,21 @@ class BaselineServiceTest {
         if (repository != null) {
             repository.close();
         }
+    }
+
+    @Test
+    @DisplayName("键集合缩域：仅解析出的键被建档（桶选择与解析核心一一对应）")
+    void establishMissing_keySetScoping() {
+        repository.saveInteractionIfAbsent(makeRecord("rec-1", "skill-1", 1000L, "{\"ok\":true}"));
+        repository.saveInteractionIfAbsent(makeRecord("rec-2", "skill-2", 1000L, "{\"ok\":true}"));
+        PrintStream out = new PrintStream(output, true);
+
+        String key1 = invocationKeyOf("skill-1");
+        int established = new BaselineService(repository).establishMissing(out, "tester", null, false, new LinkedHashSet<>(Collections.singletonList(key1)), null, null, null);
+
+        assertEquals(1, established, "仅缩域键建档");
+        assertNotNull(repository.findInvocationByKey(key1));
+        assertNull(repository.findInvocationByKey(invocationKeyOf("skill-2")), "缩域外键不得建档");
     }
 
     @Test

@@ -1,7 +1,6 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.DriftDetector;
-import io.github.agentassert4j.algorithm.TaskAligner;
 import io.github.agentassert4j.model.ArchivedTemplateVersion;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
@@ -38,7 +37,7 @@ public class StatusCommand implements Callable<Integer> {
     @Option(names = {"--diff"}, description = "Render per-dimension candidate vs baseline diffs for invocations holding candidate fingerprints")
     boolean diff;
 
-    @Option(names = {"--invocation"}, description = "Narrow the human view to one invocation: business label, invocationKey prefix, or the status display form (one label shows all its template-version buckets; the --json report is always full)")
+    @Option(names = {"--invocation"}, description = "Narrow the view to one invocation (both channels): business label (fans out to all its template-version buckets), invocationKey prefix, or the status display form")
     String invocation;
 
     @Option(names = {"--json"}, description = "Print a single-line JSON inspection report to stdout (agentassert4j.status/1)")
@@ -56,13 +55,15 @@ public class StatusCommand implements Callable<Integer> {
             Map<String, TemplateDriftState> driftByInvocationKey = templateDriftByInvocationKey(drift, allProfiles);
             Map<String, String> labelsByInvocationKey = businessLabelsByInvocationKey(repository);
             // 缩域两通道一致生效（v3 实测：JSON 静默忽略缩域被双宿主点名为排障黑洞）；
-            // 全量快照 = 不传 --invocation 时的缺省形态
-            String labelFilter = CliSupport.resolveInvocationFilter(repository, invocation, out);
+            // 全量快照 = 不传 --invocation 时的缺省形态。解析走统一阶梯的键集合语义
+            // （标签扇出其全部桶），换算 Note 行走诊断通道保 --json 的 stdout 单行契约
+            List<String> narrowedKeys = CliSupport.resolveInvocationKeys(repository, invocation, true, jsonOutput ? err : out);
             int totalCount = allProfiles.size();
-            if (labelFilter != null) {
+            if (narrowedKeys != null) {
+                Set<String> keySet = new LinkedHashSet<>(narrowedKeys);
                 profiles = new ArrayList<>();
                 for (InvocationProfile profile : allProfiles) {
-                    if (matchesFilter(profile, labelFilter)) {
+                    if (keySet.contains(profile.getInvocationKey())) {
                         profiles.add(profile);
                     }
                 }
@@ -100,18 +101,18 @@ public class StatusCommand implements Callable<Integer> {
                 }
             }
 
-            if (labelFilter != null && profiles.isEmpty()) {
-                out.println("No invocation matches '" + CliSupport.visibleText(labelFilter) + "'. Drop --invocation for the full list.");
+            if (narrowedKeys != null && profiles.isEmpty()) {
+                out.println("No baseline profile under the selection (the invocation keys are recorded but unestablished; see below).");
             }
             List<String> uncovered = uncoveredBusinessTags(repository, profiles);
             for (String tag : uncovered) {
-                if (labelFilter != null && !labelFilter.equals(tag)) {
+                if (narrowedKeys != null && !narrowedKeys.contains(new BaselineService(repository).invocationKeyOfFirstRecord(tag))) {
                     continue;
                 }
                 out.println("  " + tag + ": recorded but no baseline (run `agentassert4j baseline` first)");
             }
-            printUnestablished(repository, labelFilter);
-            if (labelFilter != null) {
+            printUnestablished(repository, narrowedKeys);
+            if (narrowedKeys != null) {
                 out.println("Total: " + profiles.size() + " of " + totalCount + " invocation profiles (narrowed by --invocation).");
             } else {
                 out.println("Total: " + CliSupport.plural(profiles.size(), "invocation profile") + ".");
@@ -130,15 +131,6 @@ public class StatusCommand implements Callable<Integer> {
                 repository.close();
             }
         }
-    }
-
-    /**
-     * 缩域过滤谓词：声明标签从键内解析（一标签覆盖其全部模板桶），键前缀兜底
-     * （零声明键无标签可依）。解析层已把显示短形/键前缀换算为业务标签，这里只做最终匹配。
-     */
-    private static boolean matchesFilter(InvocationProfile profile, String labelFilter) {
-        String key = profile.getInvocationKey();
-        return labelFilter.equals(TaskAligner.declaredLabelOfKey(key)) || key.startsWith(labelFilter);
     }
 
     /**
@@ -291,15 +283,16 @@ public class StatusCommand implements Callable<Integer> {
 
     /**
      * 已录制但尚无基线画像的调用点段：新版本键与零声明键在建档前在此可见，
-     * 否则它们只会在对齐报告的缺/新增步骤里被动暴露。
+     * 否则它们只会在对齐报告的缺/新增步骤里被动暴露。缩域 = 解析键集合直配。
      */
-    private void printUnestablished(StorageRepository repository, String labelFilter) {
+    private void printUnestablished(StorageRepository repository, List<String> narrowedKeys) {
         // established 判定必须用全量画像（缩域后的子集会把已建档键误判为未建档）
         List<InvocationFootprint> unestablished = unestablishedFootprints(repository, repository.findAllInvocations());
-        if (labelFilter != null) {
+        if (narrowedKeys != null) {
+            Set<String> keySet = new LinkedHashSet<>(narrowedKeys);
             List<InvocationFootprint> filtered = new ArrayList<>();
             for (InvocationFootprint footprint : unestablished) {
-                if (labelFilter.equals(TaskAligner.declaredLabelOfKey(footprint.invocationKey)) || footprint.invocationKey.startsWith(labelFilter)) {
+                if (keySet.contains(footprint.invocationKey)) {
                     filtered.add(footprint);
                 }
             }

@@ -494,6 +494,15 @@ class ParameterValueTracerTest {
             return Collections.emptyList();
         }
 
+        @Override
+        public void appendGovernanceEvent(GovernanceEvent event) {
+        }
+
+        @Override
+        public List<GovernanceEvent> findGovernanceEvents() {
+            return Collections.emptyList();
+        }
+
     }
     /**
      * 边存在性断言助手：精简后的图 API 以边枚举为唯一读面

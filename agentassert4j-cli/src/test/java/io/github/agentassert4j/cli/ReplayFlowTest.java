@@ -126,7 +126,7 @@ class ReplayFlowTest {
             establishAll();
             runner().run(null, null, false, false, false, false, false, null, null);
 
-            new BaselineManager(repository).reject("invocation:order:hash-a", null);
+            new BaselineManager(repository).reject("invocation:order:hash-a", null, "tester");
 
             InvocationProfile profile = repository.findInvocationByKey("invocation:order:hash-a");
             assertNull(profile.getCandidateFingerprint(), "reject 必须丢弃候选");
@@ -147,7 +147,7 @@ class ReplayFlowTest {
             new BaselineManager(repository).accept("invocation:order:hash-a", null, "tester", null);
             assertEquals("v2", repository.findInvocationByKey("invocation:order:hash-a").getVersionTag());
 
-            new BaselineManager(repository).rollback("invocation:order:hash-a", "v1", null);
+            new BaselineManager(repository).rollback("invocation:order:hash-a", "v1", null, "tester");
 
             InvocationProfile restored = repository.findInvocationByKey("invocation:order:hash-a");
             assertEquals(oldBaseline, restored.getFingerprint(), "回滚必须恢复旧基线指纹");

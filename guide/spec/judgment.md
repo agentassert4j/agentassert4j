@@ -15,8 +15,8 @@
 ## 真源与派生
 
 | 语义状态 | 真源 | 派生链 |
-|---|---|---|
-| 指纹 | 交互记录本体（工具调用集/参数类型/模型响应文本/工具成败位）+ rules 配置（维度 3/4 声明） | `FingerprintExtractor.extract` 现场重提；**存档指纹只作展示与审计，任何对比一律现场重提、不消费存档值** |
+|---|---|---|---|
+| 指纹 | 交互记录本体（工具调用集/参数类型/模型响应文本/工具成败位）+ rules 配置（维度 3/4 声明） | `FingerprintExtractor.extract` 现场重提；**候选侧（当前证据）永远现场重提；基线侧 = 批准真相的定格投影，按路径三源取用（见契约 11）** |
 | hasError | ToolCall.success 位（任一失败即 true） | 提取器内置维度 4 |
 | 判定结论 | 基线指纹 × 当前指纹 × 当前输出文本 | `DeterministicComparator.compare` 逐维比对 → `ComparisonResult`（含逐维差异清单与二值 verdict） |
 | 判定语义版本 | `JudgmentSemantics.VERSION`（det-v1） | 建立/批准/重建时盖章进画像 `algo_version` 列并随归档行留痕 |
@@ -66,9 +66,19 @@
    报告头钉 judgmentSemantics）
 10. **空值兜底**：程序化构造的缺省集合字段、null 输出文本、双空指纹均安全比对不 NPE。
     【测试钉】nullOutput_treatedAsEmpty / bothEmptyFingerprints_pass / nullConfig_usesDefaults
-11. **现场重提原则**：对比两侧指纹均由对齐器/重放器现场提取注入，存档值仅展示审计。
-    【人工对账】实现分别位于 TaskAligner（alignMatched 双侧现场重提）与重放执行器；
-    行为由对齐与重放域测试间接覆盖，无直接对偶用例
+11. **判定基线真源模型（现场重提原则收窄为候选侧）**：候选侧（当前证据）永远现场重提——
+    任何路径不得消费存档值充当候选侧。基线侧 = 批准真相的**定格投影**，按路径三源取用：
+    链路径 = 上一条真实链的记录（两侧同为记录，对称现场重提——行为对行为的差分）；验收包 =
+    导出时刻的定格提取（BaselineExportCommand 导出时现场重提后随包冻结）；CI 对照 =
+    画像活跃指纹（establish/accept 时刻的定格提取，经 BaselineSides.fromProfiles 投影）。
+    跨口径可比性由语义版本守卫强制、不可比即拒判：本地画像 = algoVersion 守卫（CI 路径同样
+    经过）、验收包 = judgmentSemantics 守卫，绝不静默跨口径对比。口径对称性另有两道结构保证：
+    维度 3/4 是「基线声明、当前答卷」（候选侧声明集不进判定，rules 配置漂移不可能制造假
+    CHANGED）；ignorableFields 是比较期口径（非提取期烙印），三源同享。注意「任何对比一律
+    现场重提」作为全称命题自 verify 存在起已被包路径突破（包基线侧本就不是现场值）——本
+    模型是把既有实践升格为明示规范，CI 画像指纹是同一模式在本地治理库的实例化。
+    【测试钉】`BaselineSidesTest`（投影属性）+ `TaskReplayRunnerTest.CiAlign`（CI 消费画像
+    指纹的判定行为）+ `VerifyExportTest`（包定格侧回归网）
 12. **returnsEmptyOnError 的空数组子句宽泛**（`contains("[]")` 会把含空数组字面量的正常输出
     误判为空）——已在源码标注 TODO，改结构化判空需随版本纪律走。【人工对账】既有债务
 
@@ -115,4 +125,5 @@
 
 | 日期 | 方式 | 发现 |
 |---|---|---|
+| 2026-09-14 | A1/A2 修复批（批 1）同批修订：--ci 基线对照让画像存档指纹首次进入**判定**（基线侧） | 契约 11 由「两侧现场重提」全称表述收窄为「候选侧永远现场重提 + 基线侧三源定格投影 + 版本守卫强制可比」；真源表同步；「任何对比一律现场重提」全称命题自 verify 包路径存在起即被突破，本修订是把既有实践升格为明示模型（单向门 ×2 标注：--ci 判定基准变更 + 本规范修订） |
 | 2026-09-03 | S3 成文：FingerprintExtractor/DeterministicComparator/BehaviorChecker/JudgmentSemantics/BaselineManager 全量对账 + 测试指针核实 | ①ARCHIVED 枚举值从不写入活跃行（导读「基线三态流转」的表述易误读为活跃行三态，governance spec 成文时精确化）；②指纹序列化字节可复现（FingerprintJson 键序固定 + TreeMap/TreeSet 归一），提取器内存 HashMap 不影响；③维度 1 不受 ignorableFields 豁免为现行事实（测试未显式反向钉「维度 1 不豁免」，为可收缩项） |

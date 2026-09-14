@@ -178,8 +178,9 @@ stage('AgentAssert 行为回归') {
 
 <img src="assets/cli-replay-ci.png" alt="replay --ci --json：逐行 task-report/1 机器报告，exit 1 门禁红灯" width="880"/>
 
-`--ci` 不为无基线调用点自动建档（新调用点先在本地 `baseline` 人工确认，缺档直接出 2），
-漂移身份不在流水线里收编（治理写不进 CI，出 0 附警告行）。`--re-drive` 属人工复核动作，
+`--ci` 以「每任务最新链 vs 已批准基线」（establish/accept 提升的画像指纹——accept 立即对门禁生效）
+为判定基准，不为无基线调用点自动建档（新调用点先在本地 `baseline` 人工确认，缺档直接出 2），
+漂移身份不在流水线里收编（不改基线；CHANGED 发现照落候选等裁决，出 0 附警告行）。`--re-drive` 属人工复核动作，
 不进流水线缺省。
 
 ## 四维指纹：判定看什么
@@ -213,7 +214,7 @@ stage('AgentAssert 行为回归') {
 | `verify` | 交付验收：验收包 × 本机真实执行链（只读）；`--dry-run` 配对预演，`--report` 产出 markdown 交付证据 |
 | `rules` | 查看内置约束行为目录与规则文件写法 |
 | `graph show` | 依赖图谱只读视图（从录制数据现场重建） |
-| `audit` | 列出 agent:* 申报的治理写（审批人/时间/代码锚）供人工对账 |
+| `audit` | 按治理事件时间线列出 agent:* 申报的治理写（动词/主体/时间/代码锚，含 reject 与 rollback）供人工对账 |
 | `mcp` | 以 stdio MCP server 运行（17 工具镜像 CLI 动词，供非 Java 栈 AI 宿主接入） |
 | `doctor` | 只读库体检，三段确定性事实：身份（骨架族、多步零标签链、值得声明任务键的重复请求族）、覆盖（未建档调用点、缺 template_hash 的记录）、规则（畸形声明、期望错位）；仅陈述事实，正常执行恒出 0（不承载门禁语义） |
 | `completion` | 生成 shell 补全脚本（bash 风格） |

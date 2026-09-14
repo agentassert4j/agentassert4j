@@ -1,6 +1,7 @@
 package io.github.agentassert4j.recorder;
 
 import io.github.agentassert4j.model.ArchivedTemplateVersion;
+import io.github.agentassert4j.model.GovernanceEvent;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.StorageRepository;
@@ -109,6 +110,16 @@ class InMemoryStorageRepository implements StorageRepository {
 
     @Override
     public List<ArchivedTemplateVersion> findArchivedVersions(String invocationId) {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public void appendGovernanceEvent(GovernanceEvent event) {
+        // 录制管道测试不消费治理事件，空实现
+    }
+
+    @Override
+    public List<GovernanceEvent> findGovernanceEvents() {
         return Collections.emptyList();
     }
 

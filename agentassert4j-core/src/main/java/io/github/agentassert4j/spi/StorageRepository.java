@@ -1,7 +1,7 @@
 package io.github.agentassert4j.spi;
 
 /**
- * 存储仓库 SPI 门面 — 聚合五个读写域子接口 + 生命周期。
+ * 存储仓库 SPI 门面 — 聚合六个读写域子接口 + 生命周期。
  *
  * <p>遵循 JDBC 模式：接口在 core，实现在独立模块；组装根（CLI / starter）
  * 显式装配实现，无运行时插件发现。</p>
@@ -13,7 +13,7 @@ package io.github.agentassert4j.spi;
  * @author axy-yxa
  * @since 2026-08-26
  */
-public interface StorageRepository extends InteractionWriteStore, InteractionQueryStore, InvocationStore, TemplateTextStore, TemplateVersionArchiveStore {
+public interface StorageRepository extends InteractionWriteStore, InteractionQueryStore, InvocationStore, TemplateTextStore, TemplateVersionArchiveStore, GovernanceEventStore {
 
     /**
      * 初始化（建表/迁移）；失败抛运行时异常且不得泄漏资源

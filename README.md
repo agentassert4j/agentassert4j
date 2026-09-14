@@ -195,9 +195,11 @@ machine report lands line by line on stdout):
 
 <img src="assets/cli-replay-ci.png" alt="replay --ci --json: line-by-line task-report/1 machine report, exit 1 gate red" width="880"/>
 
-`--ci` never auto-baselines unbaselined invocations (new points are confirmed locally via `baseline`
-first; a missing baseline exits 2) and never collects drift identity inside the pipeline (governance
-writes stay out of CI; exit 0 with a warning line). `--re-drive` is a human review action and stays
+`--ci` judges each task's latest chain against its approved baselines (the profile fingerprints
+promoted by establish/accept — accept immediately moves the gate), never auto-baselines unbaselined
+invocations (new points are confirmed locally via `baseline` first; a missing baseline exits 2) and
+never collects drift identity inside the pipeline (no baseline mutations; CHANGED findings still land
+candidates awaiting adjudication — exit 0 with a warning line). `--re-drive` is a human review action and stays
 out of pipeline defaults.
 
 ## Four fingerprint dimensions: what the verdict reads
@@ -233,7 +235,7 @@ verdict — see [OPERATIONS §2.3](OPERATIONS.md).
 | `verify` | Delivery acceptance: pack × locally recorded chains (read-only); `--dry-run` previews the pairing, `--report` writes the markdown evidence |
 | `rules` | List built-in behavior checks and rules-file syntax |
 | `graph show` | Read-only dependency graph (rebuilt from recordings on the spot) |
-| `audit` | List agent:* governance writes (approver/time/code ref) for human review |
+| `audit` | List agent:* governance writes from the event timeline (verb/actor/time/code ref, including reject and rollback) for human review |
 | `mcp` | Run as a stdio MCP server (17 tools mirroring CLI verbs, for non-Java AI hosts) |
 | `doctor` | Read-only health check in three deterministic sections: identity (skeleton families, unlabeled multi-step chains, repeated request-text families worth declaring), coverage (unestablished invocations, records missing template_hash), rules (malformed declarations, expectation mismatches); advisory only (exit 0 in normal operation; not a gate) |
 | `completion` | Emit a shell completion script (bash style) |

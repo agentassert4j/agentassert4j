@@ -1,7 +1,6 @@
 package io.github.agentassert4j.cli;
 
-import io.github.agentassert4j.model.ArchivedTemplateVersion;
-import io.github.agentassert4j.model.InvocationProfile;
+import io.github.agentassert4j.model.GovernanceEvent;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import picocli.CommandLine.Command;
@@ -15,15 +14,16 @@ import java.util.concurrent.Callable;
 /**
  * audit 命令 — 列出 agent 驱动的治理写供人类回溯（读动词，恒退出码 0）。
  *
- * <p>识别口径 = 审批人以 {@code agent:} 前缀申报自己（机器写主体的显式申报
- * 约定，见 governance.md）。活跃画像与归档行都列出——归档是历史批准，回溯时
- * 同样需要。已知边界：rollback 恢复历史行不产生新审批痕迹；reject 不盖章，
- * 两者不进本清单。</p>
+ * <p>数据源 = 治理事件表（governance_events）的时间线：六个治理动词（accept/reject/
+ * rollback/establish/force-rebuild/collect）发生时经 BaselineManager 单源落账，
+ * 含 reject 与 rollback 这两个不在画像上留状态痕迹的动作。识别口径 = 操作主体以
+ * {@code agent:} 前缀申报自己（机器写主体的显式申报约定，见 governance.md）；本命令
+ * 是事件表的 agent 透镜，人类写经 status/report 的版本史可见、不进本清单。</p>
  *
  * @author axy-yxa
  * @since 2026-09-08
  */
-@Command(name = "audit", aliases = {"au"}, description = "List agent-driven governance writes (approver marked agent:*) for human review", mixinStandardHelpOptions = true)
+@Command(name = "audit", aliases = {"au"}, description = "List agent-driven governance writes (actor marked agent:*) from the governance event timeline for human review", mixinStandardHelpOptions = true)
 public class AuditCommand implements Callable<Integer> {
 
     /**
@@ -49,16 +49,10 @@ public class AuditCommand implements Callable<Integer> {
             repository = CliSupport.openRepository(db, jsonOutput ? err : out);
             List<String> rows = new ArrayList<>();
             List<String> lines = new ArrayList<>();
-            for (InvocationProfile profile : repository.findAllInvocations()) {
-                if (isAgentDriven(profile.getApprovedBy())) {
-                    rows.add(rowJson("active", profile.getInvocationKey(), profile.getVersionTag(), profile.getApprovedBy(), profile.getCodeRef(), profile.getApprovedAt()));
-                    lines.add(humanLine("active", profile.getInvocationKey(), profile.getVersionTag(), profile.getApprovedBy(), profile.getCodeRef()));
-                }
-                for (ArchivedTemplateVersion archived : repository.findArchivedVersions(profile.getInvocationKey())) {
-                    if (isAgentDriven(archived.getApprovedBy())) {
-                        rows.add(rowJson("archived", archived.getInvocationKey(), archived.getVersionTag(), archived.getApprovedBy(), archived.getCodeRef(), archived.getApprovedAt()));
-                        lines.add(humanLine("archived", archived.getInvocationKey(), archived.getVersionTag(), archived.getApprovedBy(), archived.getCodeRef()));
-                    }
+            for (GovernanceEvent event : repository.findGovernanceEvents()) {
+                if (isAgentDriven(event.getActor())) {
+                    rows.add(rowJson(event));
+                    lines.add(humanLine(event));
                 }
             }
             if (rows.isEmpty()) {
@@ -72,7 +66,7 @@ public class AuditCommand implements Callable<Integer> {
             if (jsonOutput) {
                 out.println("{\"schema\":\"" + ReportSchemas.AUDIT + "\",\"writes\":[" + String.join(",", rows) + "]}");
             } else {
-                out.println("Agent-driven governance writes (" + rows.size() + "):");
+                out.println("Agent-driven governance writes (" + rows.size() + ", from the governance event timeline):");
                 for (String line : lines) {
                     out.println(line);
                 }
@@ -89,30 +83,34 @@ public class AuditCommand implements Callable<Integer> {
         }
     }
 
-    static boolean isAgentDriven(String approvedBy) {
-        return approvedBy != null && approvedBy.startsWith(AGENT_ACTOR_PREFIX);
+    static boolean isAgentDriven(String actor) {
+        return actor != null && actor.startsWith(AGENT_ACTOR_PREFIX);
     }
 
-    private static String rowJson(String state, String invocationKey, String versionTag, String approvedBy, String codeRef, Long approvedAt) {
-        StringBuilder sb = new StringBuilder("{\"state\":\"").append(state).append('"');
-        sb.append(",\"invocationKey\":\"").append(RecursiveJsonParser.escape(invocationKey)).append('"');
-        sb.append(",\"versionTag\":\"").append(RecursiveJsonParser.escape(versionTag != null ? versionTag : "")).append('"');
-        sb.append(",\"approvedBy\":\"").append(RecursiveJsonParser.escape(approvedBy)).append('"');
-        if (codeRef != null) {
-            sb.append(",\"codeRef\":\"").append(RecursiveJsonParser.escape(codeRef)).append('"');
+    private static String verbName(GovernanceEvent event) {
+        return event.getVerb() != null ? event.getVerb().wireName() : "unknown";
+    }
+
+    private static String rowJson(GovernanceEvent event) {
+        StringBuilder sb = new StringBuilder("{\"verb\":\"").append(RecursiveJsonParser.escape(verbName(event))).append('"');
+        sb.append(",\"invocationKey\":\"").append(RecursiveJsonParser.escape(event.getInvocationKey())).append('"');
+        sb.append(",\"versionTag\":\"").append(RecursiveJsonParser.escape(event.getVersionTag() != null ? event.getVersionTag() : "")).append('"');
+        sb.append(",\"actor\":\"").append(RecursiveJsonParser.escape(event.getActor() != null ? event.getActor() : "")).append('"');
+        if (event.getCodeRef() != null) {
+            sb.append(",\"codeRef\":\"").append(RecursiveJsonParser.escape(event.getCodeRef())).append('"');
         }
-        sb.append(",\"approvedAt\":").append(approvedAt != null ? approvedAt.toString() : "null");
+        sb.append(",\"happenedAt\":").append(event.getHappenedAt() != null ? event.getHappenedAt().toString() : "null");
         return sb.append('}').toString();
     }
 
-    private static String humanLine(String state, String invocationKey, String versionTag, String approvedBy, String codeRef) {
-        StringBuilder sb = new StringBuilder("  [").append(state).append("] ").append(CliSupport.displayKey(invocationKey));
-        if (versionTag != null) {
-            sb.append(' ').append(versionTag);
+    private static String humanLine(GovernanceEvent event) {
+        StringBuilder sb = new StringBuilder("  [").append(verbName(event)).append("] ").append(CliSupport.displayKey(event.getInvocationKey()));
+        if (event.getVersionTag() != null) {
+            sb.append(' ').append(event.getVersionTag());
         }
-        sb.append(' ').append(approvedBy);
-        if (codeRef != null) {
-            sb.append(" (ref ").append(codeRef).append(')');
+        sb.append(' ').append(event.getActor() != null ? event.getActor() : "(no actor)");
+        if (event.getCodeRef() != null) {
+            sb.append(" (ref ").append(event.getCodeRef()).append(')');
         }
         return sb.toString();
     }

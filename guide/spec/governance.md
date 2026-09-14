@@ -21,6 +21,7 @@
 | 候选 | 画像 candidateFingerprint 列 | 跨进程持久化——重放与裁决通常不在同一进程，候选必须落库才对裁决可达 |
 | 归档基线 | invocation_template_versions 行 | 完整治理面快照：指纹、模板哈希、语义版本、审批人/时间、代码锚、归档时间；rollback 的唯一恢复源 |
 | 审批事实 | approvedBy/approvedAt | 空白身份归一为 null——approvedBy=null 是「未经审批链盖章」的显式信号，空白串会稀释该信号 |
+| 治理事件 | governance_events 行（只追加时间线） | 六动词（accept/reject/rollback/establish/force-rebuild/collect）发生时经 BaselineManager 单源落账，happenedAt 由存储实现方盖章；reject/rollback 不在画像上留状态痕迹，事件是其唯一审计载体——无状态痕迹的动作没有派生重建路径，事件必须成为真源（R11） |
 | 代码锚 | codeRef（invocations 与 invocation_template_versions 双表携带） | 申报制审计标注：建档/accept 时调用方声明的代码参照（如 git 提交号），定位「行为最后被认可于哪个提交」；不校验、不连 git、不参与判定；空白归一为 null，空缺合法。归档行携带归档基线自身的锚，rollback 连锚回退——活跃行的锚必须始终描述当前基线自身，否则账本说谎 |
 | 模板身份 | 最新可分组记录的 templateHash | 建档种子携带；accept/显式收编按同一口径前移（身份前移见下） |
 
@@ -49,9 +50,9 @@ stateDiagram-v2
 | 首次建档（autoEstablish） | 桶内无画像或指纹空 | 种子记录现场重提指纹，versionTag=v1，盖章 | BASELINE |
 | 重复建档 | 指纹已有 | 幂等跳过 | 不变 |
 | 判定 CHANGED 落候选（D1） | 画像存在；候选指纹 ≠ 画像现役指纹（一致即无裁决对象，不登记不翻转） | recordCandidate（首个 CHANGED 配对的新记录 + 现场重提指纹） | CANDIDATE（不一致时）/ 不变（一致时） |
-| accept | CANDIDATE，否则抛 IllegalStateException | ①归档旧基线 ②身份前移（顺序钉死）③候选升基线 ④tag 跳过归档占用 ⑤盖章 | BASELINE |
-| reject | CANDIDATE，否则抛（与 accept 对称） | 丢弃候选，保留旧基线（回退模板是 git 的职责） | BASELINE |
-| rollback(key, tag) | 归档行存在，否则抛 | 当前基线先归档 → 按快照恢复指纹/模板哈希/语义版本/审批/tag | BASELINE |
+| accept | CANDIDATE，否则抛 IllegalStateException | ①归档旧基线 ②身份前移（顺序钉死）③候选升基线 ④tag 跳过归档占用 ⑤盖章 ⑥落 ACCEPT 事件 | BASELINE |
+| reject | CANDIDATE，否则抛（与 accept 对称） | 丢弃候选，保留旧基线（回退模板是 git 的职责）；落 REJECT 事件（actor=否决者）——候选消失后事件是「曾发生过 reject」的唯一痕迹 | BASELINE |
+| rollback(key, tag) | 归档行存在，否则抛 | 当前基线先归档 → 按快照恢复指纹/模板哈希/语义版本/审批/tag；落 ROLLBACK 事件（actor=执行者，versionTag=目标版本）——恢复按原始审批人重激活，执行者只在事件表可见 | BASELINE |
 | --force 重建 | 画像存在 | 旧基线先归档 → 桶内规范序首条记录重提指纹 → tag 顺延 | BASELINE |
 | 漂移收编（显式 advanceTemplateIdentity） | 最新可分组记录哈希 ≠ 画像哈希 | 仅前移 templateHash（指纹/候选/tag/审批不动） | 不变 |
 
@@ -152,14 +153,18 @@ agent 权限配置为完全访问时，授权决策已经在 harness 层完成�
 1. **身份申报约定**：agent 驱动治理写时以 `--approver agent:<名称>` 申报机器身份
    （自由字符串约定，框架不校验不强制；人类用默认 OS 身份），approvedBy 原样留痕。
    申报是诚实用法的一部分——不申报则审计视角下与人写无异，这正是申报制的本意。
-2. **audit 命令**：列出审批人以 `agent:` 前缀申报的全部治理写（活跃画像与归档行，
-   含代码锚），人读与 audit/1 双通道。已知边界如实标注：rollback 恢复历史行不产生
-   新审批痕迹、reject 不盖章，两者不进清单；replay 开发态自动建档记当前 OS 用户，
-   属框架自动化而非 agent 变异。
+2. **audit 命令**：治理事件表（governance_events）时间线的 agent 透镜——列出操作
+   主体以 `agent:` 前缀申报的全部治理事件（六动词含 reject/rollback，行结构
+   {verb, invocationKey, versionTag, actor, codeRef, happenedAt}），人读与 audit/1 双
+   通道，读动词恒 exit 0。事件在治理写发生时经 BaselineManager 单源落账（幂等早退与
+   前置失败不落事件；COLLECT 的 actor 恒 null——框架自动化，不进 agent 透镜）；事件
+   写失败按 L1 退化（记 SEVERE 不阻断治理写本体）。人类写经 status/report 的版本史可
+   见，不进本清单。
 
 ## 复核台账
 
 | 日期 | 方式 | 发现 |
+| 2026-09-14 | A3 修复批（批 3）：治理事件表落地，audit 由状态投影改为时间线单源读取 | ①真源表增治理事件行；状态机事件表 accept/reject/rollback 三行补事件落账；②「agent 治理与审计」节 audit 条目重写（原「rollback/reject 不进清单」已知边界随事件表消失）；③reject/rollback 签名增 actor 参数（公开 API 变更，pre-1.0 允许），CLI/MCP 面同步 --approver；④audit/1 行结构 state→verb（schema 名开发期恒定，语义变更=删库重建承接） |
 |---|---|---|
 | 2026-09-04 | 盲跑复盘批：D1 登记前置条件落地（同指纹候选不登记） | 状态机「落候选」事件增前置（候选≠现役指纹）；形态来自 dogfood 盲跑实况——画像以变异期记录建档时，对齐 CHANGED 的候选与现役一致，登记即产生无信息候选与困惑界面（MIG-V1 实况）；【测试钉】`BaselineManagerTest.SameFingerprintCandidate` |
 | 2026-09-03 | 统一重放引擎落地后复核（同日）：漂移处置状态机接线完成 | 契约 9/10 升【测试钉】（DriftStateMachine 七场景 + 单一写入口断言）；「对齐层陈述最近两次真实执行之间的差异」语义经端到端钉确认——accept 清候选转正基线，事实差异在新真实链入账前如实存续（ReplayFlowTest.diff_candidate_accept_settles），与 S4 成文时的收敛表述细化一致 |

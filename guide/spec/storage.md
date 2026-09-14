@@ -7,7 +7,7 @@
 ## 职责与边界
 
 **管**：SQLite 单文件持久化的全部契约——五表 schema 与三层列结构、事务与并发纪律、写读往返
-保真、模板原文归档、基线归档、schema 契约版本纪律、SPI 五域接口面。
+保真、模板原文归档、基线归档、治理事件时间线、schema 契约版本纪律、SPI 六域接口面。
 
 **不管**：画像字段的治理语义（谁在什么条件下改 fingerprint/候选/状态——governance）；
 invocationKey 的派生文法（identity）；查询结果的业务消费（各消费域）。
@@ -20,6 +20,7 @@ invocationKey 的派生文法（identity）；查询结果的业务消费（各�
 | `prompt_texts`（3 列） | 模板原文唯一反查点（hash 不可逆，原文不落即永久丢失） | 不可重建 |
 | `invocations`（16 列） | 治理档案 = 派生 + 治理写混合体 | 身份/视图列可从 interactions 重建；治理列（指纹/候选/审批/代码锚）以治理写为准 |
 | `invocation_template_versions`（10 列） | 只追加归档历史（rollback 数据源） | 不可重建 |
+| `governance_events`（8 列） | 只追加治理动作时间线（六动词；reject/rollback 等无状态痕迹动作的唯一审计载体） | 不可重建（发生时落账，无派生路径） |
 
 **三层列结构**（interactions）：概念层（跨协议稳定的概念数据）/ 原文层（`*_raw` 逐字保留，
 后续新增概念列的回填来源）/ 吸收层（`metadata` JSON 承接未预见扩展）。
@@ -70,7 +71,12 @@ close(): 关连接置 null；与写路径共用实例监视器——flush 进行
 10. **失败语义显式**：存储故障抛专用 `StorageException` 不吞不换型；初始化失败清理已开连接。
     【测试钉】storageFailure_throwsStorageException_neverSwallowed
     【测试钉】saveAndLoadGraph / loadGraph_empty
-12. **SPI 五域面**：写（2 方法）/ 查（6 方法）/ 调用点（3）/ 模板原文（2）/ 归档（3），
+11. **治理事件表**：`governance_events` 只追加（六动词封闭词表 verb，wire 值 kebab-case）；
+    `happened_at` 由存储实现方写入时刻盖章（调用方不携带时钟）；读取恒 `happened_at, rowid`
+    升序（同刻按写入序决胜）；verb 未知线上值按 null 退化不中断读取（宁缺勿错注记）。
+    SPI 写入点唯一 = BaselineManager 六个治理写（幂等早退与前置失败不落事件）。
+    【测试钉】governanceEvents_roundTripHostileContent_orderedAscending
+12. **SPI 六域面**：写（2 方法）/ 查（6 方法）/ 调用点（3）/ 模板原文（2）/ 归档（3）/ 治理事件（2），
     `StorageRepository` 聚合门面加 type/initialize/close。查询域现有 6 方法超出「每接口 ≤5」
     的接口隔离目标——既有阶段债，随命令面瘦身批删除 `findInvocationKeysByTemplateHash` 后
     回到 5。【人工对账】债务跟踪
@@ -103,7 +109,7 @@ close(): 关连接置 null；与写路径共用实例监视器——flush 进行
 
 ## 变更纪律
 
-- 五表列集与 `user_version` 语义 = 冻结契约：发布前变更 = 删库重建；发布后新增列走
+- 五表列集与 `user_version` 语义 = 冻结契约：发布前变更 = 删库重建（含 governance_events——开发期旧库缺表会被打开守卫拒开，删库或换新路径承接）；发布后新增列走
   「可空 + raw 回填」，禁止破坏性变更（单向门）。
 - `*_raw` 列逐字保留承诺：任何概念列新增必须能从 raw 回填，raw 不得改写。
 - 存储实现可替换（R3 插件平等）：契约 = SPI 六接口，不是 SQLite 实现；实现侧新行为先补本
@@ -112,6 +118,7 @@ close(): 关连接置 null；与写路径共用实例监视器——flush 进行
 ## 复核台账
 
 | 日期 | 方式 | 发现 |
+| 2026-09-14 | A3 修复批（批 3）：governance_events 新表 + GovernanceEventStore 域（2 方法） | ①真源表增行（不可重建——发生时落账）；契约 11 补位成文（六动词/实现方盖章/升序读/未知 verb 退化）；契约 12 五域面→六域面；②「五表」计数自 S2 成文起即失真（实为 4 表，graph 表已随图降级摘除）——本批加表后恰为 5，旧失真一并回填；③开发期旧库（channel2/dogfood）user_version=1 且缺新表，打开守卫直接拒开并给删库指引（非静默降级——方案文档原「事件写入恒走 L1 降级」表述据此修正，L1 降级仅作为 BaselineManager 写入侧防御保留） |
 |---|---|---|
 | 2026-09-11 | 批B SPI 死面修剪（维护者「零兼容残留」指令）： SPI 删 `saveInteraction`/`type()`/`findByTemplateHash`/`saveTemplateText`/`isAvailable`，`saveInteractionIfAbsent` 升入 InteractionWriteStore； ②`idx_template_hash` 索引随唯一查询方消亡（删库重建承接）； ③McpRecordIngestion/CliSupport.openRepository 回归 StorageRepository 接口类型 | 契约 2 措辞更新（写入面私有化）；SPI 六接口瘦身为五域面；无行为变更，往返测试全绿为钉 |
 | 2026-09-12 | 批3 N6 首跑 + 义务登记 | ①LOW：`FingerprintJson.asStringMap`（core util，private）与 `JsonMapper.asStringMap`（storage，private）同一 Map→Map<String,String> 小工具双份——storage 依赖 core 可单点化（FingerprintJson 出包级公共或挪 TextUtil），列 1.0.x；②契约张力登记：三 raw 列的「未来一切新概念列的回填来源」承诺对 **SDK 采集记录不成立**（ChatModel 抽象层拿不到线上原文，raw 恒 null，两 mapper 注记在案）——raw 回填仅覆盖 CLI 重驱记录与 MCP 摄取记录（wire 原文全量），SDK 面新增概念列的回填来源需届时单独设计 |

@@ -55,7 +55,7 @@ public class VerifyCommand implements Callable<Integer> {
         try {
             packContent = new String(Files.readAllBytes(Paths.get(packPath)), StandardCharsets.UTF_8);
         } catch (Exception e) {
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_ENV, "Cannot read the acceptance pack file: " + packPath, "Check the --pack path; the file must exist and be readable.", "");
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_ENV, "Cannot read the acceptance pack file: " + packPath, "Check the --pack path; the file must exist and be readable.", "agentassert4j verify --pack <path>");
         }
         String digest = HashUtil.sha256(packContent);
 

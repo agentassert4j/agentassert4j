@@ -5,6 +5,8 @@ import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.spi.StorageRepository;
 
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * 基线生命周期管理 — 框架只报告差异（侦探），接受与否由开发者裁决（法官）。
@@ -21,6 +23,8 @@ import java.util.List;
  * @since 2026-08-26
  */
 public class BaselineManager {
+
+    private static final Logger LOG = Logger.getLogger(BaselineManager.class.getName());
 
     private final StorageRepository repository;
 
@@ -73,6 +77,7 @@ public class BaselineManager {
         profile.setVersionTag(nextAvailableVersionTag(invocationKey, profile.getVersionTag()));
         stampApproval(profile, approver, codeRef);
         repository.saveInvocationProfile(profile);
+        recordGovernanceEvent(GovernanceVerb.ACCEPT, invocationKey, profile.getVersionTag(), approver, codeRef);
     }
 
     /**
@@ -82,9 +87,10 @@ public class BaselineManager {
      *
      * @param invocationKey         调用点键
      * @param expectedActiveVersion 乐观守卫的期望活跃版本标签，null = 不设守卫
+     * @param actor                 否决者身份（治理事件留痕；reject 不改画像审批链）
      * @throws IllegalStateException 无候选指纹时抛出（与 accept 对称）
      */
-    public synchronized void reject(String invocationKey, String expectedActiveVersion) {
+    public synchronized void reject(String invocationKey, String expectedActiveVersion, String actor) {
         InvocationProfile profile = repository.findInvocationByKey(invocationKey);
         if (profile == null) {
             throw new IllegalStateException("Invocation profile not found: " + invocationKey);
@@ -97,6 +103,7 @@ public class BaselineManager {
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);
         repository.saveInvocationProfile(profile);
+        recordGovernanceEvent(GovernanceVerb.REJECT, invocationKey, profile.getVersionTag(), actor, null);
     }
 
     /**
@@ -117,6 +124,7 @@ public class BaselineManager {
         boolean advanced = recomputeTemplateHash(invocationKey, profile);
         if (advanced) {
             repository.saveInvocationProfile(profile);
+            recordGovernanceEvent(GovernanceVerb.COLLECT, invocationKey, profile.getVersionTag(), null, null);
         }
         return advanced;
     }
@@ -128,9 +136,11 @@ public class BaselineManager {
      * @param invocationKey         调用点键
      * @param versionTag            目标版本标签
      * @param expectedActiveVersion 乐观守卫的期望活跃版本标签，null = 不设守卫
+     * @param actor                 回滚执行者身份（治理事件留痕——rollback 不改画像
+     *                              审批链，执行者在事件表可见）
      * @throws IllegalStateException 无归档基线时抛出
      */
-    public synchronized void rollback(String invocationKey, String versionTag, String expectedActiveVersion) {
+    public synchronized void rollback(String invocationKey, String versionTag, String expectedActiveVersion, String actor) {
         ArchivedTemplateVersion archived = repository.findArchivedVersion(invocationKey, versionTag);
         if (archived == null) {
             throw new IllegalStateException("No archived template version found for invocation: " + invocationKey + ", version: " + versionTag);
@@ -161,6 +171,7 @@ public class BaselineManager {
         // 否则行为是旧版本、标注却挂着新提交，审计账本说谎
         profile.setCodeRef(archived.getCodeRef());
         repository.saveInvocationProfile(profile);
+        recordGovernanceEvent(GovernanceVerb.ROLLBACK, invocationKey, versionTag, actor, null);
     }
 
     /**
@@ -255,7 +266,8 @@ public class BaselineManager {
 
         // 提取指纹作为基线
         // 规则口径必须与重放判定同源（三参提取注入维度 3-4）；
-        // 存档指纹只作展示与审计，任何对比一律现场重提，不消费存档值
+        // 存档指纹是批准真相的定格投影：CI 基线对照经 BaselineSides.fromProfiles
+        // 以它为基线侧，候选侧（当前证据）永远现场重提
         DeterministicFingerprint fingerprint = FingerprintExtractor.extract(record, rules, record.getInvocationId());
 
         // 以解析器产出为基底：invocation_name/invocation_type 等展示列来自解析的派生结果，
@@ -269,6 +281,27 @@ public class BaselineManager {
         stampApproval(profile, approver, codeRef);
 
         repository.saveInvocationProfile(profile);
+        recordGovernanceEvent(overwrite ? GovernanceVerb.FORCE_REBUILD : GovernanceVerb.ESTABLISH, grouping.getInvocationKey(), profile.getVersionTag(), approver, codeRef);
+    }
+
+    /**
+     * 治理事件并行落账（只挂真实写入路径——本方法只在实际治理写完成后被调用，
+     * 幂等早退与前置失败路径不产生事件）。L1 退化：事件写失败记 SEVERE 不阻断
+     * 治理写本体——事件缺失经日志可见，审计失败不得阻止治理动作；happenedAt
+     * 由存储实现方写入时刻盖章。
+     */
+    private void recordGovernanceEvent(GovernanceVerb verb, String invocationKey, String versionTag, String actor, String codeRef) {
+        try {
+            GovernanceEvent event = new GovernanceEvent();
+            event.setVerb(verb);
+            event.setInvocationKey(invocationKey);
+            event.setVersionTag(versionTag);
+            event.setActor(actor);
+            event.setCodeRef(codeRef);
+            repository.appendGovernanceEvent(event);
+        } catch (RuntimeException e) {
+            LOG.log(Level.SEVERE, "governance event append failed: " + verb.wireName() + " " + invocationKey, e);
+        }
     }
 
     /**

@@ -78,8 +78,13 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
    缺省处理——类型契约由 schema 声明、校验归客户端侧，服务端不回类型错误。【测试钉】manifest 组
 6. **读动词 ci 语义（零治理写）**：check/diff/re-drive 适配 replay --ci——不自动建档；
    缩域内存在未建档调用点时拒绝判定（E-GUARD 包络 + 指向 establish 的 nextAction）；
-   漂移身份不收编。理由：MCP 读动词必须与 CLI 读动词同等「只读」，治理写只能经显式变异
-   动词（establish/accept/reject）发生。report/verify/doctor/graph 本就是只读命令，直调。
+   漂移身份不收编；CHANGED 发现照落候选等裁决（除候选登记外无治理写）。check/diff 的
+   判定基准 = 每任务最新链对照其已批准基线（画像活跃指纹；check/diff 的 manifest
+   description 与 initialize instructions 双轨声明该基准，并注明本地 `replay` 不带 --ci
+   时为最新链 vs 次新链差分）。member-check 工具虽以 ciMode 语义运行，仍走链采样
+   （最新链对最近链窗口），不受基线对照改写。理由：MCP 读动词必须与 CLI 读动词同等
+   「只读」，治理写只能经显式变异动词（establish/accept/reject）发生。
+   report/verify/doctor/graph 本就是只读命令，直调。
 注意：拒绝与失败包络的 nextAction/hints 在抛出点以 CLI 命令形单源产出；MCP 出口经通道化映射改写为工具名形态（baseline→establish、status→report、replay→check 等，CLI 专属的 --ci 逃生舱子句一并摘除），两个通道各自拿到母语指称。
    **面一致性契约**：MCP 工具面是 CLI 命令面的完整映射（一层封装的双形态）——映射表与
    豁免清单（completion/mcp 为 CLI 专属、record 为 MCP 专属）由 CliMcpParityTest 机械钉死；
@@ -87,7 +92,7 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
    （baseline→establish、status→report、replay→check/diff/member-check/re-drive）为历史
    命名的显式登记。【测试钉】工具组（未建档拒绝且不落
    画像 + 建档后通过）
-7. **变异动词使用要求与 agent 身份申报**：establish/accept/reject 的 description 声明
+7. **变异动词使用要求与 agent 身份申报**：establish/accept/reject/rollback 的 description 声明
    「治理写，应在人类指示后调用；agent 以 approver="agent:<name>" 申报身份」。授权确认由
    harness 权限系统执行（MCP 原生同意点）；框架不校验 approver 值，事后经 CLI `audit`
    回溯 agent 申报的治理写（governance.md「agent 治理与审计」节为权威表述）。
@@ -167,6 +172,19 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
 
 ## 复核台账
 
+- 2026-09-14 A3 修复批（批 3）：reject/rollback 工具面增 approver 申报参数（parity 钉自动覆盖）；audit
+  工具描述与读取面改为治理事件时间线（六动词含 reject/rollback，actor=agent:* 过滤）；rollback 描述
+  「restoring stamps no new approval trail」陈旧陈述随事件表落地一并改写（决策变更全表面重审）。
+- 2026-09-14 A1/A2 修复批（批 1）：check/diff 判定基准改为已批准基线对照（replay --ci 同一引擎），
+  契约 6 重写（check/diff 描述与 instructions 由链对链声明改双轨；消除 1d94703 后「链对链基准」与
+  「PASS since baselines」的自相矛盾）；member-check 不受影响的守护钉（TaskReplayRunnerTest.CiAlign.
+  memberCheck_keepsChainSampling）。MCP 面自动受益——描述承诺的基线语义由实现追上。
+- 2026-09-14 Round 4 评估合并：R4 八项 △「未复现」全部无效（双宿主跑在陈旧 shade jar 上——二进制
+  指纹实证；运行中的 MCP server 锁 jar 致 clean 失败；批 C 修复在新 jar 上八项全部功能复验通过，价格
+  热读补丁自身的路径 static 化与删除早退两缺陷被探针网连抓后修复，四相位[创建/改价/删除/还原]全语义
+  生效）。工作流裁决项 A1-A4（裂键 surplus 漏判/accept 不转 CI 绿/audit 缺 reject-rollback/establish
+  爆炸半径）留维护者定方向；即修批闭环（B1 乱码=宿主侧文件编码非缺陷、B2=契约内、B3 rules/1+人读示例
+  补 tasks 段、B4 三处 nextAction）。报告=docs/阶段性 通道2双宿主实测报告Round4。
 - 2026-09-13 Round 3 双宿主实测 + 批 C 修复批（剧本 v3）：①HIGH-1 规则分叉定性=环境级
   （陈旧 server 进程；当前 jar 复现三相位全对[写→CHANGED/删→PASS]），doctor/1 rules 区新增
   `rulesFile` 溯源字段；②HIGH-2 价格覆盖静态一次加载→**mtime 热读**（长驻进程改价即生效）；

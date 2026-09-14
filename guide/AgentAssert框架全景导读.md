@@ -301,9 +301,11 @@ $ agentassert4j rollback --invocation refund --version v3
 $ agentassert4j replay --ci --json
 ```
 
-`--ci` 是给流水线的专用模式：不为没有基线的调用点自动建档——宁可拒绝判定，也不产「自建自比」的绿灯
-（不带它时，重放开头会顺手给新调用点自动建档）；漂移身份也不在流水线里收编——治理写留在人侧，出 0
-时附一行「Identity not collected」警告。`--json` 让结果变成**逐行机器可读的报告**写到标准输出，人看的进度和诊断
+`--ci` 是给流水线的专用模式：判定基准是「最新链 vs 已批准基线」（每个任务的最新链逐记录对照其调用点
+画像的活跃指纹——团队 accept 之后下一轮 CI 即对上新基线，门禁跟着裁决走）；不为没有基线的调用点自动建档——
+宁可拒绝判定，也不产「自建自比」的绿灯（不带它时，重放开头会顺手给新调用点自动建档，判定基准则是
+最新链 vs 次新链的差分）；漂移身份也不在流水线里收编——治理写留在人侧（CHANGED 候选照落等裁决），
+出 0 时附一行「Identity not collected」警告。`--json` 让结果变成**逐行机器可读的报告**写到标准输出，人看的进度和诊断
 改走错误输出——程序和人各看各的，互不干扰。这两个参数都可以不填：不填就是人看的默认形态。
 
 退出码替他说真话：**0** 无差异，**1** 存在差异（人去裁决），**2** 用法或基础设施故障——比如全部用例
@@ -605,7 +607,7 @@ recorded（到达即计数） = written（批量写成功）
 
 **本幕回顾**：第 1 幕那几百条他看不懂的记录、第 2 幕的自动归类与代号。
 
-**设计问题**：重放比对的基本单位是什么？答案不能是「单次 HTTP 调用」（同一段业务流程里有多次调用），也不能是「业务系统」（太粗）。框架的三分模型：**用例（case）= 一条录制交互 = 回归最小单元**，期望永远现场重提、用例之间无等价关系；**调用点（invocation）= 产生调用的模板/代码位置 = 变更单元与治理主体**（治理对象 = 调用点的模板版本史）；**视图（view）= 无身份语义的索引**（形状、标签、时间都是视图维度，视图粗细不影响判定对错）。身份不能靠人工登记（第一天就会被放弃），必须从交互自身确定性推导。
+**设计问题**：重放比对的基本单位是什么？答案不能是「单次 HTTP 调用」（同一段业务流程里有多次调用），也不能是「业务系统」（太粗）。框架的三分模型：**用例（case）= 一条录制交互 = 回归最小单元**，候选侧期望永远现场重提、用例之间无等价关系；**调用点（invocation）= 产生调用的模板/代码位置 = 变更单元与治理主体**（治理对象 = 调用点的模板版本史）；**视图（view）= 无身份语义的索引**（形状、标签、时间都是视图维度，视图粗细不影响判定对错）。身份不能靠人工登记（第一天就会被放弃），必须从交互自身确定性推导。
 
 **概念与术语**：invocationKey（调用点键，从记录确定性派生的唯一身份）、invocationId（调用点声明标签——业务身份，可空，不参与判定）、templateHash（模板哈希=系统提示词 SHA-256）、paramSignature（参数类型签名，视图列）。
 
@@ -654,7 +656,7 @@ recorded（到达即计数） = written（批量写成功）
 
 **为什么模板不在四维里**：模板（系统提示词）与注入的 skill 文案是**输入变量**——回归测试里被替换、被修改的正是它，拿它参与比对等于「比谁改过」，永远不同、没有信息量。框架测量的是行为后果：还调不调同样的工具、输出结构变没变、声明规则守不守。模板的真实角色有两个：身份锚点（同一份提示词归同一组，见第 5 章）与请求重建素材（重放时原样带回历史上下文，见第 9 章）。由此有个推论：MCP 工具的 name / description / schema 就是它的「提示词工程面」——修改工具描述与修改提示词是同一性质的变化，都会经由行为维度的变化被检出（能力来源无关性的故事版见第 2 幕收尾）。
 
-**表结构**：四维指纹以 JSON 形态存于 `invocations.fingerprint` / `candidate_fingerprint` / `invocation_template_versions.fingerprint`（`JsonMapper` 序列化，LinkedHashMap 保序）；存档指纹只作展示与审计，**任何对比一律现场重提**，不消费存档值。
+**表结构**：四维指纹以 JSON 形态存于 `invocations.fingerprint` / `candidate_fingerprint` / `invocation_template_versions.fingerprint`（`JsonMapper` 序列化，LinkedHashMap 保序）；存档指纹是**批准真相的定格投影**——本地链对照两侧现场重提，CI 基线对照（`replay --ci`）以画像活跃指纹为基线侧（候选侧仍恒现场重提），跨口径可比性由语义版本守卫强制、不可比即拒判。
 
 **生命周期与并发契约**：提取是纯函数；规则配置进程内加载一次，运行期不变——指纹的确定性依赖「同一规则文件 + 同一提取代码」。
 
@@ -759,7 +761,7 @@ recorded（到达即计数） = written（批量写成功）
   - 请求体手拼（转义统一走 `RecursiveJsonParser.escape`）：消息序列 system → previousTurns → user（多模态时 content 是原样注入的 JSON 数组）；**tool 消息前若缺「assistant 发起调用」帧则按已知 id/toolName 合成最小合法帧**（历史录制没有该轮的独立载体，arguments 以空对象占位）；缺失 callId 的 tool 帧跳过该轮并告警（保住其余用例）；`temperature` 为 null/非 finite 时不携带该成员（推理模型方言：发送 0.0 会被 400 拒绝）；`extraBodyFields` 作为顶层成员原样追加（DeepSeek 思考态等方言逃生舱）。
   - 响应解析统一走 `RecursiveJsonParser` 导航（choices[0].message.content / tool_calls / usage 子树 / 顶层 model / finish_reason）；usage 子树原文逐字存 `usageRaw`；缓存 token 取 `prompt_tokens_details.cached_tokens`、思考 token 取 `completion_tokens_details.reasoning_tokens`（**input_tokens 语义钉死为总处理输入 token**）；`finish_reason` 归一为枚举词表 stop/tool_calls/max_tokens/content_filter/other。
   - `ProviderDialects`（数据注册表，资源文件 `provider-dialects.json`）：规则 = `matchModelPrefix` + `dropParams`，当前仅收录「发送即报错」的方言（o1/o3/o4/gpt-5 → drop temperature）；命中时显式配置的参数被裁掉并**一次性 WARN**（点名 extraBody 逃生舱，防静默丢配置的排障黑洞）；快照损坏等同缺席，退化不中断。
-- `TaskReplayRunner`（cli，统一重放引擎）——bare 命令即全项目完整默认能力，三层判定模型：**身份检测**（DriftDetector 全库只读巡检画像模板身份 vs 最新记录，检测报告全项目零调用）→ **真实对齐**（逐任务最新链 vs 次新链按调用点对齐，零调用，退出码载体）→ **受控重驱**（`--re-drive` 显式开启：逐漂移点以该点最新归档模板重驱录制输入，预算池合计封顶，`--full-chain` 扩为缩域内全部记录）。漂移处置状态机把每个漂移点收敛到三出口之一：对齐 PASS → 开发态自动收编（`--ci` 不落治理写、附警告）；CHANGED → 现场重提指纹落候选等人工裁决；证据缺口（缺步骤/新增/规则违规/无可对齐证据）→ 挂起。守卫五项在引擎入口：判定语义版本、`--ci` 未建档拒绝、换模型告警（含默认模型盲区）、全败按基础设施故障出 2（重驱层）、served 模型就地标注。**本块是地图不是规格**——编排细节、退出码复合与行为矩阵以 `guide/spec/replay.md` 为基准（该 spec 以落地代码成文）。
+- `TaskReplayRunner`（cli，统一重放引擎）——bare 命令即全项目完整默认能力，三层判定模型：**身份检测**（DriftDetector 全库只读巡检画像模板身份 vs 最新记录，检测报告全项目零调用）→ **真实对齐**（本地模式逐任务最新链 vs 次新链按调用点对齐；`--ci` 模式改为基线对照——最新链逐记录对照其调用点画像活跃指纹，单链任务同判，零调用，退出码载体）→ **受控重驱**（`--re-drive` 显式开启：逐漂移点以该点最新归档模板重驱录制输入，预算池合计封顶，`--full-chain` 扩为缩域内全部记录）。漂移处置状态机把每个漂移点收敛到三出口之一：对齐 PASS → 开发态自动收编（`--ci` 不收编漂移身份、附警告——CHANGED 候选照落，除候选登记外流水线无治理写）；CHANGED → 现场重提指纹落候选等人工裁决；证据缺口（缺步骤/新增/规则违规/无可对齐证据）→ 挂起。守卫五项在引擎入口：判定语义版本、`--ci` 未建档拒绝、换模型告警（含默认模型盲区）、全败按基础设施故障出 2（重驱层）、served 模型就地标注。**本块是地图不是规格**——编排细节、退出码复合与行为矩阵以 `guide/spec/replay.md` 为基准（该 spec 以落地代码成文）。
   - **输出通道契约**（全命令统一）：`--json` 模式 stdout 只产报告本体（replay 为 `agentassert4j.task-report/1`，逐行分段：drift-detection / task-align / drift-disposition / task-re-drive / task-dry-run），进度静默、诊断走 stderr；失败的运行以 `agentassert4j.error/1` 包络收尾 stdout（错误码四族 E-USAGE/E-NO-DATA/E-GUARD/E-ENV + hints + nextAction），人读失败路径 stdout 零产出；配置披露与告警改走 stderr。报告 schema 总表见 `guide/spec/cli.md`。
 - `CostEstimator`（core）：价格真源是随 jar 分发的精选快照 `model_prices.json`（LiteLLM MIT 库裁剪，发布前再生成；`_meta` 前缀键是元信息非价格行），查找 = 精确命中后按最长包含匹配归入模型族。两个入口同一张表：`estimate`（执行前预估文案，固定 1000 输入/500 输出口径；**模型无价格时只报调用次数、不编造货币数**）与 `estimateCallCostUsd`（捕获时刻按实际 token 计价，查不到返回 null）；快照缺席/损坏等同无价格表；快照外的模型族经 `agentassert4j-prices.json` 覆盖文件补充（并集覆盖，同族改价/新族补充），价格表随进程首次使用加载一次、改价需重启。
 
@@ -817,7 +819,7 @@ recorded（到达即计数） = written（批量写成功）
 完整 invocationKey（版本即身份，跨版本不配对）。
   - `align(baselineSteps, newChain, comparator, rules)`：基线侧改由调用方给定 `Map<invocationKey, List<BaselineStep>>`（指纹步骤）——交付验收（第 12 章）用同一对齐核消费包内指纹，不做第二台差分引擎。
   - `prefixDependent` 标注：链内任一记录 `turnIndex>0` 或 `previousTurns` 非空 = 该链携带会话前缀 → 报告提示「真实再执行对照必须重演到该问为止的整个会话前缀，否则差异源于上下文缺失而非回归」（防误报，不阻断）。
-- `TaskReplayRunner`（cli，统一重放引擎）——三层流程与漂移处置状态机的编排细节、缩域复合语义、退出码复合与 task-report/1 报告契约**以 `guide/spec/replay.md` 为基准**（本块只留叙事骨架）。仍值得知道的实现事实：对齐仍逐任务取「最新链 vs 次新链」，每对两侧指纹现场重提（不消费任何存档值）；CHANGED 步就地现场重提指纹落候选（重放与裁决通常不在同一进程，候选必须落库）；对齐报告附成本对照行（token 合计恒显，无价记录使货币项整项省略）；`--re-drive` 的模板取「该点最新归档全文」而非记录自身哈希——语义是「用各点自己的新模板对录制输入复核」。
+- `TaskReplayRunner`（cli，统一重放引擎）——三层流程与漂移处置状态机的编排细节、缩域复合语义、退出码复合与 task-report/1 报告契约**以 `guide/spec/replay.md` 为基准**（本块只留叙事骨架）。仍值得知道的实现事实：本地模式对齐逐任务取「最新链 vs 次新链」（两侧指纹现场重提）；`--ci` 基线对照经 `BaselineSides.fromProfiles` 取画像活跃指纹为基线侧（候选侧恒现场重提，每执行一份步骤消灭 surplus 盲区，accept 后同证据即转绿）；CHANGED 步就地现场重提指纹落候选（重放与裁决通常不在同一进程，候选必须落库）；对齐报告附成本对照行（token 合计恒显，无价记录使货币项整项省略）；`--re-drive` 的模板取「该点最新归档全文」而非记录自身哈希——语义是「用各点自己的新模板对录制输入复核」。
 
 **表结构**：无新表、无新列——任务键声明住在 `interactions.metadata` JSON（吸收层），链是读侧派生。
 

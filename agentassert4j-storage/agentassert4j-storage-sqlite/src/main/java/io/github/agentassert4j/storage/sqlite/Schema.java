@@ -128,6 +128,20 @@ final class Schema {
 
             "CREATE INDEX IF NOT EXISTS idx_archived_invocation ON invocation_template_versions(invocation_key)",
 
+            // 治理动作事件表（只追加时间线；reject/rollback 等无状态痕迹动作的唯一审计载体）
+            "CREATE TABLE IF NOT EXISTS governance_events (" +
+                    "  id             INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "  happened_at    INTEGER NOT NULL," +
+                    "  actor          TEXT," +
+                    "  verb           TEXT NOT NULL," +
+                    "  invocation_key TEXT NOT NULL," +
+                    "  version_tag    TEXT," +
+                    "  code_ref       TEXT," +
+                    "  note           TEXT" +
+                    ")",
+
+            "CREATE INDEX IF NOT EXISTS idx_governance_events_time ON governance_events(happened_at)",
+
     };
 
     private Schema() {

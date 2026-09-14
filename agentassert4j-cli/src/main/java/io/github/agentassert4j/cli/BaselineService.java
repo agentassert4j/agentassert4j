@@ -13,6 +13,7 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 基线建立服务 — baseline 命令与 replay 前置步骤共用的落基线逻辑。
@@ -35,27 +36,28 @@ public class BaselineService {
     /**
      * 为已录制且尚无基线的分组建立基线。
      *
-     * @param out              报告输出流
-     * @param actor            操作者身份（审批留痕）
-     * @param codeRef          代码锚（申报制：随基线留痕，空缺合法）
-     * @param force            以当前判定语义重建基线：已有基线也被当前算法新指纹覆盖
-     *                         （判定语义版本升级后的恢复路径），版本标签按归档占用顺延
-     * @param invocationFilter 仅处理该业务 invocationId 或分组键前缀（null = 全部；调用方经
-     *                         CliSupport 预解析，invocationKey 前缀已在解析层换算成业务标签）
-     * @param rules            规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
-     * @param outcomes         逐调用点结果收集（null = 不收集；人类结果行已就地打印，
-     *                         明细供 --json 报告组装）
-     * @param expectedVersion  乐观并发守卫的期望活跃版本标签，null = 不设守卫
+     * @param out             报告输出流
+     * @param actor           操作者身份（审批留痕）
+     * @param codeRef         代码锚（申报制：随基线留痕，空缺合法）
+     * @param force           以当前判定语义重建基线：已有基线也被当前算法新指纹覆盖
+     *                        （判定语义版本升级后的恢复路径），版本标签按归档占用顺延
+     * @param invocationKeys  仅处理这些调用点键（null = 全部；由 CliSupport 统一解析阶梯
+     *                        产出——标签扇出/显示短形/唯一前缀在解析层收敛为键集合，
+     *                        匹配职责不残留本层）
+     * @param rules           规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
+     * @param outcomes        逐调用点结果收集（null = 不收集；人类结果行已就地打印，
+     *                        明细供 --json 报告组装）
+     * @param expectedVersion 乐观并发守卫的期望活跃版本标签，null = 不设守卫
      * @return 本次新建/重建基线的分组数
      */
-    public int establishMissing(PrintStream out, String actor, String codeRef, boolean force, String invocationFilter, InvocationRulesConfig rules, List<BaselineOutcome> outcomes, String expectedVersion) {
+    public int establishMissing(PrintStream out, String actor, String codeRef, boolean force, Set<String> invocationKeys, InvocationRulesConfig rules, List<BaselineOutcome> outcomes, String expectedVersion) {
         BaselineManager manager = new BaselineManager(repository);
         int established = 0;
 
         for (Map.Entry<String, List<InteractionRecord>> bucket : CliSupport.invocationBuckets(repository).entrySet()) {
             String invocationKey = bucket.getKey();
             List<InteractionRecord> records = bucket.getValue();
-            if (invocationFilter != null && !bucketCoversFilter(records, invocationKey, invocationFilter)) {
+            if (invocationKeys != null && !invocationKeys.contains(invocationKey)) {
                 continue;
             }
 
@@ -150,18 +152,6 @@ public class BaselineService {
                 out.println("    - " + violation);
             }
         }
-    }
-
-    /**
-     * 桶是否覆盖过滤值：桶内任一记录的业务标签精确等于过滤值，或分组键以其为前缀。
-     */
-    private static boolean bucketCoversFilter(List<InteractionRecord> records, String invocationKey, String filter) {
-        for (InteractionRecord record : records) {
-            if (filter.equals(record.getInvocationId())) {
-                return true;
-            }
-        }
-        return invocationKey.startsWith(filter);
     }
 
     /**

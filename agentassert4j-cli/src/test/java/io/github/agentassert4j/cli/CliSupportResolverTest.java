@@ -2,7 +2,6 @@ package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +13,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -121,23 +123,57 @@ class CliSupportResolverTest {
     }
 
     @Test
-    @DisplayName("选例过滤器：唯一前缀换算回业务标签")
-    void businessFilter_prefixMapsToLabel() {
+    @DisplayName("选例过滤器：唯一前缀解析到键并提示")
+    void businessFilter_prefixMapsToKey() {
         saveRecord("r1", "queryOrder", "hash-a");
         establishAll();
 
-        String resolved = CliSupport.resolveInvocationFilter(repository, "invocation:queryOrder", new PrintStream(output));
+        List<String> resolved = CliSupport.resolveInvocationKeys(repository, "invocation:queryOrder", true, new PrintStream(output));
 
-        assertEquals("queryOrder", resolved);
-        assertTrue(output.toString().contains("business label queryOrder"));
+        assertEquals(Collections.singletonList("invocation:queryOrder:hash-a"), resolved);
+        assertTrue(output.toString().contains("matched invocationKey prefix"));
     }
 
     @Test
-    @DisplayName("选例过滤器：业务标签精确命中按原义使用")
-    void businessFilter_exactLabelPassthrough() {
+    @DisplayName("选例过滤器：业务标签解析到其全部键（扇出）")
+    void businessFilter_labelFansOutAllKeys() {
         saveRecord("r1", "queryOrder", "hash-a");
+        saveRecord("r2", "queryOrder", "hash-b");
 
-        assertEquals("queryOrder", CliSupport.resolveInvocationFilter(repository, "queryOrder", new PrintStream(output)));
+        List<String> resolved = CliSupport.resolveInvocationKeys(repository, "queryOrder", true, new PrintStream(output));
+
+        assertEquals(Arrays.asList("invocation:queryOrder:hash-a", "invocation:queryOrder:hash-b"), resolved);
+    }
+
+    @Test
+    @DisplayName("阶梯等价钉：同输入两族解析出同一键集合（多键策略是唯一差异）")
+    void ladder_singularPlural_sameKeySet() {
+        saveRecord("r1", "queryOrder", "hash-a");
+        saveRecord("r2", "hexCase", "abcdef12");
+
+        assertEquals(
+                CliSupport.resolveInvocationKeys(repository, "invocation:queryOrder:hash-a", true, null),
+                CliSupport.resolveInvocationKeys(repository, "invocation:queryOrder:hash-a", false, null));
+        assertEquals(
+                CliSupport.resolveInvocationKeys(repository, "queryOrder", true, null),
+                CliSupport.resolveInvocationKeys(repository, "queryOrder", false, null));
+        assertEquals(
+                CliSupport.resolveInvocationKeys(repository, "hexCase@abcdef12", true, null),
+                CliSupport.resolveInvocationKeys(repository, "hexCase@abcdef12", false, null));
+    }
+
+    @Test
+    @DisplayName("阶梯键空间钉：未建档已录键可解析（显示短形/唯一前缀/目标族）")
+    void ladder_resolvesUnestablishedRecordedKeys() {
+        saveRecord("r1", "queryOrder", "abcdef1234567890");
+        // 不 establishAll——键已录而无画像
+
+        assertEquals(Collections.singletonList("invocation:queryOrder:abcdef1234567890"),
+                CliSupport.resolveInvocationKeys(repository, "queryOrder@abcdef12", true, null));
+        assertEquals(Collections.singletonList("invocation:queryOrder:abcdef1234567890"),
+                CliSupport.resolveInvocationKeys(repository, "invocation:queryOrder:abcdef12", false, null));
+        assertEquals("invocation:queryOrder:abcdef1234567890",
+                CliSupport.resolveInvocationKeyTarget(repository, "queryOrder@abcdef12"));
     }
 
     @Test
@@ -187,34 +223,51 @@ class CliSupportResolverTest {
     @Test
     @DisplayName("骨架/模板短形（skl@/tpl@）同样可选")
     void displayForm_skeletonAndTemplateForms() {
-        // 零声明键不会经 baseline 入画像（按业务标签桶遍历），直落画像验证短形匹配契约本身
-        InvocationProfile profile = new InvocationProfile();
-        profile.setInvocationKey("skeleton:0123456789abcdef");
-        profile.setInvocationName("skeleton:0123456789abcdef");
-        repository.saveInvocationProfile(profile);
+        // 阶梯键空间=已录键全集：零声明骨架键以记录形态入场（画像皆由记录建档）
+        saveKeyedRecord("r1", "skeleton:0123456789abcdef");
 
         assertEquals("skeleton:0123456789abcdef", CliSupport.resolveInvocationKeyTarget(repository, "skl@01234567"));
     }
 
-    @Test
-    @DisplayName("选例过滤器：显示短形换算回业务标签并提示")
-    void businessFilter_displayFormMapsToLabel() {
-        saveRecord("r1", "queryOrder", "abcdef1234567890");
-        establishAll();
-
-        String resolved = CliSupport.resolveInvocationFilter(repository, "queryOrder@abcdef12", new PrintStream(output));
-
-        assertEquals("queryOrder", resolved);
-        assertTrue(output.toString().contains("display form"), output.toString());
-        assertTrue(output.toString().contains("business label queryOrder"));
+    /**
+     * 零声明形态的记录（存储键直写，invocationId 落空串）。
+     */
+    private void saveKeyedRecord(String recordId, String invocationKey) {
+        InteractionRecord r = new InteractionRecord();
+        r.setRecordId(recordId);
+        r.setSessionId("session-skl");
+        r.setTimestamp(1000L);
+        r.setSeq(1L);
+        r.setInvocationKey(invocationKey);
+        r.setTemplateHash("tpl-hash");
+        r.setUserInput("查订单");
+        r.setTurnIndex(0);
+        r.setModelResponse("答");
+        r.setToolCalls(new ArrayList<>());
+        r.setHasToolCalls(false);
+        repository.saveInteractionIfAbsent(r);
     }
 
     @Test
-    @DisplayName("选例过滤器：显示短形未命中画像时按原样返回由调用方兜底")
-    void businessFilter_displayFormMissPassthrough() {
+    @DisplayName("选例过滤器：显示短形直返键并提示（不做键→标签往返）")
+    void businessFilter_displayFormMapsToKey() {
+        saveRecord("r1", "queryOrder", "abcdef1234567890");
+        establishAll();
+
+        List<String> resolved = CliSupport.resolveInvocationKeys(repository, "queryOrder@abcdef12", true, new PrintStream(output));
+
+        assertEquals(Collections.singletonList("invocation:queryOrder:abcdef1234567890"), resolved);
+        assertTrue(output.toString().contains("display form"), output.toString());
+    }
+
+    @Test
+    @DisplayName("选例过滤器：显示短形未命中 → E-NO-DATA 响亮报错（静默裸返回已消灭）")
+    void businessFilter_displayFormMiss_loudZeroHit() {
         saveRecord("r1", "queryOrder", "abcdef1234567890");
 
-        assertEquals("queryOrder@zzzzzz", CliSupport.resolveInvocationFilter(repository, "queryOrder@zzzzzz", new PrintStream(output)));
+        CliFailureException e = assertThrows(CliFailureException.class, () -> CliSupport.resolveInvocationKeys(repository, "queryOrder@zzzzzz", true, new PrintStream(output)));
+        assertEquals(CliErrorCode.E_NO_DATA, e.errorCode);
+        assertTrue(e.getMessage().contains("No invocation matching"));
     }
 
     @Test

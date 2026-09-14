@@ -10,7 +10,6 @@ import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.InvocationRulesConfig.InvocationRule;
 import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.model.LlmWireProtocol;
 import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.result.ComparisonResult;
@@ -253,122 +252,102 @@ final class CliSupport {
     }
 
     /**
-     * 解析 --invocation 过滤值（选例类命令用：replay/baseline）。与某业务 invocationId
-     * 精确相等时按原义使用；否则按显示短形或 invocationKey 唯一前缀定位调用点并换算回
-     * 业务标签（画像上的 invocationId 是分组器派生的内部标识，与记录上的业务标签是两套
-     * 体系）。完全无命中时原样返回，由调用方的「未找到用例」路径兜底。
+     * 统一调用点解析阶梯——「把 --invocation 值解析成调用点键集合」的单源实现，
+     * target 族（accept/reject/rollback/replay 的目标语义）与 filter 族（establish/
+     * status 的缩域语义）共享同一阶梯，仅多键策略不同。
      *
-     * @return 业务 invocationId 过滤值（null 语义由调用方维持）
+     * <p>阶梯（高档短路低档）：① 完整 invocationKey 精确命中（即使它是他键前缀）；
+     * ② 业务标签 → 该标签下全部键（plural 允许多键扇出；singular 多键报错列候选）；
+     * ③ 显示短形 → 直返键（不做键→标签往返——裂键下首记录几乎总在最老键上，往返
+     * 是有损投影）；④ invocationKey 唯一前缀（多命中报错列候选）；⑤ 零命中 →
+     * E-NO-DATA 响亮报错并列全部合法写法（不静默裸返回）。</p>
+     *
+     * <p>键空间 = 已录键全集（{@link #recordedInvocationFootprints}）——画像皆由记录
+     * 建档且记录只追加，已录键是画像键的实践超集；未建档裂键同样可解析（W11.9a 的
+     * 根因修复），target 族消费方的画像存在性由各自既有守卫承接。</p>
+     *
+     * @param filter 原始 --invocation 值（null/空 = 不缩域，返回 null）
+     * @param plural true = filter 族策略（标签扇出全部键）；false = target 族（多键报错）
+     * @param notice 换算提示行输出通道（null = 静默；--json 模式应传 err 保 stdout 纯净）
+     * @return 解析出的键集合（恒非空、按解析序）
      */
-    static String resolveInvocationFilter(StorageRepository repository, String filter, PrintStream out) {
+    static List<String> resolveInvocationKeys(StorageRepository repository, String filter, boolean plural, PrintStream notice) {
         if (filter == null || filter.isEmpty()) {
             return null;
         }
-        Set<String> businessIds = recordedInvocationIds(repository);
-        if (businessIds.contains(filter)) {
-            return filter;
+        List<String> recordedKeys = recordedInvocationKeys(repository);
+        if (recordedKeys.contains(filter)) {
+            return new ArrayList<>(Collections.singletonList(filter));
+        }
+        if (recordedInvocationIds(repository).contains(filter)) {
+            Set<String> labelKeys = new LinkedHashSet<>();
+            for (InteractionRecord record : repository.findByInvocationId(filter)) {
+                String invocationKey = invocationKeyOfRecord(record);
+                if (invocationKey != null) {
+                    labelKeys.add(invocationKey);
+                }
+            }
+            if (!labelKeys.isEmpty()) {
+                if (labelKeys.size() > 1 && !plural) {
+                    throw new CliFailureException(CliErrorCode.E_USAGE, "Business label " + filter + " covers multiple invocations: " + String.join(", ", labelKeys) + "; specify one with an invocationKey (unique prefix or the status display form).", "Pick one invocationKey (unique prefix or the status display form) from the listed candidates.", "");
+                }
+                return new ArrayList<>(labelKeys);
+            }
         }
         String displayMatch = resolveByDisplayForm(repository, filter);
         if (displayMatch != null) {
-            List<String> labelMatches = businessLabelsForKey(repository, displayMatch);
-            if (labelMatches.size() == 1) {
-                out.println("Note: --invocation " + filter + " matched display form " + displayMatch + " (business label " + labelMatches.get(0) + ")");
-                return labelMatches.get(0);
+            if (notice != null) {
+                notice.println("Note: --invocation " + filter + " matched display form " + displayMatch);
             }
-            if (labelMatches.size() > 1) {
-                throw new CliFailureException(CliErrorCode.E_USAGE, "--invocation " + filter + " maps to multiple business labels: " + String.join(", ", labelMatches) + "; use the exact business label.", "Use the exact business label as recorded; `status` lists the label column.", "");
-            }
+            return new ArrayList<>(Collections.singletonList(displayMatch));
         }
-        List<InvocationProfile> prefixMatches = new ArrayList<>();
-        for (InvocationProfile profile : repository.findAllInvocations()) {
-            if (profile.getInvocationKey() != null && profile.getInvocationKey().startsWith(filter)) {
-                prefixMatches.add(profile);
+        List<String> prefixMatches = new ArrayList<>();
+        for (String key : recordedKeys) {
+            if (key.startsWith(filter)) {
+                prefixMatches.add(key);
             }
         }
         if (prefixMatches.size() > 1) {
-            List<String> keys = new ArrayList<>();
-            for (InvocationProfile profile : prefixMatches) {
-                keys.add(profile.getInvocationKey());
+            throw new CliFailureException(CliErrorCode.E_USAGE, "Prefix matches multiple invocations: " + String.join(", ", prefixMatches) + "; provide a longer prefix.", "Provide a longer --invocation prefix so exactly one invocation matches.", "");
+        }
+        if (prefixMatches.size() == 1) {
+            if (notice != null) {
+                notice.println("Note: --invocation " + filter + " matched invocationKey prefix " + prefixMatches.get(0));
             }
-            throw new CliFailureException(CliErrorCode.E_USAGE, "--invocation " + filter + " prefix matches multiple invocations: " + String.join(", ", keys) + "; provide a longer prefix.", "Provide a longer --invocation prefix so exactly one invocation matches.", "");
+            return prefixMatches;
         }
-        if (prefixMatches.isEmpty()) {
-            return filter;
-        }
-        String targetInvocationKey = prefixMatches.get(0).getInvocationKey();
-        List<String> businessMatches = businessLabelsForKey(repository, targetInvocationKey);
-        if (businessMatches.size() == 1) {
-            out.println("Note: --invocation " + filter + " matched invocationKey prefix " + targetInvocationKey + " (business label " + businessMatches.get(0) + ")");
-            return businessMatches.get(0);
-        }
-        if (businessMatches.size() > 1) {
-            throw new CliFailureException(CliErrorCode.E_USAGE, "--invocation " + filter + " maps to multiple business labels: " + String.join(", ", businessMatches) + "; use the exact business label.", "Use the exact business label as recorded; `status` lists the label column.", "");
-        }
-        return filter;
+        throw new CliFailureException(CliErrorCode.E_NO_DATA, "No invocation matching " + filter + " (accepted: business label, invocationKey prefix, or the status display form like label@8hex; see `status` for the full list).", "Check the value against `status` output, then retry.", "agentassert4j status");
     }
 
     /**
-     * 解析 --invocation 目标值（画像操作类命令用：accept/reject/rollback），返回唯一 invocationKey。
-     * 解析优先级：完整 invocationKey 精确命中（即使它是其他 key 的前缀）＞ 业务标签（该标签
-     * 覆盖多个分组时报错并列出）＞ 显示短形（status 展示的 标签@8位/skl@8位 等，看得到的写法
-     * 选得到）＞ invocationKey 唯一前缀。无命中抛 E-NO-DATA、多命中抛 E-USAGE 的
-     * {@link CliFailureException}，由命令层转译为退出码 2 与机器包络。
+     * 解析 --invocation 目标值（画像操作类命令用：accept/reject/rollback/replay），返回唯一
+     * invocationKey——统一阶梯的 singular 策略。多命中抛 E-USAGE、零命中抛 E-NO-DATA 的
+     * {@link CliFailureException}，由命令层转译为退出码 2 与机器包络；解析出的键无画像时由
+     * 调用方的画像存在性守卫承接（已录未建档键可解析）。
      */
     static String resolveInvocationKeyTarget(StorageRepository repository, String filter) {
         if (filter == null || filter.isEmpty()) {
             throw new CliFailureException(CliErrorCode.E_USAGE, "Missing invocation target.", "Pass --invocation with a business label, invocationKey prefix, or the status display form.", "");
         }
-        for (InvocationProfile profile : repository.findAllInvocations()) {
-            if (filter.equals(profile.getInvocationKey())) {
-                return filter;
-            }
-        }
-        Set<String> businessIds = recordedInvocationIds(repository);
-        if (businessIds.contains(filter)) {
-            Set<String> invocationKeys = new LinkedHashSet<>();
-            for (InteractionRecord record : repository.findByInvocationId(filter)) {
-                String invocationKey = invocationKeyOfRecord(record);
-                if (invocationKey != null) {
-                    invocationKeys.add(invocationKey);
-                }
-            }
-            if (invocationKeys.isEmpty()) {
-                throw new CliFailureException(CliErrorCode.E_NO_DATA, "No groupable records under business label " + filter + "; cannot resolve the invocation.", "Record interactions carrying this invocationId first, then retry.", "");
-            }
-            if (invocationKeys.size() > 1) {
-                throw new CliFailureException(CliErrorCode.E_USAGE, "Business label " + filter + " covers multiple invocations: " + String.join(", ", invocationKeys) + "; specify one with an invocationKey (unique prefix or the status display form).", "Pick one invocationKey (unique prefix or the status display form) from the listed candidates.", "");
-            }
-            return invocationKeys.iterator().next();
-        }
-        String displayMatch = resolveByDisplayForm(repository, filter);
-        if (displayMatch != null) {
-            return displayMatch;
-        }
-        List<InvocationProfile> prefixMatches = new ArrayList<>();
-        for (InvocationProfile profile : repository.findAllInvocations()) {
-            if (profile.getInvocationKey() != null && profile.getInvocationKey().startsWith(filter)) {
-                prefixMatches.add(profile);
-            }
-        }
-        if (prefixMatches.isEmpty()) {
-            throw new CliFailureException(CliErrorCode.E_NO_DATA, "No invocation matching " + filter + " (accepted: business label, invocationKey prefix, or the status display form like label@8hex; see `status` for the full list).", "Check the value against `status` output, then retry.", "agentassert4j status");
-        }
-        if (prefixMatches.size() > 1) {
-            List<String> keys = new ArrayList<>();
-            for (InvocationProfile profile : prefixMatches) {
-                keys.add(profile.getInvocationKey());
-            }
-            throw new CliFailureException(CliErrorCode.E_USAGE, "Prefix matches multiple invocations: " + String.join(", ", keys) + "; provide a longer prefix.", "Provide a longer --invocation prefix so exactly one invocation matches.", "");
-        }
-        return prefixMatches.get(0).getInvocationKey();
+        return resolveInvocationKeys(repository, filter, false, null).get(0);
+    }
+
+    /**
+     * 已录键全集（键字典序）——统一解析阶梯的扫描空间。与建档分桶
+     * （{@link #invocationBuckets}）同键同源：存储键缺失时按解析器现算，
+     * 解析出的键与 establish/status 的目标桶逐字一致。
+     */
+    private static List<String> recordedInvocationKeys(StorageRepository repository) {
+        return new ArrayList<>(invocationBuckets(repository).keySet());
     }
 
     /**
      * 显示短形反解——status/对齐报告展示的「标签@8位哈希」「skl@8位」等短形可直接
-     * 粘贴为 --invocation 值，消除「看得到的写法选不了」的文法分叉。匹配方式：对画像键
-     * 现算显示形后全等比对（哈希段大小写不敏感）；末段不是 8 位十六进制的值不视为显示
-     * 短形，返回 null 由调用方走原解析路径。多命中（细分哈希前 8 位撞车）抛 E-USAGE 的
-     * {@link CliFailureException} 由命令层转译为退出码 2 与机器包络。
+     * 粘贴为 --invocation 值，消除「看得到的写法选不了」的文法分叉。匹配方式：对已录键
+     * 现算显示形后全等比对（哈希段大小写不敏感）——已录键全集含未建档裂键，短形对
+     * 未建档键同样可选；末段不是 8 位十六进制的值不视为显示短形，返回 null 由调用方走
+     * 原解析路径。多命中（细分哈希前 8 位撞车）抛 E-USAGE 的 {@link CliFailureException}
+     * 由命令层转译为退出码 2 与机器包络。
      */
     static String resolveByDisplayForm(StorageRepository repository, String filter) {
         int at = filter == null ? -1 : filter.lastIndexOf('@');
@@ -384,40 +363,20 @@ final class CliSupport {
             }
         }
         String prefix = filter.substring(0, at + 1);
-        List<InvocationProfile> matches = new ArrayList<>();
-        for (InvocationProfile profile : repository.findAllInvocations()) {
-            String shown = displayKey(profile.getInvocationKey());
+        List<String> matches = new ArrayList<>();
+        for (String key : recordedInvocationKeys(repository)) {
+            String shown = displayKey(key);
             if (shown != null && shown.length() == filter.length() && shown.startsWith(prefix) && shown.regionMatches(true, at + 1, hash, 0, 8)) {
-                matches.add(profile);
+                matches.add(key);
             }
         }
         if (matches.isEmpty()) {
             return null;
         }
         if (matches.size() > 1) {
-            List<String> keys = new ArrayList<>();
-            for (InvocationProfile profile : matches) {
-                keys.add(profile.getInvocationKey());
-            }
-            throw new CliFailureException(CliErrorCode.E_USAGE, "Display form " + filter + " matches multiple invocations (subdivision hash collision in the first 8 hex chars): " + String.join(", ", keys) + "; provide the full invocationKey.", "Provide the full invocationKey to disambiguate the hash collision.", "");
+            throw new CliFailureException(CliErrorCode.E_USAGE, "Display form " + filter + " matches multiple invocations (subdivision hash collision in the first 8 hex chars): " + String.join(", ", matches) + "; provide the full invocationKey.", "Provide the full invocationKey to disambiguate the hash collision.", "");
         }
-        return matches.get(0).getInvocationKey();
-    }
-
-    /**
-     * 调用点键 → 业务标签反查：恰一个业务标签的首记录落在此键上时返回单元素列表，
-     * 零个或多个返回原样由调用方处置。键前缀与显示短形两条解析路径共用同一实现，
-     * 两侧语义不得分叉。
-     */
-    private static List<String> businessLabelsForKey(StorageRepository repository, String invocationKey) {
-        List<String> matches = new ArrayList<>();
-        for (String invocationId : recordedInvocationIds(repository)) {
-            List<InteractionRecord> records = repository.findByInvocationId(invocationId);
-            if (!records.isEmpty() && invocationKey.equals(invocationKeyOfRecord(records.get(0)))) {
-                matches.add(invocationId);
-            }
-        }
-        return matches;
+        return matches.get(0);
     }
 
     /**

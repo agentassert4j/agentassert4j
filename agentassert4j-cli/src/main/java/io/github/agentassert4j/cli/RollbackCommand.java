@@ -43,6 +43,9 @@ public class RollbackCommand implements Callable<Integer> {
     @Option(names = {"--version"}, required = true, description = "Target archived version tag (see the archived column in `status`)")
     String version;
 
+    @Option(names = {"--approver"}, description = "Rollback executor identity recorded in the governance event trail (defaults to the current OS user; agents use agent:<name>)")
+    String approver;
+
     @Option(names = {"--json"}, description = "Print a single-line JSON report to stdout")
     boolean jsonOutput;
 
@@ -58,7 +61,8 @@ public class RollbackCommand implements Callable<Integer> {
                 throw new IllegalStateException("Invocation " + invocationKey + " has no baseline profile.");
             }
             ensureVersionExists(repository, invocationKey, version);
-            new BaselineManager(repository).rollback(invocationKey, version, expectedVersion);
+            String actor = approver != null && !approver.trim().isEmpty() ? approver.trim() : CliSupport.currentActor();
+            new BaselineManager(repository).rollback(invocationKey, version, expectedVersion, actor);
             InvocationProfile reloaded = repository.findInvocationByKey(invocationKey);
             if (jsonOutput) {
                 out.println("{\"schema\":\"" + ReportSchemas.ROLLBACK + "\",\"invocationKey\":\"" + RecursiveJsonParser.escape(invocationKey) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(version) + "\",\"status\":\"" + reloaded.getBaselineStatus() + "\",\"approvedBy\":\"" + RecursiveJsonParser.escape(reloaded.getApprovedBy() != null ? reloaded.getApprovedBy() : "") + "\",\"codeRef\":\"" + RecursiveJsonParser.escape(reloaded.getCodeRef() != null ? reloaded.getCodeRef() : "") + "\",\"ok\":true}");

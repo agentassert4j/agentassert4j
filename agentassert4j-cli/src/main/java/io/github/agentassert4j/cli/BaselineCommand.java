@@ -3,6 +3,7 @@ package io.github.agentassert4j.cli;
 import io.github.agentassert4j.algorithm.VersionMismatchException;
 import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.InvocationRulesConfig;
+import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import picocli.CommandLine.Command;
@@ -10,6 +11,7 @@ import picocli.CommandLine.Option;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.Callable;
 
@@ -30,7 +32,7 @@ public class BaselineCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--invocation"}, description = "Only this invocation: business invocationId or a unique invocationKey prefix (defaults to all)")
+    @Option(names = {"--invocation"}, description = "Target invocations: business label (fans out to all its buckets, listed before writing), invocationKey or its unique prefix, or the status display form (defaults to all)")
     String invocation;
 
     @Option(names = {"--approver"}, description = "Operator identity recorded with the baseline approval (defaults to the current OS user)")
@@ -56,11 +58,15 @@ public class BaselineCommand implements Callable<Integer> {
             PrintStream notice = jsonOutput ? err : out;
             repository = CliSupport.openRepository(db, notice);
             String actor = approver != null && !approver.trim().isEmpty() ? approver.trim() : CliSupport.currentActor();
-            String resolvedInvocation = CliSupport.resolveInvocationFilter(repository, invocation, notice);
+            List<String> resolvedKeys = CliSupport.resolveInvocationKeys(repository, invocation, true, notice);
+            discloseFanOut(repository, resolvedKeys, notice);
             InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
             CliSupport.warnUnknownBehaviors(rules, notice);
             List<BaselineService.BaselineOutcome> outcomes = new ArrayList<>();
-            int established = new BaselineService(repository).establishMissing(jsonOutput ? CliSupport.discardStream() : out, actor, codeRef, force, resolvedInvocation, rules, outcomes, expectedVersion);
+            int established = new BaselineService(repository).establishMissing(jsonOutput ? CliSupport.discardStream() : out, actor, codeRef, force, resolvedKeys == null ? null : new LinkedHashSet<>(resolvedKeys), rules, outcomes, expectedVersion);
+            if (outcomes.isEmpty() && resolvedKeys != null) {
+                return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, "No recorded invocation bucket matches the resolved selection.", "Check the value against `status` output, then retry.", "agentassert4j status");
+            }
             if (jsonOutput) {
                 StringBuilder invocations = new StringBuilder();
                 for (BaselineService.BaselineOutcome outcome : outcomes) {
@@ -71,7 +77,7 @@ public class BaselineCommand implements Callable<Integer> {
                 }
                 out.println("{\"schema\":\"" + ReportSchemas.BASELINE_REPORT + "\",\"force\":" + force + ",\"established\":" + established + ",\"invocations\":[" + invocations + "]}");
             } else {
-                out.println(established > 0 ? "Done: " + CliSupport.plural(established, "invocation") + " " + (force ? "re-established" : "established") + "." : "Done: every invocation already has a baseline.");
+                out.println(established > 0 ? "Done: " + CliSupport.plural(established, "invocation") + " " + (force ? "re-established" : "established") + "." : "Done: every selected invocation already has a baseline.");
             }
             return 0;
         } catch (VersionMismatchException e) {
@@ -84,6 +90,22 @@ public class BaselineCommand implements Callable<Integer> {
             if (repository != null) {
                 repository.close();
             }
+        }
+    }
+
+    /**
+     * 多键扇出的写前披露：一个选择器覆盖多个调用点时，逐键列出目标与建档状态——
+     * 治理写动词的目标集必须在写入前可见（跨宿主共享库时防顺手为他键建档）。
+     */
+    private static void discloseFanOut(StorageRepository repository, List<String> resolvedKeys, PrintStream notice) {
+        if (resolvedKeys == null || resolvedKeys.size() < 2) {
+            return;
+        }
+        notice.println("Note: the selection covers " + CliSupport.plural(resolvedKeys.size(), "invocation") + ":");
+        for (String key : resolvedKeys) {
+            InvocationProfile profile = repository.findInvocationByKey(key);
+            String status = profile != null && profile.getFingerprint() != null ? "exists " + profile.getVersionTag() : "no baseline";
+            notice.println("  " + CliSupport.displayKey(key) + " (" + status + ")");
         }
     }
 }

@@ -74,7 +74,7 @@ final class McpRecordIngestion {
         }
         String protocolParam = nonBlankString(args, "protocol");
         if (protocolParam != null && LlmWireProtocol.fromWireName(protocolParam) == null) {
-            return envelopeOutcome(CliErrorCode.E_USAGE, "protocol '" + protocolParam + "' is not a known wire protocol.", "Valid values: " + LlmWireProtocol.legalWireNames() + ".", "");
+            return envelopeOutcome(CliErrorCode.E_USAGE, "protocol '" + protocolParam + "' is not a known wire protocol.", "Valid values: " + LlmWireProtocol.legalWireNames() + ".", "the `record` tool");
         }
         String metadataParam = nonBlankString(args, "metadata");
         Map<String, Object> metadata = null;
