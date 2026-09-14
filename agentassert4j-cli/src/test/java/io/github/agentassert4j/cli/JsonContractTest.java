@@ -199,6 +199,37 @@ class JsonContractTest {
         }
 
         @Test
+        @DisplayName("baseline --json --invocation：selection 段随报告出境（机器通道可见扇出）")
+        void baselineJson_selectionDisclosesFanOut() throws Exception {
+            seedOneRecord();
+            execute("baseline", "--db", dbPath);
+            InteractionRecord split = new InteractionRecord();
+            split.setRecordId("rec-split");
+            split.setSessionId("session-2");
+            split.setTimestamp(2000L);
+            split.setSeq(2L);
+            split.setInvocationId("queryOrder");
+            split.setTemplateHash("hash-new");
+            split.setInvocationKey("invocation:queryOrder:hash-new");
+            split.setUserInput("查订单");
+            split.setTurnIndex(0);
+            split.setModelResponse("{\"orderId\":\"ORD-002\"}");
+            split.setToolCalls(new ArrayList<>());
+            split.setHasToolCalls(false);
+            repository.saveInteractionIfAbsent(split);
+
+            int narrowed = execute("baseline", "--db", dbPath, "--invocation", "queryOrder", "--json");
+
+            assertEquals(0, narrowed);
+            String report = singleLineReport();
+            assertTrue(report.contains("\"selection\":{\"requested\":\"queryOrder\",\"matched\":2"), "机器面必须看到一次调用覆盖了几个键: " + report);
+
+            int all = execute("baseline", "--db", dbPath, "--json");
+            assertEquals(0, all);
+            assertFalse(singleLineReport().contains("\"selection\":"), "全量缺省无选择器，不出 selection 段");
+        }
+
+        @Test
         @DisplayName("export --json：包元数据报告（对账 SHA-256），包文件照常落盘")
         void exportJson_metadataReport() throws Exception {
             seedOneRecord();
@@ -517,6 +548,67 @@ class JsonContractTest {
             assertEquals(0, exit);
             String report = singleLineReport();
             assertTrue(report.contains("\"uncovered\":[\"queryOrder\"]"), "覆盖缺口必须列清单而非只报数量: " + report);
+        }
+
+        @Test
+        @DisplayName("status --json --invocation 缩域：uncovered/unestablished 以全库为准，不得把域外已建档键误报为缺口")
+        void statusJson_narrowingKeepsGlobalGapSemantics() throws Exception {
+            seedOneRecord();
+            execute("baseline", "--db", dbPath);
+            InteractionRecord pending = new InteractionRecord();
+            pending.setRecordId("rec-pending");
+            pending.setSessionId("session-pending");
+            pending.setTimestamp(2000L);
+            pending.setSeq(2L);
+            pending.setInvocationId("refund");
+            pending.setTemplateHash("hash-refund");
+            pending.setInvocationKey("invocation:refund:hash-refund");
+            pending.setUserInput("退款");
+            pending.setTurnIndex(0);
+            pending.setModelResponse("ok");
+            pending.setToolCalls(new ArrayList<>());
+            pending.setHasToolCalls(false);
+            repository.saveInteractionIfAbsent(pending);
+
+            int narrowed = execute("status", "--db", dbPath, "--json", "--invocation", "queryOrder");
+
+            assertEquals(0, narrowed);
+            String report = singleLineReport();
+            assertTrue(report.contains("\"uncovered\":[]"), "缩域不得把选择集内已建档标签报成 uncovered: " + report);
+            assertTrue(report.contains("\"unestablished\":[]"), "缩域不得把域外键报成 unestablished（语义反转）: " + report);
+
+            assertEquals(0, execute("status", "--db", dbPath, "--json"));
+            String full = singleLineReport();
+            assertTrue(full.contains("\"uncovered\":[\"refund\"]"), "全量面如实报未建档标签: " + full);
+            assertTrue(full.contains("\"unestablished\":[{\"invocationKey\":\"invocation:refund:hash-refund\""), "全量面列出未建档键: " + full);
+        }
+
+        @Test
+        @DisplayName("status --json --invocation 缩域含未建档键：正向缺口保留（信息不因缩域丢失）")
+        void statusJson_narrowedUnestablishedStillListed() throws Exception {
+            seedOneRecord();
+            execute("baseline", "--db", dbPath);
+            InteractionRecord split = new InteractionRecord();
+            split.setRecordId("rec-split");
+            split.setSessionId("session-2");
+            split.setTimestamp(2000L);
+            split.setSeq(2L);
+            split.setInvocationId("queryOrder");
+            split.setTemplateHash("hash-new");
+            split.setInvocationKey("invocation:queryOrder:hash-new");
+            split.setUserInput("查订单");
+            split.setTurnIndex(0);
+            split.setModelResponse("{\"orderId\":\"ORD-002\"}");
+            split.setToolCalls(new ArrayList<>());
+            split.setHasToolCalls(false);
+            repository.saveInteractionIfAbsent(split);
+
+            int exit = execute("status", "--db", dbPath, "--json", "--invocation", "queryOrder");
+
+            assertEquals(0, exit);
+            String report = singleLineReport();
+            assertTrue(report.contains("\"unestablished\":[{\"invocationKey\":\"invocation:queryOrder:hash-new\""), "缩域内真实未建档键必须仍在场: " + report);
+            assertTrue(report.contains("\"uncovered\":[]"), "标签首键已有基线，标签级 uncovered 为空: " + report);
         }
 
         @Test

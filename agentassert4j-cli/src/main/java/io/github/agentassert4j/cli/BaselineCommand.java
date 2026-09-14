@@ -75,7 +75,10 @@ public class BaselineCommand implements Callable<Integer> {
                     }
                     invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(outcome.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(outcome.getLabel())).append("\",\"action\":\"").append(outcome.getAction()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(outcome.getVersionTag() != null ? outcome.getVersionTag() : "")).append("\",\"codeRef\":\"").append(RecursiveJsonParser.escape(outcome.getCodeRef() != null ? outcome.getCodeRef() : "")).append("\"}");
                 }
-                out.println("{\"schema\":\"" + ReportSchemas.BASELINE_REPORT + "\",\"force\":" + force + ",\"established\":" + established + ",\"invocations\":[" + invocations + "]}");
+                // 选择段进报告本体：扇出披露只走诊断流时，机器消费方（MCP 的
+                // structuredContent 只收 stdout 报告行）感知不到「一次调用覆盖了几个键」
+                String selectionJson = resolvedKeys != null ? ",\"selection\":{\"requested\":\"" + RecursiveJsonParser.escape(invocation) + "\",\"matched\":" + resolvedKeys.size() + "}" : "";
+                out.println("{\"schema\":\"" + ReportSchemas.BASELINE_REPORT + "\",\"force\":" + force + ",\"established\":" + established + selectionJson + ",\"invocations\":[" + invocations + "]}");
             } else {
                 out.println(established > 0 ? "Done: " + CliSupport.plural(established, "invocation") + " " + (force ? "re-established" : "established") + "." : "Done: every selected invocation already has a baseline.");
             }

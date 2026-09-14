@@ -480,15 +480,20 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("换模型执行时告警（判定结果不与基线直接可比）")
-        void modelDiffers_warns() {
+        @DisplayName("换模型告警只挂重驱：零调用判定路径不告警，重驱前必须告警")
+        void modelDiffers_warnsOnlyBeforeReDrive() {
             seedIdenticalChains("{\"v\":1}");
             TestExecutionConfig withModel = new TestExecutionConfig().timeoutMs(1000).temperature(null).model("another-model");
             TaskReplayRunner modelRunner = new TaskReplayRunner(repository, new StubLlmClient(), new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), withModel, new PrintStream(output, true), new PrintStream(output, true), false);
 
             modelRunner.run(null, null, false, false, false, false, false, null, null);
 
-            assertTrue(output.toString().contains("differs from recorded models"), "换模型必须告警: " + output);
+            assertFalse(output.toString().contains("differs from recorded models"), "判定与对齐层零 LLM 调用，不消费重放模型，不得告警: " + output);
+
+            output.reset();
+            modelRunner.run(null, null, false, false, false, true, false, null, null);
+
+            assertTrue(output.toString().contains("differs from recorded models"), "重驱真实消费重放模型，必须告警: " + output);
         }
 
         @Test
@@ -676,6 +681,54 @@ class TaskReplayRunnerTest {
             TaskReplayRunner ciRunner = newRunner(false);
             output.reset();
             assertEquals(1, ciRunner.run(null, null, true, false, false, false, false, null, null), "CI 对照批准指纹点破窗口外漂移");
+        }
+
+        @Test
+        @DisplayName("处置对账：行为候选已落时 candidatesRegistered=1 而 candidatePoints=0（双口径分列）")
+        void dispositionCounts_behaviorCandidateWithoutDrift() {
+            InteractionRecord seed = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            establishFromRecord(seed);
+            saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
+
+            TaskReplayRunner jsonRunner = newRunner(true);
+            output.reset();
+            assertEquals(1, jsonRunner.run(null, null, true, false, false, false, false, null, null));
+
+            String dispositionLine = reportLine(output.toString(), "\"mode\":\"drift-disposition\"");
+            assertNotNull(dispositionLine, "必须有处置报告行: " + output);
+            assertTrue(dispositionLine.contains("\"candidatePoints\":0"), "无模板漂移点时漂移域计数为 0: " + dispositionLine);
+            assertTrue(dispositionLine.contains("\"candidatesRegistered\":1"), "对齐域候选计数必须与 Candidate registered 行同源对账: " + dispositionLine);
+        }
+
+        @Test
+        @DisplayName("skippedPairs 释义：首 CHANGED 早停后未检配对有人读注记")
+        void skippedPairs_explainedInReport() {
+            saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
+            InteractionRecord good = saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            establishFromRecord(good);
+
+            runner.run(null, null, true, false, false, false, false, null, null);
+
+            String out = output.toString();
+            assertTrue(out.contains("not examined after the first difference"), "早停未检配对必须就地释义: " + out);
+            assertTrue(out.contains("the step verdict is already CHANGED"), "释义必须点明步骤判定已定: " + out);
+        }
+
+        @Test
+        @DisplayName("dry-run --ci 计划面：baselineVersions 列出对照版本，未建档键显式 null")
+        void dryRunCi_planCarriesBaselineVersions() {
+            InteractionRecord seed = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            establishFromRecord(seed);
+            saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-b", "{\"result\":\"ok\"}", null);
+
+            TaskReplayRunner jsonRunner = newRunner(true);
+            output.reset();
+            assertEquals(0, jsonRunner.run(null, null, true, true, false, false, false, null, null));
+
+            String planLine = reportLine(output.toString(), "\"mode\":\"task-dry-run\"");
+            assertNotNull(planLine, "必须有计划行: " + output);
+            assertTrue(planLine.contains("\"ciAlign\":true"), planLine);
+            assertTrue(planLine.contains("\"baselineVersions\":[{\"invocationKey\":\"invocation:order:hash-a\",\"versionTag\":\"v1\"},{\"invocationKey\":\"invocation:order:hash-b\",\"versionTag\":null}]"), "计划必须讲清将对照谁（未建档 null 显式）: " + planLine);
         }
     }
 

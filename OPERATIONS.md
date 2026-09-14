@@ -182,6 +182,9 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
   否则 flush 线程锁住文件。
 - **健康检查**：应用日志中的计数闭合账本 `recorded = written + dropped + failed`（filtered 另列）；
   任何对不上账的情况都是缺陷。
+- **幂等键是全库全局的**：recordId / response id 去重不区分写入方——多实例部署或多评估者共库
+  并行录制时，同 id 的第二条会 duplicate 并归属首录会话（报告带 `storedSessionId` 指路）。
+  并行写入方给 recordId/response id 带实例前缀（如 `zcode-r5-…`）可从根上避开撞车。
 - **库体检**：`doctor` 命令一次性输出身份/覆盖/规则三段确定性事实（骨架族形态、多步零标签链、
   未声明任务的重复请求文本任务族、未建档调用点、template_hash 缺失、规则期望错位）——零声明接入
   补声明、首次建档前自查都用它；只读不判定不建档。
@@ -292,7 +295,9 @@ agentassert4j audit --json       # agentassert4j.audit/1 机器报告（writes �
 
 reject 与 rollback 不在画像上留状态痕迹，事件时间线是其唯一审计载体；MCP 工具清单的
 description 声明各变异动词的使用要求（如 accept 应在人类指示后调用），授权确认由
-harness 权限系统执行。
+harness 权限系统执行。`--ref` 与 approver 是申报制自由串、不做校验——多人/多 agent 共库
+协作时给 ref 带写入方与用途前缀（如 `zcode-r5-accept`、`release-gate-v3`），时间线的归属
+一眼可读（actor 区分身份，ref 区分事由）。
 
 ## 6.2 MCP 接入（AI 自主验证回路）
 

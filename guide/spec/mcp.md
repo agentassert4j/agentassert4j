@@ -82,7 +82,9 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
    判定基准 = 每任务最新链对照其已批准基线（画像活跃指纹；check/diff 的 manifest
    description 与 initialize instructions 双轨声明该基准，并注明本地 `replay` 不带 --ci
    时为最新链 vs 次新链差分）。member-check 工具虽以 ciMode 语义运行，仍走链采样
-   （最新链对最近链窗口），不受基线对照改写。理由：MCP 读动词必须与 CLI 读动词同等
+   （最新链对最近链窗口），不受基线对照改写；其成员块字段形态——命中携带
+   matchedSession、未命中携带 closestSession 与 closestScore——在 manifest description
+   同句声明（可发现性，字段语义本身见 replay.md 契约 13）。理由：MCP 读动词必须与 CLI 读动词同等
    「只读」，治理写只能经显式变异动词（establish/accept/reject）发生。
    report/verify/doctor/graph 本就是只读命令，直调。
 注意：拒绝与失败包络的 nextAction/hints 在抛出点以 CLI 命令形单源产出；MCP 出口经通道化映射改写为工具名形态（baseline→establish、status→report、replay→check 等，CLI 专属的 --ci 逃生舱子句一并摘除），两个通道各自拿到母语指称。
@@ -90,12 +92,17 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
    豁免清单（completion/mcp 为 CLI 专属、record 为 MCP 专属）由 CliMcpParityTest 机械钉死；
    CLI 新增命令/参数必须同步 MCP 工具面或在豁免清单显式登记，否则测试红。三对不同名映射
    （baseline→establish、status→report、replay→check/diff/member-check/re-drive）为历史
-   命名的显式登记。【测试钉】工具组（未建档拒绝且不落
+   命名的显式登记；另有一对**同名反义**需留意——CLI `record` 是只读巡检母命令
+   （Inspect stored interactions，实查用 `record show`），MCP `record` 是摄入动词
+   （wire 交互上报落库），切换通道时不得按同名互推语义。【测试钉】工具组（未建档拒绝且不落
    画像 + 建档后通过）
 7. **变异动词使用要求与 agent 身份申报**：establish/accept/reject/rollback 的 description 声明
    「治理写，应在人类指示后调用；agent 以 approver="agent:<name>" 申报身份」。授权确认由
    harness 权限系统执行（MCP 原生同意点）；框架不校验 approver 值，事后经 CLI `audit`
-   回溯 agent 申报的治理写（governance.md「agent 治理与审计」节为权威表述）。
+   回溯 agent 申报的治理写（governance.md「agent 治理与审计」节为权威表述）。establish
+   声明了 invocation 时，baseline-report/1 携带 `selection`（requested/matched）——标签
+   扇出对 agent 的机器通道可见（写前披露的 stderr 文本块之外，structuredContent 亦可达，
+   agent 不必依赖人类通道感知「一次调用覆盖了几个键」）。
    【测试钉】manifest 组（description 含治理写声明）
 8. **record 摄取（幂等，三协议 wire 方言）**：入参 sessionId（必填）、request/response（必填，
    原始请求/响应 JSON 文本）、protocol（可选，封闭词表 `openai-chat`/`anthropic-messages`/
@@ -172,6 +179,10 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
 
 ## 复核台账
 
+- 2026-09-14 Round 5 即修批（无裁决项）：契约 6 补 member-check 成员块字段形态的 manifest 声明（matchedSession
+  命中 / closestSession+closestScore 未命中——描述句已落 McpTools，字段语义权威表述在 replay 契约 13）；契约 7 补
+  establish 结果 selection 段的机器通道可达性（CC 宿主实测：扇出披露只走 stderr 文本块时 structuredContent 消费方
+  感知不到扇出；同批 status/1 缺口反转与换模型告警位置修复见 replay.md 台账，MCP 面经同一 CLI 命令薄壳自动受益）。
 - 2026-09-14 A3 修复批（批 3）：reject/rollback 工具面增 approver 申报参数（parity 钉自动覆盖）；audit
   工具描述与读取面改为治理事件时间线（六动词含 reject/rollback，actor=agent:* 过滤）；rollback 描述
   「restoring stamps no new approval trail」陈旧陈述随事件表落地一并改写（决策变更全表面重审）。

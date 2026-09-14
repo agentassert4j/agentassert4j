@@ -349,7 +349,7 @@ class CommandSmokeTest {
         ByteArrayOutputStream jsonOut = redirectStdout();
         int jsonExit = new CommandLine(new AgentAssert4jCli()).execute("status", "--invocation", "queryOrder", "--json", "--db", dbPath);
         assertEquals(0, jsonExit);
-        assertTrue(jsonOut.toString().contains("\"verdict\""), "--json 通道恒全量: " + jsonOut);
+        assertFalse(jsonOut.toString().contains("verdict"), "JSON 通道缩域与人读通道一致生效，域外已建档键不得被误报为缺口: " + jsonOut);
     }
 
     @Test

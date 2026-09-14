@@ -21,7 +21,7 @@ schema、退出码契约、help 终态。
 
 | 命令 | bare 语义 | 主要参数 |
 |---|---|---|
-| `status` | 全部画像巡检 | `--diff`（候选差异+模板原文渲染）、`--invocation` 缩域（两通道一致生效；缺省=全量快照）、`--json`、`--db` |
+| `status` | 全部画像巡检 | `--diff`（候选差异+模板原文渲染）、`--invocation` 缩域（两通道一致生效；缺省=全量快照；uncovered/unestablished 恒以全库为准仅过滤显示）、`--json`、`--db` |
 | `baseline` | 全部调用点建档（幂等） | `--force`（判定语义重建恢复路径）、`--invocation` 缩域、`--ref`（代码锚，申报制）、`--json` |
 | `replay` | 全项目漂移检测+逐任务对齐（零 LLM 调用） | `--task`/`--invocation` 复合缩域、`--ci`、`--re-drive`、`--member-check`（成员判定：最新链匹配任一最近链即通过）、`--full-chain`、`--max-total-calls`/`--max-total-tokens`、`--dry-run`、`--json` |
 | `accept` / `reject` | 裁决全部待裁决候选 | `--invocation` 缩域、`--approver`（治理事件留痕）、`--json`；accept 另有 `--ref`（代码锚，申报制） |
@@ -43,12 +43,14 @@ schema、退出码契约、help 终态。
 未建档裂键同样可解析，target 族消费方的画像存在性由既有守卫承接）。两族策略仅多键处理
 不同：**target 族**（accept/reject/rollback/replay 的 --invocation）= singular——标签多键报错列
 候选；**filter 族**（establish/status 的 --invocation）= plural——标签扇出全部键（establish 是
-治理写动词：写前披露目标集与逐键建档状态；status 两通道一致缩域，换算 Note 行走诊断通道
-保 --json 的 stdout 单行契约）。replay 的 --task 是请求文本前缀选择器（精确相等优先、唯一
+治理写动词：写前披露目标集与逐键建档状态，且 baseline-report/1 携带 `selection`
+（requested/matched）使扇出对机器通道可见；status 两通道一致缩域，换算 Note 行走诊断通道
+保 --json 的 stdout 单行契约）。status 的 uncovered/unestablished 缺口判定恒以全库画像为准、
+缩域只过滤显示范围——缩域子集入算会把域外已建档键误报为缺口。replay 的 --task 是请求文本前缀选择器（精确相等优先、唯一
 前缀采用、多候选歧义报错），不属本阶梯；verify/export 的 --task 为前缀过滤。【测试钉】
 `CliSupportResolverTest`（阶梯等价/标签扇出/未建档键可解析/响亮零命中）+
 `CommandSmokeTest`（显示短形 establish/扇出披露/假成功消灭）+ `JsonContractTest`（Note 行
-路由 err）
+路由 err + 缩域缺口两钉）
 
 ## 契约
 
@@ -75,7 +77,9 @@ schema、退出码契约、help 终态。
    出口健康三计数）；replay=agentassert4j.task-report/1（mode: drift-detection / task-align /
    task-dry-run / drift-disposition / task-re-drive / member-check / exit-health / re-drive-dry-run /
    ci-align——--ci 基线对照的报告形态：步骤携带 baselineVersion（画像活跃版本）、成本只出
-   current 侧、baselineTime=链内画像最新 approvedAt 缺席整体省略）；裁决=
+   current 侧、baselineTime=链内画像最新 approvedAt 缺席整体省略；dry-run 的 alignPlan 在
+   ciAlign 时携带 baselineVersions——最新链逐调用点首现序的画像活跃版本，未建档键
+   versionTag=null 显式）；裁决=
    agentassert4j.adjudication/1；验收=agentassert4j.verify-report/1（含 dry-run mode；判定
    报告携带 `health` 对象同 status，dry-run 预演报告不携带）；导出=acceptance-pack/1（内嵌声明规则段：
    invocations/tasks 断言原文随包出境，verify 以包内规则对本地记录**对称**评估维度 3/4 与
@@ -177,6 +181,7 @@ re-drive/missing/added。句式 sentence case；全角标点与「」不出现�
 
 | 日期 | 方式 | 发现 |
 |---|---|---|
+| 2026-09-14 | Round 5 即修批（无裁决项）：status/1 缩域缺口反转修复 + establish selection 段 + dry-run ciAlign 计划 baselineVersions | ①C1 根因=JSON 路径用缩域画像算 uncovered/unestablished（人读路径的正确形态「全量+键集过滤」同文件已在，收敛两通道共用助手）；②旧钉 CommandSmokeTest「--json 通道恒全量」钉住反转产物且与 v3「两通道一致缩域」裁决相悖，同批改钉（测试错误改钉理由：其通过面正是缺陷本体）；③baseline-report/1 增 selection（requested/matched）——扇出披露对 structuredContent 机器通道可见（披露文本在 stderr，MCP structuredContent 只收 stdout 报告行） |
 | 2026-09-09 | 通道 2 修复批：mode 词表增 re-drive-dry-run；signal 字段名 score→similarity；record/1 duplicate 增 storedSessionId/note——均来自通道 2 双宿主实测的 AI 使用证据 |
 | 2026-09-08 | 响应契约统一批成文对账（error/1 包络 + doctor --json 实施同批） | 机器失败包络 agentassert4j.error/1 落地全命令（--json 失败出 stdout 收尾行，人读失败零产出不变——D1 双契约定案）；错误码四族 E-USAGE/E-NO-DATA/E-GUARD/E-ENV，抛出点经包内专用 CliFailureException 钉死、命令层不做消息反推；doctor --json 补齐（doctor/1 三段体检：计数全量+样本封顶，规则告警同款走 stderr）；同批审查轮收口：verify 覆盖缺口 exit 2 补接包络（原三元出口漏网）、README×2 replay 样例块清除图降级漏网（Dependency graph 行 + downstream 段）、契约编号重复（两个 5）与文案表 "0 downstream" 残留修正 |
 | 2026-09-05 | E2+E3 英文迁移收口（E1 后同日连续实施，12 模块全绿） | E2 巡检治理域生产串清零（Status/CliSupport/Baseline×3/Verify×2/Adjudicate/Rollback/Doctor/Rules/GraphShow/FingerprintDiffRenderer/Accept/Reject/Completion + core parseNotes/PackCodec/ConfigLoader）；E3 help 面 55 处 description 与根命令面英文态；11 命令短别名落地（s/b/a/g/v/d/c + rp/rj/rb/ru，完整名保留，不做前缀匹配）；断言等义迁移累计 ~110 处 + 别名新测；README×2 样例块换英文实跑形态 + `aa` 别名姿势、OPERATIONS/导读引用片段同步；完成度门禁达成=cli/core 主码非注释 CJK 串 0，JSON 键集零变化 |

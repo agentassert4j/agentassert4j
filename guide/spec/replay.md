@@ -54,12 +54,16 @@ member-check 无论 ci 与否走链采样）→ 漂移处置 → 退出码复合
    键缩域/空交集）
 7. **JSON 报告 task-report/1**：逐行分段——drift-detection（漂移集/零模板计数）→
    task-align（逐步 action/verdict/dims/cost）或 selfEstablished → drift-disposition（逐漂移
-   点 action: collected/candidate/hung/external/uncollected）；dry-run 为 task-dry-run；CI 基线
+   点 action: collected/candidate/hung/external/uncollected；summary 计数双口径——
+   candidatePoints 只覆盖身份漂移点族别，candidatesRegistered 为对齐层本轮登记的行为候选数，
+   无模板漂移的行为变化落候选时前者恒 0、后者对账）；dry-run 为 task-dry-run；CI 基线
    对照为 ci-align（见契约 19）。键名稳定、单行、null 缺省即契约；报告头钉判定语义版本。
-   【测试钉】`TaskReplayRunnerTest.JsonContract`
+   【测试钉】`TaskReplayRunnerTest.JsonContract` + `TaskReplayRunnerTest.CiAlign.dispositionCounts_behaviorCandidateWithoutDrift`
 8. **守卫五项**：判定语义版本守卫（任一画像版本不符拒绝判定）；`--ci` 未建档拒绝判定
-   （缩域名单）+ 漂移 PASS 不收编；换模型告警（配置缺省时比对客户端实际生效模型）；
+   （缩域名单）+ 漂移 PASS 不收编；换模型告警只挂受控重驱前（判定与对齐层零 LLM 调用、
+   不消费重放模型，提早告警只会训练用户忽略它；配置缺省时比对客户端实际生效模型）；
    全败按基础设施故障退出（重驱层）；served 模型不一致逐步标注。【测试钉】`TaskReplayRunnerTest.Guards` 全组
+   + `Alignment.modelDiffers_warnsOnlyBeforeReDrive`
 9. **CHANGED 步落候选**：显式 replay 即测试行为——对齐首个 CHANGED 配对的新记录现场重提
    指纹落候选；自动建档先于候选登记（裂键新画像必须先存在）；`--ci` 已在建档守卫处拒判。
    【测试钉】`TaskReplayRunnerTest.Alignment.stepDiff_changed_exits1_andRegistersCandidate`
@@ -93,9 +97,11 @@ member-check 无论 ci 与否走链采样）→ 漂移处置 → 退出码复合
     `TaskReplayRunnerTest.FirstVoyageAndExitHealth.firstVoyage_taskRuleViolation_exits1`
 15. **优化信号（非判定）**：task-align/member-check 报告的 summary 携带 comparedPairs/
     skippedPairs（对齐在首个 CHANGED 配对即停，聚合只承认已比对配对，缺失分数不默认补值）；
+    skippedPairs>0 时人读报告就地释义（该调用点早停后未检的配对数、步骤判定已 CHANGED）；
     signal 对象=已比对步骤相似度均值，字段名 similarity（无已比对步骤时整体省略）。明示非判定——判定始终
     二值。【测试钉】`TaskAlignerTest.comparedSkippedPairs_earlyStopOnFirstChanged` +
-    `TaskReplayRunnerTest.SignalAndStability.signalAndPairCounts_json`
+    `TaskReplayRunnerTest.SignalAndStability.signalAndPairCounts_json` +
+    `TaskReplayRunnerTest.CiAlign.skippedPairs_explainedInReport`
 16. **稳定性注记（纯读侧）**：逐任务对组内全链逐调用点提取指纹（与判定同源），报告
     executions/points/fluctuating[]（形态数 >1 的点）；判定不受影响（缺省配对最新 vs 次新、
     成员模式见契约 13）。人读一行明示 informational 并提示不追噪音。【测试钉】
@@ -140,13 +146,15 @@ member-check 无论 ci 与否走链采样）→ 漂移处置 → 退出码复合
     指纹后同证据即 PASS（裁决对门禁立即生效）。member-check 无论 ci 与否保持链采样（实现钉
     `ciMode && !memberCheck` 分支）。渲染：Cost 行只出 current 侧（基线侧无记录）；baselineTime
     = 链内画像最新 approvedAt（全部未盖章则整体省略）；步骤携带 `baselineVersion`（画像活跃
-    版本）；mode=ci-align。模式语义边界（意图后果）：①缺步骤/新增步骤结构性不可能（基线组键
+    版本）；mode=ci-align。dry-run 计划行 alignPlan 增 `baselineVersions`（最新链逐调用点
+    首现序的画像活跃版本，未建档键 versionTag=null 显式可见——计划讲清「将对照谁」，不靠
+    缺席暗示）。模式语义边界（意图后果）：①缺步骤/新增步骤结构性不可能（基线组键
     ≡ 新链组键），「任务不再调用某调用点」在 CI 面只剩任务纪律能抓；②两链记忆窗口缺口就此
     可见——链对链只看最新两条链，滑过窗口的未裁决漂移链模式永远 PASS 而 CI 对照画像 CHANGED
     （长期只跑开发态的库首次切 CI 可能立即翻红，这是正确语义）；③规则收紧滞后到 re-baseline
     （维度 3/4 = 基线声明当前答卷，与 verify 包规则随包走同构）。【测试钉】
     `TaskReplayRunnerTest.CiAlign`（A2 闭环/A1 同会话迭代/幂等/首航/报告形态/member-check
-    守护/两链窗口八场景）+ `BaselineSidesTest`（投影属性）
+    守护/两链窗口/dry-run 计划 baselineVersions 场景）+ `BaselineSidesTest`（投影属性）
 
 ## 行为矩阵
 
@@ -167,8 +175,9 @@ member-check 无论 ci 与否走链采样）→ 漂移处置 → 退出码复合
 | --task 前缀歧义 / 无命中 / AND 交集为空 | exit 2 |
 | --ci 且缩域内有未建档键 | exit 2 + 名单 |
 | 任一画像判定语义版本不符 | exit 2 + 重建指引 |
-| dry-run | 只读预演（检测 + 对齐计划），恒 exit 0 |
-| 换模型执行 | 告警行，判定照常（结果不可比性留给使用者） |
+| dry-run | 只读预演（检测 + 对齐计划），恒 exit 0；ciAlign 计划携带 baselineVersions（未建档键 null 显式） |
+| 换模型重驱 | 重驱前告警行，判定照常（结果不可比性留给使用者）；零调用判定路径不告警 |
+| reject 后任务链已前移 | fresh 全量 check 不重落旧漂移的候选（判定域恒为任务最新链，证据不在域）；缩域 `diff --invocation` 可定向重落 |
 | 任意判定完成出口（dry-run 预演与 fail 除外） | 出口健康摘要一行（人读全零静默；JSON 为 exit-health 行/health 对象，契约 17） |
 
 ## 域间边界
@@ -191,6 +200,7 @@ member-check 无论 ci 与否走链采样）→ 漂移处置 → 退出码复合
 
 | 日期 | 方式 | 发现 |
 |---|---|---|
+| 2026-09-14 | Round 5 即修批（无裁决项）：status/1 缩域 uncovered/unestablished 反转修复 + establish 扇出进机器通道（baseline-report selection 段）+ 换模型告警挪重驱前 + disposition 双口径（candidatesRegistered）+ skippedPairs 人读释义 + dry-run ciAlign 计划补 baselineVersions | ①双宿主同报的 C1 缺陷根因=JSON 路径用缩域画像算缺口集（正确形态「全量画像+缩域键过滤」同文件人读路径已在，收敛为两通道共用助手）；②旧钉 CommandSmokeTest「--json 通道恒全量」钉住的正是反转产物且与 v3「缩域两通道一致」裁决相悖，同批改钉；③candidatePoints 语义澄清为漂移域专属（wire 冻结不改名），行为候选经 candidatesRegistered 对账；④告警只挂真实消费重放模型的路径（防狼来了） |
 | 2026-09-14 | A1/A2 修复批（批 1）：--ci 判定基准从链对链改为基线对照，基线侧投影单源化为 BaselineSides | ①真源表与契约 3/7 双轨化（本地链模式不变）；②新契约 19（判定基准/渲染三决策/模式语义边界三条）；③verify 的包投影收编进 fromPackSteps（行为等价，VerifyExportTest 20 钉回归网）；④判定基线真源模型同批修订 judgment 契约 11；⑤模式词表增 ci-align；member-check 守护钉防基线对照误伤（McpTools 恒 ciMode=true） |
 | 2026-09-12 | 批3 N6 首跑（doc-tools 三扫描器）+ 义务登记 | ①LOW：TaskReplayRunner↔VerifyRunner 步骤外围 JSON 渲染（verdict/surplusCount/invocationLabel/versionSwitch 拼装）双份 ×24 窗口——dims 度量已单源（comparisonMetricsFragment），外围收编为 stepEnvelope 单源列 1.0.x（两报告面各被契约钉独立看守，漂移可测，不阻塞发布）；②LOW（承接既有 TODO）：BehaviorChecker.returnsEmptyOnError 的 `contains("[]")` 把含空数组字面量的正常输出误判为空输出——修复需动判定路径（RecursiveJsonParser 结构判空），列 1.0.x，发布前不动判定语义；③N6 豁免类别沉淀：import 样板/POJO getter-setter/方言客户端 buildRequestBody 本体/JSON 导航守卫/测试桩夹具/SDK 与 boot 配对线镜像 |
 | 2026-09-09 | 通道 2 决策批：契约 2 增中间态记录请求文本回退（previousTurns 首个 user 轮）——粘链与 task 域失明同源解决；回放/文档动词 approve 全局更名 accept（含 adjudication/1 action 值） | 根因链：无请求文本记录附着到打开链（F2/F3 温床）+ 任务域对中间态不可见（F5）；维护者裁决采纳「父级 user 文本回填」而非裸键链概念——零 schema 变更、纯派生视图层、符合 R11（previousTurns 即真源） |

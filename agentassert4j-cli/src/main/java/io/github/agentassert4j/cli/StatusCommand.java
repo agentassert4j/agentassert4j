@@ -77,12 +77,12 @@ public class StatusCommand implements Callable<Integer> {
                     invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(profile.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), ""))).append("\",\"status\":\"").append(profile.getBaselineStatus()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(profile.getVersionTag() != null ? profile.getVersionTag() : "")).append("\",\"hasCandidate\":").append(profile.getCandidateFingerprint() != null).append(",\"templateDrift\":\"").append(driftByInvocationKey.getOrDefault(profile.getInvocationKey(), TemplateDriftState.NONE).wireName()).append("\",\"codeRef\":\"").append(RecursiveJsonParser.escape(profile.getCodeRef() != null ? profile.getCodeRef() : "")).append("\",\"archivedVersions\":\"").append(RecursiveJsonParser.escape(archivedTags)).append("\"}");
                 }
                 StringBuilder uncoveredJson = new StringBuilder();
-                for (String tag : uncoveredBusinessTags(repository, profiles)) {
+                for (String tag : uncoveredBusinessTagsInScope(repository, allProfiles, narrowedKeys)) {
                     if (uncoveredJson.length() > 0) uncoveredJson.append(",");
                     uncoveredJson.append("\"").append(RecursiveJsonParser.escape(tag)).append("\"");
                 }
                 StringBuilder unestablishedJson = new StringBuilder();
-                for (InvocationFootprint footprint : unestablishedFootprints(repository, profiles)) {
+                for (InvocationFootprint footprint : unestablishedFootprintsInScope(repository, narrowedKeys)) {
                     if (unestablishedJson.length() > 0) unestablishedJson.append(",");
                     unestablishedJson.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(footprint.invocationKey)).append("\",\"recordCount\":").append(footprint.recordCount).append("}");
                 }
@@ -104,11 +104,7 @@ public class StatusCommand implements Callable<Integer> {
             if (narrowedKeys != null && profiles.isEmpty()) {
                 out.println("No baseline profile under the selection (the invocation keys are recorded but unestablished; see below).");
             }
-            List<String> uncovered = uncoveredBusinessTags(repository, profiles);
-            for (String tag : uncovered) {
-                if (narrowedKeys != null && !narrowedKeys.contains(new BaselineService(repository).invocationKeyOfFirstRecord(tag))) {
-                    continue;
-                }
+            for (String tag : uncoveredBusinessTagsInScope(repository, allProfiles, narrowedKeys)) {
                 out.println("  " + tag + ": recorded but no baseline (run `agentassert4j baseline` first)");
             }
             printUnestablished(repository, narrowedKeys);
@@ -259,22 +255,26 @@ public class StatusCommand implements Callable<Integer> {
 
     /**
      * 已录制业务标签中尚无对应基线画像的（记录标签 → 分组 → 画像缺失）。
+     * established 判定必须用全量画像——缩域子集会把库内已建档键误判为未覆盖；
+     * 缩域只过滤显示范围（标签按首记录键 ∈ 选择集），两通道共用本口径。
      */
-    private static List<String> uncoveredBusinessTags(StorageRepository repository, List<InvocationProfile> profiles) {
+    private static List<String> uncoveredBusinessTagsInScope(StorageRepository repository, List<InvocationProfile> allProfiles, List<String> narrowedKeys) {
         List<String> uncovered = new ArrayList<>();
+        BaselineService service = new BaselineService(repository);
+        Set<String> keySet = narrowedKeys != null ? new LinkedHashSet<>(narrowedKeys) : null;
         for (String invocationId : CliSupport.recordedInvocationIds(repository)) {
-            String invocationKey = new BaselineService(repository).invocationKeyOfFirstRecord(invocationId);
+            String invocationKey = service.invocationKeyOfFirstRecord(invocationId);
             if (invocationKey == null) {
                 continue;
             }
             boolean covered = false;
-            for (InvocationProfile profile : profiles) {
+            for (InvocationProfile profile : allProfiles) {
                 if (invocationKey.equals(profile.getInvocationKey())) {
                     covered = true;
                     break;
                 }
             }
-            if (!covered) {
+            if (!covered && (keySet == null || keySet.contains(invocationKey))) {
                 uncovered.add(invocationId);
             }
         }
@@ -283,21 +283,26 @@ public class StatusCommand implements Callable<Integer> {
 
     /**
      * 已录制但尚无基线画像的调用点段：新版本键与零声明键在建档前在此可见，
-     * 否则它们只会在对齐报告的缺/新增步骤里被动暴露。缩域 = 解析键集合直配。
+     * 否则它们只会在对齐报告的缺/新增步骤里被动暴露。established 判定用全量
+     * 画像，缩域 = 解析键集合直配（与人读/JSON 两通道同一口径）。
      */
-    private void printUnestablished(StorageRepository repository, List<String> narrowedKeys) {
-        // established 判定必须用全量画像（缩域后的子集会把已建档键误判为未建档）
+    private static List<InvocationFootprint> unestablishedFootprintsInScope(StorageRepository repository, List<String> narrowedKeys) {
         List<InvocationFootprint> unestablished = unestablishedFootprints(repository, repository.findAllInvocations());
-        if (narrowedKeys != null) {
-            Set<String> keySet = new LinkedHashSet<>(narrowedKeys);
-            List<InvocationFootprint> filtered = new ArrayList<>();
-            for (InvocationFootprint footprint : unestablished) {
-                if (keySet.contains(footprint.invocationKey)) {
-                    filtered.add(footprint);
-                }
-            }
-            unestablished = filtered;
+        if (narrowedKeys == null) {
+            return unestablished;
         }
+        Set<String> keySet = new LinkedHashSet<>(narrowedKeys);
+        List<InvocationFootprint> filtered = new ArrayList<>();
+        for (InvocationFootprint footprint : unestablished) {
+            if (keySet.contains(footprint.invocationKey)) {
+                filtered.add(footprint);
+            }
+        }
+        return filtered;
+    }
+
+    private void printUnestablished(StorageRepository repository, List<String> narrowedKeys) {
+        List<InvocationFootprint> unestablished = unestablishedFootprintsInScope(repository, narrowedKeys);
         if (unestablished.isEmpty()) {
             out.println("Unestablished invocations: none.");
             return;

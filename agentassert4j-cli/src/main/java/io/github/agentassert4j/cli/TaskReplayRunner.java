@@ -140,8 +140,6 @@ public class TaskReplayRunner {
             return fail(CliErrorCode.E_NO_DATA, "No recorded interactions found.", "Run your agent first to record some interactions, then retry.", "agentassert4j status");
         }
 
-        warnIfModelDiffers();
-
         // 第 1 层 身份检测（全项目，零调用）
         DriftReport drift = DriftDetector.detect(repository);
         printDriftReport(drift);
@@ -227,11 +225,14 @@ public class TaskReplayRunner {
                 }
             }
         }
-        DispositionTotals dispositions = disposeDrifts(drift, scopedKeys, ciMode, outcomes, manager);
+        DispositionTotals dispositions = disposeDrifts(drift, scopedKeys, ciMode, outcomes, manager, totals.pendingCandidates);
 
         // 第 3 层 受控重驱（显式开启）：逐点以最新归档模板重驱录制输入
         ReDriveTotals reDriveTotals = new ReDriveTotals();
         if (reDrive) {
+            // 模型身份告警只挂真实消费处——判定与对齐层零 LLM 调用，不消费
+            // 重放模型，提早告警只会训练用户忽略它
+            warnIfModelDiffers();
             reDriveLayer(drift, fullChain, narrowed, invocationKey, scoped, manager, maxTotalCalls, maxTotalTokens, reDriveTotals);
         }
 
@@ -793,6 +794,9 @@ public class TaskReplayRunner {
                 if (step.getSurplusCount() > 0) {
                     info("    (uneven record counts on this invocation; " + step.getSurplusCount() + " surplus unpaired, excluded from judgment; run the task in a new session to bring these records into judgment)");
                 }
+                if (step.getSkippedPairs() > 0) {
+                    info("    (" + CliSupport.plural(step.getSkippedPairs(), "pair") + " on this invocation not examined after the first difference; the step verdict is already CHANGED)");
+                }
             }
             render.comparedPairs += step.getComparedPairs();
             render.skippedPairs += step.getSkippedPairs();
@@ -993,8 +997,11 @@ public class TaskReplayRunner {
     /**
      * 漂移处置：PASS→收编（开发态）/未收编（--ci）；CHANGED→落候选；证据缺口或
      * 域外→挂起/仅报告。返回处置计数供退出码复合与 JSON 报告。
+     * candidatesRegistered 是对齐层的跨域对账口径：candidatePoints 只覆盖身份
+     * 漂移点族别，行为变化（无模板漂移）落候选时不进漂移域计数——机器消费方
+     * 据此分清「本轮落了几个候选」与「几个漂移点被判 CHANGED」。
      */
-    private DispositionTotals disposeDrifts(DriftReport drift, Set<String> scopedKeys, boolean ciMode, Map<String, StepOutcome> outcomes, BaselineManager manager) {
+    private DispositionTotals disposeDrifts(DriftReport drift, Set<String> scopedKeys, boolean ciMode, Map<String, StepOutcome> outcomes, BaselineManager manager, int candidatesRegistered) {
         DispositionTotals totals = new DispositionTotals();
         List<String> dispositionJsons = jsonMode ? new ArrayList<>() : null;
         for (DriftReport.DriftPoint point : drift.getSameKeyDrifts()) {
@@ -1006,7 +1013,7 @@ public class TaskReplayRunner {
         if (jsonMode) {
             StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.DRIFT_DISPOSITION.wireName() + "\"");
             sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
-            sb.append(",\"summary\":{\"collected\":").append(totals.collected).append(",\"candidatePoints\":").append(totals.candidates).append(",\"hung\":").append(totals.hung).append(",\"external\":").append(totals.external).append(",\"uncollected\":").append(totals.uncollected).append("}");
+            sb.append(",\"summary\":{\"collected\":").append(totals.collected).append(",\"candidatePoints\":").append(totals.candidates).append(",\"candidatesRegistered\":").append(candidatesRegistered).append(",\"hung\":").append(totals.hung).append(",\"external\":").append(totals.external).append(",\"uncollected\":").append(totals.uncollected).append("}");
             sb.append(",\"dispositions\":[").append(String.join(",", dispositionJsons)).append("]}");
             out.println(sb.toString());
         }
@@ -1116,8 +1123,9 @@ public class TaskReplayRunner {
 
     /**
      * 基线与重放配置的模型身份不一致时告警——换模型重放的判定结果不可与
-     * 原基线直接比较。配置未指定模型时比对客户端实际生效模型，
-     * 否则「默认模型 ≠ 录制模型」这一最常见场景恰成盲区。
+     * 原基线直接比较。只在受控重驱前调用（唯一消费重放模型的路径）；配置
+     * 未指定模型时比对客户端实际生效模型，否则「默认模型 ≠ 录制模型」这
+     * 一最常见场景恰成盲区。
      */
     private void warnIfModelDiffers() {
         String configModel = executionConfig.getModel();
@@ -1323,10 +1331,37 @@ public class TaskReplayRunner {
                 info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": baseline session " + baseline.getSessionId() + " (" + CliSupport.plural(baseline.getRecords().size(), "step") + ") → new chain session " + latest.getSessionId() + " (" + CliSupport.plural(latest.getRecords().size(), "step") + "). Task rules: " + ruleApplicability(latest));
             }
             if (jsonMode) {
-                out.println(dryRunAlignJson(latest.getRequestText(), !ciAlign && group.size() > 1 ? baselineSessionOf(group) : null, !ciAlign && group.size() > 1 ? group.get(group.size() - 2).getRecords().size() : null, latest.getSessionId(), latest.getRecords().size(), memberCheck && group.size() > 1, ciAlign));
+                out.println(dryRunAlignJson(latest.getRequestText(), !ciAlign && group.size() > 1 ? baselineSessionOf(group) : null, !ciAlign && group.size() > 1 ? group.get(group.size() - 2).getRecords().size() : null, latest.getSessionId(), latest.getRecords().size(), memberCheck && group.size() > 1, ciAlign, ciAlign ? baselineVersionsJson(latest) : null));
             }
         }
         return 0;
+    }
+
+    /**
+     * ci-align 计划面的基线版本集：最新链逐调用点（首现序）的画像活跃版本——
+     * 计划要讲清「将对照谁」；未建档调用点版本为 null 显式可见，不靠缺席暗示。
+     */
+    private String baselineVersionsJson(TaskChain chain) {
+        Map<String, String> versions = new LinkedHashMap<>();
+        for (InteractionRecord record : chain.getRecords()) {
+            String key = CliSupport.invocationKeyOfRecord(record);
+            if (key == null || versions.containsKey(key)) {
+                continue;
+            }
+            InvocationProfile profile = repository.findInvocationByKey(key);
+            versions.put(key, profile != null ? profile.getVersionTag() : null);
+        }
+        StringBuilder sb = new StringBuilder("[");
+        boolean first = true;
+        for (Map.Entry<String, String> entry : versions.entrySet()) {
+            if (!first) {
+                sb.append(",");
+            }
+            first = false;
+            sb.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(entry.getKey())).append("\",\"versionTag\":");
+            sb.append(entry.getValue() != null ? "\"" + RecursiveJsonParser.escape(entry.getValue()) + "\"" : "null").append("}");
+        }
+        return sb.append("]").toString();
     }
 
     private static String baselineSessionOf(List<TaskChain> group) {
@@ -1445,8 +1480,8 @@ public class TaskReplayRunner {
         return note.length() <= TEXT_DIFF_BUDGET ? note : note.substring(0, TEXT_DIFF_BUDGET) + "...";
     }
 
-    private static String dryRunAlignJson(String request, String baselineSession, Integer baselineSteps, String newSession, int newSteps, boolean memberCheck, boolean ciAlign) {
-        return "{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.TASK_DRY_RUN.wireName() + "\",\"alignPlan\":{\"request\":\"" + RecursiveJsonParser.escape(request) + "\",\"baselineSession\":" + (baselineSession != null ? "\"" + RecursiveJsonParser.escape(baselineSession) + "\"" : "null") + ",\"baselineSteps\":" + (baselineSteps != null ? baselineSteps.toString() : "null") + ",\"newSession\":\"" + RecursiveJsonParser.escape(newSession) + "\"" + ",\"newSteps\":" + newSteps + (memberCheck ? ",\"memberCheck\":true" : "") + (ciAlign ? ",\"ciAlign\":true" : "") + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}";
+    private static String dryRunAlignJson(String request, String baselineSession, Integer baselineSteps, String newSession, int newSteps, boolean memberCheck, boolean ciAlign, String baselineVersionsJson) {
+        return "{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.TASK_DRY_RUN.wireName() + "\",\"alignPlan\":{\"request\":\"" + RecursiveJsonParser.escape(request) + "\",\"baselineSession\":" + (baselineSession != null ? "\"" + RecursiveJsonParser.escape(baselineSession) + "\"" : "null") + ",\"baselineSteps\":" + (baselineSteps != null ? baselineSteps.toString() : "null") + ",\"newSession\":\"" + RecursiveJsonParser.escape(newSession) + "\"" + ",\"newSteps\":" + newSteps + (memberCheck ? ",\"memberCheck\":true" : "") + (ciAlign ? ",\"ciAlign\":true" : "") + (baselineVersionsJson != null ? ",\"baselineVersions\":" + baselineVersionsJson : "") + "},\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\"}";
     }
 
     private String taskJson(TaskReportMode mode, String request, String sessionId, int total, AlignmentRender render, int crossVersion, Long baselineTime, Long newChainTime, boolean prefixDependent) {
