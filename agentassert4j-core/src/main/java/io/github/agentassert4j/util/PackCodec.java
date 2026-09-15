@@ -43,6 +43,7 @@ public final class PackCodec {
             t.put("requestText", task.getRequestText());
             t.put("declared", task.isDeclared());
             t.put("baselineTime", task.getBaselineTime());
+            t.put("unadjudicatedSteps", task.getUnadjudicatedSteps());
             List<Object> steps = new ArrayList<>();
             int order = 1;
             for (BaselineStep step : task.getSteps()) {
@@ -107,6 +108,7 @@ public final class PackCodec {
                 task.setRequestText(asString(tm.get("requestText")));
                 task.setDeclared(Boolean.TRUE.equals(tm.get("declared")));
                 task.setBaselineTime(tm.get("baselineTime") instanceof Number ? ((Number) tm.get("baselineTime")).longValue() : 0L);
+                task.setUnadjudicatedSteps(tm.get("unadjudicatedSteps") instanceof Number ? ((Number) tm.get("unadjudicatedSteps")).intValue() : 0);
                 if (tm.get("steps") instanceof List) {
                     for (Object s : (List<?>) tm.get("steps")) {
                         if (!(s instanceof Map)) {

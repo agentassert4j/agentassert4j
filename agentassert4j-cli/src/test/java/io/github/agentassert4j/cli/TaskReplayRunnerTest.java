@@ -570,7 +570,7 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("A1 闭环：同会话好在前坏在后 → CI 判 CHANGED，无 surplus 逃逸")
+        @DisplayName("A1 闭环：同会话好在前坏在后 → 链末坏形态仍挡门，早记录注记在场")
         void sameSessionIteration_allJudged() {
             InteractionRecord seed = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
             establishFromRecord(seed);
@@ -578,27 +578,35 @@ class TaskReplayRunnerTest {
 
             int exit = runner.run(null, null, true, false, false, false, false, null, null);
 
-            assertEquals(1, exit, "同链后续记录必须进判定（基线对照无 surplus 盲区）");
+            assertEquals(1, exit, "链末坏形态必须挡门（好→坏追加，坏是链末）");
             String out = output.toString();
-            assertFalse(out.contains("surplus unpaired"), "每执行一份步骤，不得有富余排除: " + out);
+            assertFalse(out.contains("surplus unpaired"), "链末判定每调用点一份步骤，不得有富余排除: " + out);
             assertTrue(out.contains("CHANGED"));
+            assertTrue(out.contains("--ci gates the latest execution per invocation"), "草稿透明层注记在场: " + out);
+            assertFalse(out.contains("unapproved shape"), "早记录=已批准种子形态，M=0 不追加未批准子句: " + out);
         }
 
         @Test
-        @DisplayName("坏记录在前：首配对即 CHANGED，comparedPairs=1（首 CHANGED 即停）")
-        void badFirst_comparesOnePair() {
+        @DisplayName("链末判定哲学钉：坏草稿在前、好链末在后 → PASS + exit 0 + 透明层计数（草稿不挡门）")
+        void badDraftFirst_ciGatesChainFinal_passes() {
             saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
             InteractionRecord good = saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
             establishFromRecord(good);
 
+            assertEquals(0, runner.run(null, null, true, false, false, false, false, null, null), "判定对象=链末执行（与画像一致），草稿不挡门");
+            String human = output.toString();
+            assertTrue(human.contains("--ci gates the latest execution per invocation"), "早记录注记在人读通道: " + human);
+            assertTrue(human.contains("1 earlier record"), "组内早记录计数 N=1: " + human);
+            assertTrue(human.contains("unapproved shape"), "坏草稿的未批准计数 M=1: " + human);
+            assertNull(repository.findInvocationByKey(good.getInvocationKey()).getCandidateFingerprint(), "链末与画像一致，无候选登记");
+
             TaskReplayRunner jsonRunner = newRunner(true);
             output.reset();
-            jsonRunner.run(null, null, true, false, false, false, false, null, null);
-
+            assertEquals(0, jsonRunner.run(null, null, true, false, false, false, false, null, null));
             String ciLine = reportLine(output.toString(), "\"mode\":\"ci-align\"");
             assertNotNull(ciLine, "必须有 ci-align 报告行");
-            assertTrue(ciLine.contains("\"comparedPairs\":1"), "首配对即 CHANGED 停止: " + ciLine);
-            assertNotNull(repository.findInvocationByKey(good.getInvocationKey()).getCandidateFingerprint());
+            assertTrue(ciLine.contains("\"earlierRecords\":1"), "早记录计数进 JSON: " + ciLine);
+            assertTrue(ciLine.contains("\"unapprovedEarlier\":1"), "未批准草稿计数进 JSON: " + ciLine);
         }
 
         @Test
@@ -701,17 +709,80 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("skippedPairs 释义：首 CHANGED 早停后未检配对有人读注记")
-        void skippedPairs_explainedInReport() {
-            saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
-            InteractionRecord good = saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
-            establishFromRecord(good);
+        @DisplayName("skippedPairs 释义移驻 bare 链对链：首 CHANGED 早停后未检配对有人读注记（ci 面链末判定下恒 0）")
+        void skippedPairs_explainedInReport_barePairing() {
+            saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+            saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
+            saveRecord("b-1", "session-b", 3000L, "查订单", "order", "hash-a", "{\"v\":2,\"w\":3}", null);
+            saveRecord("b-2", "session-b", 4000L, "查订单", "order", "hash-a", "{\"v\":1}", null);
 
-            runner.run(null, null, true, false, false, false, false, null, null);
+            int exit = runner.run(null, null, false, false, false, false, false, null, null);
 
+            assertEquals(1, exit, "bare 链对链首配对即差异");
             String out = output.toString();
             assertTrue(out.contains("not examined after the first difference"), "早停未检配对必须就地释义: " + out);
             assertTrue(out.contains("the step verdict is already CHANGED"), "释义必须点明步骤判定已定: " + out);
+        }
+
+        @Test
+        @DisplayName("T2 闭环：混合链 accept 后同链复检即绿（CC Round5 原始预期）")
+        void mixedChain_acceptThenSameChainRecheck_green() {
+            InteractionRecord seed = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            establishFromRecord(seed);
+            saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
+
+            assertEquals(1, runner.run(null, null, true, false, false, false, false, null, null), "链末坏形态先挡门");
+            assertNotNull(repository.findInvocationByKey("invocation:order:hash-a").getCandidateFingerprint(), "CHANGED 步照落候选");
+
+            new BaselineManager(repository).accept("invocation:order:hash-a", null, "tester", null);
+
+            assertEquals(0, runner.run(null, null, true, false, false, false, false, null, null), "accept 提升链末形态后，同一证据复检必须绿");
+        }
+
+        @Test
+        @DisplayName("多形态收敛：同键稳定两形态——accept 链末形态后复检恒绿不摆振")
+        void multiShapeInvocation_acceptConverges_noPendulum() {
+            InteractionRecord first = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"shape\":\"one\"}", null);
+            saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-a", "{\"shape\":\"two\",\"extra\":true}", null);
+            establishFromRecord(first);
+
+            assertEquals(1, runner.run(null, null, true, false, false, false, false, null, null), "建档种子=形态一，链末形态二 → CHANGED 落候选");
+            new BaselineManager(repository).accept("invocation:order:hash-a", null, "tester", null);
+
+            assertEquals(0, runner.run(null, null, true, false, false, false, false, null, null), "accept 形态二后同链复检绿");
+            assertEquals(0, runner.run(null, null, true, false, false, false, false, null, null), "再复检仍绿——判定对象=链末，不随历史摆振");
+        }
+
+        @Test
+        @DisplayName("链末判定对象=最新链的组末：第二链链末复检对已 accept 形态 PASS")
+        void chainFinal_judgedObjectIsLatestChainGroupEnd() {
+            InteractionRecord first = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"shape\":\"one\"}", null);
+            saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-a", "{\"shape\":\"two\",\"extra\":true}", null);
+            establishFromRecord(first);
+            saveRecord("b-1", "session-b", 3000L, "查订单", "order", "hash-a", "{\"shape\":\"one\"}", null);
+            saveRecord("b-2", "session-b", 4000L, "查订单", "order", "hash-a", "{\"shape\":\"two\",\"extra\":true}", null);
+
+            assertEquals(1, runner.run(null, null, true, false, false, false, false, null, null), "最新链(session-b)链末=形态二 → CHANGED");
+            new BaselineManager(repository).accept("invocation:order:hash-a", null, "tester", null);
+            assertEquals(0, runner.run(null, null, true, false, false, false, false, null, null), "复检判定最新链链末（已批准形态）→ PASS");
+        }
+
+        @Test
+        @DisplayName("守卫窄化：草稿键未建档不拒绝判定（judged 键已建档照常对照）；裂键缺口由漂移层披露")
+        void ciGuard_narrowedToJudgedKeys() {
+            saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-old", "{\"result\":\"ok\"}", null);
+            InteractionRecord finalShape = saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            establishFromRecord(finalShape);
+
+            int exit = runner.run(null, null, true, false, false, false, false, null, null);
+
+            String out = output.toString();
+            assertFalse(out.contains("Refusing to judge in --ci mode"), "判定不再被草稿键拒绝——judged 键已建档: " + out);
+            assertTrue(out.contains("PASS 1"), "链末对照照常判定且通过: " + out);
+            assertTrue(out.contains("unapproved shape"), "无画像草稿计为未批准（透明层）: " + out);
+            assertNull(repository.findInvocationByKey("invocation:order:hash-old"), "ci 模式不顺手为草稿键建档");
+            assertEquals(1, exit, "同标签异哈希草稿=标签裂键，作为证据缺口由漂移层挂起（身份卫生问题独立于基线对照）");
+            assertTrue(out.contains("Hung: order@hash-old"), "挂起点就地指名: " + out);
         }
 
         @Test
@@ -726,9 +797,10 @@ class TaskReplayRunnerTest {
             assertEquals(0, jsonRunner.run(null, null, true, true, false, false, false, null, null));
 
             String planLine = reportLine(output.toString(), "\"mode\":\"task-dry-run\"");
-            assertNotNull(planLine, "必须有计划行: " + output);
+            assertNotNull(planLine, "必须有计划行: " + output.toString());
             assertTrue(planLine.contains("\"ciAlign\":true"), planLine);
-            assertTrue(planLine.contains("\"baselineVersions\":[{\"invocationKey\":\"invocation:order:hash-a\",\"versionTag\":\"v1\"},{\"invocationKey\":\"invocation:order:hash-b\",\"versionTag\":null}]"), "计划必须讲清将对照谁（未建档 null 显式）: " + planLine);
+            assertTrue(planLine.contains("\"baselineVersions\":[{\"invocationKey\":\"invocation:order:hash-b\",\"versionTag\":null}]"), "计划只列链末判定将对照的键（同标签早记录键不入列，未建档 null 显式）: " + planLine);
+            assertTrue(planLine.contains("\"newSteps\":1"), "计划步数=链末调用点数（同标签两记录裁剪为一）: " + planLine);
         }
     }
 

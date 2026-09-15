@@ -24,9 +24,10 @@ import java.util.*;
 /**
  * verify 执行流程 — 验收包（导入参照）× 本地录制链（现场重提）的交付验收比对。
  *
- * <p>包内指纹作为基线侧、本地录制链现场重提作为当前侧，走同一对齐器；
- * 验收包只读：不落库、不改本地基线与候选状态。包判定语义与当前引擎不一致时拒绝判定；
- * 包任务未执行属证据缺口，不允许冒充通过。</p>
+ * <p>包内指纹作为基线侧（导出侧画像活跃指纹的定格交付）、本地录制链的链末执行
+ * （每调用点最新记录）现场重提作为当前侧，走链末判定入口（与 CI 门禁同一把尺：
+ * 任务纪律与前缀看全链）；验收包只读：不落库、不改本地基线与候选状态。包判定语义
+ * 与当前引擎不一致时拒绝判定；包任务未执行属证据缺口，不允许冒充通过。</p>
  *
  * @author axy-yxa
  * @since 2026-08-30
@@ -137,7 +138,7 @@ public class VerifyRunner {
                 continue;
             }
             Map<String, List<BaselineStep>> baselineSteps = BaselineSides.fromPackSteps(task.getSteps());
-            TaskAlignment alignment = TaskAligner.align(baselineSteps, local, comparator, packRules);
+            TaskAlignment alignment = TaskAligner.alignLatestPerInvocation(baselineSteps, local, comparator, packRules);
             alignment.setBaselineTime(task.getBaselineTime());
             alignment.setNewChainTime(local.firstTimestamp());
             boolean crossModel = isCrossModel(local, pack.getMeta().getServedModel());
@@ -227,14 +228,15 @@ public class VerifyRunner {
         StringBuilder pairingsJson = new StringBuilder();
         for (AcceptancePack.PackTask task : tasks) {
             TaskChain local = latestLocalChain(localChains, task.getTaskKey());
-            String pairing = local == null ? "no matching local chain (counts as a coverage gap when executed)" : "pairs with local chain session " + local.getSessionId() + " (" + CliSupport.plural(local.getRecords().size(), "step") + "; pack baseline " + CliSupport.plural(task.getSteps().size(), "step") + ")";
+            int judgedSteps = local == null ? 0 : TaskAligner.trimToLatestPerInvocation(local).getRecords().size();
+            String pairing = local == null ? "no matching local chain (counts as a coverage gap when executed)" : "pairs with local chain session " + local.getSessionId() + " (" + CliSupport.plural(judgedSteps, "invocation") + " judged from " + local.getRecords().size() + " records; pack baseline " + CliSupport.plural(task.getSteps().size(), "step") + ")";
             info("  " + task.getTaskKey() + " → " + pairing);
             if (jsonMode) {
                 if (pairingsJson.length() > 0) pairingsJson.append(",");
                 pairingsJson.append("{\"task\":\"").append(RecursiveJsonParser.escape(task.getTaskKey())).append('"');
                 if (local != null) {
                     pairingsJson.append(",\"localSession\":\"").append(RecursiveJsonParser.escape(local.getSessionId())).append('"');
-                    pairingsJson.append(",\"localSteps\":").append(local.getRecords().size());
+                    pairingsJson.append(",\"localSteps\":").append(judgedSteps);
                 } else {
                     pairingsJson.append(",\"localSession\":null");
                 }
@@ -339,6 +341,9 @@ public class VerifyRunner {
                 }
                 if (step.getSurplusCount() > 0) {
                     sb.append("  - uneven record counts on this invocation; ").append(step.getSurplusCount()).append(" surplus unpaired\n");
+                }
+                if (step.getEarlierRecords() > 0) {
+                    sb.append("  - judging the latest execution per invocation; ").append(step.getEarlierRecords()).append(" earlier record(s) on this invocation not re-judged\n");
                 }
             }
         }
@@ -454,6 +459,9 @@ public class VerifyRunner {
             }
             if (step.getSurplusCount() > 0) {
                 ss.append(",\"surplusCount\":").append(step.getSurplusCount());
+            }
+            if (step.getEarlierRecords() > 0) {
+                ss.append(",\"earlierRecords\":").append(step.getEarlierRecords());
             }
             if (step.getInvocationLabel() != null) {
                 ss.append(",\"invocationLabel\":\"").append(RecursiveJsonParser.escape(step.getInvocationLabel())).append('"');

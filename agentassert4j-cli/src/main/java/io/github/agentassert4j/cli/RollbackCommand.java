@@ -61,11 +61,13 @@ public class RollbackCommand implements Callable<Integer> {
                 throw new IllegalStateException("Invocation " + invocationKey + " has no baseline profile.");
             }
             ensureVersionExists(repository, invocationKey, version);
+            // 回滚会顺带清空在途候选：丢弃待裁决证据是治理副作用，必须在回执披露
+            boolean discardedCandidate = target.getCandidateFingerprint() != null;
             String actor = approver != null && !approver.trim().isEmpty() ? approver.trim() : CliSupport.currentActor();
             new BaselineManager(repository).rollback(invocationKey, version, expectedVersion, actor);
             InvocationProfile reloaded = repository.findInvocationByKey(invocationKey);
             if (jsonOutput) {
-                out.println("{\"schema\":\"" + ReportSchemas.ROLLBACK + "\",\"invocationKey\":\"" + RecursiveJsonParser.escape(invocationKey) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(version) + "\",\"status\":\"" + reloaded.getBaselineStatus() + "\",\"approvedBy\":\"" + RecursiveJsonParser.escape(reloaded.getApprovedBy() != null ? reloaded.getApprovedBy() : "") + "\",\"codeRef\":\"" + RecursiveJsonParser.escape(reloaded.getCodeRef() != null ? reloaded.getCodeRef() : "") + "\",\"ok\":true}");
+                out.println("{\"schema\":\"" + ReportSchemas.ROLLBACK + "\",\"invocationKey\":\"" + RecursiveJsonParser.escape(invocationKey) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(version) + "\",\"status\":\"" + reloaded.getBaselineStatus() + "\",\"approvedBy\":\"" + RecursiveJsonParser.escape(reloaded.getApprovedBy() != null ? reloaded.getApprovedBy() : "") + "\"" + (discardedCandidate ? ",\"candidateDiscarded\":true" : "") + ",\"codeRef\":\"" + RecursiveJsonParser.escape(reloaded.getCodeRef() != null ? reloaded.getCodeRef() : "") + "\",\"ok\":true}");
             } else {
                 // 审批事实按在场渲染：approvedBy=null 是合法形态（未经审批链盖章），
                 // 人读输出不得出现 "null" 字样
@@ -79,6 +81,12 @@ public class RollbackCommand implements Callable<Integer> {
                     }
                     facts.append("ref ").append(reloaded.getCodeRef());
                 }
+                if (discardedCandidate) {
+                    if (facts.length() > 0) {
+                        facts.append(", ");
+                    }
+                    facts.append("in-flight candidate discarded");
+                }
                 out.println("  " + invocationKey + " → " + version + (facts.length() > 0 ? " (" + facts + ")" : ""));
             }
             return 0;
@@ -87,8 +95,8 @@ public class RollbackCommand implements Callable<Integer> {
         } catch (VersionMismatchException e) {
             return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run report to see the active version, then retry with --expected-version <tag>, or drop the guard.", "report");
         } catch (IllegalStateException e) {
-            // 目标画像/归档版本不存在：无对象可回滚，非环境故障
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, CliSupport.describe(e), "Pick a version from the archived column in `status`, then retry.", "agentassert4j status");
+            // 目标画像/归档版本不存在，或目标=活动版本（空回滚被拒）：用法域拒绝，非环境故障
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, CliSupport.describe(e), "Pick a different archived version in `status` (the active tag is not a rollback target); to discard an in-flight candidate use `reject`.", "agentassert4j status");
         } catch (RuntimeException e) {
             return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_ENV, "rollback failed: " + CliSupport.describe(e), "Fix the reported problem and retry; `agentassert4j doctor` reports database and config health.", "agentassert4j doctor");
         } finally {

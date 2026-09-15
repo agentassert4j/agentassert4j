@@ -285,7 +285,8 @@ requiredSteps/order/counts 的包，编排纪律同样参与判定——跨模�
 
 框架是纯能力提供方，agent 能调用什么由 harness 权限系统决定；框架承担透明与事后审计。
 约定：agent 驱动治理写时以 `--approver agent:<名称>` 申报机器身份（自由字符串，人类用
-默认 OS 身份；reject/rollback 同样支持）。六个治理动词（establish/force-rebuild/accept/
+默认 OS 身份；reject/rollback 同样支持；MCP 工具面 approver 为必填参数——机器调用方
+必须申报身份，缺席即拒）。六个治理动词（establish/force-rebuild/accept/
 reject/rollback/collect）发生时落入治理事件时间线，agent 申报的治理写用一条命令回溯：
 
 ```bash

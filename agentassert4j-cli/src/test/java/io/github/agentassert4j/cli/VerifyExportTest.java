@@ -1,11 +1,14 @@
 package io.github.agentassert4j.cli;
 
+import io.github.agentassert4j.algorithm.BaselineManager;
 import io.github.agentassert4j.algorithm.ComparatorConfig;
 import io.github.agentassert4j.algorithm.DeterministicComparator;
+import io.github.agentassert4j.algorithm.FingerprintExtractor;
 import io.github.agentassert4j.algorithm.TaskAligner;
 import io.github.agentassert4j.algorithm.TaskChainView;
 import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.InvocationRulesConfig;
+import io.github.agentassert4j.model.AcceptancePack;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.result.TaskAlignment;
@@ -94,6 +97,22 @@ class VerifyExportTest {
         repo.saveInteractionIfAbsent(r);
     }
 
+    /**
+     * 构造而不落库（recordCandidate 等直调需要 InteractionRecord 对象本体）。
+     */
+    private InteractionRecord record(String recordId, String sessionId, long timestamp, String invocationKey, String label, String templateHash, String response) {
+        InteractionRecord r = new InteractionRecord();
+        r.setRecordId(recordId);
+        r.setSessionId(sessionId);
+        r.setTimestamp(timestamp);
+        r.setSeq(timestamp);
+        r.setInvocationKey(invocationKey);
+        r.setInvocationId(label);
+        r.setTemplateHash(templateHash);
+        r.setModelResponse(response);
+        return r;
+    }
+
     private String exportPack(String dbPath, boolean includeSamples) throws Exception {
         return exportPack(dbPath, includeSamples, null);
     }
@@ -112,7 +131,15 @@ class VerifyExportTest {
     }
 
     private void establishBaselines() {
-        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", null, false, null, null, null, null);
+        establishBaselines(null);
+    }
+
+    /**
+     * 带 rules 建档与 CLI 生产路径同形（BaselineCommand 加载配置后传入）——
+     * 画像指纹的维度 3/4 由建档时的 rules 定格，null = 无规则建档。
+     */
+    private void establishBaselines(InvocationRulesConfig rules) {
+        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", null, false, null, rules, null, null);
     }
 
     @Test
@@ -135,6 +162,7 @@ class VerifyExportTest {
         Map<?, ?> step = ((List<Map<?, ?>>) task.get("steps")).get(0);
         Map<?, ?> fp = (Map<?, ?>) step.get("fingerprint");
         assertEquals(new HashSet<>(Arrays.asList("toolCallSet", "toolParamTypes", "outputContentType", "outputFieldPaths", "outputFieldTypeMap", "textLengthMagnitude", "requiredKeywords", "forbiddenKeywords", "regexPatterns", "declaredBehaviors", "hasError")), fp.keySet(), "指纹键集固定");
+        assertTrue(json.contains("\"unadjudicatedSteps\":0"), "出厂偏离计数恒序列化（0 也写）: " + json);
         assertTrue(json.contains("\"servedModel\":\"dev-model\""), json);
         assertTrue(json.contains("\"codeRef\":null"), "未声明锚的包显式写 null 键: " + json);
     }
@@ -184,20 +212,150 @@ class VerifyExportTest {
     }
 
     @Test
-    @DisplayName("同键多记录往返：每步骤携带各自记录的指纹 → 全 PASS")
+    @DisplayName("同键多记录往返：uniform 多记录链折叠为每调用点一步（组末锚）→ 全 PASS")
     void roundtrip_multiRecordSameKey_pass() throws Exception {
-        // 同一调用点键的两条记录（同模板、输出结构异质——模板复用形态），
-        // 画像指纹只来自规范序首条；步骤指纹若取画像值，第二步必然假 CHANGED
+        // 同一调用点键的两条同形态记录：链末判定下每调用点一份步骤（组末为证据锚），
+        // 指纹消费画像批准真相——uniform 链链末与画像一致，往返必自洽
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        saveRecord("r2", "s1", 2000L, null, "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        establishBaselines();
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+
+        Object parsed = RecursiveJsonParser.parse(json);
+        Map<?, ?> task = (Map<?, ?>) ((List<?>) ((Map<?, ?>) parsed).get("tasks")).get(0);
+        List<?> steps = (List<?>) task.get("steps");
+        assertEquals(1, steps.size(), "同键多记录折叠为每调用点一步: " + json);
+        assertEquals("r2", ((Map<?, ?>) steps.get(0)).get("recordId"), "证据锚=组末记录: " + json);
+        assertEquals(0, ((Number) task.get("unadjudicatedSteps")).intValue(), "链末与画像一致 → 偏离计数 0");
+
+        VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+        int exit = runner.run(json, HashUtil.sha256(json), null, null, false);
+        assertEquals(0, exit, "同环境往返必 PASS: " + output);
+    }
+
+    @Test
+    @DisplayName("出厂偏离检测·链末形态异：承诺照常入包+计数，verify 同尺判链末 CHANGED")
+    void export_flagsChainEndDeviation_verifyJudgesChainFinal() throws Exception {
         saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         saveRecord("r2", "s1", 2000L, null, "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\",\"extra\":1}", "dev-model");
         establishBaselines();
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
         String digest = HashUtil.sha256(json);
 
-        VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
-        int exit = runner.run(json, digest, null, null, false);
+        Object parsed = RecursiveJsonParser.parse(json);
+        Map<?, ?> task = (Map<?, ?>) ((List<?>) ((Map<?, ?>) parsed).get("tasks")).get(0);
+        assertEquals(1, ((Number) task.get("unadjudicatedSteps")).intValue(), "链末提取≠批准指纹 → 出厂偏离计数: " + json);
+        assertTrue(output.toString().contains("unadjudicated steps in the pack"), "人读警告在场: " + output);
 
-        assertEquals(0, exit, "同环境往返必 PASS（步骤指纹必须逐记录提取，画像指纹口径下第二步假 CHANGED）: " + output);
+        VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+        Path reportPath = tempDir.resolve("deviation-report.md");
+        int exit = runner.run(json, digest, null, reportPath.toString(), false);
+        assertEquals(1, exit, "verify 判本地链末（异形态）vs 包承诺（批准形态）→ CHANGED（与 CI 同尺）: " + output);
+        assertTrue(output.toString().contains("CHANGED 1"), output.toString());
+        String markdown = new String(Files.readAllBytes(reportPath), StandardCharsets.UTF_8);
+        assertTrue(markdown.contains("judging the latest execution per invocation; 1 earlier record(s)"), "markdown 镜像 N 面注记: " + markdown);
+
+        ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+        VerifyRunner jsonRunner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
+        assertEquals(1, jsonRunner.run(json, digest, null, null, false));
+        assertTrue(jsonOut.toString().contains("\"earlierRecords\":1"), "verify-report/1 步骤镜像 N 面字段: " + jsonOut);
+    }
+
+    @Test
+    @DisplayName("出厂偏离检测·在途候选：未裁决即导出计数+警告+JSON 报告字段；accept 后重导归零")
+    void export_flagsInFlightCandidate_thenCleanAfterAdjudication() throws Exception {
+        InteractionRecord seed = record("r1", "s1", 1000L, "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}");
+        repository.saveInteractionIfAbsent(seed);
+        establishBaselines();
+        InteractionRecord changed = record("n1", "s2", 9000L, "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"status\":\"FAILED\"}");
+        changed.setUserInput("查订单");
+        repository.saveInteractionIfAbsent(changed);
+        assertTrue(new BaselineManager(repository).recordCandidate(changed, FingerprintExtractor.extract(changed, new InvocationRulesConfig(), "verdict")), "登记在途候选");
+
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+        Object parsed = RecursiveJsonParser.parse(json);
+        Map<?, ?> task = (Map<?, ?>) ((List<?>) ((Map<?, ?>) parsed).get("tasks")).get(0);
+        assertEquals(1, ((Number) task.get("unadjudicatedSteps")).intValue(), "在途候选 → 出厂偏离计数: " + json);
+        assertTrue(output.toString().contains("unadjudicated steps in the pack"), "人读警告在场: " + output);
+
+        BaselineExportCommand jsonReport = new BaselineExportCommand();
+        jsonReport.db = tempDir.resolve("verify.db").toString();
+        jsonReport.out = new PrintStream(output, true);
+        jsonReport.err = new PrintStream(output, true);
+        jsonReport.outPath = tempDir.resolve("pack2.json").toString();
+        jsonReport.jsonOutput = true;
+        assertEquals(0, jsonReport.call(), "导出应成功: " + output);
+        assertTrue(output.toString().contains("\"unadjudicatedSteps\":1"), "export-report/1 计数在场: " + output);
+
+        new BaselineManager(repository).accept("invocation:verdict:h-verdict", null, "tester", null);
+        output.reset();
+        String clean = exportPack(tempDir.resolve("verify.db").toString(), false);
+        Object reparsed = RecursiveJsonParser.parse(clean);
+        Map<?, ?> cleanTask = (Map<?, ?>) ((List<?>) ((Map<?, ?>) reparsed).get("tasks")).get(0);
+        assertEquals(0, ((Number) cleanTask.get("unadjudicatedSteps")).intValue(), "裁决后重导归零: " + clean);
+        assertFalse(output.toString().contains("unadjudicated steps in the pack"), "全裁决一致库不出警告: " + output);
+    }
+
+    @Test
+    @DisplayName("自违不误报：declared 规则 × 链末偏离 → 走偏离出口，不整链排除为自违")
+    void export_selfViolation_notMisdiagnosed() throws Exception {
+        Path rulesFile = tempDir.resolve("rules.json");
+        Files.write(rulesFile, "{\"invocations\":{\"verdict\":{\"requiredKeywords\":[\"DONE\"]}}}".getBytes(StandardCharsets.UTF_8));
+        System.setProperty(ConfigLoader.RULES_PATH_PROPERTY, rulesFile.toString());
+        try {
+            saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "verdict DONE shipped", "dev-model");
+            establishBaselines();
+            saveRecord("r2", "s1", 2000L, null, "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\",\"extra\":1}", "dev-model");
+
+            String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+
+            assertTrue(json.contains("\"taskKey\":\"查订单\""), "任务照常入包（承诺仍良定义）: " + json);
+            assertFalse(output.toString().contains("violates its own content rules"), "链末偏离不得误诊为基线自违: " + output);
+            Object parsed = RecursiveJsonParser.parse(json);
+            Map<?, ?> task = (Map<?, ?>) ((List<?>) ((Map<?, ?>) parsed).get("tasks")).get(0);
+            assertEquals(1, ((Number) task.get("unadjudicatedSteps")).intValue(), "偏离走出厂检测出口: " + json);
+        } finally {
+            System.clearProperty(ConfigLoader.RULES_PATH_PROPERTY);
+        }
+    }
+
+    @Test
+    @DisplayName("字段缺省语义：缺 unadjudicatedSteps 字段的包 fromMap 缺省 0，verify 照常")
+    void packField_defaultZero_whenAbsent() throws Exception {
+        saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+        establishBaselines();
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+
+        String stripped = json.replace(",\"unadjudicatedSteps\":0", "");
+        assertFalse(stripped.contains("unadjudicatedSteps"), "夹具必须真的剥掉字段: " + stripped);
+        AcceptancePack pack = PackCodec.fromJson(stripped);
+        assertEquals(0, pack.getTasks().get(0).getUnadjudicatedSteps(), "缺字段缺省 0（解析健壮性，非版本迁移）");
+
+        VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+        assertEquals(0, runner.run(stripped, HashUtil.sha256(stripped), null, null, false), "缺字段包照常判定: " + output);
+    }
+
+    @Test
+    @DisplayName("指纹真源+同尺钉：导出时规则缺席（仅声明集漂移）→ 不计偏离（与门禁同尺），包步骤携带画像批准指纹")
+    void export_stepsCarryApprovedFingerprints() throws Exception {
+        Path rulesFile = tempDir.resolve("rules.json");
+        Files.write(rulesFile, "{\"invocations\":{\"verdict\":{\"requiredKeywords\":[\"DONE\"]}}}".getBytes(StandardCharsets.UTF_8));
+        System.setProperty(ConfigLoader.RULES_PATH_PROPERTY, rulesFile.toString());
+        try {
+            saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
+            establishBaselines(InvocationRulesConfig.fromJson("{\"invocations\":{\"verdict\":{\"requiredKeywords\":[\"DONE\"]}}}"));
+        } finally {
+            System.clearProperty(ConfigLoader.RULES_PATH_PROPERTY);
+        }
+        // 导出时规则文件缺席：链末现场提取只缺声明集（结构维一致），门禁会判 PASS——
+        // 偏离检测不得比门禁更严（否则警告指路的裁决对象不存在）→ 计数 0；
+        // 包步骤指纹仍携带画像批准真相（声明规则维在场）
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+        Object parsed = RecursiveJsonParser.parse(json);
+        Map<?, ?> task = (Map<?, ?>) ((List<?>) ((Map<?, ?>) parsed).get("tasks")).get(0);
+        assertEquals(0, ((Number) task.get("unadjudicatedSteps")).intValue(), "仅声明集漂移=门禁 PASS=非偏离（同尺）: " + json);
+        assertFalse(output.toString().contains("unadjudicated steps in the pack"), "不出假警告: " + output);
+        assertTrue(json.contains("DONE"), "步骤指纹携带画像的声明规则维: " + json);
     }
 
     @Test
@@ -342,17 +500,17 @@ class VerifyExportTest {
     }
 
     @Test
-    @DisplayName("参照等价：包内指纹与库内记录路径喂同一对齐核，各自语义下判定正确")
+    @DisplayName("参照等价：包=批准真相定格——本地链末偏离判红；库内路径两轮结构变化照判")
     void referenceEquivalence() throws Exception {
         saveRecord("b1", "s-old", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
         saveRecord("n1", "s-new", 9000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"status\":\"FAILED\"}", "dev-model");
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
 
-        // 包路径：包=最新链的行为证据（折叠+逐记录指纹），本地同链现场重提 → 自洽 PASS
+        // 包路径：包指纹=画像批准真相（b1 形态）；本地链末（n1 形态）偏离 → 如实 CHANGED
         VerifyRunner packRunner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
         int packExit = packRunner.run(json, "digest", null, null, false);
-        assertEquals(0, packExit, "包内指纹与本地重提同口径，同链必自洽 PASS: " + output);
+        assertEquals(1, packExit, "包=批准真相：本地链末偏离承诺必须判红: " + output);
 
         // 库内路径：两条链喂同一对齐核 → 两轮间的结构变化 = CHANGED
         List<TaskChain> chains = TaskChainView.resolveAll(repository);
@@ -434,7 +592,7 @@ class VerifyExportTest {
         try {
             saveRecord("r1", "s1", 1000L, "clean request", "invocation:order:h-order", "order", "h-order", "your order 123 shipped", "dev-model");
             saveRecord("r2", "s2", 2000L, "refund request", "invocation:refund:h-refund", "refund", "h-refund", "done", "dev-model");
-            establishBaselines();
+            establishBaselines(InvocationRulesConfig.fromJson("{\"invocations\":{\"refund\":{\"requiredKeywords\":[\"order\"]}}}"));
             String json = exportPack(tempDir.resolve("verify.db").toString(), false);
             assertTrue(json.contains("\"rules\""), "声明规则段必须随包出境: " + json);
             assertTrue(output.toString().contains("violate their own declared content rules"), "自违排除必须警告: " + output);
@@ -457,7 +615,7 @@ class VerifyExportTest {
         System.setProperty(ConfigLoader.RULES_PATH_PROPERTY, rulesFile.toString());
         try {
             saveRecord("r1", "s1", 1000L, "refund request", "invocation:refund:h-refund", "refund", "h-refund", "your order 123 shipped", "dev-model");
-            establishBaselines();
+            establishBaselines(InvocationRulesConfig.fromJson("{\"invocations\":{\"refund\":{\"requiredKeywords\":[\"order\"]}}}"));
             String json = exportPack(tempDir.resolve("verify.db").toString(), false);
 
             SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer.db").toString());

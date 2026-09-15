@@ -37,8 +37,8 @@ final class McpTools {
      */
     static List<McpTool> tools(String db) {
         List<McpTool> tools = new ArrayList<>();
-        tools.add(McpTool.of("check", "Project-wide behavior check with zero LLM calls: template drift detection plus baseline comparison. " + "Alignment basis: each task's LATEST chain is judged against its APPROVED baselines (the profile fingerprints promoted by establish/accept); accept updates those baselines but does not flip existing chain history. The local replay command without --ci instead pairs the latest chain with the previous chain. " + "PASS compares structure and declared rules only; answer wording is not fingerprinted (declare content rules to pin wording). " + "Precondition: recorded interactions in the database (starter SDK in-app recording, or the record tool). " + "Runs CI semantics: invocations without baselines are refused with a pointer to establish; drift identities are not collected and no baseline mutations happen — CHANGED findings still land candidate fingerprints awaiting accept/reject. " + "PASS means no behavioral regression since the baselines; CHANGED means a behavioral difference, reported per task with per-step diffs.", "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}", CliCommands("replay"), args -> runReplay(db, args, true, false, false)));
-        tools.add(McpTool.of("diff", "Behavioral difference for a narrowed scope, same zero-call engine as check: each task's latest chain judged " + "against its approved baselines (see check), plus template drift, scoped by task request-text prefix and/or invocation selector. " + "CI semantics like check: refuses when the scope holds unbaselined invocations.", "{\"type\":\"object\",\"properties\":{" + "\"task\":{\"type\":\"string\",\"description\":\"Task chain request-text prefix\"}," + "\"invocation\":{\"type\":\"string\",\"description\":\"Invocation selector: business label, invocationKey, unique prefix, or the status display form\"}}," + "\"additionalProperties\":false}", CliCommands("replay"), args -> runReplay(db, args, true, false, false)));
+        tools.add(McpTool.of("check", "Project-wide behavior check with zero LLM calls: template drift detection plus baseline comparison. " + "Alignment basis: the latest execution of each invocation in each task's LATEST chain is judged against its APPROVED baselines (the profile fingerprints promoted by establish/accept); accept promotes the approved shape, so the same chain rechecks green (earlier same-session records stay visible as notes, not gated). The local replay command without --ci instead pairs the latest chain with the previous chain. " + "PASS compares structure and declared rules only; answer wording is not fingerprinted (declare content rules to pin wording). " + "Precondition: recorded interactions in the database (starter SDK in-app recording, or the record tool). " + "Runs CI semantics: invocations without baselines are refused with a pointer to establish; drift identities are not collected and no baseline mutations happen — CHANGED findings still land candidate fingerprints awaiting accept/reject. " + "PASS means no behavioral regression since the baselines; CHANGED means a behavioral difference, reported per task with per-step diffs.", "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}", CliCommands("replay"), args -> runReplay(db, args, true, false, false)));
+        tools.add(McpTool.of("diff", "Behavioral difference for a narrowed scope, same zero-call engine as check: the latest execution of each invocation in each task's latest chain judged " + "against its approved baselines (see check), plus template drift, scoped by task request-text prefix and/or invocation selector. " + "CI semantics like check: refuses when the scope holds unbaselined invocations.", "{\"type\":\"object\",\"properties\":{" + "\"task\":{\"type\":\"string\",\"description\":\"Task chain request-text prefix\"}," + "\"invocation\":{\"type\":\"string\",\"description\":\"Invocation selector: business label, invocationKey, unique prefix, or the status display form\"}}," + "\"additionalProperties\":false}", CliCommands("replay"), args -> runReplay(db, args, true, false, false)));
         tools.add(McpTool.of("report", "Snapshot of recorded invocations and baselines: version tags, pending candidate fingerprints, stability view over repeated runs, " + "and exit-health counts. Read-only. Default output is the status/1 JSON report; " + "invocation narrows both channels, diff=true switches to the full human inspection view with per-dimension candidate vs baseline diffs.", "{\"type\":\"object\",\"properties\":{" + "\"invocation\":{\"type\":\"string\",\"description\":\"Narrow the view to one invocation (both channels): business label, invocationKey prefix, or the status display form\"}," + "\"diff\":{\"type\":\"boolean\",\"description\":\"Render the human inspection view including candidate diffs instead of the JSON report\"}}," + "\"additionalProperties\":false}", CliCommands("status"), args -> runCommand(capture -> {
             StatusCommand command = new StatusCommand();
             command.out = capture.out;
@@ -101,47 +101,69 @@ final class McpTools {
                 return command;
             });
         }));
-        tools.add(McpTool.of("establish", "Establish baselines for recorded invocations (idempotent, safe to re-run; force rebuilds existing baselines under the current judgment semantics). " + "Governance write: call after a trustworthy recorded run, typically on human instruction. " + "Agents declare themselves with approver like \"agent:<name>\"; the CLI audit command lists such writes.", "{\"type\": \"object\", \"properties\": {\"invocation\": {\"type\": \"string\", \"description\": \"Only this invocation (defaults to all)\"}, \"approver\": {\"type\": \"string\", \"description\": \"Approver identity stamped on the baseline; agents use agent:<name>\"}, \"ref\": {\"type\": \"string\", \"description\": \"Code reference (e.g. a git commit) the baselines correspond to\"}, \"force\": {\"type\": \"boolean\", \"description\": \"Rebuild existing baselines under the current judgment semantics\"}, \"expectedVersion\": {\"type\": \"string\", \"description\": \"Optimistic concurrency guard for force: refuse unless every active baseline version still equals this tag\"}}, \"additionalProperties\": false}", CliCommands("baseline"), args -> runCommand(capture -> {
-            BaselineCommand command = new BaselineCommand();
-            command.out = capture.out;
-            command.err = capture.err;
-            command.db = db;
-            command.invocation = optionalString(args, "invocation");
-            command.approver = optionalString(args, "approver");
-            command.codeRef = optionalString(args, "ref");
-            command.force = optionalBoolean(args, "force");
-            command.expectedVersion = optionalString(args, "expectedVersion");
-            command.jsonOutput = true;
-            return command;
-        })));
-        tools.add(McpTool.of("accept", "Promote a pending candidate fingerprint (landed by check or diff on CHANGED) to the baseline; the previous baseline is archived " + "and restorable via the CLI rollback command. Governance write: call only when the human decides the new behavior is intended. " + "Agents declare themselves with approver like \"agent:<name>\".", "{\"type\": \"object\", \"properties\": {\"invocation\": {\"type\": \"string\", \"description\": \"Invocation holding the candidate (defaults to all pending)\"}, \"approver\": {\"type\": \"string\", \"description\": \"Approver identity; agents use agent:<name>\"}, \"ref\": {\"type\": \"string\", \"description\": \"Code reference (e.g. a git commit) the promoted baseline corresponds to\"}, \"expectedVersion\": {\"type\": \"string\", \"description\": \"Optimistic concurrency guard: refuse unless the active baseline version still equals this tag (see report)\"}}, \"additionalProperties\": false}", CliCommands("accept"), args -> runCommand(capture -> {
-            AcceptCommand command = new AcceptCommand();
-            command.out = capture.out;
-            command.err = capture.err;
-            command.db = db;
-            command.invocation = optionalString(args, "invocation");
-            command.approver = optionalString(args, "approver");
-            command.codeRef = optionalString(args, "ref");
-            command.expectedVersion = optionalString(args, "expectedVersion");
-            command.jsonOutput = true;
-            return command;
-        })));
-        tools.add(McpTool.of("reject", "Discard a pending candidate fingerprint and keep the current baseline. Governance write: call on the human decision to keep the old behavior; " + "the rejection lands in the governance event timeline (audit lists it). Reverting the prompt change itself is git's job.", "{\"type\": \"object\", \"properties\": {\"invocation\": {\"type\": \"string\", \"description\": \"Invocation holding the candidate (defaults to all pending)\"}, \"approver\": {\"type\": \"string\", \"description\": \"Rejector identity recorded in the governance event trail; agents use agent:<name>\"}, \"expectedVersion\": {\"type\": \"string\", \"description\": \"Optimistic concurrency guard: refuse unless the active baseline version still equals this tag (see report)\"}}, \"additionalProperties\": false}", CliCommands("reject"), args -> runCommand(capture -> {
-            RejectCommand command = new RejectCommand();
-            command.out = capture.out;
-            command.err = capture.err;
-            command.db = db;
-            command.invocation = optionalString(args, "invocation");
-            command.approver = optionalString(args, "approver");
-            command.expectedVersion = optionalString(args, "expectedVersion");
-            command.jsonOutput = true;
-            return command;
-        })));
-        tools.add(McpTool.of("rollback", "Restore the active baseline to a previously archived version (see the archived column in report). Governance write: call when the human decides to roll back; " + "the rollback lands in the governance event timeline with its executor (audit lists it). Requires invocation and version.", "{\"type\": \"object\", \"properties\": {\"invocation\": {\"type\": \"string\", \"description\": \"Target invocation: business label, invocationKey, or unique prefix\"}, \"version\": {\"type\": \"string\", \"description\": \"Archived version tag to restore (e.g. v1)\"}, \"approver\": {\"type\": \"string\", \"description\": \"Rollback executor identity recorded in the governance event trail; agents use agent:<name>\"}, \"expectedVersion\": {\"type\": \"string\", \"description\": \"Optimistic concurrency guard: refuse unless the active baseline version still equals this tag (see report)\"}}, \"required\": [\"invocation\", \"version\"], \"additionalProperties\": false}", CliCommands("rollback"), args -> {
+        tools.add(McpTool.of("establish", "Establish baselines for recorded invocations (idempotent, safe to re-run; force rebuilds existing baselines under the current judgment semantics). " + "Governance write: call after a trustworthy recorded run, typically on human instruction. " + "Agents declare themselves with approver like \"agent:<name>\"; the CLI audit command lists such writes.", "{\"type\": \"object\", \"properties\": {\"invocation\": {\"type\": \"string\", \"description\": \"Only this invocation (defaults to all)\"}, \"approver\": {\"type\": \"string\", \"description\": \"Required approver identity stamped on the baseline; agents use agent:<name>\"}, \"ref\": {\"type\": \"string\", \"description\": \"Code reference (e.g. a git commit) the baselines correspond to\"}, \"force\": {\"type\": \"boolean\", \"description\": \"Rebuild existing baselines under the current judgment semantics\"}, \"expectedVersion\": {\"type\": \"string\", \"description\": \"Optimistic concurrency guard for force: refuse unless every active baseline version still equals this tag\"}}, \"required\": [\"approver\"], \"additionalProperties\": false}", CliCommands("baseline"), args -> {
+            String approver = optionalString(args, "approver");
+            if (approver == null) {
+                return missingApprover("establish");
+            }
+            return runCommand(capture -> {
+                BaselineCommand command = new BaselineCommand();
+                command.out = capture.out;
+                command.err = capture.err;
+                command.db = db;
+                command.invocation = optionalString(args, "invocation");
+                command.approver = approver;
+                command.codeRef = optionalString(args, "ref");
+                command.force = optionalBoolean(args, "force");
+                command.expectedVersion = optionalString(args, "expectedVersion");
+                command.jsonOutput = true;
+                return command;
+            });
+        }));
+        tools.add(McpTool.of("accept", "Promote a pending candidate fingerprint (landed by check or diff on CHANGED) to the baseline; the previous baseline is archived " + "and restorable via the CLI rollback command. Governance write: call only when the human decides the new behavior is intended. " + "Agents declare themselves with approver like \"agent:<name>\".", "{\"type\": \"object\", \"properties\": {\"invocation\": {\"type\": \"string\", \"description\": \"Invocation holding the candidate (defaults to all pending)\"}, \"approver\": {\"type\": \"string\", \"description\": \"Required approver identity; agents use agent:<name>\"}, \"ref\": {\"type\": \"string\", \"description\": \"Code reference (e.g. a git commit) the promoted baseline corresponds to\"}, \"expectedVersion\": {\"type\": \"string\", \"description\": \"Optimistic concurrency guard: refuse unless the active baseline version still equals this tag (see report)\"}}, \"required\": [\"approver\"], \"additionalProperties\": false}", CliCommands("accept"), args -> {
+            String approver = optionalString(args, "approver");
+            if (approver == null) {
+                return missingApprover("accept");
+            }
+            return runCommand(capture -> {
+                AcceptCommand command = new AcceptCommand();
+                command.out = capture.out;
+                command.err = capture.err;
+                command.db = db;
+                command.invocation = optionalString(args, "invocation");
+                command.approver = approver;
+                command.codeRef = optionalString(args, "ref");
+                command.expectedVersion = optionalString(args, "expectedVersion");
+                command.jsonOutput = true;
+                return command;
+            });
+        }));
+        tools.add(McpTool.of("reject", "Discard a pending candidate fingerprint and keep the current baseline. Governance write: call on the human decision to keep the old behavior; " + "the rejection lands in the governance event timeline (audit lists it). Reverting the prompt change itself is git's job.", "{\"type\": \"object\", \"properties\": {\"invocation\": {\"type\": \"string\", \"description\": \"Invocation holding the candidate (defaults to all pending)\"}, \"approver\": {\"type\": \"string\", \"description\": \"Required rejector identity recorded in the governance event trail; agents use agent:<name>\"}, \"expectedVersion\": {\"type\": \"string\", \"description\": \"Optimistic concurrency guard: refuse unless the active baseline version still equals this tag (see report)\"}}, \"required\": [\"approver\"], \"additionalProperties\": false}", CliCommands("reject"), args -> {
+            String approver = optionalString(args, "approver");
+            if (approver == null) {
+                return missingApprover("reject");
+            }
+            return runCommand(capture -> {
+                RejectCommand command = new RejectCommand();
+                command.out = capture.out;
+                command.err = capture.err;
+                command.db = db;
+                command.invocation = optionalString(args, "invocation");
+                command.approver = approver;
+                command.expectedVersion = optionalString(args, "expectedVersion");
+                command.jsonOutput = true;
+                return command;
+            });
+        }));
+        tools.add(McpTool.of("rollback", "Restore the active baseline to a previously archived version (see the archived column in report). Governance write: call when the human decides to roll back; " + "the rollback lands in the governance event timeline with its executor (audit lists it). Requires invocation, version, and approver.", "{\"type\": \"object\", \"properties\": {\"invocation\": {\"type\": \"string\", \"description\": \"Target invocation: business label, invocationKey, or unique prefix\"}, \"version\": {\"type\": \"string\", \"description\": \"Archived version tag to restore (e.g. v1)\"}, \"approver\": {\"type\": \"string\", \"description\": \"Required rollback executor identity recorded in the governance event trail; agents use agent:<name>\"}, \"expectedVersion\": {\"type\": \"string\", \"description\": \"Optimistic concurrency guard: refuse unless the active baseline version still equals this tag (see report)\"}}, \"required\": [\"invocation\", \"version\", \"approver\"], \"additionalProperties\": false}", CliCommands("rollback"), args -> {
             String invocation = optionalString(args, "invocation");
             String version = optionalString(args, "version");
+            String approver = optionalString(args, "approver");
             if (invocation == null || version == null) {
                 return McpToolOutcome.of(2, CliSupport.errorEnvelope(CliErrorCode.E_USAGE, "rollback requires invocation and version (see the archived column in report).", "Run report first, then pass the invocation and the archived version tag to restore.", "report") + "\n", "");
+            }
+            if (approver == null) {
+                return missingApprover("rollback");
             }
             return runCommand(capture -> {
                 RollbackCommand command = new RollbackCommand();
@@ -150,7 +172,7 @@ final class McpTools {
                 command.db = db;
                 command.invocation = invocation;
                 command.version = version;
-                command.approver = optionalString(args, "approver");
+                command.approver = approver;
                 command.expectedVersion = optionalString(args, "expectedVersion");
                 command.jsonOutput = true;
                 return command;
@@ -286,6 +308,15 @@ final class McpTools {
         }
         String text = (String) value;
         return text.trim().isEmpty() ? null : text;
+    }
+
+    /**
+     * 治理动词缺 approver 的拒绝包络。schema required 之外的服务端守卫：不守卫时
+     * CLI 侧会静默落到 OS 用户缺省，机器写从 agent 审计透镜中消失——机器通道
+     * 必须申报身份（agent:<name> 约定），人读 CLI 通道保留 OS 用户缺省不变。
+     */
+    private static McpToolOutcome missingApprover(String toolName) {
+        return McpToolOutcome.of(2, CliSupport.errorEnvelope(CliErrorCode.E_USAGE, toolName + " requires approver; agents declare themselves like agent:<name>.", "Pass approver with your identity, then retry.", toolName) + "\n", "");
     }
 
     private static boolean optionalBoolean(Map<String, Object> args, String key) {

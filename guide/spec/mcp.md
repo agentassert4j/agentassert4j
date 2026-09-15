@@ -77,11 +77,12 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
    description 含治理写声明。参数值类型与 inputSchema 不符时（如 task 传数字）按该参数
    缺省处理——类型契约由 schema 声明、校验归客户端侧，服务端不回类型错误。【测试钉】manifest 组
 6. **读动词 ci 语义（零治理写）**：check/diff/re-drive 适配 replay --ci——不自动建档；
-   缩域内存在未建档调用点时拒绝判定（E-GUARD 包络 + 指向 establish 的 nextAction）；
+   链末判定将对照的键集存在未建档调用点时拒绝判定（E-GUARD 包络 + 指向 establish 的
+   nextAction；早于链末的同会话草稿键不构成拒绝理由，见 replay 契约 19 守卫窄化）；
    漂移身份不收编；CHANGED 发现照落候选等裁决（除候选登记外无治理写）。check/diff 的
-   判定基准 = 每任务最新链对照其已批准基线（画像活跃指纹；check/diff 的 manifest
-   description 与 initialize instructions 双轨声明该基准，并注明本地 `replay` 不带 --ci
-   时为最新链 vs 次新链差分）。member-check 工具虽以 ciMode 语义运行，仍走链采样
+   判定基准 = 每任务最新链的逐调用点链末执行对照其已批准基线（画像活跃指纹；check/diff
+   的 manifest description 与 initialize instructions 双轨声明该基准——accept 提升链末
+   形态后同链复检即绿，并注明本地 `replay` 不带 --ci 时为最新链 vs 次新链差分）。member-check 工具虽以 ciMode 语义运行，仍走链采样
    （最新链对最近链窗口），不受基线对照改写；其成员块字段形态——命中携带
    matchedSession、未命中携带 closestSession 与 closestScore——在 manifest description
    同句声明（可发现性，字段语义本身见 replay.md 契约 13）。理由：MCP 读动词必须与 CLI 读动词同等
@@ -98,12 +99,16 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
    画像 + 建档后通过）
 7. **变异动词使用要求与 agent 身份申报**：establish/accept/reject/rollback 的 description 声明
    「治理写，应在人类指示后调用；agent 以 approver="agent:<name>" 申报身份」。授权确认由
-   harness 权限系统执行（MCP 原生同意点）；框架不校验 approver 值，事后经 CLI `audit`
-   回溯 agent 申报的治理写（governance.md「agent 治理与审计」节为权威表述）。establish
+   harness 权限系统执行（MCP 原生同意点）；框架不校验 approver 具体值，事后经 CLI `audit`
+   回溯 agent 申报的治理写（governance.md「agent 治理与审计」节为权威表述）。
+   **MCP 通道 approver 必填**：四动词 schema 的 required 数组含 approver，服务端另有
+   E-USAGE 守卫（缺席即拒，不落到 CLI 的 OS 用户缺省——机器写静默冒名会从 agent 审计
+   透镜中消失）；CLI 人读通道保留 OS 用户缺省。establish
    声明了 invocation 时，baseline-report/1 携带 `selection`（requested/matched）——标签
    扇出对 agent 的机器通道可见（写前披露的 stderr 文本块之外，structuredContent 亦可达，
    agent 不必依赖人类通道感知「一次调用覆盖了几个键」）。
-   【测试钉】manifest 组（description 含治理写声明）
+   【测试钉】manifest 组（description 含治理写声明 + required 含 approver 四工具）+
+   ToolCalls.governanceWithoutApprover_refused（E-USAGE 包络）
 8. **record 摄取（幂等，三协议 wire 方言）**：入参 sessionId（必填）、request/response（必填，
    原始请求/响应 JSON 文本）、protocol（可选，封闭词表 `openai-chat`/`anthropic-messages`/
    `openai-responses`，词表单源=LlmWireProtocol 枚举——显式声明优先；缺省按响应形态自动
@@ -179,6 +184,15 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
 
 ## 复核台账
 
+- 2026-09-14 Round 5 裁决批（B3/B4）：契约 7 补 approver 必填（schema required 四动词 + 服务端 E-USAGE
+  守卫——缺席不落 CLI 的 OS 用户缺省，机器写不得无痕混入人类名单）；MCP 面自动受益的 status/1 审批溯源
+  （approvedBy/approvedAt）与 rollback 守卫/披露见 governance.md 同日台账行。fullLoop 钉随契约适配
+  （establish 传 approver）。
+- 2026-09-15 B1 批（链末判定）：契约 6 判定基准句链末化（check/diff 描述与 instructions 同批改码：
+  基准句「每任务最新链」升级为「最新链的逐调用点链末执行」；两句 flip 子句——"accept never flips
+  existing chain history to PASS" 与 "does not flip existing chain history"——在链末判定下由真变假，
+  重写为「accept 提升链末形态后同链复检即绿」）；未建档守卫窄化到链末键集（草稿键不再触发 E-GUARD
+  拒绝，裂键缺口由漂移层披露）。
 - 2026-09-14 Round 5 即修批（无裁决项）：契约 6 补 member-check 成员块字段形态的 manifest 声明（matchedSession
   命中 / closestSession+closestScore 未命中——描述句已落 McpTools，字段语义权威表述在 replay 契约 13）；契约 7 补
   establish 结果 selection 段的机器通道可达性（CC 宿主实测：扇出披露只走 stderr 文本块时 structuredContent 消费方

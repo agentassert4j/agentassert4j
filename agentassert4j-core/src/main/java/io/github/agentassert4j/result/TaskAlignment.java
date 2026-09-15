@@ -145,6 +145,11 @@ public class TaskAlignment {
          * （行为对照含提示词混杂变量，报告尾提示受控实验口径）
          */
         private boolean versionSwitch;
+        /**
+         * 链末判定路径专用：该调用点组内早于链末记录的记录数（草稿形态不判定的
+         * 数目，透明层注记的数据源）；链/包全量配对路径恒 0
+         */
+        private int earlierRecords;
         private String baselineSubdivision;
         private String newSubdivision;
 
@@ -274,6 +279,14 @@ public class TaskAlignment {
 
         public void setNewModelResponse(String newModelResponse) {
             this.newModelResponse = newModelResponse;
+        }
+
+        public int getEarlierRecords() {
+            return earlierRecords;
+        }
+
+        public void setEarlierRecords(int earlierRecords) {
+            this.earlierRecords = earlierRecords;
         }
     }
 }

@@ -268,6 +268,17 @@ class McpServerTest {
         }
 
         @Test
+        @DisplayName("治理动词 approver 必填：schema required 四工具齐备")
+        void governanceTools_requireApproverInSchema() {
+            for (McpTool tool : McpTools.tools(dbPath)) {
+                if (tool.name.equals("establish") || tool.name.equals("accept") || tool.name.equals("reject") || tool.name.equals("rollback")) {
+                    Map<String, Object> schema = parseObject(tool.inputSchemaJson);
+                    assertTrue(castList(schema.get("required")).contains("approver"), tool.name + " 的 approver 必须在 required 数组");
+                }
+            }
+        }
+
+        @Test
         @DisplayName("record description 声明幂等与身份规则")
         void recordTool_declaresSemantics() {
             for (McpTool tool : McpTools.tools(dbPath)) {
@@ -355,6 +366,21 @@ class McpServerTest {
         }
 
         @Test
+        @DisplayName("治理动词缺 approver：E-USAGE 包络拒绝（机器写不得静默落到 OS 身份）")
+        void governanceWithoutApprover_refused() {
+            for (String tool : Arrays.asList("establish", "accept", "reject")) {
+                Map<String, Object> result = callTool(tool, "{}");
+                assertTrue(isError(result), tool + " 缺 approver 必须拒绝");
+                Map<String, Object> structured = castMap(result.get("structuredContent"));
+                assertEquals("E-USAGE", structured.get("errorCode"), tool);
+                assertTrue(String.valueOf(structured.get("message")).contains("approver"), tool);
+            }
+            Map<String, Object> rollback = callTool("rollback", "{\"invocation\":\"some-key\",\"version\":\"v1\"}");
+            assertTrue(isError(rollback), "rollback 缺 approver 必须拒绝（invocation/version 齐也不能放行）");
+            assertEquals("E-USAGE", castMap(rollback.get("structuredContent")).get("errorCode"));
+        }
+
+        @Test
         @DisplayName("doctor 工具：读动词直调，报告在场")
         void doctor_tool_reports() {
             Map<String, Object> result = callTool("doctor", "{}");
@@ -377,7 +403,7 @@ class McpServerTest {
             Map<String, Object> second = firstReport(callRecord("session-b", "chatcmpl-b"));
             assertEquals("saved", second.get("status"));
 
-            Map<String, Object> established = callTool("establish", "{}");
+            Map<String, Object> established = callTool("establish", "{\"approver\":\"agent:test\"}");
             assertFalse(isError(established));
 
             Map<String, Object> check = callTool("check", "{}");

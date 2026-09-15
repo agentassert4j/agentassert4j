@@ -1,6 +1,7 @@
 package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.config.InvocationRulesConfig;
+import io.github.agentassert4j.model.BaselineStep;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.model.ToolCall;
@@ -15,12 +16,17 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * TaskAligner 的单元测试 — 对齐语义黄金测试：对齐键=invocationKey、
- * 缺/新增步骤=行为差异、matched 1:1 规范序配对、两侧指纹现场重提。
+ * 缺/新增步骤=行为差异、matched 1:1 规范序配对、两侧指纹现场重提；
+ * 链末判定域（每调用点只判组末执行、任务纪律与前缀看全链）。
  *
  * @author axy-yxa
  * @since 2026-08-30
@@ -328,5 +334,136 @@ class TaskAlignerTest {
         assertNull(TaskAligner.declaredLabelOfKey("skeleton:abc"));
         assertNull(TaskAligner.declaredLabelOfKey("template:abc"));
         assertNull(TaskAligner.declaredLabelOfKey(null));
+    }
+
+    private List<String> recordIds(List<InteractionRecord> records) {
+        return records.stream().map(InteractionRecord::getRecordId).collect(Collectors.toList());
+    }
+
+    /**
+     * 基线侧步骤手工装配（fromProfiles 形态：按完整键每记录一步，指纹现场提取）——
+     * 链末判定的基线侧入参同构。
+     */
+    private Map<String, List<BaselineStep>> profileSteps(InteractionRecord... records) {
+        Map<String, List<BaselineStep>> steps = new LinkedHashMap<>();
+        for (InteractionRecord r : records) {
+            BaselineStep step = new BaselineStep();
+            step.setInvocationKey(r.getInvocationKey());
+            step.setInvocationId(r.getInvocationId());
+            step.setRecordId(r.getRecordId());
+            step.setFingerprint(FingerprintExtractor.extract(r, null, r.getInvocationId()));
+            steps.put(r.getInvocationKey(), Collections.singletonList(step));
+        }
+        return steps;
+    }
+
+    @Test
+    @DisplayName("invocationGroups：标签优先跨模板版本一组、无标签按完整键、组内保链序")
+    void invocationGroups_labelFirst_chainOrder() {
+        TaskChain chain = chain(
+                labeledRecord("r1", 1000L, "order", "h1", "{\"v\":1}"),
+                record("r2", 2000L, "skeleton:aaa", "答B"),
+                labeledRecord("r3", 3000L, "order", "h2", "{\"v\":1}"));
+
+        Map<String, List<InteractionRecord>> groups = TaskAligner.invocationGroups(chain);
+
+        assertEquals(2, groups.size(), "两标签同组 + 无标签独立一组");
+        assertEquals(Arrays.asList("r1", "r3"), recordIds(groups.get("L:order")), "同标签跨模板版本同组且保链序");
+        assertEquals(Collections.singletonList("r2"), recordIds(groups.get("K:skeleton:aaa")));
+    }
+
+    @Test
+    @DisplayName("trimToLatestPerInvocation：每调用点只留组末记录，链元数据原样携带")
+    void trimToLatest_keepsLastPerGroupAndMetadata() {
+        TaskChain chain = chain(
+                labeledRecord("r1", 1000L, "order", "h1", "{\"v\":1}"),
+                labeledRecord("r2", 2000L, "order", "h2", "{\"v\":1}"),
+                record("r3", 3000L, "skeleton:aaa", "答B"));
+        chain.setSessionId("session-x");
+
+        TaskChain trimmed = TaskAligner.trimToLatestPerInvocation(chain);
+
+        assertEquals(Arrays.asList("r2", "r3"), recordIds(trimmed.getRecords()), "组末记录按组首现序输出");
+        assertEquals("session-x", trimmed.getSessionId());
+        assertEquals("查订单", trimmed.getRequestText());
+        assertFalse(trimmed.isDeclared());
+    }
+
+    @Test
+    @DisplayName("链末判定：坏草稿在前、好链末在后 → PASS 且 earlierRecords=1（草稿不挡门）")
+    void alignLatest_badDraftFirst_passesWithNote() {
+        TaskChain mixed = chain(
+                labeledRecord("bad", 4000L, "order", "h1", "{\"v\":1,\"w\":3}"),
+                labeledRecord("good", 5000L, "order", "h1", "{\"v\":1}"));
+
+        TaskAlignment alignment = TaskAligner.alignLatestPerInvocation(
+                profileSteps(labeledRecord("g", 1000L, "order", "h1", "{\"v\":1}")), mixed, comparator, null);
+
+        assertEquals(Verdict.PASS, alignment.getVerdict(), "判定对象=链末执行（与画像一致），草稿不进判定");
+        StepAlignment step = alignment.getSteps().get(0);
+        assertEquals("good", step.getNewRecordId());
+        assertEquals(1, step.getEarlierRecords(), "草稿计数进透明层字段");
+    }
+
+    @Test
+    @DisplayName("链末判定：好草稿在前、坏链末在后 → CHANGED（链末回归仍挡门）")
+    void alignLatest_badChainFinal_changed() {
+        TaskChain mixed = chain(
+                labeledRecord("good", 4000L, "order", "h1", "{\"v\":1}"),
+                labeledRecord("bad", 5000L, "order", "h1", "{\"v\":1,\"w\":3}"));
+
+        TaskAlignment alignment = TaskAligner.alignLatestPerInvocation(
+                profileSteps(labeledRecord("g", 1000L, "order", "h1", "{\"v\":1}")), mixed, comparator, null);
+
+        assertEquals(Verdict.CHANGED, alignment.getVerdict());
+        assertEquals("bad", alignment.getSteps().get(0).getNewRecordId());
+    }
+
+    @Test
+    @DisplayName("链末判定任务纪律看全链：同标签恰两次满足 min=2，裁剪链会少数误判")
+    void alignLatest_taskRulesSeeFullChain() {
+        InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"tasks\":{\"查订单\":{\"steps\":{\"order\":{\"min\":2,\"max\":2}}}}}");
+        TaskChain newChain = declaredChain("查订单",
+                labeledRecord("n1", 4000L, "order", "h1", "{\"v\":1}"),
+                labeledRecord("n2", 5000L, "order", "h1", "{\"v\":1}"));
+
+        TaskAlignment alignment = TaskAligner.alignLatestPerInvocation(
+                profileSteps(labeledRecord("g", 1000L, "order", "h1", "{\"v\":1}")), newChain, comparator, rules);
+
+        assertTrue(alignment.getRuleViolations().isEmpty(), "次数纪律在全链上评估（order 出现 2 次满足 min=2），裁剪链只剩 1 次会误判");
+        assertEquals(Verdict.PASS, alignment.getVerdict());
+    }
+
+    @Test
+    @DisplayName("链末判定 prefixDependent 看全链：前缀标记挂在被裁剪的草稿记录上仍标注")
+    void alignLatest_prefixFromFullChain() {
+        InteractionRecord draft = labeledRecord("n1", 4000L, "order", "h1", "{\"v\":1}");
+        draft.setPreviousTurns(Collections.singletonList(new TurnContext("user", "上一问")));
+        TaskChain newChain = chain(draft, labeledRecord("n2", 5000L, "order", "h1", "{\"v\":1}"));
+
+        TaskAlignment alignment = TaskAligner.alignLatestPerInvocation(
+                profileSteps(labeledRecord("g", 1000L, "order", "h1", "{\"v\":1}")), newChain, comparator, null);
+
+        assertTrue(alignment.isPrefixDependent(), "前缀标记可能只在草稿记录上，必须看全链");
+    }
+
+    @Test
+    @DisplayName("纯配对拆分回归：公开 align(Map) 仍在传入链上评任务纪律并折叠")
+    void align_mapEntry_foldsRulesOnPassedChain() {
+        InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"tasks\":{\"t1\":{\"requiredSteps\":[\"A\",\"B\"]}}}");
+        Map<String, List<BaselineStep>> steps = profileSteps(
+                labeled("g1", 1000L, "invocation:a:h1", "A", "答A"),
+                labeled("g2", 2000L, "invocation:b:h2", "B", "答B"));
+
+        TaskAlignment complete = TaskAligner.align(steps, declaredChain("t1",
+                labeled("n1", 5000L, "invocation:a:h1", "A", "答A"),
+                labeled("n2", 6000L, "invocation:b:h2", "B", "答B")), comparator, rules);
+        assertEquals(Verdict.PASS, complete.getVerdict(), "requiredSteps A/B 均在场 → 无违规");
+        assertTrue(complete.getRuleViolations().isEmpty());
+
+        TaskAlignment missingB = TaskAligner.align(steps, declaredChain("t1",
+                labeled("n1", 5000L, "invocation:a:h1", "A", "答A")), comparator, rules);
+        assertEquals(Verdict.CHANGED, missingB.getVerdict());
+        assertEquals(1, missingB.getRuleViolations().size(), "map 入口的纪律折叠未随拆分丢失");
     }
 }

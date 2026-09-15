@@ -86,7 +86,9 @@ public class BaselineExportCommand implements Callable<Integer> {
             pack.setMeta(meta);
 
             List<String> excluded = new ArrayList<>();
+            List<String> unadjudicatedTasks = new ArrayList<>();
             TreeSet<String> servedModels = new TreeSet<>();
+            int unadjudicatedTotal = 0;
             for (TaskChain chain : chains) {
                 AcceptancePack.PackTask packTask = new AcceptancePack.PackTask();
                 packTask.setTaskKey(chain.getRequestText());
@@ -96,8 +98,13 @@ public class BaselineExportCommand implements Callable<Integer> {
 
                 boolean complete = true;
                 boolean selfViolating = false;
-                for (InteractionRecord record : chain.getRecords()) {
-                    String key = CliSupport.invocationKeyOfRecord(record);
+                int unadjudicated = 0;
+                // 包 = 批准真相定格交付：步骤按调用点分组取组末记录为证据锚（recordId/
+                // 样本锚定链末执行），指纹消费画像活跃指纹（与 CI 同源）——链末判定下每
+                // 调用点一份步骤，不存在「单份快照冒充多步骤」
+                for (List<InteractionRecord> group : TaskAligner.invocationGroups(chain).values()) {
+                    InteractionRecord anchor = group.get(group.size() - 1);
+                    String key = CliSupport.invocationKeyOfRecord(anchor);
                     InvocationProfile profile = key == null ? null : repository.findInvocationByKey(key);
                     if (profile == null || profile.getFingerprint() == null) {
                         complete = false;
@@ -105,29 +112,40 @@ public class BaselineExportCommand implements Callable<Integer> {
                     }
                     BaselineStep step = new BaselineStep();
                     step.setInvocationKey(key);
-                    step.setRecordId(record.getRecordId());
-                    // 步骤指纹逐记录现场提取（与 verify 重提侧、库内任务对齐同口径）——
-                    // 画像指纹是建档种子记录的单份快照，同键多记录时冒充其他步骤必然假 CHANGED
-                    step.setFingerprint(FingerprintExtractor.extract(record, rules, record.getInvocationId()));
-                    // 自违守卫：基线响应违反自己声明的内容规则 → 该链永不自往返 PASS，
-                    // 不允许作为「承诺行为」出境；排除与警告就地可见
-                    if (selfViolatesDeclaredRules(step.getFingerprint(), record.getModelResponse())) {
+                    step.setRecordId(anchor.getRecordId());
+                    step.setFingerprint(profile.getFingerprint());
+                    // 出厂偏离检测：链末行为与承诺的结构维不一致（或在途候选未裁决）
+                    // → 计数入包并警告，任务照常入包（承诺仍良定义）。比较口径=结构维
+                    //（维度 1/2 + hasError）：判定尺的维度 3/4 是基线声明 × 当前答卷，
+                    // 候选侧声明集不进判定——规则配置漂移只动声明集时门禁判 PASS，偏离
+                    // 检测不得比门禁更严（否则警告指路的裁决对象根本不存在）
+                    if (profile.getCandidateFingerprint() != null
+                            || !structuralView(FingerprintExtractor.extract(anchor, rules, anchor.getInvocationId())).equals(structuralView(profile.getFingerprint()))) {
+                        unadjudicated++;
+                    } else if (selfViolatesDeclaredRules(step.getFingerprint(), anchor.getModelResponse())) {
+                        // 自违守卫只在组末与画像一致时执行：未批准形态走偏离出口，
+                        // 不误诊为「基线自违」（approved 指纹 × 偏离响应的比对对象错位）
                         complete = false;
                         selfViolating = true;
                         break;
                     }
                     if (sanitizer != null) {
-                        InteractionRecord sanitized = sanitizer.sanitize(record);
+                        InteractionRecord sanitized = sanitizer.sanitize(anchor);
                         step.setSampleInput(sanitized.getUserInput());
                         step.setSampleOutput(sanitized.getModelResponse());
                     }
                     packTask.getSteps().add(step);
-                    if (record.getServedModel() != null) {
-                        servedModels.add(record.getServedModel());
+                    if (anchor.getServedModel() != null) {
+                        servedModels.add(anchor.getServedModel());
                     }
                 }
+                packTask.setUnadjudicatedSteps(unadjudicated);
                 if (complete && !packTask.getSteps().isEmpty()) {
                     pack.getTasks().add(packTask);
+                    if (unadjudicated > 0) {
+                        unadjudicatedTasks.add(chain.getRequestText() + " (" + unadjudicated + ")");
+                        unadjudicatedTotal += unadjudicated;
+                    }
                 } else if (selfViolating) {
                     excluded.add(chain.getRequestText() + " (baseline violates its own content rules)");
                 } else {
@@ -158,7 +176,7 @@ public class BaselineExportCommand implements Callable<Integer> {
                     if (excludedJson.length() > 0) excludedJson.append(",");
                     excludedJson.append("\"").append(RecursiveJsonParser.escape(excludedChain)).append("\"");
                 }
-                out.println("{\"schema\":\"" + ReportSchemas.EXPORT_REPORT + "\",\"out\":\"" + RecursiveJsonParser.escape(outPath) + "\",\"taskCount\":" + pack.getTasks().size() + ",\"stepCount\":" + stepCount + ",\"sha256\":\"" + HashUtil.sha256(json) + "\",\"codeRef\":\"" + RecursiveJsonParser.escape(meta.getCodeRef() != null ? meta.getCodeRef() : "") + "\",\"excluded\":[" + excludedJson + "]}");
+                out.println("{\"schema\":\"" + ReportSchemas.EXPORT_REPORT + "\",\"out\":\"" + RecursiveJsonParser.escape(outPath) + "\",\"taskCount\":" + pack.getTasks().size() + ",\"stepCount\":" + stepCount + ",\"unadjudicatedSteps\":" + unadjudicatedTotal + ",\"sha256\":\"" + HashUtil.sha256(json) + "\",\"codeRef\":\"" + RecursiveJsonParser.escape(meta.getCodeRef() != null ? meta.getCodeRef() : "") + "\",\"excluded\":[" + excludedJson + "]}");
                 return 0;
             }
             out.println("Acceptance pack written: " + outPath);
@@ -179,6 +197,10 @@ public class BaselineExportCommand implements Callable<Integer> {
             }
             if (!unestablishedOnly.isEmpty()) {
                 out.println("  Warning: task chains with unestablished steps were excluded: " + String.join("; ", unestablishedOnly));
+            }
+            if (!unadjudicatedTasks.isEmpty()) {
+                err.println("  Warning: unadjudicated steps in the pack (in-flight candidate, or the chain-end shape differs from the approved baseline): " + String.join("; ", unadjudicatedTasks));
+                err.println("  Adjudicate the pending candidates (accept/reject), then re-export for a clean pack.");
             }
             return 0;
         } catch (CliFailureException e) {
@@ -222,5 +244,25 @@ public class BaselineExportCommand implements Callable<Integer> {
         }
         ComparisonResult result = new DeterministicComparator(ComparatorConfig.defaults()).compare(fingerprint, fingerprint, response);
         return !result.isKeywordMatch() || !result.isRegexMatch();
+    }
+
+    /**
+     * 结构维视图（维度 1/2 + hasError，维度 3/4 声明集置空）——出厂偏离检测的比较
+     * 口径与判定尺对齐：候选侧声明集不进判定，仅声明集漂移不是行为偏离。
+     */
+    private static DeterministicFingerprint structuralView(DeterministicFingerprint fingerprint) {
+        DeterministicFingerprint view = new DeterministicFingerprint();
+        view.setToolCallSet(fingerprint.getToolCallSet());
+        view.setToolParamTypes(fingerprint.getToolParamTypes());
+        view.setOutputContentType(fingerprint.getOutputContentType());
+        view.setOutputFieldPaths(fingerprint.getOutputFieldPaths());
+        view.setOutputFieldTypeMap(fingerprint.getOutputFieldTypeMap());
+        view.setTextLengthMagnitude(fingerprint.getTextLengthMagnitude());
+        view.setHasError(fingerprint.isHasError());
+        view.setRequiredKeywords(Collections.emptySet());
+        view.setForbiddenKeywords(Collections.emptySet());
+        view.setRegexPatterns(Collections.emptyList());
+        view.setDeclaredBehaviors(Collections.emptySet());
+        return view;
     }
 }

@@ -134,6 +134,12 @@ public class AcceptancePack {
         private String requestText;
         private boolean declared;
         private long baselineTime;
+        /**
+         * 出厂偏离检测计数：组末行为与批准真相不一致（在途候选、或链末提取指纹 ≠
+         * 画像活跃指纹）的步骤数。承诺（画像指纹）仍良定义故任务照常入包，交付方
+         * 应先裁决再导出；恒序列化（0 也写），旧包缺字段读取侧缺省 0
+         */
+        private int unadjudicatedSteps;
         private final List<BaselineStep> steps = new ArrayList<>();
 
         public String getTaskKey() {
@@ -170,6 +176,14 @@ public class AcceptancePack {
 
         public List<BaselineStep> getSteps() {
             return steps;
+        }
+
+        public int getUnadjudicatedSteps() {
+            return unadjudicatedSteps;
+        }
+
+        public void setUnadjudicatedSteps(int unadjudicatedSteps) {
+            this.unadjudicatedSteps = unadjudicatedSteps;
         }
     }
 }

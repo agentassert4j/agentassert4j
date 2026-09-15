@@ -323,6 +323,65 @@ class JsonContractTest {
         }
 
         @Test
+        @DisplayName("status/1 审批溯源：approvedBy/approvedAt 随画像回读（「谁批的」任何面可答）")
+        void statusJson_exposesApprover() throws Exception {
+            seedOneRecord();
+            execute("baseline", "--db", dbPath, "--approver", "wang", "--ref", "abc1234");
+
+            assertEquals(0, execute("status", "--db", dbPath, "--json"));
+            String report = singleLineReport();
+            assertTrue(report.contains("\"approvedBy\":\"wang\""), "审批人必须可读: " + report);
+            assertTrue(report.contains("\"approvedAt\":"), "审批时刻必须可读: " + report);
+            assertFalse(report.contains("\"approvedAt\":null"), "建档即盖章，approvedAt 不缺席: " + report);
+
+            assertEquals(0, execute("status", "--db", dbPath));
+            String human = stdout();
+            assertTrue(human.contains("approver"), "人读 approver 列头必须在场: " + human);
+            assertTrue(human.contains("wang"), "人读 approver 列值必须在场: " + human);
+        }
+
+        @Test
+        @DisplayName("rollback 守卫与披露：目标=活动版本拒绝指路 reject；跨版本回滚清候选必须披露")
+        void rollbackGuards_activeTargetRefusedAndCandidateDisclosed() throws Exception {
+            InteractionRecord record = seedOneRecord();
+            execute("baseline", "--db", dbPath);
+            seedCandidate("invocation:queryOrder:hash-old", record);
+            int accepted = execute("accept", "--db", dbPath, "--invocation", "queryOrder", "--json");
+            assertEquals(0, accepted, "accept 应成功: " + stdout() + stderr());
+            int firstRollback = execute("rollback", "--db", dbPath, "--invocation", "queryOrder", "--version", "v1", "--json");
+            assertEquals(0, firstRollback, "回滚到 v1 应成功: " + stdout() + stderr());
+
+            int refused = execute("rollback", "--db", dbPath, "--invocation", "queryOrder", "--version", "v1", "--json");
+
+            assertEquals(2, refused, "回滚到活动版本必须拒绝（清候选有专门动词）");
+            String envelope = singleLineReport();
+            assertTrue(envelope.contains("already the active baseline"), "拒绝必须言明空回滚: " + envelope);
+            assertTrue(envelope.contains("reject"), "拒绝必须指路 reject: " + envelope);
+
+            seedCandidate("invocation:queryOrder:hash-old", record);
+            assertEquals(0, execute("rollback", "--db", dbPath, "--invocation", "queryOrder", "--version", "v2", "--json"));
+            assertTrue(singleLineReport().contains("\"candidateDiscarded\":true"), "回滚清候选必须在回执披露: " + singleLineReport());
+        }
+
+        @Test
+        @DisplayName("status 人读归档列：活动版本打 * 标记，机器通道不标记")
+        void statusHuman_archivedColumnMarksActive() throws Exception {
+            InteractionRecord record = seedOneRecord();
+            execute("baseline", "--db", dbPath);
+            seedCandidate("invocation:queryOrder:hash-old", record);
+            execute("accept", "--db", dbPath, "--invocation", "queryOrder");
+            execute("rollback", "--db", dbPath, "--invocation", "queryOrder", "--version", "v1");
+
+            assertEquals(0, execute("status", "--db", dbPath));
+            String human = stdout();
+            assertTrue(human.contains("v1*"), "活动 tag 必须带 *（回滚恢复后活动号仍在归档列）: " + human);
+            assertTrue(human.contains("rollback targets"), "归档列例必须在场: " + human);
+
+            assertEquals(0, execute("status", "--db", dbPath, "--json"));
+            assertFalse(singleLineReport().contains("v1*"), "机器通道不标记（versionTag 即活动版）: " + singleLineReport());
+        }
+
+        @Test
         @DisplayName("audit 空清单：无 agent 治理写时报 no writes")
         void audit_empty() throws Exception {
             seedOneRecord();

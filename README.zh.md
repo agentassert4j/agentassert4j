@@ -149,7 +149,9 @@ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 - 结构类偏差（工具集 / 参数类型 / 输出结构）= **真问题**，转开发侧；
 - 开发侧与本地模型不同时自动标注**跨模型验收**：措辞差异属预期内，结构判定依然有效；
 - 包内有而本地未执行的任务 = **覆盖缺口**（exit 2）——证据不完整不允许冒充通过；
-- `verify` 全程只读不落库，可反复执行；markdown 报告即交付证据。
+- `verify` 全程只读不落库，可反复执行；markdown 报告即交付证据；
+- 验收包定格的是**已批准**指纹（与 CI 门禁同一真相源）；链末形态或在途候选未裁决时
+  `baseline export` 警告并在报告给出 `unadjudicatedSteps` 计数——先裁决再导出才干净。
 
 验收侧真实执行后，先 `--dry-run` 预演配对，再正式核对（演示库真实输出）：
 

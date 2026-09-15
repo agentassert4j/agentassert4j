@@ -28,6 +28,11 @@ import java.util.*;
  * 经注入的对比器判定。缺步骤/新增步骤是行为差异，与配对 CHANGED 同归入链级
  * CHANGED。</p>
  *
+ * <p>配对域两种：链对链全量配对（{@link #align(TaskChain, TaskChain, DeterministicComparator,
+ * InvocationRulesConfig)} 与成员判定采样——每条记录都是证据）与链末判定
+ * （{@link #alignLatestPerInvocation}——每调用点只判组内最新执行，更早的同会话
+ * 记录是迭代草稿，经步骤的 earlierRecords 进透明层注记；任务纪律仍看全链）。</p>
+ *
  * <p>对齐收尾评 rules.tasks 任务纪律（必备步骤/次数范围/有序子序列，只对声明
  * taskKey 的任务、按新链侧评估）：违规挂入结果的 ruleViolations 并折叠为链级
  * CHANGED，不新增 verdict 值。</p>
@@ -86,6 +91,62 @@ public final class TaskAligner {
      * @param rules         规则配置（新链侧现场重提口径；null = 无规则）
      */
     public static TaskAlignment align(Map<String, List<BaselineStep>> baselineSteps, TaskChain newChain, DeterministicComparator comparator, InvocationRulesConfig rules) {
+        TaskAlignment alignment = alignPairs(baselineSteps, newChain, comparator, rules, null);
+        foldTaskRules(alignment, evaluateTaskRules(newChain, rules));
+        return alignment;
+    }
+
+    /**
+     * 链内逐调用点分组（声明标签优先跨模板版本，无标签退完整键；组内保持链序）。
+     * 分组口径的唯一公开真源——链对链对齐、链末判定、验收导出/校验消费同一实现，
+     * 调用方不得手写第二套分组规则。
+     */
+    public static Map<String, List<InteractionRecord>> invocationGroups(TaskChain chain) {
+        return groupByInvocation(chain.getRecords());
+    }
+
+    /**
+     * 链末判定视图：每调用点只保留组内最后一条记录（链序末位 = 该任务最终跑成的
+     * 样子，更早的同会话记录是迭代草稿）；sessionId/requestText/declared 原样携带。
+     * 派生视图，不改动原链。
+     */
+    public static TaskChain trimToLatestPerInvocation(TaskChain chain) {
+        List<InteractionRecord> trimmed = new ArrayList<>();
+        for (List<InteractionRecord> group : groupByInvocation(chain.getRecords()).values()) {
+            trimmed.add(group.get(group.size() - 1));
+        }
+        TaskChain view = new TaskChain();
+        view.setSessionId(chain.getSessionId());
+        view.setRequestText(chain.getRequestText());
+        view.setDeclared(chain.isDeclared());
+        view.setRecords(trimmed);
+        return view;
+    }
+
+    /**
+     * 链末判定：基线侧步骤 × 新链「每调用点最新执行」配对——CI 门禁与交付验收
+     * 共用的判定入口。任务纪律与前缀标记用全链评估：次数/顺序规则必须看见任务的
+     * 全部调用（裁剪链会误判「恰好两次」类规则），会话前缀可能挂在被裁剪的中间
+     * 记录上。rules 同时喂新侧指纹提取（维度 3/4 口径）与任务纪律——配对与纪律
+     * 都以 rules 照传，仅纪律的评估链是全长。
+     */
+    public static TaskAlignment alignLatestPerInvocation(Map<String, List<BaselineStep>> baselineSteps, TaskChain newChain, DeterministicComparator comparator, InvocationRulesConfig rules) {
+        Map<String, Integer> groupSizes = new HashMap<>();
+        for (Map.Entry<String, List<InteractionRecord>> entry : groupByInvocation(newChain.getRecords()).entrySet()) {
+            groupSizes.put(entry.getKey(), entry.getValue().size());
+        }
+        TaskAlignment alignment = alignPairs(baselineSteps, trimToLatestPerInvocation(newChain), comparator, rules, groupSizes);
+        foldTaskRules(alignment, evaluateTaskRules(newChain, rules));
+        alignment.setPrefixDependent(alignment.isPrefixDependent() || hasSessionPrefix(newChain));
+        return alignment;
+    }
+
+    /**
+     * 纯配对核心：分组 + 逐组配对 + 前缀标记，不评任务纪律——纪律折叠由两个公开
+     * 入口按各自口径（传入链 / 全长链）追加。fullChainGroupSizes 非 null 时（链末
+     * 判定路径）按全链组大小填步骤的 earlierRecords（透明层数据源）。
+     */
+    private static TaskAlignment alignPairs(Map<String, List<BaselineStep>> baselineSteps, TaskChain pairingChain, DeterministicComparator comparator, InvocationRulesConfig rules, Map<String, Integer> fullChainGroupSizes) {
         LinkedHashMap<String, List<BaselineStep>> regrouped = new LinkedHashMap<>();
         for (List<BaselineStep> group : baselineSteps.values()) {
             for (BaselineStep step : group) {
@@ -96,10 +157,10 @@ public final class TaskAligner {
             }
         }
         TaskAlignment alignment = new TaskAlignment();
-        alignment.setPrefixDependent(hasSessionPrefix(newChain));
+        alignment.setPrefixDependent(hasSessionPrefix(pairingChain));
 
         Map<String, List<BaselineStep>> baselineGroups = regrouped;
-        Map<String, List<InteractionRecord>> newGroups = groupByInvocation(newChain.getRecords());
+        Map<String, List<InteractionRecord>> newGroups = groupByInvocation(pairingChain.getRecords());
 
         boolean anyChanged = false;
         // LinkedHashSet 语义：先基线序后新链序的并集，缺步骤排在其原链位置附近
@@ -135,16 +196,22 @@ public final class TaskAligner {
                     alignment.setCrossVersionCount(alignment.getCrossVersionCount() + 1);
                 }
             }
+            if (fullChainGroupSizes != null) {
+                Integer size = fullChainGroupSizes.get(key);
+                step.setEarlierRecords(size != null ? size.intValue() - 1 : 0);
+            }
             alignment.getSteps().add(step);
         }
 
         alignment.setVerdict(anyChanged ? Verdict.CHANGED : Verdict.PASS);
-        List<TaskRuleViolation> violations = evaluateTaskRules(newChain, rules);
+        return alignment;
+    }
+
+    private static void foldTaskRules(TaskAlignment alignment, List<TaskRuleViolation> violations) {
         if (!violations.isEmpty()) {
             alignment.getRuleViolations().addAll(violations);
             alignment.setVerdict(Verdict.CHANGED);
         }
-        return alignment;
     }
 
     /**

@@ -23,8 +23,9 @@ import java.util.*;
  *   <li><b>身份检测</b>：DriftDetector 全库只读巡检画像模板身份 vs 最新记录，
  *       漂移键经依赖图扩散为下游波及集，检测报告全项目、不随缩域收窄；</li>
  *   <li><b>真实对齐</b>：本地模式逐任务（同名请求链）最新 vs 次新按调用点对齐；
- *       {@code --ci} 模式改为基线对照——每任务最新链逐记录对照其调用点画像的
- *       活跃指纹（批准真相的单份定格投影，BaselineSides.fromProfiles），
+ *       {@code --ci} 模式改为基线对照——每任务最新链的<b>逐调用点链末执行</b>对照
+ *       其调用点画像的活跃指纹（批准真相的单份定格投影，BaselineSides.fromProfiles；
+ *       早于链末的同会话记录是迭代草稿，经透明层注记可见、不进判定），
  *       单链任务同判（首航即批改）；步级产出 PASS/CHANGED 与任务纪律违规；</li>
  *   <li><b>受控重驱</b>：花 LLM 钱的显式复核层（--re-drive 开启，逐漂移点注入
  *       最新归档模板）。</li>
@@ -574,7 +575,7 @@ public class TaskReplayRunner {
         if (rules != null && rules.hasTaskRules() && !newChain.isDeclared()) {
             info("Note: task has no declared taskKey; task rules do not apply.");
         }
-        AlignmentRender render = renderAlignment(alignment, baseline, newChain, outcomes, totals, manager, stability);
+        AlignmentRender render = renderAlignment(alignment, baseline, newChain, outcomes, totals, manager, stability, null);
         if (jsonMode) {
             out.println(taskJson(TaskReportMode.TASK_ALIGN, newChain.getRequestText(), newChain.getSessionId(), alignment.getSteps().size(), render, alignment.getCrossVersionCount(), alignment.getBaselineTime(), alignment.getNewChainTime(), alignment.isPrefixDependent()));
         }
@@ -587,7 +588,7 @@ public class TaskReplayRunner {
      */
     private static String alignmentBasisLine(boolean ciMode, boolean memberCheck) {
         if (ciMode && !memberCheck) {
-            return "Alignment basis: --ci judges each task's latest chain against its approved baseline fingerprints (the profiles promoted by establish/accept).";
+            return "Alignment basis: --ci judges the latest execution of each invocation in each task's latest chain against its approved baseline fingerprints (the profiles promoted by establish/accept).";
         }
         if (memberCheck) {
             return "Alignment basis: member check judges the latest chain against the most recent chains of the same task (bounded sample window).";
@@ -596,12 +597,13 @@ public class TaskReplayRunner {
     }
 
     /**
-     * --ci 基线对照：每任务（含单链）最新链逐记录对照其调用点画像的活跃指纹。
-     * 每执行一份步骤（BaselineSides.fromProfiles），paired = 新链记录数——
-     * 同会话多轮迭代全部进判定，无 surplus 盲区；accept 提升指纹后同证据即 PASS，
-     * 裁决对门禁立即生效。基线侧无记录：成本只出 current 侧、baselineTime 取画像
-     * approvedAt（在场拼接）。member-check 即使在 ciMode 语义下也走链采样（不进本
-     * 分支）。
+     * --ci 基线对照：每任务（含单链）最新链的逐调用点链末执行对照其调用点画像的
+     * 活跃指纹（每调用点一份步骤，paired = 调用点数）——CI 门禁的对象是任务链的
+     * 末状态，更早的同会话记录是迭代草稿，经透明层注记可见、不进判定；accept
+     * 提升链末形态的指纹后同链复检即 PASS（判定对象不随 accept 翻转，无摆振）。
+     * 任务纪律与前缀标记仍看全链。基线侧无记录：成本只出 current 侧、baselineTime
+     * 取画像 approvedAt（在场拼接）。member-check 即使在 ciMode 语义下也走链采样
+     * （不进本分支）。
      */
     private void alignCiGroup(List<TaskChain> group, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager) {
         TaskChain newChain = group.get(group.size() - 1);
@@ -612,21 +614,52 @@ public class TaskReplayRunner {
                 profiles.putIfAbsent(key, repository.findInvocationByKey(key));
             }
         }
-        TaskAlignment alignment = TaskAligner.align(BaselineSides.fromProfiles(newChain.getRecords(), profiles::get), newChain, comparator, rules);
+        TaskChain judged = TaskAligner.trimToLatestPerInvocation(newChain);
+        TaskAlignment alignment = TaskAligner.alignLatestPerInvocation(
+                BaselineSides.fromProfiles(judged.getRecords(), profiles::get), newChain, comparator, rules);
         Long baselineTime = latestApprovedAt(profiles.values());
         alignment.setBaselineTime(baselineTime);
         alignment.setNewChainTime(newChain.firstTimestamp());
 
-        String versionNote = newChain.getRecords().size() == 1 ? "" : " (" + CliSupport.plural(newChain.getRecords().size(), "step") + ")";
+        String versionNote = newChain.getRecords().size() == 1 ? "" : " (" + CliSupport.plural(judged.getRecords().size(), "invocation") + " judged from " + newChain.getRecords().size() + " records)";
         info("Task \"" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "\": baseline comparison (--ci) — new chain (session " + newChain.getSessionId() + ")" + versionNote + " against approved baselines" + (baselineTime != null ? " (latest approval on this chain's invocations)" : ""));
         if (rules != null && rules.hasTaskRules() && !newChain.isDeclared()) {
             info("Note: task has no declared taskKey; task rules do not apply.");
         }
         Stability stability = stabilityOf(group);
-        AlignmentRender render = renderAlignment(alignment, null, newChain, outcomes, totals, manager, stability);
+        AlignmentRender render = renderAlignment(alignment, null, newChain, outcomes, totals, manager, stability, unapprovedEarlierPerGroup(newChain, profiles));
         if (jsonMode) {
             out.println(taskJson(TaskReportMode.CI_ALIGN, newChain.getRequestText(), newChain.getSessionId(), alignment.getSteps().size(), render, alignment.getCrossVersionCount(), baselineTime, alignment.getNewChainTime(), alignment.isPrefixDependent()));
         }
+    }
+
+    /**
+     * 透明层的未批准草稿计数：逐调用点组内早于链末的记录，按自己的键对自己的
+     * 画像判「提取指纹 ≠ 活跃指纹（或无画像）」——早记录的键可能与被判记录不同
+     * （标签跨版本组），不冒用被判记录的画像。键 = 被判记录的 recordId（与步骤
+     * 渲染经 recordId 汇合，不复制组键文法）。
+     */
+    private Map<String, Integer> unapprovedEarlierPerGroup(TaskChain newChain, Map<String, InvocationProfile> profiles) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (List<InteractionRecord> groupRecords : TaskAligner.invocationGroups(newChain).values()) {
+            if (groupRecords.size() <= 1) {
+                continue;
+            }
+            int unapproved = 0;
+            for (int i = 0; i < groupRecords.size() - 1; i++) {
+                InteractionRecord earlier = groupRecords.get(i);
+                String key = CliSupport.invocationKeyOfRecord(earlier);
+                InvocationProfile profile = key == null ? null : profiles.get(key);
+                if (profile == null || profile.getFingerprint() == null
+                        || !FingerprintExtractor.extract(earlier, rules, earlier.getInvocationId()).equals(profile.getFingerprint())) {
+                    unapproved++;
+                }
+            }
+            if (unapproved > 0) {
+                counts.put(groupRecords.get(groupRecords.size() - 1).getRecordId(), unapproved);
+            }
+        }
+        return counts;
     }
 
     /**
@@ -689,7 +722,7 @@ public class TaskReplayRunner {
         }
 
         Stability stability = stabilityOf(group);
-        AlignmentRender render = renderAlignment(evidence, evidenceSample, newChain, outcomes, totals, manager, stability);
+        AlignmentRender render = renderAlignment(evidence, evidenceSample, newChain, outcomes, totals, manager, stability, null);
         if (jsonMode) {
             StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.MEMBER_CHECK.wireName() + "\"");
             sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
@@ -733,7 +766,11 @@ public class TaskReplayRunner {
      * <p>baseline 传 null = 基线侧为画像对照（ci-align）：无基线记录，served
      * 标注自然退化、模型对偶与基线成本省略、Cost 行只出 current 侧。</p>
      */
-    private AlignmentRender renderAlignment(TaskAlignment alignment, TaskChain baseline, TaskChain newChain, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager, Stability stability) {
+    /**
+     * unapprovedEarlierByRecordId 仅链末判定路径非 null（被判记录 id → 组内未批准
+     * 草稿数）——驱动早记录透明层注记；链/包全量配对路径无草稿概念，传 null。
+     */
+    private AlignmentRender renderAlignment(TaskAlignment alignment, TaskChain baseline, TaskChain newChain, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager, Stability stability, Map<String, Integer> unapprovedEarlierByRecordId) {
         AlignmentRender render = new AlignmentRender();
         List<TaskRuleViolation> violations = alignment.getRuleViolations();
         totals.ruleViolations += violations.size();
@@ -797,6 +834,11 @@ public class TaskReplayRunner {
                 if (step.getSkippedPairs() > 0) {
                     info("    (" + CliSupport.plural(step.getSkippedPairs(), "pair") + " on this invocation not examined after the first difference; the step verdict is already CHANGED)");
                 }
+                if (step.getEarlierRecords() > 0) {
+                    Integer unapproved = unapprovedEarlierByRecordId != null ? unapprovedEarlierByRecordId.get(step.getNewRecordId()) : null;
+                    info("    (--ci gates the latest execution per invocation; " + CliSupport.plural(step.getEarlierRecords(), "earlier record") + " on this invocation not re-judged"
+                            + (unapproved != null && unapproved > 0 ? ", unapproved shape on " + CliSupport.plural(unapproved.intValue(), "record") + " (visible here and in the stability view; not gated)" : "") + ")");
+                }
             }
             render.comparedPairs += step.getComparedPairs();
             render.skippedPairs += step.getSkippedPairs();
@@ -845,7 +887,7 @@ public class TaskReplayRunner {
 
         for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
             String action = step.getKind() == StepKind.MISSING ? "missing" : step.getKind() == StepKind.ADDED ? "added" : "aligned";
-            render.stepJsons.add(alignedStepJson(action, step));
+            render.stepJsons.add(alignedStepJson(action, step, unapprovedEarlierByRecordId != null ? unapprovedEarlierByRecordId.get(step.getNewRecordId()) : null));
         }
         for (TaskRuleViolation violation : violations) {
             render.violationJsons.add("{\"type\":\"" + violation.getType() + "\",\"label\":\"" + RecursiveJsonParser.escape(violation.getLabel()) + "\",\"detail\":\"" + RecursiveJsonParser.escape(violation.getDetail()) + "\"}");
@@ -1105,13 +1147,15 @@ public class TaskReplayRunner {
     }
 
     /**
-     * 缩域链中尚无基线画像的调用点键（CI 模式守卫的拒绝名单）。
+     * 缩域链的链末判定将对照、但尚无基线画像的调用点键（CI 模式守卫的拒绝名单）。
+     * 只看每链逐调用点的链末记录——早于链末的同会话草稿不挡门（无画像走透明层
+     * 未批准计数）。
      */
     private Set<String> unbaselinedKeysInScope(List<TaskChain> scoped) {
         Set<String> missing = new TreeSet<>();
         Set<String> checked = new HashSet<>();
         for (TaskChain chain : scoped) {
-            for (InteractionRecord record : chain.getRecords()) {
+            for (InteractionRecord record : TaskAligner.trimToLatestPerInvocation(chain).getRecords()) {
                 String key = CliSupport.invocationKeyOfRecord(record);
                 if (key != null && checked.add(key) && repository.findInvocationByKey(key) == null) {
                     missing.add(key);
@@ -1315,12 +1359,13 @@ public class TaskReplayRunner {
         }
         boolean ciAlign = ciMode && !memberCheck;
         if (ciAlign) {
-            info("Judgment basis: each task's latest chain against its approved baselines (--ci).");
+            info("Judgment basis: the latest execution of each invocation in each task's latest chain against its approved baselines (--ci).");
         }
         for (List<TaskChain> group : groups) {
             TaskChain latest = group.get(group.size() - 1);
             if (ciAlign) {
-                info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": latest chain session " + latest.getSessionId() + " (" + CliSupport.plural(latest.getRecords().size(), "step") + ") judged against approved baselines. Task rules: " + ruleApplicability(latest));
+                TaskChain judged = TaskAligner.trimToLatestPerInvocation(latest);
+                info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": latest chain session " + latest.getSessionId() + " (" + CliSupport.plural(judged.getRecords().size(), "invocation") + " judged from " + latest.getRecords().size() + " records) against approved baselines. Task rules: " + ruleApplicability(latest));
             } else if (group.size() == 1) {
                 info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": single chain (" + CliSupport.plural(latest.getRecords().size(), "step") + ") → first recording self-establishes the baseline.");
             } else if (memberCheck) {
@@ -1331,15 +1376,17 @@ public class TaskReplayRunner {
                 info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": baseline session " + baseline.getSessionId() + " (" + CliSupport.plural(baseline.getRecords().size(), "step") + ") → new chain session " + latest.getSessionId() + " (" + CliSupport.plural(latest.getRecords().size(), "step") + "). Task rules: " + ruleApplicability(latest));
             }
             if (jsonMode) {
-                out.println(dryRunAlignJson(latest.getRequestText(), !ciAlign && group.size() > 1 ? baselineSessionOf(group) : null, !ciAlign && group.size() > 1 ? group.get(group.size() - 2).getRecords().size() : null, latest.getSessionId(), latest.getRecords().size(), memberCheck && group.size() > 1, ciAlign, ciAlign ? baselineVersionsJson(latest) : null));
+                TaskChain ciJudged = ciAlign ? TaskAligner.trimToLatestPerInvocation(latest) : null;
+                out.println(dryRunAlignJson(latest.getRequestText(), !ciAlign && group.size() > 1 ? baselineSessionOf(group) : null, !ciAlign && group.size() > 1 ? group.get(group.size() - 2).getRecords().size() : null, latest.getSessionId(), ciAlign ? ciJudged.getRecords().size() : latest.getRecords().size(), memberCheck && group.size() > 1, ciAlign, ciAlign ? baselineVersionsJson(ciJudged) : null));
             }
         }
         return 0;
     }
 
     /**
-     * ci-align 计划面的基线版本集：最新链逐调用点（首现序）的画像活跃版本——
-     * 计划要讲清「将对照谁」；未建档调用点版本为 null 显式可见，不靠缺席暗示。
+     * ci-align 计划面的基线版本集：链末判定将对照的调用点（链末视图首现序）的
+     * 画像活跃版本——计划要讲清「将对照谁」；未建档调用点版本为 null 显式可见，
+     * 不靠缺席暗示。
      */
     private String baselineVersionsJson(TaskChain chain) {
         Map<String, String> versions = new LinkedHashMap<>();
@@ -1566,7 +1613,11 @@ public class TaskReplayRunner {
         return sb.append("}").toString();
     }
 
-    private static String alignedStepJson(String action, TaskAlignment.StepAlignment step) {
+    /**
+     * unapprovedEarlier 仅链末判定路径携带（被判记录 id 对应的组内未批准草稿数，
+     * null = 非该路径）；earlierRecords 来自步骤本体（core 链末判定入口就近写入）。
+     */
+    private static String alignedStepJson(String action, TaskAlignment.StepAlignment step, Integer unapprovedEarlier) {
         StringBuilder sb = new StringBuilder("{");
         String recordId = step.getNewRecordId() != null ? step.getNewRecordId() : step.getBaselineRecordId();
         sb.append("\"recordId\":\"").append(RecursiveJsonParser.escape(recordId != null ? recordId : "")).append('"');
@@ -1580,6 +1631,12 @@ public class TaskReplayRunner {
         }
         if (step.getSurplusCount() > 0) {
             sb.append(",\"surplusCount\":").append(step.getSurplusCount());
+        }
+        if (step.getEarlierRecords() > 0) {
+            sb.append(",\"earlierRecords\":").append(step.getEarlierRecords());
+            if (unapprovedEarlier != null && unapprovedEarlier > 0) {
+                sb.append(",\"unapprovedEarlier\":").append(unapprovedEarlier);
+            }
         }
         if (step.getInvocationLabel() != null) {
             sb.append(",\"invocationLabel\":\"").append(RecursiveJsonParser.escape(step.getInvocationLabel())).append('"');

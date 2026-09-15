@@ -74,7 +74,7 @@ public class StatusCommand implements Callable<Integer> {
                 for (InvocationProfile profile : profiles) {
                     if (invocations.length() > 0) invocations.append(",");
                     String archivedTags = archivedVersionTags(repository, profile.getInvocationKey());
-                    invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(profile.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), ""))).append("\",\"status\":\"").append(profile.getBaselineStatus()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(profile.getVersionTag() != null ? profile.getVersionTag() : "")).append("\",\"hasCandidate\":").append(profile.getCandidateFingerprint() != null).append(",\"templateDrift\":\"").append(driftByInvocationKey.getOrDefault(profile.getInvocationKey(), TemplateDriftState.NONE).wireName()).append("\",\"codeRef\":\"").append(RecursiveJsonParser.escape(profile.getCodeRef() != null ? profile.getCodeRef() : "")).append("\",\"archivedVersions\":\"").append(RecursiveJsonParser.escape(archivedTags)).append("\"}");
+                    invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(profile.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), ""))).append("\",\"status\":\"").append(profile.getBaselineStatus()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(profile.getVersionTag() != null ? profile.getVersionTag() : "")).append("\",\"hasCandidate\":").append(profile.getCandidateFingerprint() != null).append(",\"templateDrift\":\"").append(driftByInvocationKey.getOrDefault(profile.getInvocationKey(), TemplateDriftState.NONE).wireName()).append("\",\"codeRef\":\"").append(RecursiveJsonParser.escape(profile.getCodeRef() != null ? profile.getCodeRef() : "")).append("\",\"approvedBy\":\"").append(RecursiveJsonParser.escape(profile.getApprovedBy() != null ? profile.getApprovedBy() : "")).append("\",\"approvedAt\":").append(profile.getApprovedAt() != null ? profile.getApprovedAt().toString() : "null").append(",\"archivedVersions\":\"").append(RecursiveJsonParser.escape(archivedTags)).append("\"}");
                 }
                 StringBuilder uncoveredJson = new StringBuilder();
                 for (String tag : uncoveredBusinessTagsInScope(repository, allProfiles, narrowedKeys)) {
@@ -90,11 +90,13 @@ public class StatusCommand implements Callable<Integer> {
                 return 0;
             }
 
-            out.printf("  %-50s %-9s %-6s %-4s %-5s %-12s %s%n", "invocationKey", "status", "ver", "cand", "drift", "archived", "label");
+            out.printf("  %-50s %-9s %-6s %-14s %-4s %-5s %-12s %s%n", "invocationKey", "status", "ver", "approver", "cand", "drift", "archived", "label");
             out.println("  drift column: \u25cf consistent / \u25b2 drifted / - none (template identity)");
+            out.println("  archived column: rollback targets; * marks the tag that is also the active version");
             for (InvocationProfile profile : profiles) {
                 String archivedTags = archivedVersionTags(repository, profile.getInvocationKey());
-                out.printf("  %-50s %-9s %-6s %-4s %-5s %-12s %s%n", CliSupport.displayKey(profile.getInvocationKey()), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getCandidateFingerprint() != null ? "yes" : "-", driftByInvocationKey.getOrDefault(profile.getInvocationKey(), TemplateDriftState.NONE).symbol(), archivedTags.isEmpty() ? "-" : archivedTags, labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), "-"));
+                String markedTags = markActiveTag(archivedTags, profile.getVersionTag());
+                out.printf("  %-50s %-9s %-6s %-14s %-4s %-5s %-12s %s%n", CliSupport.displayKey(profile.getInvocationKey()), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getApprovedBy() != null ? profile.getApprovedBy() : "-", profile.getCandidateFingerprint() != null ? "yes" : "-", driftByInvocationKey.getOrDefault(profile.getInvocationKey(), TemplateDriftState.NONE).symbol(), markedTags.isEmpty() ? "-" : markedTags, labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), "-"));
                 printTemplateText(repository, profile);
                 if (diff) {
                     printCandidateDiff(profile);
@@ -163,6 +165,22 @@ public class StatusCommand implements Callable<Integer> {
             // 归档查询失败不阻断巡检
             return "-";
         }
+    }
+
+    /**
+     * 人读归档列的活动版本标记：活动 tag 追加 *。回滚恢复的版本其归档行仍在，
+     * 活动号出现在归档列是合法形态——标记让「当前是哪版」不靠猜。机器通道
+     * 不标记（同一行的 versionTag 即活动版，比较即知）。
+     */
+    private static String markActiveTag(String archivedTags, String activeTag) {
+        if (activeTag == null || activeTag.isEmpty() || archivedTags == null || archivedTags.isEmpty()) {
+            return archivedTags;
+        }
+        List<String> marked = new ArrayList<>();
+        for (String tag : archivedTags.split(",")) {
+            marked.add(tag.equals(activeTag) ? tag + "*" : tag);
+        }
+        return String.join(",", marked);
     }
 
     /**

@@ -131,14 +131,17 @@ public class BaselineManager {
 
     /**
      * 回滚到指定版本的归档基线。expectedActiveVersion 非空时执行乐观并发守卫
-     * （语义同 {@link #accept}）。
+     * （语义同 {@link #accept}）。目标即当前活动版本时拒绝——那是一次无指纹
+     * 变化的空回滚，唯一副作用是丢弃在途候选，而丢弃候选有专门动词（reject）。
+     * 回滚会顺带清空在途候选，调用方输出须披露（画像恢复到目标版本获批时的
+     * 完整治理事实，候选是其后产生的分歧证据，不随版本回退）。
      *
      * @param invocationKey         调用点键
      * @param versionTag            目标版本标签
      * @param expectedActiveVersion 乐观守卫的期望活跃版本标签，null = 不设守卫
      * @param actor                 回滚执行者身份（治理事件留痕——rollback 不改画像
      *                              审批链，执行者在事件表可见）
-     * @throws IllegalStateException 无归档基线时抛出
+     * @throws IllegalStateException 无归档基线、画像缺席或目标=活动版本时抛出
      */
     public synchronized void rollback(String invocationKey, String versionTag, String expectedActiveVersion, String actor) {
         ArchivedTemplateVersion archived = repository.findArchivedVersion(invocationKey, versionTag);
@@ -151,6 +154,9 @@ public class BaselineManager {
             throw new IllegalStateException("Invocation profile not found: " + invocationKey);
         }
         checkExpectedVersion(profile, expectedActiveVersion);
+        if (versionTag.equals(profile.getVersionTag())) {
+            throw new IllegalStateException("Target version " + versionTag + " is already the active baseline of " + invocationKey + "; rollback would change nothing. To discard an in-flight candidate, use reject.");
+        }
 
         // 当前基线也归档（若该 tag 未曾归档过）
         archiveIfAbsent(invocationKey, profile);

@@ -52,7 +52,7 @@ stateDiagram-v2
 | 判定 CHANGED 落候选（D1） | 画像存在；候选指纹 ≠ 画像现役指纹（一致即无裁决对象，不登记不翻转） | recordCandidate（首个 CHANGED 配对的新记录 + 现场重提指纹） | CANDIDATE（不一致时）/ 不变（一致时） |
 | accept | CANDIDATE，否则抛 IllegalStateException | ①归档旧基线 ②身份前移（顺序钉死）③候选升基线 ④tag 跳过归档占用 ⑤盖章 ⑥落 ACCEPT 事件 | BASELINE |
 | reject | CANDIDATE，否则抛（与 accept 对称） | 丢弃候选，保留旧基线（回退模板是 git 的职责）；落 REJECT 事件（actor=否决者）——候选消失后事件是「曾发生过 reject」的唯一痕迹 | BASELINE |
-| rollback(key, tag) | 归档行存在，否则抛 | 当前基线先归档 → 按快照恢复指纹/模板哈希/语义版本/审批/tag；落 ROLLBACK 事件（actor=执行者，versionTag=目标版本）——恢复按原始审批人重激活，执行者只在事件表可见 | BASELINE |
+| rollback(key, tag) | 归档行存在，否则抛；tag = 当前活动版本同样抛（空回滚唯一副作用是清候选，丢弃候选有专门动词 reject，拒绝即消除歧义路径） | 当前基线先归档 → 按快照恢复指纹/模板哈希/语义版本/审批/tag；在途候选随之清空（回执披露 candidateDiscarded，治理动词无静默副作用）；落 ROLLBACK 事件（actor=执行者，versionTag=目标版本）——恢复按原始审批人重激活，执行者只在事件表可见 | BASELINE |
 | --force 重建 | 画像存在 | 旧基线先归档 → 桶内规范序首条记录重提指纹 → tag 顺延 | BASELINE |
 | 漂移收编（显式 advanceTemplateIdentity） | 最新可分组记录哈希 ≠ 画像哈希 | 仅前移 templateHash（指纹/候选/tag/审批不动） | 不变 |
 
@@ -108,6 +108,18 @@ stateDiagram-v2
 10. **漂移收编只走治理写入口**：自动收编不得由 CLI 直写画像（单一写者纪律），只经
     advanceTemplateIdentity。【测试钉】`TaskReplayRunnerTest.DriftStateMachine`
     （driftPass_dev_collects 断言身份经收编前移、driftPass_ci_keepsStale 断言 CI 不落写）
+11. **rollback 守卫与副作用披露**：目标 = 当前活动版本即拒（IllegalStateException 指路
+    reject——空回滚不改指纹，唯一效果是丢弃在途候选，那有专门动词）；任何 rollback 清了
+    在途候选必须在回执披露（人读行 "in-flight candidate discarded"、rollback/1 的
+    `candidateDiscarded:true`）——待裁决证据的丢失不得静默。人读 status 的归档列给活动 tag
+    打 *（回滚恢复后活动号仍在归档列是可逆性的合法代价，标记让当前版本不靠猜；机器通道
+    不标记——同行的 versionTag 即活动版）。【测试钉】`BaselineManagerTest.Rollback.
+    rollbackToActiveVersion_refused` + `JsonContractTest.rollbackGuards_activeTargetRefusedAndCandidateDisclosed`
+    + `statusHuman_archivedColumnMarksActive`
+12. **审批溯源读面**：approvedBy/approvedAt 随 status/1 每行回读（approvedBy 空串=未盖章、
+    approvedAt null 字面量=未盖章），人读 status 表带 approver 列——「这个基线是谁批的、
+    何时批的」任何面可答；audit 仍是 agent 透镜（人类写不进清单，其溯源经 status/report
+    版本史可见）。【测试钉】`JsonContractTest.statusJson_exposesApprover`
 
 ## 行为矩阵
 
@@ -116,6 +128,8 @@ stateDiagram-v2
 | 无候选 accept/reject | IllegalStateException（CLI 转译为退出码 2） |
 | 画像不存在 accept/reject/rollback | IllegalStateException |
 | rollback 目标 tag 无归档行 | IllegalStateException |
+| rollback 目标 = 当前活动版本 | IllegalStateException，消息指路 reject（丢弃候选的专门动词） |
+| rollback 时画像持有在途候选 | 候选随恢复清空，回执披露 candidateDiscarded |
 | accept 时归档 tag 撞车 | nextAvailableVersionTag 顺延跳过（tag↔指纹一一对应不破） |
 | 候选哈希与最新记录一致时 accept | 身份不动（幂等），候选照常转正 |
 | 漂移 + 对齐 PASS（开发态） | 收编：模板哈希前移，其余治理字段不动，报告可见 |
@@ -151,17 +165,25 @@ agent 权限配置为完全访问时，授权决策已经在 harness 层完成�
 机制与之竞争。框架承担的是透明与事后审计：
 
 1. **身份申报约定**：agent 驱动治理写时以 `--approver agent:<名称>` 申报机器身份
-   （自由字符串约定，框架不校验不强制；人类用默认 OS 身份），approvedBy 原样留痕。
+   （自由字符串约定，框架不校验具体值；人类用默认 OS 身份），approvedBy 原样留痕。
    申报是诚实用法的一部分——不申报则审计视角下与人写无异，这正是申报制的本意。
+   **MCP 通道 approver 必填**（establish/accept/reject/rollback 的 schema required +
+   服务端 E-USAGE 守卫）：机器调用方总能申报身份，缺席时 CLI 侧静默落到 OS 用户缺省
+   会让机器写从 agent 透镜中消失（人机分账的例外窗口）；CLI 人读通道保留 OS 用户
+   缺省不变。【测试钉】`McpServerTest`（schema required 四工具 + 缺 approver E-USAGE）
 2. **audit 命令**：治理事件表（governance_events）时间线的 agent 透镜——列出操作
    主体以 `agent:` 前缀申报的全部治理事件（六动词含 reject/rollback，行结构
    {verb, invocationKey, versionTag, actor, codeRef, happenedAt}），人读与 audit/1 双
    通道，读动词恒 exit 0。事件在治理写发生时经 BaselineManager 单源落账（幂等早退与
    前置失败不落事件；COLLECT 的 actor 恒 null——框架自动化，不进 agent 透镜）；事件
    写失败按 L1 退化（记 SEVERE 不阻断治理写本体）。人类写经 status/report 的版本史可
-   见，不进本清单。
+   见，不进本清单（审批溯源读面见契约 12）。
 
 ## 复核台账
+
+| 日期 | 方式 | 发现 |
+|---|---|---|
+| 2026-09-14 | Round 5 裁决批（B3/B4）：审批溯源读面 + MCP approver 必填 + rollback 守卫与披露 | ①B3 根因=approvedBy/approvedAt 一直在画像与归档行上（establish/accept/rollback 三路径盖章），读面从不渲染——audit 类注释承诺的「人类写经 status/report 可见」落空，本批兑现（契约 12）；逃逸窗口根因=MCP approver 可选 + CLI OS 用户缺省回退，机器写无痕混入人类名单，schema required + 服务端 E-USAGE 双守卫关闭；②B4 根因=nextAvailableVersionTag 只防新 accept 复用 tag，回滚恢复出的 tag 本就在归档（可逆性代价），活动 tag 因此可被 rollback 命中且顺带清候选——拒绝空回滚（指路 reject）+ candidateDiscarded 回执披露 + 归档列 * 标记（契约 11）；③MCP approver 必填是发布前收紧（对省略客户端破坏性，pre-1.0 免费） |
 
 | 日期 | 方式 | 发现 |
 | 2026-09-14 | A3 修复批（批 3）：治理事件表落地，audit 由状态投影改为时间线单源读取 | ①真源表增治理事件行；状态机事件表 accept/reject/rollback 三行补事件落账；②「agent 治理与审计」节 audit 条目重写（原「rollback/reject 不进清单」已知边界随事件表消失）；③reject/rollback 签名增 actor 参数（公开 API 变更，pre-1.0 允许），CLI/MCP 面同步 --approver；④audit/1 行结构 state→verb（schema 名开发期恒定，语义变更=删库重建承接） |

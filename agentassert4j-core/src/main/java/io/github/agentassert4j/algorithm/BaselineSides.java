@@ -16,9 +16,9 @@ import java.util.function.Function;
  * <p>判定基线的统一不变式：候选侧（当前证据）永远现场重提；基线侧 = 批准真相的
  * 定格投影，按路径三源取用——链路径 = 上一条真实链的记录（两侧同为记录，对称
  * 现场重提）；验收包 = 导出时刻的定格提取；CI 对照 = 画像活跃指纹（establish/
- * accept 时刻的定格提取）。三个工厂方法只做投影，产物统一喂
- * {@link TaskAligner#align(Map, io.github.agentassert4j.model.TaskChain, DeterministicComparator,
- * io.github.agentassert4j.config.InvocationRulesConfig)} 这一个对齐入口。</p>
+ * accept 时刻的定格提取）。三个工厂方法只做投影，产物统一喂对齐器：链路径进
+ * {@link TaskAligner#align}，CI/包路径进链末判定入口
+ * {@link TaskAligner#alignLatestPerInvocation}。</p>
  *
  * @author axy-yxa
  * @since 2026-09-14
@@ -42,9 +42,10 @@ public final class BaselineSides {
     }
 
     /**
-     * 画像指纹投影（CI 基线对照）：每条新链记录产出一份基线步骤，指纹与版本取自该
-     * 记录调用点画像的活跃定格值。步骤身份（键与标签）镜像记录自身——保证基线组键
-     * 与新链分组键逐字相等，对齐只可能 MATCHED（CI 面缺步骤/新增步骤结构性不可能）。
+     * 画像指纹投影（CI 基线对照）：每条传入记录产出一份基线步骤，指纹与版本取自该
+     * 记录调用点画像的活跃定格值。链末判定路径喂裁剪后的链末记录集（每调用点一份
+     * 步骤）；步骤身份（键与标签）镜像记录自身——保证基线组键与新链分组键逐字相等，
+     * 对齐只可能 MATCHED（CI 面缺步骤/新增步骤结构性不可能）。
      *
      * <p>解析不到画像或画像无活跃指纹即抛 IllegalStateException——CI 路径的未建档
      * 守卫先于此入口，到达即为数据违约，宁可响亮失败不做静默缺步（缺步会伪装成

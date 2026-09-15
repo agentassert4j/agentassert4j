@@ -163,7 +163,10 @@ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
   structural verdicts remain valid;
 - Pack tasks never executed locally are **coverage gaps** (exit 2) — incomplete evidence never
   masquerades as a pass;
-- `verify` is read-only and repeatable; the markdown report is the delivery evidence itself.
+- `verify` is read-only and repeatable; the markdown report is the delivery evidence itself;
+- the pack freezes the **approved** fingerprints (the same truth the CI gate checks) and warns when
+  a chain-end shape or an in-flight candidate was never adjudicated (`unadjudicatedSteps` in the
+  export report).
 
 After the acceptance side really executes, preview the pairing with `--dry-run`, then verify
 (genuine demo output; cross-model marked automatically):

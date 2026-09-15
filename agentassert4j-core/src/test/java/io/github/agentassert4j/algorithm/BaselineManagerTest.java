@@ -225,6 +225,19 @@ class BaselineManagerTest {
         }
 
         @Test
+        @DisplayName("目标=活动版本：拒绝并指路 reject（空回滚唯一副作用是清候选，丢弃候选有专门动词）")
+        void rollbackToActiveVersion_refused() {
+            InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
+            repo.saveInvocationProfile(profile);
+            manager.accept("gk-1", null, "tester", null);    // v1 → v2，归档 v1
+            manager.rollback("gk-1", "v1", null, "tester");  // 回 v1：活跃 v1，其归档行仍在（可逆性代价）
+
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () -> manager.rollback("gk-1", "v1", null, "tester"));
+            assertTrue(ex.getMessage().contains("already the active baseline"), "必须言明空回滚: " + ex.getMessage());
+            assertTrue(ex.getMessage().contains("reject"), "必须指路丢弃候选的专门动词: " + ex.getMessage());
+        }
+
+        @Test
         @DisplayName("Skill profile 不存在 → 抛出 IllegalStateException")
         void profileNotFound_throwsException() {
             assertThrows(IllegalStateException.class, () -> manager.rollback("nonexistent", "v1", null, "tester"));
