@@ -11,6 +11,8 @@ import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -248,6 +250,41 @@ class CommandSmokeTest {
 
         assertEquals(2, exit);
         assertTrue(errOut.toString().contains("No candidates pending adjudication"), "bare 无候选必须显式说明而非误报成功: " + errOut);
+    }
+
+    @Test
+    @DisplayName("rollback 目标=活动版本：统一走空回滚守卫文案并指路 reject")
+    void rollback_toActiveRefusesWithRejectPointer() {
+        seedOneRecord("session-1", 1000L, "hash-old");
+        new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath);
+
+        ByteArrayOutputStream errOut = redirectStderr();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("rollback", "--invocation", "queryOrder", "--version", "v1", "--db", dbPath);
+
+        assertEquals(2, exit);
+        String err = errOut.toString();
+        assertTrue(err.contains("already the active baseline"), "空回滚守卫话术优先于「不在归档列表」: " + err);
+        assertTrue(err.contains("use reject"), "必须指路丢候选的专门动词: " + err);
+    }
+
+    @Test
+    @DisplayName("规则文件正证行：命中即披露路径与声明计数（与 Config 行同格就地正证）")
+    void rulesLine_disclosedWhenRulesFilePresent() throws Exception {
+        seedOneRecord("session-1", 1000L, "hash-old");
+        Path rulesFile = tempDir.resolve("agentassert4j-rules.json");
+        Files.write(rulesFile, "{\"invocations\":{\"queryOrder\":{\"requiredKeywords\":[\"ORD\"]}},\"tasks\":{\"查订单\":{\"requiredSteps\":[\"queryOrder\"]}}}".getBytes(StandardCharsets.UTF_8));
+        System.setProperty("agentassert4j.rules.path", rulesFile.toString());
+        try {
+            ByteArrayOutputStream out = redirectStdout();
+            int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath);
+
+            assertEquals(0, exit);
+            String text = out.toString();
+            assertTrue(text.contains("Rules: " + rulesFile), "规则生效正证行必须在场: " + text);
+            assertTrue(text.contains("1 invocation declaration(s), 1 task declaration(s)"), "声明计数就地可见: " + text);
+        } finally {
+            System.clearProperty("agentassert4j.rules.path");
+        }
     }
 
     @Test

@@ -200,9 +200,10 @@ public class TaskReplayRunner {
         AlignmentTotals totals = new AlignmentTotals();
 
         List<List<TaskChain>> groups = groupByRequestText(scoped);
+        Map<String, Map<String, Verdict>> verdictsByKey = ciMode && !memberCheck ? new LinkedHashMap<String, Map<String, Verdict>>() : null;
         for (List<TaskChain> group : groups) {
             if (ciMode && !memberCheck) {
-                alignCiGroup(group, outcomes, totals, manager);
+                alignCiGroup(group, outcomes, totals, manager, verdictsByKey);
                 continue;
             }
             if (group.size() == 1) {
@@ -213,6 +214,19 @@ public class TaskReplayRunner {
                 alignMemberGroup(group, outcomes, totals, manager);
             } else {
                 alignTaskGroup(group, outcomes, totals, manager);
+            }
+        }
+
+        // 同调用点跨任务链混形指路：单活跃基线只能满足一边，accept 任一形态后另一边
+        // 仍会红——判定本身已逐任务如实报告，这里补的是「为什么裁决后还有红」的因果
+        // 与收敛路径（新会话全一形态链）
+        if (verdictsByKey != null) {
+            for (Map.Entry<String, Map<String, Verdict>> entry : verdictsByKey.entrySet()) {
+                Set<Verdict> verdicts = new HashSet<>(entry.getValue().values());
+                if (verdicts.contains(Verdict.PASS) && verdicts.contains(Verdict.CHANGED)) {
+                    info("Mixed shapes on " + CliSupport.displayKey(entry.getKey()) + ": this invocation ends different shapes across task chains (" + taskNamesForVerdict(entry.getValue(), Verdict.PASS) + " PASS, " + taskNamesForVerdict(entry.getValue(), Verdict.CHANGED) + " CHANGED).");
+                    info("  One baseline serves the whole invocation; rerun the diverging task in a new session as a single form to converge.");
+                }
             }
         }
 
@@ -605,7 +619,7 @@ public class TaskReplayRunner {
      * 取画像 approvedAt（在场拼接）。member-check 即使在 ciMode 语义下也走链采样
      * （不进本分支）。
      */
-    private void alignCiGroup(List<TaskChain> group, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager) {
+    private void alignCiGroup(List<TaskChain> group, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager, Map<String, Map<String, Verdict>> verdictsByKey) {
         TaskChain newChain = group.get(group.size() - 1);
         Map<String, InvocationProfile> profiles = new LinkedHashMap<>();
         for (InteractionRecord record : newChain.getRecords()) {
@@ -617,6 +631,13 @@ public class TaskReplayRunner {
         TaskChain judged = TaskAligner.trimToLatestPerInvocation(newChain);
         TaskAlignment alignment = TaskAligner.alignLatestPerInvocation(
                 BaselineSides.fromProfiles(judged.getRecords(), profiles::get), newChain, comparator, rules);
+        if (verdictsByKey != null) {
+            for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
+                if (step.getVerdict() != null) {
+                    verdictsByKey.computeIfAbsent(step.getInvocationKey(), k -> new LinkedHashMap<String, Verdict>()).put(newChain.getRequestText(), step.getVerdict());
+                }
+            }
+        }
         Long baselineTime = latestApprovedAt(profiles.values());
         alignment.setBaselineTime(baselineTime);
         alignment.setNewChainTime(newChain.firstTimestamp());
@@ -631,6 +652,20 @@ public class TaskReplayRunner {
         if (jsonMode) {
             out.println(taskJson(TaskReportMode.CI_ALIGN, newChain.getRequestText(), newChain.getSessionId(), alignment.getSteps().size(), render, alignment.getCrossVersionCount(), baselineTime, alignment.getNewChainTime(), alignment.isPrefixDependent()));
         }
+    }
+
+    /**
+     * 混形指路注记的任务名清单：按判定结论分组列出任务请求文本（缩略），
+     * 让「哪条链红、哪条链绿」就地可读。
+     */
+    private static String taskNamesForVerdict(Map<String, Verdict> verdictsByTask, Verdict verdict) {
+        List<String> names = new ArrayList<>();
+        for (Map.Entry<String, Verdict> entry : verdictsByTask.entrySet()) {
+            if (entry.getValue() == verdict) {
+                names.add("\"" + CliSupport.abbreviateText(entry.getKey(), 40) + "\"");
+            }
+        }
+        return String.join(", ", names);
     }
 
     /**
@@ -887,7 +922,7 @@ public class TaskReplayRunner {
 
         for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
             String action = step.getKind() == StepKind.MISSING ? "missing" : step.getKind() == StepKind.ADDED ? "added" : "aligned";
-            render.stepJsons.add(alignedStepJson(action, step, unapprovedEarlierByRecordId != null ? unapprovedEarlierByRecordId.get(step.getNewRecordId()) : null));
+            render.stepJsons.add(alignedStepJson(action, step, unapprovedEarlierByRecordId != null ? Integer.valueOf(unapprovedEarlierByRecordId.getOrDefault(step.getNewRecordId(), 0)) : null));
         }
         for (TaskRuleViolation violation : violations) {
             render.violationJsons.add("{\"type\":\"" + violation.getType() + "\",\"label\":\"" + RecursiveJsonParser.escape(violation.getLabel()) + "\",\"detail\":\"" + RecursiveJsonParser.escape(violation.getDetail()) + "\"}");
@@ -1615,7 +1650,9 @@ public class TaskReplayRunner {
 
     /**
      * unapprovedEarlier 仅链末判定路径携带（被判记录 id 对应的组内未批准草稿数，
-     * null = 非该路径）；earlierRecords 来自步骤本体（core 链末判定入口就近写入）。
+     * null = 非该路径；该路径上与 earlierRecords 成对恒输出，含 0——消费端无需
+     * 区分「无草稿」与「字段缺席」两种形态）；earlierRecords 来自步骤本体
+     * （core 链末判定入口就近写入）。
      */
     private static String alignedStepJson(String action, TaskAlignment.StepAlignment step, Integer unapprovedEarlier) {
         StringBuilder sb = new StringBuilder("{");
@@ -1634,7 +1671,7 @@ public class TaskReplayRunner {
         }
         if (step.getEarlierRecords() > 0) {
             sb.append(",\"earlierRecords\":").append(step.getEarlierRecords());
-            if (unapprovedEarlier != null && unapprovedEarlier > 0) {
+            if (unapprovedEarlier != null) {
                 sb.append(",\"unapprovedEarlier\":").append(unapprovedEarlier);
             }
         }

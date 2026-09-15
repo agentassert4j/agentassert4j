@@ -649,7 +649,7 @@ class VerifyExportTest {
         int exit = runner.run(json, "digest", null, reportPath.toString(), false);
         assertEquals(0, exit, "无规则段降级：维度 3/4 两侧默认 match: " + output);
         String markdown = new String(Files.readAllBytes(reportPath), StandardCharsets.UTF_8);
-        assertTrue(markdown.contains("not embedded in pack (dimensions 3/4 skipped)"), "降级必须注记: " + markdown);
+        assertTrue(markdown.contains("no pack rules section (dimensions 3/4 skipped"), "降级必须注记: " + markdown);
     }
 
     @Test

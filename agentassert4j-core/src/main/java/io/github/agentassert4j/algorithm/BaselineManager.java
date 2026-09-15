@@ -144,18 +144,19 @@ public class BaselineManager {
      * @throws IllegalStateException 无归档基线、画像缺席或目标=活动版本时抛出
      */
     public synchronized void rollback(String invocationKey, String versionTag, String expectedActiveVersion, String actor) {
-        ArchivedTemplateVersion archived = repository.findArchivedVersion(invocationKey, versionTag);
-        if (archived == null) {
-            throw new IllegalStateException("No archived template version found for invocation: " + invocationKey + ", version: " + versionTag);
-        }
-
         InvocationProfile profile = repository.findInvocationByKey(invocationKey);
         if (profile == null) {
             throw new IllegalStateException("Invocation profile not found: " + invocationKey);
         }
         checkExpectedVersion(profile, expectedActiveVersion);
+        // 空回滚守卫先于归档查找：目标=活动版本时「不在归档列表」不是用户真实意图，
+        // 拒绝话术必须带 reject 指路（丢候选的专门动词）
         if (versionTag.equals(profile.getVersionTag())) {
             throw new IllegalStateException("Target version " + versionTag + " is already the active baseline of " + invocationKey + "; rollback would change nothing. To discard an in-flight candidate, use reject.");
+        }
+        ArchivedTemplateVersion archived = repository.findArchivedVersion(invocationKey, versionTag);
+        if (archived == null) {
+            throw new IllegalStateException("No archived template version found for invocation: " + invocationKey + ", version: " + versionTag);
         }
 
         // 当前基线也归档（若该 tag 未曾归档过）

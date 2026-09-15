@@ -358,7 +358,7 @@ public class VerifyRunner {
         sb.append("| Pack schema | ").append(AcceptancePack.SCHEMA).append(" |\n");
         sb.append("| Pack SHA-256 | `").append(digest).append("` |\n");
         sb.append("| Judgment semantics | ").append(JudgmentSemantics.VERSION).append(" |\n");
-        sb.append("| Content rules | ").append(rulesEmbedded ? "embedded in pack (dimensions 3/4 active)" : "not embedded in pack (dimensions 3/4 skipped)").append(" |\n");
+        sb.append("| Content rules | ").append(rulesEmbedded ? "pack rules section embedded (dimensions 3/4 active)" : "no pack rules section (dimensions 3/4 skipped; pinned declarations still travel in step fingerprints)").append(" |\n");
         sb.append("| Dev-side servedModel | ").append(pack.getMeta().getServedModel() != null ? pack.getMeta().getServedModel() : "(not recorded)").append(" |\n");
         sb.append("| Local servedModel | ").append(localServedModels.isEmpty() ? "(not recorded)" : String.join(",", localServedModels)).append(" |\n");
         sb.append("| Cross-model | ").append(crossModel ? "yes (structural verdicts valid; text differences are expected wording variation)" : "no").append(" |\n\n");

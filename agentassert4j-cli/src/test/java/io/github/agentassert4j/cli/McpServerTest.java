@@ -112,7 +112,9 @@ class McpServerTest {
             Map<String, Object> serverInfo = castMap(result.get("serverInfo"));
             assertEquals("agentassert4j", serverInfo.get("name"));
             assertTrue(serverInfo.get("version") instanceof String);
-            assertTrue(result.get("instructions") instanceof String);
+            String instructions = String.valueOf(result.get("instructions"));
+            assertTrue(instructions.contains("latest chain"), "判定基准句必须在场: " + instructions);
+            assertTrue(instructions.contains("(establish, accept, reject, rollback)"), "治理动词枚举必须含 rollback（四动词均必填 approver）: " + instructions);
         }
 
         @Test

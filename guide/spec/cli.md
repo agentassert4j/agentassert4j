@@ -81,7 +81,10 @@ schema、退出码契约、help 终态。
    ci-align——--ci 基线对照的报告形态（判定基准=链末判定：每调用点只判组末执行，见 replay
    契约 19）：步骤携带 baselineVersion（画像活跃版本）、成本只出 current 侧、baselineTime=
    链内画像最新 approvedAt 缺席整体省略、步骤加法字段 earlierRecords/unapprovedEarlier
-   （组内草稿数/未批准草稿数，>0 才出现）；dry-run 的 alignPlan 在 ciAlign 时 newSteps=
+   （组内草稿数/未批准草稿数：earlierRecords >0 才出现；unapprovedEarlier 在 ci-align
+   路径与 earlierRecords 成对恒出现、含 0——消费端不区分「无草稿」与「字段缺席」两种
+   形态；同运行内同一调用点跨任务链一绿一红时人读补混形指路注记，收敛=新会话全一
+   形态链）；dry-run 的 alignPlan 在 ciAlign 时 newSteps=
    链末调用点数、携带 baselineVersions——链末键集首现序的画像活跃版本，未建档键
    versionTag=null 显式）；裁决=
    agentassert4j.adjudication/1；验收=agentassert4j.verify-report/1（含 dry-run mode；判定
@@ -195,6 +198,7 @@ re-drive/missing/added。句式 sentence case；全角标点与「」不出现�
 
 | 日期 | 方式 | 发现 |
 |---|---|---|
+| 2026-09-15 | Round 6 合并无裁决收口批（观测性/文案统一，语义零变更）：种子披露 + 规则差异告警 + 空回滚文案统一 + 混形指路 | ①establish 建档/force 重建行披露 `(seed record <id>)`（种子=桶内规范序最早记录——用户当场可见批准的是哪条记录，此前只能经 status --diff 反推）；②establish exists 行遇「当前规则文件声明 ≠ 基线钉定声明」时告警并指路两条刷新路径（check→accept 无重播种 / --force 重播种）——规则刷新无幂等路径的静默缺口就此可见；③rollback 目标=活动版本时统一走「already the active baseline … use reject」话术（守卫前置到归档查找之前，BaselineManager.rollback 检查顺序调整，语义与信封不变）；④选择器零命中话术精确化（invocationKey 前缀须以 `invocation:` 起头）；⑤每次运行在 Config 行后披露 `Rules: <path> (N invocation declaration(s), M task declaration(s))`（规则生效正证行——此前只能靠「task rules do not apply」反推）；⑥ci-align 步骤 unapprovedEarlier 与 earlierRecords 成对恒出现（含 0）；⑦同调用点跨任务链一绿一红时人读混形指路注记（收敛=新会话全一形态链）；⑧export 警告补「包照写、计数在包内与 --json」口径句；⑨verify 报告 Content rules 行措辞改「pack rules section」（与步骤指纹内钉声明区分载体）。【测试钉】BaselineServiceTest 种子披露/规则告警三钉 + TaskReplayRunnerTest 生产播种后果钉（坏草稿在前的混合链建档即偏红——判定/播种不对称的现行为由钉如实钉住）+ 混形指路钉 + unapprovedEarlier=0 钉 + CommandSmokeTest 空回滚统一话术钉 |
 | 2026-09-14 | Round 5 裁决批（B3/B4）：审批溯源读面 + rollback 守卫与披露 | ①status/1 增 approvedBy/approvedAt（空串/null=未盖章）+ 人读 approver 列 + archived 列活动 tag *（机器通道不标记）；②rollback/1 增 candidateDiscarded、目标=活动版本即拒（指路 reject）；③MCP 治理动词 approver 必填的命令面影响=零（CLI 人读通道保留 OS 用户缺省）；权威表述见 governance.md 契约 11/12 与台账同日行 |
 | 2026-09-14 | Round 5 即修批（无裁决项）：status/1 缩域缺口反转修复 + establish selection 段 + dry-run ciAlign 计划 baselineVersions | ①C1 根因=JSON 路径用缩域画像算 uncovered/unestablished（人读路径的正确形态「全量+键集过滤」同文件已在，收敛两通道共用助手）；②旧钉 CommandSmokeTest「--json 通道恒全量」钉住反转产物且与 v3「两通道一致缩域」裁决相悖，同批改钉（测试错误改钉理由：其通过面正是缺陷本体）；③baseline-report/1 增 selection（requested/matched）——扇出披露对 structuredContent 机器通道可见（披露文本在 stderr，MCP structuredContent 只收 stdout 报告行） |
 | 2026-09-09 | 通道 2 修复批：mode 词表增 re-drive-dry-run；signal 字段名 score→similarity；record/1 duplicate 增 storedSessionId/note——均来自通道 2 双宿主实测的 AI 使用证据 |

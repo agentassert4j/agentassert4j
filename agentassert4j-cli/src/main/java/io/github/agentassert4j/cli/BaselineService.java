@@ -4,6 +4,7 @@ import io.github.agentassert4j.algorithm.BaselineManager;
 import io.github.agentassert4j.algorithm.InvocationResolver;
 import io.github.agentassert4j.algorithm.VersionMismatchException;
 import io.github.agentassert4j.config.InvocationRulesConfig;
+import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.model.RegexPattern;
@@ -11,6 +12,7 @@ import io.github.agentassert4j.spi.StorageRepository;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -65,6 +67,7 @@ public class BaselineService {
             boolean hadBaseline = existing != null && existing.getFingerprint() != null;
             if (hadBaseline && !force) {
                 out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + existing.getVersionTag() + ")" + refSuffix(existing.getCodeRef()));
+                warnRulesDrift(out, firstBusinessLabel(records), existing.getFingerprint(), rules);
                 if (outcomes != null) {
                     outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "exists", existing.getVersionTag(), existing.getCodeRef()));
                 }
@@ -107,7 +110,7 @@ public class BaselineService {
             // 首条记录建立画像时 totalRecords=1，回填该分组的真实记录数
             created.setTotalRecords(records.size());
             repository.saveInvocationProfile(created);
-            out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "baseline re-established under the current judgment semantics (" + created.getVersionTag() + ")" : "baseline established") + refSuffix(created.getCodeRef()));
+            out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "baseline re-established under the current judgment semantics (" + created.getVersionTag() + ")" : "baseline established") + " (seed record " + records.get(0).getRecordId() + ")" + refSuffix(created.getCodeRef()));
             if (outcomes != null) {
                 outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), hadBaseline ? "reestablished" : "created", created.getVersionTag(), created.getCodeRef()));
             }
@@ -152,6 +155,43 @@ public class BaselineService {
                 out.println("    - " + violation);
             }
         }
+    }
+
+    /**
+     * 已存在基线与当前规则文件的声明差异告警：establish 对既有基线是幂等 no-op，
+     * 不会把规则文件里的新声明刷进指纹——差异静默时用户以为「已 establish = 已刷新」。
+     * 指路两条刷新路径：check 后 accept（用当前规则落候选再升格，不动种子）或
+     * --force（连种子一起从桶内最早记录重播）。
+     */
+    private static void warnRulesDrift(PrintStream out, String label, DeterministicFingerprint fingerprint, InvocationRulesConfig rules) {
+        if (rules == null || !rules.hasRules() || fingerprint == null) {
+            return;
+        }
+        InvocationRulesConfig.InvocationRule rule = rules.getRulesForInvocation(label);
+        String pinned = declarationDescription(fingerprint.getRequiredKeywords(), fingerprint.getForbiddenKeywords(), fingerprint.getRegexPatterns(), fingerprint.getDeclaredBehaviors());
+        String file = declarationDescription(rule.getRequiredKeywords(), rule.getForbiddenKeywords(), rule.getRegexPatterns(), rule.getBehaviors());
+        if (pinned.equals(file)) {
+            return;
+        }
+        out.println("  Warning: rules declarations for " + label + " differ from the ones pinned in this baseline (pinned " + pinned + " | file " + file + ").");
+        out.println("    establish does not refresh them: run `replay --ci` with this rules file in place and accept the candidate it lands (no re-seed), or use `--force` (re-seeds from the earliest record in the bucket).");
+    }
+
+    /**
+     * 规则声明的紧凑描述（告警用，两侧同形才可比较）。
+     */
+    private static String declarationDescription(Set<String> required, Set<String> forbidden, List<RegexPattern> regex, Set<String> behaviors) {
+        StringBuilder sb = new StringBuilder("required=").append(sorted(required));
+        sb.append(", forbidden=").append(sorted(forbidden));
+        sb.append(", regex=").append(regex == null || regex.isEmpty() ? "[]" : regex.toString());
+        sb.append(", behaviors=").append(sorted(behaviors));
+        return sb.toString();
+    }
+
+    private static List<String> sorted(Set<String> values) {
+        List<String> list = new ArrayList<>(values != null ? values : Collections.<String>emptySet());
+        Collections.sort(list);
+        return list;
     }
 
     /**

@@ -201,6 +201,7 @@ public class BaselineExportCommand implements Callable<Integer> {
             if (!unadjudicatedTasks.isEmpty()) {
                 err.println("  Warning: unadjudicated steps in the pack (in-flight candidate, or the chain-end shape differs from the approved baseline): " + String.join("; ", unadjudicatedTasks));
                 err.println("  Adjudicate the pending candidates (accept/reject), then re-export for a clean pack.");
+                err.println("  (The pack is still written; these steps are counted in-pack and in the --json report.)");
             }
             return 0;
         } catch (CliFailureException e) {

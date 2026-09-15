@@ -183,6 +183,7 @@ agent 权限配置为完全访问时，授权决策已经在 harness 层完成�
 
 | 日期 | 方式 | 发现 |
 |---|---|---|
+| 2026-09-15 | Round 6 合并无裁决收口批：rollback 空回滚守卫前置 | BaselineManager.rollback 的检查顺序调整：目标=活动版本守卫提至归档查找之前——此前目标为「活动且不在归档列表」的版本时（首建未替换的画像），用户先撞「No archived template version found」而非带 reject 指路的空回滚话术，双宿主 Round 6 实测同一拒绝两档措辞。状态机契约不变（两种失败均 IllegalStateException/E-NO-DATA）；CLI 侧 RollbackCommand.ensureVersionExists 同批放行目标=活动版本给 manager 守卫承接。【测试钉】CommandSmokeTest.rollback_toActiveRefusesWithRejectPointer |
 | 2026-09-14 | Round 5 裁决批（B3/B4）：审批溯源读面 + MCP approver 必填 + rollback 守卫与披露 | ①B3 根因=approvedBy/approvedAt 一直在画像与归档行上（establish/accept/rollback 三路径盖章），读面从不渲染——audit 类注释承诺的「人类写经 status/report 可见」落空，本批兑现（契约 12）；逃逸窗口根因=MCP approver 可选 + CLI OS 用户缺省回退，机器写无痕混入人类名单，schema required + 服务端 E-USAGE 双守卫关闭；②B4 根因=nextAvailableVersionTag 只防新 accept 复用 tag，回滚恢复出的 tag 本就在归档（可逆性代价），活动 tag 因此可被 rollback 命中且顺带清候选——拒绝空回滚（指路 reject）+ candidateDiscarded 回执披露 + 归档列 * 标记（契约 11）；③MCP approver 必填是发布前收紧（对省略客户端破坏性，pre-1.0 免费） |
 
 | 日期 | 方式 | 发现 |

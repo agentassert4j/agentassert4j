@@ -108,9 +108,15 @@ public class RollbackCommand implements Callable<Integer> {
 
     /**
      * 版本不存在时列出全部可选归档版本——rollback 的 --version 是必填值，
-     * 可选值没有发现渠道时用户只能猜，这里是猜错的出口。
+     * 可选值没有发现渠道时用户只能猜，这里是猜错的出口。目标=活动版本时放行给
+     * BaselineManager 的空回滚守卫：那里的话术带 reject 指路，比「不在归档列表」
+     * 更接近用户的真实意图（丢候选）。
      */
     private static void ensureVersionExists(StorageRepository repository, String invocationKey, String version) {
+        InvocationProfile profile = repository.findInvocationByKey(invocationKey);
+        if (profile != null && version.equals(profile.getVersionTag())) {
+            return;
+        }
         for (ArchivedTemplateVersion archived : repository.findArchivedVersions(invocationKey)) {
             if (version.equals(archived.getVersionTag())) {
                 return;

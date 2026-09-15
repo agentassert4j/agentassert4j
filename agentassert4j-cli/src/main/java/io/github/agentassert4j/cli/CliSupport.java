@@ -74,6 +74,13 @@ final class CliSupport {
         // 错误目录下运行时旧配置静默生效是最难查的排障黑洞
         String configSource = ConfigLoader.describeMainConfigSource();
         out.println(configSource != null ? "Config: " + configSource : "Config: no agentassert4j.json found; using built-in defaults.");
+        // 规则文件命中哪个路径必须与主配置同格披露——「规则是否生效、生效的是哪个文件」
+        // 只能靠反证（无规则任务行的 Note）是排障黑洞；doctor 之外的每次运行就地正证
+        String rulesPath = ConfigLoader.resolveRulesPath();
+        if (rulesPath != null) {
+            InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
+            out.println("Rules: " + rulesPath + " (" + rules.getDeclaredInvocationIds().size() + " invocation declaration(s), " + rules.getDeclaredTaskKeys().size() + " task declaration(s))");
+        }
         String url = dbOverride != null ? dbOverride : config.getStorage().getUrl();
         StorageRepository repository = new SqliteStorageRepository(expandHome(url));
         repository.initialize();
@@ -316,7 +323,7 @@ final class CliSupport {
             }
             return prefixMatches;
         }
-        throw new CliFailureException(CliErrorCode.E_NO_DATA, "No invocation matching " + filter + " (accepted: business label, invocationKey prefix, or the status display form like label@8hex; see `status` for the full list).", "Check the value against `status` output, then retry.", "agentassert4j status");
+        throw new CliFailureException(CliErrorCode.E_NO_DATA, "No invocation matching " + filter + " (accepted: business label, an invocationKey prefix starting with `invocation:`, or the status display form like label@8hex; see `status` for the full list).", "Check the value against `status` output, then retry.", "agentassert4j status");
     }
 
     /**

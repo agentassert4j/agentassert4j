@@ -584,6 +584,46 @@ class TaskReplayRunnerTest {
             assertTrue(out.contains("CHANGED"));
             assertTrue(out.contains("--ci gates the latest execution per invocation"), "草稿透明层注记在场: " + out);
             assertFalse(out.contains("unapproved shape"), "早记录=已批准种子形态，M=0 不追加未批准子句: " + out);
+
+            TaskReplayRunner jsonRunner = newRunner(true);
+            output.reset();
+            jsonRunner.run(null, null, true, false, false, false, false, null, null);
+            String ciLine = reportLine(output.toString(), "\"mode\":\"ci-align\"");
+            assertNotNull(ciLine, "ci-align 报告行在场");
+            assertTrue(ciLine.contains("\"earlierRecords\":1"), "早记录计数进 JSON: " + ciLine);
+            assertTrue(ciLine.contains("\"unapprovedEarlier\":0"), "零值恒输出——消费端不区分「无草稿」与「字段缺席」两种形态: " + ciLine);
+        }
+
+        @Test
+        @DisplayName("生产路径钉：establishMissing 以桶内最早记录播种，坏草稿在前的混合链建档即偏红")
+        void productionEstablish_seedsEarliest_mixedChainGoesRed() {
+            InteractionRecord draft = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
+            saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            new BaselineService(repository).establishMissing(new PrintStream(output, true), "tester", null, false, null, null, null, null);
+
+            InvocationProfile profile = repository.findInvocationByKey("invocation:order:hash-a");
+            assertNotNull(profile, "生产建档路径必须产出画像");
+            assertEquals(FingerprintExtractor.extract(draft, null, null), profile.getFingerprint(), "种子指纹=桶内最早记录（规范序），链末好形态不参与播种");
+            assertEquals(1, runner.run(null, null, true, false, false, false, false, null, null), "链末好形态对坏种子判 CHANGED——判定与播种的现行为缺口由本钉如实钉住");
+            assertNotNull(repository.findInvocationByKey("invocation:order:hash-a").getCandidateFingerprint(), "CHANGED 照落候选");
+        }
+
+        @Test
+        @DisplayName("混形指路：同调用点跨任务链一绿一红时输出收敛路径注记")
+        void mixedShapes_acrossTaskChains_notePointsToConvergence() {
+            InteractionRecord good = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
+            establishFromRecord(good);
+            saveRecord("b-1", "session-b", 2000L, "退货", "order", "hash-a", "{\"changed\":true}", null);
+
+            int exit = runner.run(null, null, true, false, false, false, false, null, null);
+
+            assertEquals(1, exit, "坏链末必须挡门");
+            String out = output.toString();
+            assertTrue(out.contains("Mixed shapes on order@"), "混形注记点名调用点: " + out);
+            assertTrue(out.contains("ends different shapes across task chains"), "注记说明跨链混形因果: " + out);
+            assertTrue(out.contains("\"查订单\" PASS"), "绿链任务就地可见: " + out);
+            assertTrue(out.contains("\"退货\" CHANGED"), "红链任务就地可见: " + out);
+            assertTrue(out.contains("single form to converge"), "注记给出收敛路径: " + out);
         }
 
         @Test

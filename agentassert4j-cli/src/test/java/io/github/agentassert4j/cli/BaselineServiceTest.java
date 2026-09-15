@@ -72,7 +72,7 @@ class BaselineServiceTest {
         BaselineService service = new BaselineService(repository);
 
         service.establishMissing(out, "tester", "abc1234", false, null, null, null, null);
-        assertTrue(output.toString().contains(": baseline established (ref abc1234)"), output.toString());
+        assertTrue(output.toString().contains(": baseline established (seed record rec-1) (ref abc1234)"), output.toString());
 
         output.reset();
         service.establishMissing(out, "tester", "def5678", false, null, null, null, null);
@@ -140,6 +140,62 @@ class BaselineServiceTest {
         assertNotNull(profile, "基线已建立");
         assertEquals(FingerprintExtractor.extract(early, null, null), profile.getFingerprint(), "种子指纹必须来自规范序最早记录");
         assertNotEquals(FingerprintExtractor.extract(late, null, null), profile.getFingerprint(), "晚于种子的记录不得成为基线");
+    }
+
+    @Test
+    @DisplayName("种子记录在建档与 force 重建行上就地披露：用户能当场看到批准的是哪条记录")
+    void seedRecordId_disclosedOnCreateAndForce() {
+        repository.saveInteractionIfAbsent(makeRecord("rec-1", "skill-1", 1000L, "{\"ok\":true}"));
+        repository.saveInteractionIfAbsent(makeRecord("rec-2", "skill-1", 2000L, "{\"ok\":true}"));
+        PrintStream out = new PrintStream(output, true);
+        BaselineService service = new BaselineService(repository);
+
+        service.establishMissing(out, "tester", null, false, null, null, null, null);
+        assertTrue(output.toString().contains("(seed record rec-1)"), "建档行披露种子 recordId: " + output);
+
+        output.reset();
+        service.establishMissing(out, "tester", null, true, null, null, null, null);
+        String force = output.toString();
+        assertTrue(force.contains("re-established under the current judgment semantics (v2) (seed record rec-1)"), "force 重建行同样披露种子（规范序最早）: " + force);
+    }
+
+    @Test
+    @DisplayName("既有基线遇不同规则声明：exists 行就地告警并指路两条刷新路径")
+    void rulesDrift_warnedOnExistingBaseline() {
+        repository.saveInteractionIfAbsent(makeRecord("rec-1", "skill-1", 1000L, "订单号 ORD-001 已出库"));
+        PrintStream out = new PrintStream(output, true);
+        BaselineService service = new BaselineService(repository);
+        InvocationRulesConfig pinned = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"requiredKeywords\":[\"订单号\"]}}}");
+        service.establishMissing(out, "tester", null, false, null, pinned, null, null);
+
+        output.reset();
+        InvocationRulesConfig changed = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"requiredKeywords\":[\"出库\"]}}}");
+        service.establishMissing(out, "tester", null, false, null, changed, null, null);
+        String report = output.toString();
+        assertTrue(report.contains(": baseline exists (v1)"), "既有基线幂等不重建: " + report);
+        assertTrue(report.contains("rules declarations for skill-1 differ"), "声明差异必须告警: " + report);
+        assertTrue(report.contains("pinned required=[订单号]"), "告警披露基线侧钉定声明: " + report);
+        assertTrue(report.contains("file required=[出库]"), "告警披露文件侧新声明: " + report);
+        assertTrue(report.contains("accept the candidate it lands"), "指路无重播种的 check→accept 路径: " + report);
+        assertTrue(report.contains("--force"), "指路 --force 并带重播种提示: " + report);
+    }
+
+    @Test
+    @DisplayName("声明一致或无规则文件：exists 行静默（删除规则文件不是漂移）")
+    void rulesDrift_silentWhenSameOrNoRules() {
+        repository.saveInteractionIfAbsent(makeRecord("rec-1", "skill-1", 1000L, "订单号 ORD-001 已出库"));
+        PrintStream out = new PrintStream(output, true);
+        BaselineService service = new BaselineService(repository);
+        InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"skill-1\":{\"requiredKeywords\":[\"订单号\"]}}}");
+        service.establishMissing(out, "tester", null, false, null, rules, null, null);
+
+        output.reset();
+        service.establishMissing(out, "tester", null, false, null, rules, null, null);
+        assertFalse(output.toString().contains("rules declarations"), "同声明不得告警: " + output);
+
+        output.reset();
+        service.establishMissing(out, "tester", null, false, null, null, null, null);
+        assertFalse(output.toString().contains("rules declarations"), "无规则文件（合法删除态）不得告警: " + output);
     }
 
     private InteractionRecord makeRecord(String recordId, String invocationId, long timestamp, String response) {

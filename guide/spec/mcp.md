@@ -85,8 +85,11 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
    形态后同链复检即绿，并注明本地 `replay` 不带 --ci 时为最新链 vs 次新链差分）。member-check 工具虽以 ciMode 语义运行，仍走链采样
    （最新链对最近链窗口），不受基线对照改写；其成员块字段形态——命中携带
    matchedSession、未命中携带 closestSession 与 closestScore——在 manifest description
-   同句声明（可发现性，字段语义本身见 replay.md 契约 13）。理由：MCP 读动词必须与 CLI 读动词同等
-   「只读」，治理写只能经显式变异动词（establish/accept/reject）发生。
+   同句声明（可发现性，字段语义本身见 replay.md 契约 13）；member-check 的 manifest 同句如实声明
+   「no baseline writes; mismatch findings still land candidates awaiting adjudication」——候选
+   登记不是基线治理写，但会改变 status/导出面，措辞不得让消费者误以为零副作用。理由：MCP 读动词必须与 CLI 读动词同等
+   「只读」，治理写只能经显式变异动词（establish/accept/reject/rollback）发生——initialize
+   instructions 的治理动词枚举与之一致（四动词均必填 approver）。
    report/verify/doctor/graph 本就是只读命令，直调。
 注意：拒绝与失败包络的 nextAction/hints 在抛出点以 CLI 命令形单源产出；MCP 出口经通道化映射改写为工具名形态（baseline→establish、status→report、replay→check 等，CLI 专属的 --ci 逃生舱子句一并摘除），两个通道各自拿到母语指称。
    **面一致性契约**：MCP 工具面是 CLI 命令面的完整映射（一层封装的双形态）——映射表与
@@ -184,6 +187,12 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
 
 ## 复核台账
 
+- 2026-09-15 Round 6 合并无裁决收口批：①member-check manifest 措辞改「no baseline writes;
+  mismatch findings still land candidates awaiting adjudication」（原「no governance writes」技术上
+  为真但让消费者误以为零副作用——候选登记经 renderAlignment 在任何模式的 CHANGED 步发生，CC 宿主
+  Round 6 实测其 member-check 报告 candidatesRegistered:1 且疑为候选来源，白盒证实即为设计行为）；
+  ②initialize instructions 治理动词枚举补 rollback（四动词均必填 approver，枚举缺口让同意分级面
+  失真）。【测试钉】McpServerTest 握手组 instructions 断言（枚举含 rollback + 判定基准句）。
 - 2026-09-14 Round 5 裁决批（B3/B4）：契约 7 补 approver 必填（schema required 四动词 + 服务端 E-USAGE
   守卫——缺席不落 CLI 的 OS 用户缺省，机器写不得无痕混入人类名单）；MCP 面自动受益的 status/1 审批溯源
   （approvedBy/approvedAt）与 rollback 守卫/披露见 governance.md 同日台账行。fullLoop 钉随契约适配
