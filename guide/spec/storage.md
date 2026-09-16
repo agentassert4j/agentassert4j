@@ -26,7 +26,11 @@ invocationKey 的派生文法（identity）；查询结果的业务消费（各�
 后续新增概念列的回填来源）/ 吸收层（`metadata` JSON 承接未预见扩展）。
 
 **写侧变形契约**：`invocation_id`/`invocation_key` 的 null → 空串落库（换取 NOT NULL 列约束）；
-落库后无键与空键不可区分。指纹列 null ↔ `"{}"` 对写读对称（NOT NULL 约束）。
+落库后无键与空键不可区分。指纹列（invocations 与 invocation_template_versions 两表）载荷 =
+**认可形态集合的有序数组 JSON**（首元素 = establish 种子锚，accept 追加于尾）：null/空集合 ↔
+`"[]"` 对写读对称（NOT NULL 约束，读侧 `"[]"` 映射回 null = 无基线）；形态集合语义之前的
+单对象旧行读侧响亮拒绝并指路删库重建（预发布承接，无兼容读取）。candidate_fingerprint 列
+仍为单指纹 `"{}"` 形态。归档行指纹 = 该版本获批时的**全量集合快照**（rollback 整集恢复）。
 
 ## 状态机与生命周期
 
@@ -62,6 +66,8 @@ close(): 关连接置 null；与写路径共用实例监视器——flush 进行
 7. **敌对内容逐字保真**：特殊字符/NUL/控制符/深嵌套 JSON 在文本列与 JSON 列写读往返逐字一致。
    【测试钉】specialCharacters_roundTripUnescaped / jsonColumns_roundTripHostileContent /
    fingerprintColumns_roundTripHostileContent
+   （形态集合整集往返与数组载荷见 fingerprintColumn_legacySingleShapeRow_failsLoudly、
+   saveAndFindProfile 的集合断言）
 8. **列 ↔ 模型 setter 契约**：interactions 捕获保真列、invocations 治理列（含 code_ref）写读往返逐字段对齐；
    指纹 null ↔ `"{}"` 对称。【测试钉】captureFidelityColumnsRoundTrip /
    skillProfileGovernanceColumnsRoundTrip / fingerprintColumn_nullRoundTripsAsNull
@@ -118,7 +124,8 @@ close(): 关连接置 null；与写路径共用实例监视器——flush 进行
 ## 复核台账
 
 | 日期 | 方式 | 发现 |
-| 2026-09-14 | A3 修复批（批 3）：governance_events 新表 + GovernanceEventStore 域（2 方法） | ①真源表增行（不可重建——发生时落账）；契约 11 补位成文（六动词/实现方盖章/升序读/未知 verb 退化）；契约 12 五域面→六域面；②「五表」计数自 S2 成文起即失真（实为 4 表，graph 表已随图降级摘除）——本批加表后恰为 5，旧失真一并回填；③开发期旧库（channel2/dogfood）user_version=1 且缺新表，打开守卫直接拒开并给删库指引（非静默降级——方案文档原「事件写入恒走 L1 降级」表述据此修正，L1 降级仅作为 BaselineManager 写入侧防御保留） |
+|---|---|
+| 2026-09-16 | D2 结构批随批 | 指纹列载荷契约换为形态集合数组（DDL 零改动）；null↔"[]" 对称；legacy 单对象行响亮拒绝；归档行=整集快照（测试钉 fingerprintColumn_legacySingleShapeRow_failsLoudly + 往返钉改集合断言） |-14 | A3 修复批（批 3）：governance_events 新表 + GovernanceEventStore 域（2 方法） | ①真源表增行（不可重建——发生时落账）；契约 11 补位成文（六动词/实现方盖章/升序读/未知 verb 退化）；契约 12 五域面→六域面；②「五表」计数自 S2 成文起即失真（实为 4 表，graph 表已随图降级摘除）——本批加表后恰为 5，旧失真一并回填；③开发期旧库（channel2/dogfood）user_version=1 且缺新表，打开守卫直接拒开并给删库指引（非静默降级——方案文档原「事件写入恒走 L1 降级」表述据此修正，L1 降级仅作为 BaselineManager 写入侧防御保留） |
 |---|---|---|
 | 2026-09-11 | 批B SPI 死面修剪（维护者「零兼容残留」指令）： SPI 删 `saveInteraction`/`type()`/`findByTemplateHash`/`saveTemplateText`/`isAvailable`，`saveInteractionIfAbsent` 升入 InteractionWriteStore； ②`idx_template_hash` 索引随唯一查询方消亡（删库重建承接）； ③McpRecordIngestion/CliSupport.openRepository 回归 StorageRepository 接口类型 | 契约 2 措辞更新（写入面私有化）；SPI 六接口瘦身为五域面；无行为变更，往返测试全绿为钉 |
 | 2026-09-12 | 批3 N6 首跑 + 义务登记 | ①LOW：`FingerprintJson.asStringMap`（core util，private）与 `JsonMapper.asStringMap`（storage，private）同一 Map→Map<String,String> 小工具双份——storage 依赖 core 可单点化（FingerprintJson 出包级公共或挪 TextUtil），列 1.0.x；②契约张力登记：三 raw 列的「未来一切新概念列的回填来源」承诺对 **SDK 采集记录不成立**（ChatModel 抽象层拿不到线上原文，raw 恒 null，两 mapper 注记在案）——raw 回填仅覆盖 CLI 重驱记录与 MCP 摄取记录（wire 原文全量），SDK 面新增概念列的回填来源需届时单独设计 |

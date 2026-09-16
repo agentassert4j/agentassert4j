@@ -52,10 +52,19 @@ public class TaskReplayRunner {
     private static final int TEXT_DIFF_BUDGET = 300;
 
     /**
-     * 成员判定的样本窗上限——「任一历史链匹配即合法成员」的宽容度必须有界，
-     * 否则历史无限增长后新链总能匹配到某条旧链，判定被稀释成摆设。
+     * 成员判定样本窗的内置默认——「任一历史链匹配即合法成员」的宽容度默认有界，
+     * 否则历史无限增长后新链总能匹配到某条旧链，稳定性量尺被稀释成考古 oracle。
+     * 本次调用的显式值（--member-window N|all）与配置默认（regression.memberSampleWindow，
+     * 只收有限整数）在本值之上解析；all 仅限单次调用显式传入。
      */
-    private static final int MEMBER_SAMPLE_LIMIT = 5;
+    static final int DEFAULT_MEMBER_WINDOW = 5;
+
+    /**
+     * 本次运行的成员判定样本窗（解析阶梯：显式 > 配置 > 内置默认；all 解析为
+     * memberAllHistory=true）。run() 入口赋值，实例随建随跑。
+     */
+    private int memberWindow = DEFAULT_MEMBER_WINDOW;
+    private boolean memberAllHistory;
 
     private final StorageRepository repository;
     private final LlmClient llmClient;
@@ -133,7 +142,9 @@ public class TaskReplayRunner {
      * @param maxTotalTokens 重驱预算池：本次运行真重驱 token 合计上限（null = 不限）
      * @return 进程退出码（0/1/2）
      */
-    public int run(String taskPrefix, String invocationKey, boolean ciMode, boolean dryRun, boolean memberCheck, boolean reDrive, boolean fullChain, Integer maxTotalCalls, Integer maxTotalTokens) {
+    public int run(String taskPrefix, String invocationKey, boolean ciMode, boolean dryRun, boolean memberCheck, Integer memberWindowOverride, boolean memberAllHistoryOverride, boolean reDrive, boolean fullChain, Integer maxTotalCalls, Integer maxTotalTokens) {
+        this.memberWindow = memberWindowOverride != null ? memberWindowOverride.intValue() : DEFAULT_MEMBER_WINDOW;
+        this.memberAllHistory = memberAllHistoryOverride;
         executionConfig.validate();
 
         List<TaskChain> chains = CliSupport.taskChains(repository);
@@ -179,8 +190,10 @@ public class TaskReplayRunner {
                 return failWithEnvelopeOnly(CliErrorCode.E_GUARD, "Refusing to judge in --ci mode: the scope holds " + CliSupport.plural(unbaselined.size(), "unbaselined invocation") + " (full list on stderr).", "Run `agentassert4j baseline` locally to review and establish baselines, then retry; or drop --ci to auto-establish.", "agentassert4j baseline");
             }
         } else {
-            // 自动建档（开发态自动化，报告可见）：裂键新档与全新键在此收编
-            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), null, false, null, rules, null, null);
+            // 自动建档（开发态自动化，报告可见）：只收编全新键——裂键（同标签已有
+            // 兄弟建档）是模板身份变更的治理信号，自动收编会吞掉并行方的 Hung 观察，
+            // 等显式 establish（与 --ci 的裂键处置同一条规则）
+            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), null, false, freshAutoEstablishKeys(), rules, null, null);
         }
 
         // 判定语义守卫：任何画像由其他版本（含未标记历史行）批准即拒绝判定——
@@ -217,15 +230,15 @@ public class TaskReplayRunner {
             }
         }
 
-        // 同调用点跨任务链混形指路：单活跃基线只能满足一边，accept 任一形态后另一边
-        // 仍会红——判定本身已逐任务如实报告，这里补的是「为什么裁决后还有红」的因果
-        // 与收敛路径（新会话全一形态链）
+        // 同调用点跨任务链混形指路：认可集合满足一边、另一边是集合外形态——判定本身
+        // 已逐任务如实报告，这里补的是「另一边的形态怎么处置」：不同任务上下文合理
+        // 触发不同形态（公共工具的常态），各自 accept 入集即全绿；真回归则复跑收敛
         if (verdictsByKey != null) {
             for (Map.Entry<String, Map<String, Verdict>> entry : verdictsByKey.entrySet()) {
                 Set<Verdict> verdicts = new HashSet<>(entry.getValue().values());
                 if (verdicts.contains(Verdict.PASS) && verdicts.contains(Verdict.CHANGED)) {
                     info("Mixed shapes on " + CliSupport.displayKey(entry.getKey()) + ": this invocation ends different shapes across task chains (" + taskNamesForVerdict(entry.getValue(), Verdict.PASS) + " PASS, " + taskNamesForVerdict(entry.getValue(), Verdict.CHANGED) + " CHANGED).");
-                    info("  One baseline serves the whole invocation; rerun the diverging task in a new session as a single form to converge.");
+                    info("  If each task context legitimately produces its shape, accept the candidate to add the new shape to the approved set; otherwise re-run the diverging task to converge.");
                 }
             }
         }
@@ -669,8 +682,52 @@ public class TaskReplayRunner {
     }
 
     /**
+     * 自动建档的收编键集 = 全新键（该声明标签下没有任何已建档兄弟）。裂键——同
+     * 标签已有其他键建档——就地披露并排除：模板身份变更等显式 establish，自动
+     * 路径收编会让共享库他方的 Hung 信号凭空消失。
+     */
+    private Set<String> freshAutoEstablishKeys() {
+        Map<String, List<InteractionRecord>> buckets = CliSupport.invocationBuckets(repository);
+        Map<String, InvocationProfile> profiles = new LinkedHashMap<>();
+        for (String key : buckets.keySet()) {
+            profiles.put(key, repository.findInvocationByKey(key));
+        }
+        Map<String, String> baselinedKeyByLabel = new LinkedHashMap<>();
+        for (Map.Entry<String, List<InteractionRecord>> bucket : buckets.entrySet()) {
+            String label = firstDeclaredLabel(bucket.getValue());
+            if (!label.isEmpty() && CliSupport.hasBaseline(profiles.get(bucket.getKey()))) {
+                baselinedKeyByLabel.putIfAbsent(label, bucket.getKey());
+            }
+        }
+        Set<String> freshKeys = new LinkedHashSet<>();
+        for (Map.Entry<String, List<InteractionRecord>> bucket : buckets.entrySet()) {
+            String key = bucket.getKey();
+            String label = firstDeclaredLabel(bucket.getValue());
+            if (!CliSupport.hasBaseline(profiles.get(key)) && !label.isEmpty() && baselinedKeyByLabel.containsKey(label)) {
+                info("Split key " + CliSupport.displayKey(key) + " under label '" + label + "' left for explicit establish (a sibling invocation of this label already has a baseline; automatic establish only covers fresh invocations).");
+                info("  Run `agentassert4j baseline --invocation " + key + "` to establish it deliberately.");
+                continue;
+            }
+            freshKeys.add(key);
+        }
+        return freshKeys;
+    }
+
+    /**
+     * 桶内首个非空声明标签（无标签形状组返回空串，不参与裂键判定）。
+     */
+    private static String firstDeclaredLabel(List<InteractionRecord> records) {
+        for (InteractionRecord record : records) {
+            if (record.getInvocationId() != null && !record.getInvocationId().isEmpty()) {
+                return record.getInvocationId();
+            }
+        }
+        return "";
+    }
+
+    /**
      * 透明层的未批准草稿计数：逐调用点组内早于链末的记录，按自己的键对自己的
-     * 画像判「提取指纹 ≠ 活跃指纹（或无画像）」——早记录的键可能与被判记录不同
+     * 画像判「提取指纹 ∉ 认可集合（或无画像）」——早记录的键可能与被判记录不同
      * （标签跨版本组），不冒用被判记录的画像。键 = 被判记录的 recordId（与步骤
      * 渲染经 recordId 汇合，不复制组键文法）。
      */
@@ -685,8 +742,8 @@ public class TaskReplayRunner {
                 InteractionRecord earlier = groupRecords.get(i);
                 String key = CliSupport.invocationKeyOfRecord(earlier);
                 InvocationProfile profile = key == null ? null : profiles.get(key);
-                if (profile == null || profile.getFingerprint() == null
-                        || !FingerprintExtractor.extract(earlier, rules, earlier.getInvocationId()).equals(profile.getFingerprint())) {
+                if (profile == null || profile.getFingerprints() == null
+                        || !profile.getFingerprints().contains(FingerprintExtractor.extract(earlier, rules, earlier.getInvocationId()))) {
                     unapproved++;
                 }
             }
@@ -712,21 +769,25 @@ public class TaskReplayRunner {
     }
 
     /**
-     * 成员判定模式（--member-check）：最新链对同任务最近 N 条历史链（样本窗
-     * 上限常量钉死）逐一核成员资格。行为全匹配的第一条（时间升序）即合法成员；
-     * 全不匹配时取信号分最高者为最接近样本（升序迭代 + 严格大于 = 平局取最早），
-     * 差异报告与候选登记都挂在证据对齐上。任务纪律为样本不变量，从证据对齐
-     * 取一次计一份，绝不跨样本累计。
+     * 成员判定模式（--member-check）：最新链对同任务最近 N 条历史链（样本窗 =
+     * 本次解析值：显式 N|all > 配置默认 > 内置 5）逐一核成员资格。行为全匹配的
+     * 第一条（时间升序）即证据样本；命中计数（matched of checked）量化稳定性——
+     * 这是「入集前量尺」的本体：matched 4/5 = 稳定复现，matched 1/N（旧会话）=
+     * 考古命中非稳定信号。全不匹配时取信号分最高者为最接近样本（升序迭代 +
+     * 严格大于 = 平局取最早），差异报告与候选登记都挂在证据对齐上。任务纪律为
+     * 样本不变量，从证据对齐取一次计一份，绝不跨样本累计。
      */
     private void alignMemberGroup(List<TaskChain> group, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager) {
         TaskChain newChain = group.get(group.size() - 1);
-        int checked = Math.min(MEMBER_SAMPLE_LIMIT, group.size() - 1);
+        int checked = memberAllHistory ? group.size() - 1 : Math.min(memberWindow, group.size() - 1);
         List<TaskChain> samples = group.subList(group.size() - 1 - checked, group.size() - 1);
-        info("Task \"" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "\": member check — new chain (session " + newChain.getSessionId() + ") against the " + checked + " most recent chain(s) of " + (group.size() - 1) + " (window " + MEMBER_SAMPLE_LIMIT + ")");
+        info("Task \"" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "\": member check — new chain (session " + newChain.getSessionId() + ") against the " + checked + " most recent chain(s) of " + (group.size() - 1) + " (window " + windowLabel() + ")");
 
         TaskAlignment evidence = null;
         TaskChain evidenceSample = null;
         boolean member = false;
+        int matched = 0;
+        List<String> matchedSessions = new ArrayList<>();
         TaskAlignment closest = null;
         TaskChain closestSample = null;
         double closestScore = -1.0;
@@ -740,10 +801,14 @@ public class TaskReplayRunner {
                 closest = alignment;
                 closestSample = sample;
             }
-            if (!member && behaviorMatchesSample(alignment)) {
-                member = true;
-                evidence = alignment;
-                evidenceSample = sample;
+            if (behaviorMatchesSample(alignment)) {
+                matched++;
+                matchedSessions.add(sample.getSessionId());
+                if (!member) {
+                    member = true;
+                    evidence = alignment;
+                    evidenceSample = sample;
+                }
             }
         }
         if (!member) {
@@ -751,7 +816,7 @@ public class TaskReplayRunner {
             evidenceSample = closestSample;
         }
         if (member) {
-            info("Member: behavior matches historical chain (session " + evidenceSample.getSessionId() + "); no regression against the sample window.");
+            info("Member: behavior matches " + matched + " of " + checked + " sampled chain(s) (sessions " + String.join(", ", matchedSessions) + "); no regression against the sample window.");
         } else {
             info("No member match: closest historical chain is session " + evidenceSample.getSessionId() + "; differences below are against that sample.");
         }
@@ -762,9 +827,17 @@ public class TaskReplayRunner {
             StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.MEMBER_CHECK.wireName() + "\"");
             sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
             sb.append(",\"task\":{\"request\":\"").append(RecursiveJsonParser.escape(newChain.getRequestText())).append("\",\"sessionId\":\"").append(RecursiveJsonParser.escape(newChain.getSessionId())).append("\"}");
-            sb.append(",\"member\":{\"checked\":").append(checked).append(",\"window\":").append(MEMBER_SAMPLE_LIMIT).append(",\"isMember\":").append(member);
+            sb.append(",\"member\":{\"checked\":").append(checked).append(",\"window\":").append(memberAllHistory ? "\"all\"" : Integer.toString(memberWindow)).append(",\"isMember\":").append(member).append(",\"matched\":").append(matched);
             if (member) {
                 sb.append(",\"matchedSession\":\"").append(RecursiveJsonParser.escape(evidenceSample.getSessionId())).append('"');
+                sb.append(",\"matchedSessions\":[");
+                for (int i = 0; i < matchedSessions.size(); i++) {
+                    if (i > 0) {
+                        sb.append(',');
+                    }
+                    sb.append('"').append(RecursiveJsonParser.escape(matchedSessions.get(i))).append('"');
+                }
+                sb.append(']');
             } else {
                 sb.append(",\"closestSession\":\"").append(RecursiveJsonParser.escape(evidenceSample.getSessionId())).append('"');
                 if (closestScore >= 0) {
@@ -775,6 +848,13 @@ public class TaskReplayRunner {
             appendCommonReport(sb, newChain.getRequestText(), newChain.getSessionId(), evidence.getSteps().size(), render, evidence.getCrossVersionCount(), evidence.getBaselineTime(), evidence.getNewChainTime(), evidence.isPrefixDependent());
             out.println(sb.toString());
         }
+    }
+
+    /**
+     * 窗口的输出形态：all 或解析后的整数（配置默认与内置默认都已在解析阶梯收敛）。
+     */
+    private String windowLabel() {
+        return memberAllHistory ? "all" : String.valueOf(memberWindow);
     }
 
     /**
@@ -837,12 +917,15 @@ public class TaskReplayRunner {
                 worstOutcome(outcomes, step.getInvocationKey(), StepOutcome.GAP);
             } else {
                 String versionPrefix = step.isVersionSwitch() ? "cross-version pair: " : "";
+                // 多形态基线的命中注记：集合大小 >1 时披露命中（或最近似）形态的序号，
+                // 调试共享调用点多形态时能对上「判的是集合里哪一个」
+                String shapeNote = step.getBaselineShapeCount() > 1 ? " (shape " + step.getBaselineShapeIndex() + " of " + step.getBaselineShapeCount() + ")" : "";
                 InteractionRecord newStepRecord = newRecords.get(step.getNewRecordId());
                 InteractionRecord baselineStepRecord = baselineRecords.get(step.getBaselineRecordId());
                 String served = servedModelNote(newStepRecord == null ? null : newStepRecord.getServedModel(), baselineStepRecord == null ? null : baselineStepRecord.getServedModel(), "baseline");
                 if (step.getVerdict() == Verdict.CHANGED) {
                     render.changed++;
-                    info(stepLine(index, step.getInvocationKey(), versionPrefix + step.getComparison().getSummary()) + served);
+                    info(stepLine(index, step.getInvocationKey(), versionPrefix + step.getComparison().getSummary()) + shapeNote + served);
                     String note = textDiffNote(step.getBaselineModelResponse(), step.getNewModelResponse());
                     if (!note.isEmpty()) {
                         info("    " + note);
@@ -860,7 +943,7 @@ public class TaskReplayRunner {
                     }
                 } else {
                     render.pass++;
-                    info(stepLine(index, step.getInvocationKey(), versionPrefix + "PASS") + served);
+                    info(stepLine(index, step.getInvocationKey(), versionPrefix + "PASS") + shapeNote + served);
                     worstOutcome(outcomes, step.getInvocationKey(), StepOutcome.PASS);
                 }
                 if (step.getSurplusCount() > 0) {
@@ -1404,8 +1487,8 @@ public class TaskReplayRunner {
             } else if (group.size() == 1) {
                 info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": single chain (" + CliSupport.plural(latest.getRecords().size(), "step") + ") → first recording self-establishes the baseline.");
             } else if (memberCheck) {
-                int checked = Math.min(MEMBER_SAMPLE_LIMIT, group.size() - 1);
-                info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": member check of new chain session " + latest.getSessionId() + " against the " + checked + " most recent chain(s) (window " + MEMBER_SAMPLE_LIMIT + "). Task rules: " + ruleApplicability(latest));
+                int checked = memberAllHistory ? group.size() - 1 : Math.min(memberWindow, group.size() - 1);
+                info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": member check of new chain session " + latest.getSessionId() + " against the " + checked + " most recent chain(s) (window " + windowLabel() + "). Task rules: " + ruleApplicability(latest));
             } else {
                 TaskChain baseline = group.get(group.size() - 2);
                 info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": baseline session " + baseline.getSessionId() + " (" + CliSupport.plural(baseline.getRecords().size(), "step") + ") → new chain session " + latest.getSessionId() + " (" + CliSupport.plural(latest.getRecords().size(), "step") + "). Task rules: " + ruleApplicability(latest));
@@ -1497,7 +1580,7 @@ public class TaskReplayRunner {
         if (drift.getSkippedQueries() > 0) {
             info("  Warning: " + CliSupport.plural(drift.getSkippedQueries(), "detection query") + " failed and were skipped (see storage logs).");
         }
-        info("(Baseline seeds take the earliest record per bucket; the first full audit reports one drift per invocation whose seed template differs from its latest one, auto-collected point by point after a PASS alignment; mass drifts are usually one-time convergence.)");
+        info("(Baseline seeds take the latest record per bucket — the behavior you approved at establish time; drift points here come from earlier drafts whose template differs, auto-collected point by point after a PASS alignment; mass drifts are usually one-time convergence.)");
     }
 
     private static String driftJson(DriftReport drift) {
@@ -1685,6 +1768,10 @@ public class TaskReplayRunner {
             sb.append(",\"versionSwitch\":true");
             sb.append(",\"baselineSubdivision\":\"").append(RecursiveJsonParser.escape(step.getBaselineSubdivision())).append('"');
             sb.append(",\"newSubdivision\":\"").append(RecursiveJsonParser.escape(step.getNewSubdivision())).append('"');
+        }
+        if (step.getBaselineShapeCount() > 1) {
+            sb.append(",\"shapeIndex\":").append(step.getBaselineShapeIndex());
+            sb.append(",\"shapeCount\":").append(step.getBaselineShapeCount());
         }
         return sb.append('}').toString();
     }

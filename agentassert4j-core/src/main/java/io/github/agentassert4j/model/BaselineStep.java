@@ -1,12 +1,15 @@
 package io.github.agentassert4j.model;
 
+import java.util.List;
+
 /**
- * 基线步骤 — 对齐基线侧的一个步骤引用：调用点键 + 记录标识 + 基线指纹。
+ * 基线步骤 — 对齐基线侧的一个步骤引用：调用点键 + 记录标识 + 基线形态集合。
  *
- * <p>三条产生路径共用：库内链参照由录制记录现场重提（recordId 为源记录）；
- * 验收包参照由包内指纹反序列化（recordId 为导出侧源记录，供报告溯源）；
- * 画像参照由调用点活跃指纹定格投影（CI 基线对照，versionTag 携带画像活跃版本，
- * recordId 恒 null——基线侧无记录）。样本字段仅验收包传输用（已脱敏），对齐判定不消费。</p>
+ * <p>三条产生路径共用：库内链参照由录制记录现场重提（recordId 为源记录，链路径
+ * 恒为单元素集合）；验收包参照由包内形态集合反序列化（recordId 为导出侧源记录，
+ * 供报告溯源）；画像参照由调用点活跃形态集合定格投影（CI 基线对照，versionTag
+ * 携带画像活跃版本，recordId 恒 null——基线侧无记录）。样本字段仅验收包传输用
+ * （已脱敏），对齐判定不消费。</p>
  *
  * @author axy-yxa
  * @since 2026-09-30
@@ -20,7 +23,10 @@ public class BaselineStep {
      * 无标签按完整键」分组——验收包步骤的标签在装载时从键解析回填。
      */
     private String invocationId;
-    private DeterministicFingerprint fingerprint;
+    /**
+     * 该步骤的基线形态集合（判定 = 候选指纹 ∈ 集合）；链路径恒单元素
+     */
+    private List<DeterministicFingerprint> fingerprints;
     /**
      * 仅导出 --include-samples 时携带（写入包内前已脱敏）；判定不消费
      */
@@ -56,12 +62,12 @@ public class BaselineStep {
         this.recordId = recordId;
     }
 
-    public DeterministicFingerprint getFingerprint() {
-        return fingerprint;
+    public List<DeterministicFingerprint> getFingerprints() {
+        return fingerprints;
     }
 
-    public void setFingerprint(DeterministicFingerprint fingerprint) {
-        this.fingerprint = fingerprint;
+    public void setFingerprints(List<DeterministicFingerprint> fingerprints) {
+        this.fingerprints = fingerprints;
     }
 
     public String getSampleInput() {

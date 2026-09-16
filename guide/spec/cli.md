@@ -23,7 +23,7 @@ schema、退出码契约、help 终态。
 |---|---|---|
 | `status` | 全部画像巡检 | `--diff`（候选差异+模板原文渲染）、`--invocation` 缩域（两通道一致生效；缺省=全量快照；uncovered/unestablished 恒以全库为准仅过滤显示）、`--json`、`--db` |
 | `baseline` | 全部调用点建档（幂等） | `--force`（判定语义重建恢复路径）、`--invocation` 缩域、`--ref`（代码锚，申报制）、`--json` |
-| `replay` | 全项目漂移检测+逐任务对齐（零 LLM 调用） | `--task`/`--invocation` 复合缩域、`--ci`、`--re-drive`、`--member-check`（成员判定：最新链匹配任一最近链即通过）、`--full-chain`、`--max-total-calls`/`--max-total-tokens`、`--dry-run`、`--json` |
+| `replay` | 全项目漂移检测+逐任务对齐（零 LLM 调用） | `--task`/`--invocation` 复合缩域、`--ci`、`--re-drive`、`--member-check`（成员判定：最新链对最近 N 条历史链，matched k of N 量化稳定性）、`--member-window <N\|all>`（样本窗解析阶梯：本次显式 > regression.memberSampleWindow 配置 > 内置 5；all=全历史考古仅限单次调用，配置默认只收有限整数）、`--full-chain`、`--max-total-calls`/`--max-total-tokens`、`--dry-run`、`--json` |
 | `accept` / `reject` | 裁决全部待裁决候选 | `--invocation` 缩域、`--approver`（治理事件留痕）、`--json`；accept 另有 `--ref`（代码锚，申报制） |
 | `rollback` | 无缺省（--version 是操作宾语；目标须为归档版本，=活动版本即拒指路 reject） | `--invocation`、`--version`、`--approver`（治理事件留痕） |
 | `verify` | 无缺省（--pack 是操作宾语） | `--pack`、`--task` 前缀、`--dry-run`、`--report`、`--json` |
@@ -92,9 +92,10 @@ schema、退出码契约、help 终态。
    invocations/tasks 断言原文随包出境，verify 以包内规则对本地记录**对称**评估维度 3/4 与
    任务纪律——补齐参照源抽象的双路径同语义（库内路径用本地规则，包路径用包内规则）；
    无规则段的包降级跳过维度 3/4 并在报告注记；步骤=调用点（逐调用点取组末记录为证据锚，
-   指纹=画像批准真相定格——与 CI 同源；stepCount 值语义=调用点数、servedModels 只取组末）；
-   `unadjudicatedSteps` 恒序列化（0 也写）——出厂偏离检测：组末提取与批准指纹的**结构维**
-   不一致（同判定尺口径，仅声明集漂移不计偏离）或在途候选时计数，export-report/1 出
+   指纹=画像**认可形态集合**的数组定格（首元素=种子锚）——与 CI 同源；stepCount 值语义=
+   调用点数、servedModels 只取组末）；`unadjudicatedSteps` 恒序列化（0 也写）——出厂偏离
+   检测：组末提取与认可集合任一成员的**结构维**均不一致（同判定尺口径，仅声明集漂移不计
+   偏离）或在途候选时计数，export-report/1 出
    总计数、人读 stderr 警告（裁决后再导出）；旧包缺字段
    读取侧缺省 0）；verify=链末判定同尺（本地链末执行 × 全链任务纪律，judgment 契约 11），
    verify-report/1 步骤加法字段 earlierRecords（组内草稿数，>0 才出现；不镜像 CI 的
@@ -117,6 +118,12 @@ schema、退出码契约、help 终态。
    approvedBy=null 的人读行不得出现 "null" 字样）。rollback/1 在回滚清了在途候选时携带
    `candidateDiscarded:true`（人读行同词 "in-flight candidate discarded"）——治理动词无
    静默副作用；目标=当前活动版本的回滚被拒（E-NO-DATA，消息指路 reject）。
+   member 块字段：`checked`/`window`（数字或 `"all"`）/`isMember`/`matched`（命中数）+
+   命中侧 `matchedSession`（首个，升序）与 `matchedSessions` 列表，或未命中侧
+   `closestSession`+`closestScore`——matched k of N 是「入集前稳定性量尺」的读数
+   （matched 4/5=稳定复现；matched 1/N 旧会话=考古命中非稳定信号）。多形态基线步骤在集合
+   大小 >1 时携带 `shapeIndex`/`shapeCount`（人读注记 `(shape i of n)`）。混形指路文案 =
+   accept 入集（各任务上下文形态合法）或复跑收敛。
    task-align 与 member-check 报告的 summary 携带 `comparedPairs`/`skippedPairs`（首个
    CHANGED 配对即停，聚合只承认已比对配对）；`signal` 对象（similarity=已比对步骤相似度均值、
    steps=计数）为「优化信号」，明示非判定；`stability` 对象（executions/points/fluctuating[]
@@ -201,7 +208,8 @@ re-drive/missing/added。句式 sentence case；全角标点与「」不出现�
 | 2026-09-14 | A4 修复批（批 2）：--invocation 解析统一为单源阶梯 + R12/R13 顺修 | ①「选择器两档标准」节重写为统一阶梯（resolveInvocationKeys 单源：精确键/标签/显示短形/唯一前缀/响亮零命中；键空间=已录键全集，未建档裂键可解析）；②勘误：replay --invocation 实走 target 族解析器（原文误归缩域前缀过滤族、「两档完全对称」失实）；③establishMissing 参数标签→键集合、bucketCoversFilter 退役；establish 零命中 E-NO-DATA（假成功话术消灭）、标签扇出写前披露；④status --json 换算 Note 行路由 err（stdout 单行契约）+ 工具参数描述「human view only」陈旧残留顺修；⑤模式词表增 ci-align（批 1 骑乘） |
 
 | 日期 | 方式 | 发现 |
-|---|---|---|
+|---|---|
+| 2026-09-16 | D2/D1/D6/member-check 增强批随批 | ①种子披露行=桶内最新记录（D1），force 文案同步；②--member-window N\|all 三级解析阶梯 + regression.memberSampleWindow 配置键（哨兵钉 AgentAssert4jConfigTest）+ member 块 matched/matchedSessions/window:"all" 字段 + MCP memberWindow 参数透传；③混形注记改 accept 入集指路；④裸重放裂键不再自动收编（D6：注记指路 baseline --invocation，split key 留显式 establish）；⑤漂移自白文案「seeds take the latest record」；⑥步骤 shapeIndex/shapeCount 注记 |---|
 | 2026-09-15 | Round 6 裁决批（D7/D8-4）：audit 全量时间线 + verify 人读逐任务判定行 | ①audit 拆除 agent:* 过滤镜——全量治理时间线（AI 与人类写同账本，权威表述见 governance.md 同日台账行）；②verify 人读在汇总行前增 `Per-task verdicts:` 逐任务行（任务键+结论+similarity+missing/added+首个差异摘要；coverage-gap 任务出 `no local chain` 行）——快速分诊粒度，完整明细仍留 --json/--report，人读摘要/机器明细分工不变。【测试钉】VerifyExportTest 链末偏离钉与跨版本 PASS 钉各补人读行断言 |
 | 2026-09-15 | Round 6 合并无裁决收口批（观测性/文案统一，语义零变更）：种子披露 + 规则差异告警 + 空回滚文案统一 + 混形指路 | ①establish 建档/force 重建行披露 `(seed record <id>)`（种子=桶内规范序最早记录——用户当场可见批准的是哪条记录，此前只能经 status --diff 反推）；②establish exists 行遇「当前规则文件声明 ≠ 基线钉定声明」时告警并指路两条刷新路径（check→accept 无重播种 / --force 重播种）——规则刷新无幂等路径的静默缺口就此可见；③rollback 目标=活动版本时统一走「already the active baseline … use reject」话术（守卫前置到归档查找之前，BaselineManager.rollback 检查顺序调整，语义与信封不变）；④选择器零命中话术精确化（invocationKey 前缀须以 `invocation:` 起头）；⑤每次运行在 Config 行后披露 `Rules: <path> (N invocation declaration(s), M task declaration(s))`（规则生效正证行——此前只能靠「task rules do not apply」反推）；⑥ci-align 步骤 unapprovedEarlier 与 earlierRecords 成对恒出现（含 0）；⑦同调用点跨任务链一绿一红时人读混形指路注记（收敛=新会话全一形态链）；⑧export 警告补「包照写、计数在包内与 --json」口径句；⑨verify 报告 Content rules 行措辞改「pack rules section」（与步骤指纹内钉声明区分载体）。【测试钉】BaselineServiceTest 种子披露/规则告警三钉 + TaskReplayRunnerTest 生产播种后果钉（坏草稿在前的混合链建档即偏红——判定/播种不对称的现行为由钉如实钉住）+ 混形指路钉 + unapprovedEarlier=0 钉 + CommandSmokeTest 空回滚统一话术钉 |
 | 2026-09-14 | Round 5 裁决批（B3/B4）：审批溯源读面 + rollback 守卫与披露 | ①status/1 增 approvedBy/approvedAt（空串/null=未盖章）+ 人读 approver 列 + archived 列活动 tag *（机器通道不标记）；②rollback/1 增 candidateDiscarded、目标=活动版本即拒（指路 reject）；③MCP 治理动词 approver 必填的命令面影响=零（CLI 人读通道保留 OS 用户缺省）；权威表述见 governance.md 契约 11/12 与台账同日行 |

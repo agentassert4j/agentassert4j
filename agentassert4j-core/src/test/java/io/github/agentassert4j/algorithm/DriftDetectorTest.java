@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -66,7 +67,7 @@ class DriftDetectorTest {
         p.setInvocationKey(invocationKey);
         p.setLabel(label);
         p.setTemplateHash(templateHash);
-        p.setFingerprint(new DeterministicFingerprint());
+        p.setFingerprints(Collections.singletonList(new DeterministicFingerprint()));
         return p;
     }
 

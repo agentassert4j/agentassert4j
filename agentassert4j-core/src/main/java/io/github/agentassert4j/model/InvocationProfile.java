@@ -1,12 +1,14 @@
 package io.github.agentassert4j.model;
 
+import java.util.List;
+
 /**
  * 调用点画像 — 一个调用点（invocation）的登记与治理载体。
  *
  * <p>三分模型中的「调用点」= 产生调用的模板/代码位置，是变更单元与治理主体
  * （治理对象 = 调用点的模板版本史）。主键即 {@link #invocationKey}（派生键），
  * 不设代理哈希标识。一条录制交互（case）是回归最小单元，候选侧期望永远现场
- * 重提；本画像的存档指纹是批准真相的定格投影——CI 基线对照以它为基线侧
+ * 重提；本画像的存档指纹集合是批准真相的定格投影——CI 基线对照以它为基线侧
  * （经 BaselineSides.fromProfiles），链路径对照两侧仍现场重提。</p>
  *
  * @author axy-yxa
@@ -40,9 +42,10 @@ public class InvocationProfile {
     private String paramSignature;
     private int totalRecords;
     /**
-     * 当前基线指纹
+     * 当前基线 = 已认可形态的有序集合（首元素为 establish 种子锚，accept 追加于尾；
+     * 判定 = 链末指纹 ∈ 集合，非首元素不淘汰——形态退役唯一途径是 force 重建）
      */
-    private DeterministicFingerprint fingerprint;
+    private List<DeterministicFingerprint> fingerprints;
     /**
      * 候选指纹（等待开发者裁决）
      */
@@ -138,12 +141,12 @@ public class InvocationProfile {
     }
 
 
-    public DeterministicFingerprint getFingerprint() {
-        return fingerprint;
+    public List<DeterministicFingerprint> getFingerprints() {
+        return fingerprints;
     }
 
-    public void setFingerprint(DeterministicFingerprint fingerprint) {
-        this.fingerprint = fingerprint;
+    public void setFingerprints(List<DeterministicFingerprint> fingerprints) {
+        this.fingerprints = fingerprints;
     }
 
     public DeterministicFingerprint getCandidateFingerprint() {

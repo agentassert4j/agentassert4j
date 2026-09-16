@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -53,15 +54,15 @@ class BaselineSidesTest {
             InteractionRecord a = record("r-1", "invocation:order:hash-a", "order", "{\"result\":\"ok\"}");
             InteractionRecord b = record("r-2", "skeleton:skl-1", null, "{\"result\":\"ok\"}");
             InvocationProfile pa = profile("invocation:order:hash-a", "v3");
-            pa.setFingerprint(FingerprintExtractor.extract(a, new InvocationRulesConfig(), "order"));
+            pa.setFingerprints(Collections.singletonList(FingerprintExtractor.extract(a, new InvocationRulesConfig(), "order")));
             InvocationProfile pb = profile("skeleton:skl-1", "v1");
-            pb.setFingerprint(FingerprintExtractor.extract(b, new InvocationRulesConfig(), null));
+            pb.setFingerprints(Collections.singletonList(FingerprintExtractor.extract(b, new InvocationRulesConfig(), null)));
 
             Map<String, List<BaselineStep>> sides = BaselineSides.fromProfiles(new ArrayList<>(Arrays.asList(a, b)), key -> key.equals(pa.getInvocationKey()) ? pa : pb);
 
             assertEquals(2, sides.size(), "每记录一份步骤、按键分组");
             BaselineStep stepA = sides.get("invocation:order:hash-a").get(0);
-            assertEquals(pa.getFingerprint(), stepA.getFingerprint(), "指纹取画像活跃指纹（定格投影）");
+            assertEquals(pa.getFingerprints(), stepA.getFingerprints(), "形态集合取画像认可集合（定格投影）");
             assertEquals("v3", stepA.getVersionTag(), "版本标签透传画像活跃版本");
             assertEquals("order", stepA.getInvocationId(), "标签镜像记录（保证组键与新链逐字相等）");
             assertNull(stepA.getRecordId(), "画像路径无基线记录");
@@ -76,7 +77,7 @@ class BaselineSidesTest {
             InteractionRecord a = record("r-1", "invocation:order:hash-a", "order", "{\"result\":\"ok\"}");
             InteractionRecord b = record("r-2", "invocation:order:hash-a", "order", "{\"changed\":true}");
             InvocationProfile p = profile("invocation:order:hash-a", "v1");
-            p.setFingerprint(FingerprintExtractor.extract(a, new InvocationRulesConfig(), "order"));
+            p.setFingerprints(Collections.singletonList(FingerprintExtractor.extract(a, new InvocationRulesConfig(), "order")));
 
             Map<String, List<BaselineStep>> sides = BaselineSides.fromProfiles(Arrays.asList(a, b), key -> p);
 
@@ -89,7 +90,7 @@ class BaselineSidesTest {
             InteractionRecord a = record("r-1", "invocation:order:hash-a", "order", "{\"result\":\"ok\"}");
             InteractionRecord keyless = record("r-2", null, null, "{}");
             InvocationProfile p = profile("invocation:order:hash-a", "v1");
-            p.setFingerprint(FingerprintExtractor.extract(a, new InvocationRulesConfig(), "order"));
+            p.setFingerprints(Collections.singletonList(FingerprintExtractor.extract(a, new InvocationRulesConfig(), "order")));
 
             Map<String, List<BaselineStep>> sides = BaselineSides.fromProfiles(Arrays.asList(a, keyless), key -> p);
 

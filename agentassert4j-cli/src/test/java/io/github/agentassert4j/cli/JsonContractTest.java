@@ -105,8 +105,15 @@ class JsonContractTest {
     }
 
     private void seedCandidate(String invocationKey, InteractionRecord record) {
+        // 候选必须是与认可集合相异的新形态（形态集合语义下「相等候选=幂等收尾」）：
+        // 从同一记录派生一个结构变体（追加字段）
+        InteractionRecord variant = new InteractionRecord();
+        variant.setRecordId(record.getRecordId());
+        variant.setInvocationId(record.getInvocationId());
+        variant.setTemplateHash(record.getTemplateHash());
+        variant.setModelResponse(record.getModelResponse().replaceAll("}$", "") + ",\"pendingChange\":true}");
         InvocationProfile profile = repository.findInvocationByKey(invocationKey);
-        profile.setCandidateFingerprint(FingerprintExtractor.extract(record, null, null));
+        profile.setCandidateFingerprint(FingerprintExtractor.extract(variant, null, null));
         repository.saveInvocationProfile(profile);
     }
 

@@ -40,7 +40,7 @@ class BaselineManagerTest {
         InvocationProfile p = new InvocationProfile();
         p.setInvocationKey(invocationKey);
         p.setLabel(label);
-        p.setFingerprint(new DeterministicFingerprint());
+        p.setFingerprints(shapes(new DeterministicFingerprint()));
         p.setBaselineStatus(BaselineStatus.BASELINE);
         p.setVersionTag("v1");
         return p;
@@ -48,9 +48,27 @@ class BaselineManagerTest {
 
     private InvocationProfile makeProfileWithCandidate(String invocationKey, String invocationId) {
         InvocationProfile p = makeProfileWithBaseline(invocationKey, invocationId);
-        p.setCandidateFingerprint(new DeterministicFingerprint());
+        p.setCandidateFingerprint(distinctShape());
         p.setBaselineStatus(BaselineStatus.CANDIDATE);
         return p;
+    }
+
+    /**
+     * 与空指纹基线真正相异的候选形态（集合语义下「相等候选=幂等收尾」是有意义状态，
+     * 升格用例必须用真异候选）。
+     */
+    private static DeterministicFingerprint distinctShape() {
+        return distinctShape("candidate-tool");
+    }
+
+    private static DeterministicFingerprint distinctShape(String tool) {
+        DeterministicFingerprint candidate = new DeterministicFingerprint();
+        candidate.setToolCallSet(Collections.singleton(tool));
+        return candidate;
+    }
+
+    private static List<DeterministicFingerprint> shapes(DeterministicFingerprint... fps) {
+        return new ArrayList<>(Arrays.asList(fps));
     }
 
     private InteractionRecord makeToolRecord(String invocationId, String toolName) {
@@ -74,7 +92,7 @@ class BaselineManagerTest {
         @DisplayName("候选升为基线，旧基线归档")
         void candidatePromoted_oldArchived() {
             InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
-            DeterministicFingerprint oldBaseline = profile.getFingerprint();
+            DeterministicFingerprint oldBaseline = profile.getFingerprints().get(0);
             DeterministicFingerprint candidate = profile.getCandidateFingerprint();
             repo.saveInvocationProfile(profile);
 
@@ -82,8 +100,10 @@ class BaselineManagerTest {
 
             InvocationProfile updated = repo.findInvocationByKey("gk-1");
             assertEquals(BaselineStatus.BASELINE, updated.getBaselineStatus());
-            // 候选已成为基线
-            assertEquals(candidate, updated.getFingerprint());
+            // 候选已追加进认可集合（追加非替换：旧形态仍在集合里）
+            assertEquals(2, updated.getFingerprints().size());
+            assertTrue(updated.getFingerprints().contains(candidate));
+            assertTrue(updated.getFingerprints().contains(oldBaseline));
             assertNull(updated.getCandidateFingerprint());
             // 版本递增
             assertEquals("v2", updated.getVersionTag());
@@ -115,7 +135,7 @@ class BaselineManagerTest {
             InvocationProfile profile = new InvocationProfile();
             profile.setInvocationKey("gk-1");
             profile.setLabel("order-flow");
-            profile.setFingerprint(null);
+            profile.setFingerprints(null);
             profile.setCandidateFingerprint(new DeterministicFingerprint());
             profile.setBaselineStatus(BaselineStatus.CANDIDATE);
             profile.setVersionTag(null);
@@ -138,7 +158,7 @@ class BaselineManagerTest {
 
             // 设置新候选 → v2 → v3
             InvocationProfile updated = repo.findInvocationByKey("gk-1");
-            updated.setCandidateFingerprint(new DeterministicFingerprint());
+            updated.setCandidateFingerprint(distinctShape("second-tool"));
             updated.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveInvocationProfile(updated);
             manager.accept("gk-1", null, "tester", null);
@@ -156,14 +176,14 @@ class BaselineManagerTest {
         @DisplayName("丢弃候选，保留旧基线")
         void candidateDiscarded_baselineKept() {
             InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
-            DeterministicFingerprint oldBaseline = profile.getFingerprint();
+            DeterministicFingerprint oldBaseline = profile.getFingerprints().get(0);
             repo.saveInvocationProfile(profile);
 
             manager.reject("gk-1", null, "tester");
 
             InvocationProfile updated = repo.findInvocationByKey("gk-1");
             assertEquals(BaselineStatus.BASELINE, updated.getBaselineStatus());
-            assertEquals(oldBaseline, updated.getFingerprint());
+            assertEquals(oldBaseline, updated.getFingerprints().get(0));
             assertNull(updated.getCandidateFingerprint());
             // 版本不变
             assertEquals("v1", updated.getVersionTag());
@@ -194,7 +214,7 @@ class BaselineManagerTest {
         void rollbackToVersion_restoresOldFingerprint() {
             // 建立初始 profile 并 approve 一次
             InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
-            DeterministicFingerprint originalBaseline = profile.getFingerprint();
+            DeterministicFingerprint originalBaseline = profile.getFingerprints().get(0);
             repo.saveInvocationProfile(profile);
             manager.accept("gk-1", null, "tester", null);
 
@@ -210,7 +230,7 @@ class BaselineManagerTest {
 
             InvocationProfile rolled = repo.findInvocationByKey("gk-1");
             assertEquals(BaselineStatus.BASELINE, rolled.getBaselineStatus());
-            assertEquals(originalBaseline, rolled.getFingerprint());
+            assertEquals(originalBaseline, rolled.getFingerprints().get(0));
             assertNull(rolled.getCandidateFingerprint());
             assertEquals("v1", rolled.getVersionTag());
         }
@@ -271,7 +291,7 @@ class BaselineManagerTest {
             manager.accept("gk-1", null, "tester", null); // v1 归档，活跃 v2
 
             InvocationProfile v2 = repo.findInvocationByKey("gk-1");
-            v2.setCandidateFingerprint(new DeterministicFingerprint());
+            v2.setCandidateFingerprint(distinctShape("second-tool"));
             v2.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveInvocationProfile(v2);
             manager.accept("gk-1", null, "tester", null); // v2 归档，活跃 v3
@@ -279,7 +299,7 @@ class BaselineManagerTest {
             manager.rollback("gk-1", "v1", null, "tester"); // 活跃恢复 v1，v3 归档
 
             InvocationProfile rolled = repo.findInvocationByKey("gk-1");
-            rolled.setCandidateFingerprint(new DeterministicFingerprint());
+            rolled.setCandidateFingerprint(distinctShape("third-tool"));
             rolled.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveInvocationProfile(rolled);
 
@@ -334,7 +354,7 @@ class BaselineManagerTest {
             assertEquals(1, allSkills.size());
 
             InvocationProfile created = allSkills.get(0);
-            assertNotNull(created.getFingerprint());
+            assertFalse(created.getFingerprints().isEmpty());
             assertEquals(BaselineStatus.BASELINE, created.getBaselineStatus());
             assertEquals("v1", created.getVersionTag());
             assertNull(created.getCandidateFingerprint());
@@ -348,7 +368,7 @@ class BaselineManagerTest {
 
             // 首次建立
             manager.autoEstablishBaseline(record, "tester", null, null);
-            DeterministicFingerprint original = repo.findAllInvocations().get(0).getFingerprint();
+            DeterministicFingerprint original = repo.findAllInvocations().get(0).getFingerprints().get(0);
 
             // 再次调用
             manager.autoEstablishBaseline(record, "tester", null, null);
@@ -356,7 +376,7 @@ class BaselineManagerTest {
             // 基线不变
             List<InvocationProfile> allSkills = repo.findAllInvocations();
             assertEquals(1, allSkills.size());
-            assertEquals(original, allSkills.get(0).getFingerprint());
+            assertEquals(original, allSkills.get(0).getFingerprints().get(0));
         }
 
         @Test
@@ -398,11 +418,73 @@ class BaselineManagerTest {
 
             // v2 → v3
             InvocationProfile p = repo.findInvocationByKey("gk-1");
-            p.setCandidateFingerprint(new DeterministicFingerprint());
+            p.setCandidateFingerprint(distinctShape("second-tool"));
             p.setBaselineStatus(BaselineStatus.CANDIDATE);
             repo.saveInvocationProfile(p);
             manager.accept("gk-1", null, "tester", null);
             assertEquals("v3", repo.findInvocationByKey("gk-1").getVersionTag());
+        }
+    }
+
+    @Nested
+    @DisplayName("多形态基线 - 集合语义")
+    class MultiShapeSemantics {
+
+        @Test
+        @DisplayName("accept 已在集合中的候选 → 幂等收尾：版本不动、候选清空、无新归档")
+        void acceptKnownShape_idempotent() {
+            InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
+            repo.saveInvocationProfile(profile);
+            manager.accept("gk-1", null, "tester", null); // v2 = {旧, candidate-tool}
+
+            // 把已认可形态再落成候选（例如链末回到旧形态又查了一次）
+            InvocationProfile v2 = repo.findInvocationByKey("gk-1");
+            DeterministicFingerprint knownShape = v2.getFingerprints().get(0);
+            v2.setCandidateFingerprint(knownShape);
+            v2.setBaselineStatus(BaselineStatus.CANDIDATE);
+            repo.saveInvocationProfile(v2);
+
+            manager.accept("gk-1", null, "tester", null);
+
+            InvocationProfile after = repo.findInvocationByKey("gk-1");
+            assertEquals("v2", after.getVersionTag(), "集合无新内容不产生新治理版本（tag↔集合内容一一对应）");
+            assertEquals(2, after.getFingerprints().size(), "集合不变（不重复追加）");
+            assertNull(after.getCandidateFingerprint(), "候选照常转正清空");
+            assertEquals(BaselineStatus.BASELINE, after.getBaselineStatus());
+        }
+
+        @Test
+        @DisplayName("rollback 恢复整个集合快照（不是并集）")
+        void rollbackRestoresWholeSetSnapshot() {
+            InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");
+            repo.saveInvocationProfile(profile);
+            manager.accept("gk-1", null, "tester", null); // v2 = {旧, candidate-tool}
+
+            manager.rollback("gk-1", "v1", null, "tester");
+
+            InvocationProfile rolled = repo.findInvocationByKey("gk-1");
+            assertEquals(1, rolled.getFingerprints().size(), "回滚恢复 v1 时刻的完整集合（单形态），不是 v2 的并集");
+        }
+
+        @Test
+        @DisplayName("候选守卫按集合判定：∈ 集合的任何形态都不再落候选（镜像 churn 根治钉）")
+        void candidateGuard_setMembership() {
+            String key = "invocation:order-flow:skl-1";
+            InvocationProfile profile = makeProfileWithBaseline(key, "order-flow");
+            profile.setCandidateFingerprint(distinctShape());
+            profile.setBaselineStatus(BaselineStatus.CANDIDATE);
+            repo.saveInvocationProfile(profile);
+            repo.saveInteractionIfAbsent(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
+            manager.accept(key, null, "tester", null); // 集合 = {种子空形态, candidate-tool}
+            assertEquals(2, repo.findInvocationByKey(key).getFingerprints().size());
+
+            // 链末回到任一已认可形态 → 不登记（旧守卫只覆盖「等于唯一现役」的形态）
+            assertFalse(manager.recordCandidate(repo.findByInvocationKey(key).get(0), distinctShape()),
+                    "与追加形态（第 2 成员）一致 → 不登记");
+            assertFalse(manager.recordCandidate(repo.findByInvocationKey(key).get(0), new DeterministicFingerprint()),
+                    "与种子形态（第 1 成员）一致 → 不登记");
+            assertEquals(BaselineStatus.BASELINE, repo.findInvocationByKey(key).getBaselineStatus(),
+                    "集合成员候选不得把画像翻转 CANDIDATE");
         }
     }
 
@@ -416,7 +498,7 @@ class BaselineManagerTest {
             InteractionRecord record = makeToolRecord("skill-1", "queryOrder");
             manager.autoEstablishBaseline(record, "tester", null, null);
             String invocationKey = InvocationResolver.resolve(record).getInvocationKey();
-            DeterministicFingerprint oldBaseline = repo.findInvocationByKey(invocationKey).getFingerprint();
+            DeterministicFingerprint oldBaseline = repo.findInvocationByKey(invocationKey).getFingerprints().get(0);
 
             DeterministicFingerprint candidate = new DeterministicFingerprint();
             manager.recordCandidate(record, candidate);
@@ -424,7 +506,7 @@ class BaselineManagerTest {
             InvocationProfile updated = repo.findInvocationByKey(invocationKey);
             assertEquals(BaselineStatus.CANDIDATE, updated.getBaselineStatus());
             assertEquals(candidate, updated.getCandidateFingerprint());
-            assertEquals(oldBaseline, updated.getFingerprint());
+            assertEquals(oldBaseline, updated.getFingerprints().get(0));
         }
 
         @Test
@@ -578,9 +660,9 @@ class BaselineManagerTest {
             assertNotEquals(firstVersion, reestablished.getVersionTag());
             // 重建必须以当前算法重新提取指纹：与对同一记录的现算结果逐维一致
             DeterministicFingerprint expected = FingerprintExtractor.extract(record, null, null);
-            assertEquals(expected.getToolCallSet(), reestablished.getFingerprint().getToolCallSet());
-            assertEquals(expected.getOutputContentType(), reestablished.getFingerprint().getOutputContentType());
-            assertEquals(expected.getOutputFieldPaths(), reestablished.getFingerprint().getOutputFieldPaths());
+            assertEquals(expected.getToolCallSet(), reestablished.getFingerprints().get(0).getToolCallSet());
+            assertEquals(expected.getOutputContentType(), reestablished.getFingerprints().get(0).getOutputContentType());
+            assertEquals(expected.getOutputFieldPaths(), reestablished.getFingerprints().get(0).getOutputFieldPaths());
             // 被替换基线先归档留痕（含治理事实），rollback 可恢复——重建不再不可逆
             ArchivedTemplateVersion outgoing = repo.findArchivedVersion(invocationKey, firstVersion);
             assertNotNull(outgoing);
@@ -694,8 +776,8 @@ class BaselineManagerTest {
         p.setInvocationKey(invocationKey);
         p.setLabel(label);
         p.setTemplateHash(templateHash);
-        p.setFingerprint(new DeterministicFingerprint());
-        p.setCandidateFingerprint(new DeterministicFingerprint());
+        p.setFingerprints(shapes(new DeterministicFingerprint()));
+        p.setCandidateFingerprint(distinctShape());
         p.setBaselineStatus(BaselineStatus.CANDIDATE);
         p.setVersionTag("v1");
         return p;
@@ -714,7 +796,7 @@ class BaselineManagerTest {
             profile.setTemplateHash("h1");
             repo.saveInvocationProfile(profile);
             repo.saveInteractionIfAbsent(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
-            DeterministicFingerprint activeFingerprint = profile.getFingerprint();
+            DeterministicFingerprint activeFingerprint = profile.getFingerprints().get(0);
 
             boolean registered = manager.recordCandidate(repo.findByInvocationKey(KEY).get(0), activeFingerprint);
 
@@ -735,7 +817,7 @@ class BaselineManagerTest {
             repo.saveInvocationProfile(profile);
             repo.saveInteractionIfAbsent(skeletonRecord("r-1", "order-flow", "skl-1", "h1", 1000L));
 
-            DeterministicFingerprint activeFingerprint = profile.getFingerprint();
+            DeterministicFingerprint activeFingerprint = profile.getFingerprints().get(0);
             boolean registered = manager.recordCandidate(repo.findByInvocationKey(KEY).get(0), activeFingerprint);
 
             assertFalse(registered, "与现役一致的候选不登记");

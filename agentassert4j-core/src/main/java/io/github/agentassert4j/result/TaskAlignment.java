@@ -150,6 +150,12 @@ public class TaskAlignment {
          * 数目，透明层注记的数据源）；链/包全量配对路径恒 0
          */
         private int earlierRecords;
+        /**
+         * 基线形态集合大小 >1 时的命中/最近似形态序号（1 基）与集合大小——
+         * 多形态基线的报告注记数据源；集合大小 ≤1 时恒 0（不注记）
+         */
+        private int baselineShapeIndex;
+        private int baselineShapeCount;
         private String baselineSubdivision;
         private String newSubdivision;
 
@@ -287,6 +293,22 @@ public class TaskAlignment {
 
         public void setEarlierRecords(int earlierRecords) {
             this.earlierRecords = earlierRecords;
+        }
+
+        public int getBaselineShapeIndex() {
+            return baselineShapeIndex;
+        }
+
+        public void setBaselineShapeIndex(int baselineShapeIndex) {
+            this.baselineShapeIndex = baselineShapeIndex;
+        }
+
+        public int getBaselineShapeCount() {
+            return baselineShapeCount;
+        }
+
+        public void setBaselineShapeCount(int baselineShapeCount) {
+            this.baselineShapeCount = baselineShapeCount;
         }
     }
 }

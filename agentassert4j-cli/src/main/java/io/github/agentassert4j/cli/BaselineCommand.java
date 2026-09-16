@@ -107,7 +107,7 @@ public class BaselineCommand implements Callable<Integer> {
         notice.println("Note: the selection covers " + CliSupport.plural(resolvedKeys.size(), "invocation") + ":");
         for (String key : resolvedKeys) {
             InvocationProfile profile = repository.findInvocationByKey(key);
-            String status = profile != null && profile.getFingerprint() != null ? "exists " + profile.getVersionTag() : "no baseline";
+            String status = CliSupport.hasBaseline(profile) ? "exists " + profile.getVersionTag() : "no baseline";
             notice.println("  " + CliSupport.displayKey(key) + " (" + status + ")");
         }
     }

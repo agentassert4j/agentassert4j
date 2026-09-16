@@ -119,7 +119,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
             return;
         }
         out.println("  " + target.getInvocationKey() + " candidate diff (baseline → candidate):");
-        for (String line : FingerprintDiffRenderer.render(target.getFingerprint(), target.getCandidateFingerprint())) {
+        for (String line : FingerprintDiffRenderer.render(CliSupport.anchorShape(target), target.getCandidateFingerprint())) {
             out.println("    " + line);
         }
     }

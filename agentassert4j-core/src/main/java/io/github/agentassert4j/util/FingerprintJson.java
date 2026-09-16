@@ -30,6 +30,79 @@ public final class FingerprintJson {
     }
 
     /**
+     * 形态集合序列化（存储层 fingerprint 列的载荷契约）：有序数组，每元素一个指纹
+     * 的规范 map；null/空集合序列化为 "[]"（读侧把 "[]" 映射回 null，与单指纹时代
+     * "{}"↔null 的对称约定同构）。
+     */
+    public static String shapesToJson(List<DeterministicFingerprint> shapes) {
+        if (shapes == null || shapes.isEmpty()) {
+            return "[]";
+        }
+        List<Object> array = new ArrayList<>();
+        for (DeterministicFingerprint fp : shapes) {
+            array.add(toMap(fp));
+        }
+        return RecursiveJsonParser.serialize(array);
+    }
+
+    /**
+     * 形态集合反序列化："[]" 或非法载荷返回 null（无基线）。单对象载荷是形态集合
+     * 语义之前的旧行——按开发期「删库重建」纪律不兼容读取，就地响亮失败并指路，
+     * 不静默误读。
+     */
+    public static List<DeterministicFingerprint> shapesFromJson(String json) {
+        if (json == null || json.isEmpty()) {
+            return null;
+        }
+        Object parsed = RecursiveJsonParser.parse(json);
+        if (parsed instanceof Map) {
+            throw new IllegalStateException("Legacy single-shape fingerprint payload found in storage (written before shape-set baselines); reset the database and re-run establish to rebuild baselines.");
+        }
+        if (!(parsed instanceof List)) {
+            return null;
+        }
+        List<DeterministicFingerprint> out = shapesFromMapList(parsed);
+        return out.isEmpty() ? null : out;
+    }
+
+    /**
+     * 验收包步骤的形态集合 map 形态（键 "fingerprint" 的数组载荷）。
+     */
+    public static List<Object> shapesToMapList(List<DeterministicFingerprint> shapes) {
+        List<Object> array = new ArrayList<>();
+        if (shapes == null) {
+            return array;
+        }
+        for (DeterministicFingerprint fp : shapes) {
+            array.add(toMap(fp));
+        }
+        return array;
+    }
+
+    /**
+     * 验收包步骤的形态集合装载：数组载荷逐元素解析；单对象载荷是旧版包，
+     * 响亮拒绝并指路重导出（预发布无兼容义务）。
+     */
+    public static List<DeterministicFingerprint> shapesFromMapList(Object value) {
+        List<DeterministicFingerprint> out = new ArrayList<>();
+        if (value instanceof Map) {
+            throw new IllegalArgumentException("Legacy single-shape pack fingerprint (exported before shape-set baselines); re-export the pack under the current semantics.");
+        }
+        if (!(value instanceof List)) {
+            return out;
+        }
+        for (Object item : (List<?>) value) {
+            if (item instanceof Map) {
+                DeterministicFingerprint fp = fromMap((Map<?, ?>) item);
+                if (fp != null) {
+                    out.add(fp);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
      * 反序列化；空对象/非对象返回 null（与存储层 "{}"↔null 对写读对称约定一致）
      */
     public static DeterministicFingerprint fromJson(String json) {

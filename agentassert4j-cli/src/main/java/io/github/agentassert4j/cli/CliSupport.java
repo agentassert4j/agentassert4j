@@ -9,7 +9,9 @@ import io.github.agentassert4j.config.AgentAssert4jConfig;
 import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.InvocationRulesConfig.InvocationRule;
+import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.model.LlmWireProtocol;
 import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.result.ComparisonResult;
@@ -141,6 +143,21 @@ final class CliSupport {
      * （键存储的是编码形），团队词汇表原样可读；分组器的 encodeComponent 只
      * 转义六个 ASCII 字符，绝大多数标签编码前后同形。
      */
+    /**
+     * 认可集合的锚形态（首元素，establish 种子）——候选差异报告的对照侧；
+     * 无基线返回 null（渲染器按无对照处理）。
+     */
+    static DeterministicFingerprint anchorShape(InvocationProfile profile) {
+        return profile != null && profile.getFingerprints() != null && !profile.getFingerprints().isEmpty() ? profile.getFingerprints().get(0) : null;
+    }
+
+    /**
+     * 画像是否持有基线（认可形态集合非空）——exists 判定的单源。
+     */
+    static boolean hasBaseline(InvocationProfile profile) {
+        return profile != null && profile.getFingerprints() != null && !profile.getFingerprints().isEmpty();
+    }
+
     static String displayKey(String invocationKey) {
         if (invocationKey == null || invocationKey.isEmpty()) {
             return "(unresolved invocation)";

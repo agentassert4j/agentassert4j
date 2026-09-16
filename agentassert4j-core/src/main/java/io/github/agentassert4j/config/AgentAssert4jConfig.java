@@ -67,16 +67,25 @@ public class AgentAssert4jConfig {
         if (!(parsed instanceof Map)) return config;
 
         Map<String, Object> root = (Map<String, Object>) parsed;
-        config.storage = StorageConfig.fromJson(getMap(root, "storage"), config.storage);
-        config.regression = RegressionConfig.fromJson(getMap(root, "regression"), config.regression);
-        config.llm = LlmConfig.fromJson(getMap(root, "llm"), config.llm);
 
         // 未知键就近可见：拼错/放错层级的配置键静默无效是排障黑洞（实测中
         // 「protocol 放顶层不生效」即此坑）。只告警不拒绝——未知键不影响既有语义。
         List<String> notes = new ArrayList<>();
+        config.storage = StorageConfig.fromJson(getMap(root, "storage"), config.storage);
+        config.regression = RegressionConfig.fromJson(getMap(root, "regression"), config.regression, notes);
+        config.llm = LlmConfig.fromJson(getMap(root, "llm"), config.llm);
+
         for (Object key : root.keySet()) {
             if (!ROOT_KEYS.contains(String.valueOf(key))) {
                 notes.add("unknown config key '" + key + "' (not under any known section)");
+            }
+        }
+        Map<String, Object> regressionMap = getMap(root, "regression");
+        if (regressionMap != null) {
+            for (Object key : regressionMap.keySet()) {
+                if (!REGRESSION_KEYS.contains(String.valueOf(key))) {
+                    notes.add("unknown regression key '" + key + "' (valid: " + REGRESSION_KEYS + ")");
+                }
             }
         }
         Map<String, Object> llmMap = getMap(root, "llm");
@@ -97,6 +106,7 @@ public class AgentAssert4jConfig {
      */
     private static final Set<String> ROOT_KEYS = new HashSet<>(Arrays.asList("storage", "regression", "llm"));
     private static final Set<String> LLM_KEYS = new HashSet<>(Arrays.asList("protocol", "apiKey", "endpoint", "model", "timeoutMs", "maxRetries", "maxTokens", "temperature", "extraBody"));
+    private static final Set<String> REGRESSION_KEYS = new HashSet<>(Arrays.asList("ignorableFields", "memberSampleWindow"));
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> getMap(Map<String, Object> parent, String key) {
@@ -215,11 +225,28 @@ public class AgentAssert4jConfig {
          * 可忽略字段（增删不扣分）
          */
         private List<String> ignorableFields = new ArrayList<>();
+        /**
+         * 成员判定（member-check）的样本窗默认——有限整数，null = 用内置默认 5。
+         * 配置面只收 N：all 仅限单次调用显式传入（常驻无界默认会把稳定性量尺
+         * 静默变成考古 oracle）。
+         */
+        private Integer memberSampleWindow;
 
-        static RegressionConfig fromJson(Map<String, Object> map, RegressionConfig defaults) {
+        static RegressionConfig fromJson(Map<String, Object> map, RegressionConfig defaults, List<String> notes) {
             if (map == null) return defaults;
             RegressionConfig c = new RegressionConfig();
             c.ignorableFields = getStringList(map, "ignorableFields", defaults.ignorableFields);
+            Object window = map.get("memberSampleWindow");
+            if (window instanceof Number) {
+                int value = ((Number) window).intValue();
+                if (value >= 1) {
+                    c.memberSampleWindow = Integer.valueOf(value);
+                } else {
+                    notes.add("regression.memberSampleWindow must be an integer >= 1; using the built-in default instead.");
+                }
+            } else if (window != null) {
+                notes.add("regression.memberSampleWindow must be an integer >= 1 (use --member-window all for a one-off full scan); using the built-in default instead.");
+            }
             return c;
         }
 
@@ -229,6 +256,14 @@ public class AgentAssert4jConfig {
 
         public void setIgnorableFields(List<String> ignorableFields) {
             this.ignorableFields = ignorableFields != null ? ignorableFields : Collections.emptyList();
+        }
+
+        public Integer getMemberSampleWindow() {
+            return memberSampleWindow;
+        }
+
+        public void setMemberSampleWindow(Integer memberSampleWindow) {
+            this.memberSampleWindow = memberSampleWindow;
         }
     }
 

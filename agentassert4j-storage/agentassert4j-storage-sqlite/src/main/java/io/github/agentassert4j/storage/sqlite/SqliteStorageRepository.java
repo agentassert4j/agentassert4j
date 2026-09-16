@@ -274,7 +274,7 @@ public class SqliteStorageRepository implements StorageRepository {
             ps.setString(i++, p.getTemplateHash());
             ps.setString(i++, p.getInvocationName());
             ps.setString(i++, p.getInvocationType() != null ? p.getInvocationType().name() : InvocationType.TOOL.name());
-            ps.setString(i++, JsonMapper.fingerprintToJson(p.getFingerprint()));
+            ps.setString(i++, JsonMapper.shapesToJson(p.getFingerprints()));
             ps.setString(i++, JsonMapper.fingerprintToJson(p.getCandidateFingerprint()));
             ps.setString(i++, p.getBaselineStatus() != null ? p.getBaselineStatus().name() : BaselineStatus.BASELINE.name());
             ps.setString(i++, p.getVersionTag());
@@ -359,7 +359,7 @@ public class SqliteStorageRepository implements StorageRepository {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, archived.getInvocationKey());
             ps.setString(2, archived.getTemplateHash());
-            ps.setString(3, JsonMapper.fingerprintToJson(archived.getFingerprint()));
+            ps.setString(3, JsonMapper.shapesToJson(archived.getFingerprints()));
             ps.setString(4, archived.getVersionTag());
             ps.setString(5, archived.getAlgoVersion());
             ps.setString(6, archived.getApprovedBy());

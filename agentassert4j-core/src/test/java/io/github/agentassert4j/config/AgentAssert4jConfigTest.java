@@ -214,5 +214,25 @@ class AgentAssert4jConfigTest {
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson("{\"storag\":{},\"llm\":{\"endPoint\":\"http://e\"}}");
             assertEquals(2, config.getConfigNotes().size(), "两个未知键各出一条告警: " + config.getConfigNotes());
         }
+
+        @Test
+        @DisplayName("memberSampleWindow 配置键哨兵：合法整数逐字段吸收，非法值告警回退内置默认")
+        void memberSampleWindow_absorbedAndGuarded() {
+            AgentAssert4jConfig config = AgentAssert4jConfig.fromJson("{\"regression\":{\"memberSampleWindow\":8}}");
+            assertEquals(Integer.valueOf(8), config.getRegression().getMemberSampleWindow(), "合法整数被吸收");
+            assertTrue(config.getConfigNotes().isEmpty(), "合法键零告警: " + config.getConfigNotes());
+
+            AgentAssert4jConfig nonNumeric = AgentAssert4jConfig.fromJson("{\"regression\":{\"memberSampleWindow\":\"all\"}}");
+            assertNull(nonNumeric.getRegression().getMemberSampleWindow(), "配置面只收有限整数（all 仅单次调用显式），字符串不吸收");
+            assertEquals(1, nonNumeric.getConfigNotes().size(), "非法值就近告警: " + nonNumeric.getConfigNotes());
+
+            AgentAssert4jConfig zero = AgentAssert4jConfig.fromJson("{\"regression\":{\"memberSampleWindow\":0}}");
+            assertNull(zero.getRegression().getMemberSampleWindow(), "小于 1 的值不吸收");
+            assertEquals(1, zero.getConfigNotes().size());
+
+            AgentAssert4jConfig unknown = AgentAssert4jConfig.fromJson("{\"regression\":{\"memberWindw\":3}}");
+            assertNull(unknown.getRegression().getMemberSampleWindow());
+            assertEquals(1, unknown.getConfigNotes().size(), "未知 regression 键告警（键集对照面兜住拼写错误）: " + unknown.getConfigNotes());
+        }
     }
 }

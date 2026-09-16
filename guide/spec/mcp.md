@@ -187,6 +187,11 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
 
 ## 复核台账
 
+- 2026-09-16 D2/D1 结构批：check/diff/accept 描述与 instructions 换「approved shape set」口径
+  （accept = 追加入集，previous set 归档为版本快照）；member-check 工具增 memberWindow 参数
+  （integer 或字符串 "all"，与 CLI --member-window 同一解析路径），描述补稳定性量尺定位
+  （matched k of N、window=all 为考古命中非稳定信号）。透传钉 = McpServerTest
+  memberCheck_windowPassthrough（window 字段回显解析值）。
 - 2026-09-15 Round 6 裁决批（D7）：audit 工具描述随 CLI 全量时间线化（「AI (actor agent:*) and human
   writes on one timeline」——agent 透镜语义拆除，与 governance.md 契约 13/14 同批改写）。
 - 2026-09-15 Round 6 合并无裁决收口批：①member-check manifest 措辞改「no baseline writes;

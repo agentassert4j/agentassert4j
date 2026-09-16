@@ -160,7 +160,9 @@ class VerifyExportTest {
         Map<?, ?> root = (Map<?, ?>) parsed;
         Map<?, ?> task = ((List<Map<?, ?>>) root.get("tasks")).get(0);
         Map<?, ?> step = ((List<Map<?, ?>>) task.get("steps")).get(0);
-        Map<?, ?> fp = (Map<?, ?>) step.get("fingerprint");
+        List<Map<?, ?>> shapes = (List<Map<?, ?>>) step.get("fingerprint");
+        assertEquals(1, shapes.size(), "步骤指纹=形态集合数组（首元素=种子锚）");
+        Map<?, ?> fp = shapes.get(0);
         assertEquals(new HashSet<>(Arrays.asList("toolCallSet", "toolParamTypes", "outputContentType", "outputFieldPaths", "outputFieldTypeMap", "textLengthMagnitude", "requiredKeywords", "forbiddenKeywords", "regexPatterns", "declaredBehaviors", "hasError")), fp.keySet(), "指纹键集固定");
         assertTrue(json.contains("\"unadjudicatedSteps\":0"), "出厂偏离计数恒序列化（0 也写）: " + json);
         assertTrue(json.contains("\"servedModel\":\"dev-model\""), json);
@@ -236,9 +238,10 @@ class VerifyExportTest {
     @Test
     @DisplayName("出厂偏离检测·链末形态异：承诺照常入包+计数，verify 同尺判链末 CHANGED")
     void export_flagsChainEndDeviation_verifyJudgesChainFinal() throws Exception {
+        // 工作流时序：先录并认可 r1（种子=当时的最新）→ 再录偏离的 r2 → 出厂检测才面对「链末≠批准」
         saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
-        saveRecord("r2", "s1", 2000L, null, "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\",\"extra\":1}", "dev-model");
         establishBaselines();
+        saveRecord("r2", "s1", 2000L, null, "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\",\"extra\":1}", "dev-model");
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
         String digest = HashUtil.sha256(json);
 

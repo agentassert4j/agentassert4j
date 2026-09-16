@@ -54,6 +54,65 @@ class CommandSmokeTest {
         }
     }
 
+    @Test
+    @DisplayName("--member-window 无 --member-check → E-USAGE 拒绝")
+    void memberWindow_requiresMemberCheck() {
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--member-window", "3");
+        assertEquals(2, exit);
+    }
+
+    @Test
+    @DisplayName("--member-window 非法值（非整数/小于 1）→ E-USAGE 拒绝")
+    void memberWindow_validatesValues() {
+        assertEquals(2, new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--member-check", "--member-window", "abc"));
+        assertEquals(2, new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--member-check", "--member-window", "0"));
+    }
+
+    @Test
+    @DisplayName("窗口解析阶梯：regression.memberSampleWindow 配置默认生效，显式 --member-window 本次调用胜出")
+    void memberWindow_resolutionLadder_configThenExplicit() throws Exception {
+        seedWithResponse("session-a", 1000L, "{\"v\":1}");
+        seedWithResponse("session-b", 2000L, "{\"v\":1,\"w\":{}}");
+        seedWithResponse("session-c", 3000L, "{\"v\":1}");
+        Path config = tempDir.resolve("ladder.json");
+        Files.write(config, "{\"regression\":{\"memberSampleWindow\":2}}".getBytes(StandardCharsets.UTF_8));
+        System.setProperty("agentassert4j.config.path", config.toString());
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(buffer, true));
+        try {
+            int configWindow = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--member-check", "--json");
+            assertEquals(0, configWindow, "配置窗=2 → 命中 session-a");
+            assertTrue(buffer.toString().contains("\"window\":2"), "JSON 披露配置默认: " + buffer);
+
+            buffer.reset();
+            int explicitNarrow = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--member-check", "--json", "--member-window", "1");
+            assertEquals(1, explicitNarrow, "显式 1 胜过配置 2 → 只见最近一条，不命中");
+            assertTrue(buffer.toString().contains("\"window\":1"), "JSON 披露显式值: " + buffer);
+        } finally {
+            System.clearProperty("agentassert4j.config.path");
+        }
+    }
+
+    /**
+     * 可指定响应正文的链式种子（窗口阶梯用——形态需可区分）。
+     */
+    private void seedWithResponse(String sessionId, long timestamp, String response) {
+        InteractionRecord r = new InteractionRecord();
+        r.setRecordId("rec-" + sessionId);
+        r.setSessionId(sessionId);
+        r.setTimestamp(timestamp);
+        r.setSeq(timestamp);
+        r.setInvocationId("queryOrder");
+        r.setInvocationKey("invocation:queryOrder:hash-a");
+        r.setTemplateHash("hash-a");
+        r.setUserInput("查订单");
+        r.setTurnIndex(0);
+        r.setModelResponse(response);
+        r.setToolCalls(new ArrayList<>());
+        r.setHasToolCalls(false);
+        repository.saveInteractionIfAbsent(r);
+    }
+
     private void seedOneRecord(String sessionId, long timestamp, String templateHash) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId("rec-" + timestamp);

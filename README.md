@@ -123,7 +123,7 @@ references for humans, **the verdict only reads structural fingerprints**. The w
 API key. To have the framework replay recorded inputs against each point's new template as a
 controlled review, add `--re-drive` (real calls; preview with `--dry-run`, cap with
 `--max-total-calls/--max-total-tokens`). Real LLM runs are noisy run to run; `replay --member-check`
-passes the latest chain when its behavior matches any of the most recent chains (bounded window)
+passes the latest chain when its behavior matches any of the most recent chains (window configurable per run via --member-window N|all, default 5; the matched count quantifies stability before accepting a new shape)
 instead of pairing against the previous run only.
 
 **5. Adjudicate, then align the real re-run automatically**

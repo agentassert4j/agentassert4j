@@ -20,7 +20,7 @@
 | 模板全文哈希 | 模板全文文本 | 捕获侧缺省时 enrich 以 `sha256(templateText)` 回填投影 `template_hash` 列；显式设置优先 | `InvocationResolver.resolve` 消费；`prompt_texts` 原文库以同 hash 归档全文 |
 | 骨架哈希 | 骨架文本（动态段替换为占位符后的模板形态） | 文本现算 `sha256(templateSkeleton)` 为唯一真源；`skeleton_hash` 投影列仅在文本不落库时（读侧）兜底 | 文本与投影并存时文本现算胜出 |
 | invocationKey | 以上三个锚点字段 | `interactions.invocation_key` 列（NOT NULL，enrich 在落库前定格） | `InvocationResolver.resolve(record)` 纯函数派生；键一经落库定格，读侧不重算覆盖 |
-| 调用点画像（invocations 行） | interactions 交互历史 | 派生数据 | 建档按桶种子生成，可从 interactions 全量重建 |
+| 调用点画像（invocations 行，指纹列=认可形态集合） | interactions 交互历史 | 派生数据 | 建档按桶种子（最新记录）生成单形态集合，可从 interactions 全量重建 |
 
 **就绪顺序（enrich 内钉死）**：哈希投影（templateHash/skeletonHash）先于键派生——键锚点消费
 哈希，顺序颠倒会让首条带模板文本的记录以不完整信息落锚（键成 adhoc）。显式设置的值永不被
@@ -64,8 +64,9 @@
    对四维输出做穷举断言（物料记录不带身份字段）——尚无「仅身份字段不同 → 指纹相等」的
    直接对偶用例，为可收缩项
 8. **全库分桶口径**：按完整 invocationKey 分桶，四命名空间同权（未声明不失去框架服务资格）；
-   桶内规范序 timestamp → seq → recordId，建档种子取桶内规范序最早记录（基线描述最早观察到的
-   行为）。【测试钉】`BaselineServiceTest`（seedIsCanonicalEarliest_regardlessOfInsertionOrder——
+   桶内规范序 timestamp → seq → recordId，建档种子取桶内规范序**最新**记录（2026-09-16 裁决
+   D1：认可时刻定标当前行为——提示词工程 N 版迭代，用户只在认可时 establish，种子即当时的
+   最新执行）。【测试钉】`BaselineServiceTest`（seedIsLatest_regardlessOfInsertionOrder——
    种子与录制插入顺序无关）；桶的字典序属内部消费序（建档枚举顺序），无用户可见消费面
    【人工对账】（`CliSupport.invocationBuckets` 的 TreeMap 与规范序比较器）
 9. **三分形态**：模板全文变更在键空间的表现按键锚点分三种——声明+骨架/未声明+骨架为**同键
@@ -112,6 +113,7 @@
 ## 复核台账
 
 | 日期 | 方式 | 发现 |
-|---|---|---|
+|---|---|
+| 2026-09-16 | D2/D1 结构批随批 | 契约 8 播种行翻转（最早→最新，seedIsLatest 钉改）；真源表画像行注明指纹列=认可形态集合（载荷契约见 storage.md，判定语义见 judgment.md 契约 11） |---|
 | 2026-09-03 | S1 成文：InvocationResolver/BatchWriteHandler/CliSupport/ParameterValueTracer/Schema 全量对账 + 测试指针核实 | ①`BatchWriteHandler` 类注释仍引用 `group_key` 列名（B1' 全库改名残留，实列为 `invocation_key`）——待随代码批修复；②导读第 5 章「invocations 16 列」与 Schema 实际 15 列不符（第 4 章正确）——导读对账批修正；③modelRequestRaw 无采集侧填充方属实（与导读第 4 章「预留」一致，非漂移），已写入行为矩阵 |
 | 2026-09-03 | C1 交付后全量代码审查（同会话第二轮，对抗性自证） | ①契约 8 原【命令可证】指针失实——status 画像行按 `findAllInvocations` 原始行序输出而非分桶字典序，已改写为建档种子【测试钉】（随批新增 `BaselineServiceTest` 种子序回归钉）+ 内部字典序【人工对账】；②C1 已落地治理侧身份前移（accept 前移/rollback 恢复/显式收编 + DriftDetector），归属 governance 域，待 S4 成文承接；③①②之外的漂移发现随审查批修复（group_key 注释/导读列数/测试旧词） |

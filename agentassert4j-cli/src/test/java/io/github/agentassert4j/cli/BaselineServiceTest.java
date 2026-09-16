@@ -96,7 +96,7 @@ class BaselineServiceTest {
         assertTrue(report.contains("missing required keyword '订单号'"), "告警列出违例关键词: " + report);
         InvocationProfile profile = repository.findInvocationByKey(invocationKeyOf("skill-1"));
         assertNotNull(profile, "基线已建立");
-        assertNotNull(profile.getFingerprint(), "基线指纹已落库");
+        assertFalse(profile.getFingerprints().isEmpty(), "基线形态集合已落库");
     }
 
     @Test
@@ -126,8 +126,8 @@ class BaselineServiceTest {
     }
 
     @Test
-    @DisplayName("建档种子取桶内规范序最早记录，与录制插入顺序无关")
-    void seedIsCanonicalEarliest_regardlessOfInsertionOrder() {
+    @DisplayName("建档种子取桶内规范序最新记录（认可时刻定标当前行为），与录制插入顺序无关")
+    void seedIsLatest_regardlessOfInsertionOrder() {
         InteractionRecord late = makeRecord("rec-late", "skill-1", 2000L, "{\"late\":true}");
         InteractionRecord early = makeRecord("rec-early", "skill-1", 1000L, "{\"early\":true}");
         repository.saveInteractionIfAbsent(late);
@@ -138,8 +138,8 @@ class BaselineServiceTest {
 
         InvocationProfile profile = repository.findInvocationByKey(invocationKeyOf("skill-1"));
         assertNotNull(profile, "基线已建立");
-        assertEquals(FingerprintExtractor.extract(early, null, null), profile.getFingerprint(), "种子指纹必须来自规范序最早记录");
-        assertNotEquals(FingerprintExtractor.extract(late, null, null), profile.getFingerprint(), "晚于种子的记录不得成为基线");
+        assertEquals(FingerprintExtractor.extract(late, null, null), profile.getFingerprints().get(0), "种子指纹必须来自规范序最新记录——提示词工程 N 版迭代，用户只在认可当前行为时定标");
+        assertNotEquals(FingerprintExtractor.extract(early, null, null), profile.getFingerprints().get(0), "更早的迭代草稿不参与播种");
     }
 
     @Test
@@ -151,12 +151,12 @@ class BaselineServiceTest {
         BaselineService service = new BaselineService(repository);
 
         service.establishMissing(out, "tester", null, false, null, null, null, null);
-        assertTrue(output.toString().contains("(seed record rec-1)"), "建档行披露种子 recordId: " + output);
+        assertTrue(output.toString().contains("(seed record rec-2)"), "建档行披露种子 recordId（桶内最新）: " + output);
 
         output.reset();
         service.establishMissing(out, "tester", null, true, null, null, null, null);
         String force = output.toString();
-        assertTrue(force.contains("re-established under the current judgment semantics (v2) (seed record rec-1)"), "force 重建行同样披露种子（规范序最早）: " + force);
+        assertTrue(force.contains("re-established under the current judgment semantics (v2) (seed record rec-2)"), "force 重建行同样披露种子（规范序最新）: " + force);
     }
 
     @Test

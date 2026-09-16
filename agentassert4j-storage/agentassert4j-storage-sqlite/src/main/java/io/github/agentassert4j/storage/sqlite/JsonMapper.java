@@ -106,6 +106,18 @@ final class JsonMapper {
         return FingerprintJson.fromJson(json);
     }
 
+    /**
+     * 形态集合序列化（invocations/invocation_template_versions 的 fingerprint 列载荷）；
+     * null/空集合写 "[]"，读侧映射回 null（无基线）。
+     */
+    static String shapesToJson(List<DeterministicFingerprint> shapes) {
+        return FingerprintJson.shapesToJson(shapes);
+    }
+
+    static List<DeterministicFingerprint> shapesFromDb(String json) {
+        return FingerprintJson.shapesFromJson(json);
+    }
+
     static InvocationProfile toInvocationProfile(ResultSet rs) throws SQLException {
         InvocationProfile p = new InvocationProfile();
         p.setInvocationKey(rs.getString("invocation_key"));
@@ -113,7 +125,7 @@ final class JsonMapper {
         p.setTemplateHash(rs.getString("template_hash"));
         p.setInvocationName(rs.getString("invocation_name"));
         p.setInvocationType(InvocationType.valueOf(rs.getString("invocation_type")));
-        p.setFingerprint(fingerprintFromDb(rs.getString("fingerprint")));
+        p.setFingerprints(shapesFromDb(rs.getString("fingerprint")));
         p.setCandidateFingerprint(fingerprintFromDb(rs.getString("candidate_fingerprint")));
         String status = rs.getString("baseline_status");
         p.setBaselineStatus(status != null ? BaselineStatus.valueOf(status) : BaselineStatus.BASELINE);
@@ -132,7 +144,7 @@ final class JsonMapper {
         ArchivedTemplateVersion ab = new ArchivedTemplateVersion();
         ab.setInvocationKey(rs.getString("invocation_key"));
         ab.setTemplateHash(rs.getString("template_hash"));
-        ab.setFingerprint(fingerprintFromDb(rs.getString("fingerprint")));
+        ab.setFingerprints(shapesFromDb(rs.getString("fingerprint")));
         ab.setVersionTag(rs.getString("version_tag"));
         ab.setAlgoVersion(rs.getString("algo_version"));
         ab.setApprovedBy(rs.getString("approved_by"));

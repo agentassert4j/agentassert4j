@@ -42,12 +42,12 @@ public final class BaselineSides {
     }
 
     /**
-     * 画像指纹投影（CI 基线对照）：每条传入记录产出一份基线步骤，指纹与版本取自该
-     * 记录调用点画像的活跃定格值。链末判定路径喂裁剪后的链末记录集（每调用点一份
-     * 步骤）；步骤身份（键与标签）镜像记录自身——保证基线组键与新链分组键逐字相等，
-     * 对齐只可能 MATCHED（CI 面缺步骤/新增步骤结构性不可能）。
+     * 画像形态集合投影（CI 基线对照）：每条传入记录产出一份基线步骤，形态集合与
+     * 版本取自该记录调用点画像的活跃定格值。链末判定路径喂裁剪后的链末记录集
+     * （每调用点一份步骤）；步骤身份（键与标签）镜像记录自身——保证基线组键与
+     * 新链分组键逐字相等，对齐只可能 MATCHED（CI 面缺步骤/新增步骤结构性不可能）。
      *
-     * <p>解析不到画像或画像无活跃指纹即抛 IllegalStateException——CI 路径的未建档
+     * <p>解析不到画像或画像无认可形态即抛 IllegalStateException——CI 路径的未建档
      * 守卫先于此入口，到达即为数据违约，宁可响亮失败不做静默缺步（缺步会伪装成
      * 行为差异）。</p>
      *
@@ -65,15 +65,15 @@ public final class BaselineSides {
             if (profile == null) {
                 throw new IllegalStateException("No baseline profile for invocation " + key + "; establish the baseline before judging in --ci mode.");
             }
-            if (profile.getFingerprint() == null) {
-                throw new IllegalStateException("Baseline profile for invocation " + key + " holds no active fingerprint; re-establish the baseline.");
+            if (profile.getFingerprints() == null || profile.getFingerprints().isEmpty()) {
+                throw new IllegalStateException("Baseline profile for invocation " + key + " holds no approved shape; re-establish the baseline.");
             }
             BaselineStep step = new BaselineStep();
             step.setInvocationKey(key);
             step.setInvocationId(record.getInvocationId());
-            step.setFingerprint(profile.getFingerprint());
+            step.setFingerprints(profile.getFingerprints());
             step.setVersionTag(profile.getVersionTag());
-            baselineSteps.computeIfAbsent(key, k -> new ArrayList<>()).add(step);
+            baselineSteps.computeIfAbsent(key, k -> new ArrayList<BaselineStep>()).add(step);
         }
         return baselineSteps;
     }

@@ -38,7 +38,7 @@
 stateDiagram-v2
     [*] --> BASELINE: 首次建档（种子=v1）
     BASELINE --> CANDIDATE: 判定 CHANGED 落候选
-    CANDIDATE --> BASELINE: accept（旧基线先归档+身份前移）
+    CANDIDATE --> BASELINE: accept（候选追加入认可集合；∈集合时幂等收尾）
     CANDIDATE --> BASELINE: reject（丢弃候选）
     BASELINE --> BASELINE: --force 重建（旧基线归档，tag 顺延）
     BASELINE --> BASELINE: rollback（当前基线归档，按快照恢复，代码锚随快照回退）
@@ -50,7 +50,7 @@ stateDiagram-v2
 | 首次建档（autoEstablish） | 桶内无画像或指纹空 | 种子记录现场重提指纹，versionTag=v1，盖章 | BASELINE |
 | 重复建档 | 指纹已有 | 幂等跳过 | 不变 |
 | 判定 CHANGED 落候选（D1） | 画像存在；候选指纹 ≠ 画像现役指纹（一致即无裁决对象，不登记不翻转） | recordCandidate（首个 CHANGED 配对的新记录 + 现场重提指纹） | CANDIDATE（不一致时）/ 不变（一致时） |
-| accept | CANDIDATE，否则抛 IllegalStateException | ①归档旧基线 ②身份前移（顺序钉死）③候选升基线 ④tag 跳过归档占用 ⑤盖章 ⑥落 ACCEPT 事件 | BASELINE |
+| accept | CANDIDATE，否则抛 IllegalStateException | 候选 ∈ 集合 → 幂等收尾（清候选，集合/版本/归档不动）；∉ 集合 → ①归档旧集合（整集快照）②身份前移（顺序钉死）③候选尾部追加 ④tag 跳过归档占用 ⑤盖章 ⑥落 ACCEPT 事件 | BASELINE |
 | reject | CANDIDATE，否则抛（与 accept 对称） | 丢弃候选，保留旧基线（回退模板是 git 的职责）；落 REJECT 事件（actor=否决者）——候选消失后事件是「曾发生过 reject」的唯一痕迹 | BASELINE |
 | rollback(key, tag) | 归档行存在，否则抛；tag = 当前活动版本同样抛（空回滚唯一副作用是清候选，丢弃候选有专门动词 reject，拒绝即消除歧义路径） | 当前基线先归档 → 按快照恢复指纹/模板哈希/语义版本/审批/tag；在途候选随之清空（回执披露 candidateDiscarded，治理动词无静默副作用）；落 ROLLBACK 事件（actor=执行者，versionTag=目标版本）——恢复按原始审批人重激活，执行者只在事件表可见 | BASELINE |
 | --force 重建 | 画像存在 | 旧基线先归档 → 桶内规范序首条记录重提指纹 → tag 顺延 | BASELINE |
@@ -133,8 +133,9 @@ stateDiagram-v2
 | rollback 目标 tag 无归档行 | IllegalStateException |
 | rollback 目标 = 当前活动版本 | IllegalStateException，消息指路 reject（丢弃候选的专门动词） |
 | rollback 时画像持有在途候选 | 候选随恢复清空，回执披露 candidateDiscarded |
-| accept 时归档 tag 撞车 | nextAvailableVersionTag 顺延跳过（tag↔指纹一一对应不破） |
-| 候选哈希与最新记录一致时 accept | 身份不动（幂等），候选照常转正 |
+| accept 时归档 tag 撞车 | nextAvailableVersionTag 顺延跳过（tag↔集合内容一一对应不破） |
+| 候选形态 ∈ 认可集合时 accept | 幂等收尾：清候选转正，集合与版本不动（无新内容不产生新治理版本） |
+| 候选形态 ∉ 集合时 accept | 集合 = 旧集合 ∪ {候选}（尾部追加，首元素恒为种子锚），版本递增，旧集合整体归档 |
 | 漂移 + 对齐 PASS（开发态） | 收编：模板哈希前移，其余治理字段不动，报告可见 |
 | 漂移 + 对齐 PASS（--ci） | 不收编：出 0 附「身份未收编」警告 |
 | 漂移 + 对齐 CHANGED | 落候选 → CANDIDATE，等待人工裁决 |
@@ -184,7 +185,8 @@ agent 权限配置为完全访问时，授权决策已经在 harness 层完成�
 ## 复核台账
 
 | 日期 | 方式 | 发现 |
-|---|---|---|
+|---|---|
+| 2026-09-16 | D2 结构批随批 | 治理主体从「单一指纹」换为「认可形态集合」：accept 追加入集（∈集合幂等收敛尾）、rollback 恢复整集快照、归档行=全量集合快照（载荷见 storage.md）；活跃基线=BASELINE（集合非空）判定不变 |---|
 | 2026-09-15 | Round 6 裁决批（D7）：audit 全量时间线（统一人机账本） | 维护者裁决「无论 AI 还是人类都应记录，分层统一处理不加分枝」——白盒证实记录层本就经 BaselineManager 单源落账全 actor（含 CLI 人类写），缺口仅在 audit 展示层的 agent:* 过滤镜。拆除过滤镜：audit/1 与人读清单改为全量时间线（actor 列自解释主体），`agent:` 前缀保留为机器写申报约定（身份申报契约 13 同步改写）；JsonContractTest 旧钉「人类 actor 不进 agent 透镜」随裁决翻转改钉（测试错误改钉理由：其断言面即被裁决取代的旧设计）。【测试钉】audit_listsHumanWrites_alongsideAgentWrites + rejectAndRollback_eventsListedInAudit（改钉） |
 | 2026-09-15 | Round 6 合并无裁决收口批：rollback 空回滚守卫前置 | BaselineManager.rollback 的检查顺序调整：目标=活动版本守卫提至归档查找之前——此前目标为「活动且不在归档列表」的版本时（首建未替换的画像），用户先撞「No archived template version found」而非带 reject 指路的空回滚话术，双宿主 Round 6 实测同一拒绝两档措辞。状态机契约不变（两种失败均 IllegalStateException/E-NO-DATA）；CLI 侧 RollbackCommand.ensureVersionExists 同批放行目标=活动版本给 manager 守卫承接。【测试钉】CommandSmokeTest.rollback_toActiveRefusesWithRejectPointer |
 | 2026-09-14 | Round 5 裁决批（B3/B4）：审批溯源读面 + MCP approver 必填 + rollback 守卫与披露 | ①B3 根因=approvedBy/approvedAt 一直在画像与归档行上（establish/accept/rollback 三路径盖章），读面从不渲染——audit 类注释承诺的「人类写经 status/report 可见」落空，本批兑现（契约 12）；逃逸窗口根因=MCP approver 可选 + CLI OS 用户缺省回退，机器写无痕混入人类名单，schema required + 服务端 E-USAGE 双守卫关闭；②B4 根因=nextAvailableVersionTag 只防新 accept 复用 tag，回滚恢复出的 tag 本就在归档（可逆性代价），活动 tag 因此可被 rollback 命中且顺带清候选——拒绝空回滚（指路 reject）+ candidateDiscarded 回执披露 + 归档列 * 标记（契约 11）；③MCP approver 必填是发布前收紧（对省略客户端破坏性，pre-1.0 免费） |

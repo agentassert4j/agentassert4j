@@ -13,15 +13,18 @@ import io.github.agentassert4j.spi.StorageRepository;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * 基线建立服务 — baseline 命令与 replay 前置步骤共用的落基线逻辑。
  *
- * <p>按 invocationId 遍历已录制交互（存储返回规范序），逐条调用幂等的
- * autoEstablishBaseline：首个基线由该 调用点 最早的交互建立，已存在基线不覆盖。
+ * <p>按 invocationId 遍历已录制交互（存储返回规范序），播种 = 桶内规范序
+ * <b>最后</b>一条（该调用点的最新执行）：真实提示词工程是 N 版迭代逼近，用户只在
+ * 认可当前行为时定标，定标时刻的当前行为即最新执行。已存在基线不覆盖（幂等），
  * 重复执行安全——画像属于可从 interactions 重建的派生数据。</p>
  *
  * @author axy-yxa
@@ -64,15 +67,19 @@ public class BaselineService {
             }
 
             InvocationProfile existing = repository.findInvocationByKey(invocationKey);
-            boolean hadBaseline = existing != null && existing.getFingerprint() != null;
+            boolean hadBaseline = CliSupport.hasBaseline(existing);
             if (hadBaseline && !force) {
                 out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + existing.getVersionTag() + ")" + refSuffix(existing.getCodeRef()));
-                warnRulesDrift(out, firstBusinessLabel(records), existing.getFingerprint(), rules);
+                warnRulesDrift(out, firstBusinessLabel(records), existing.getFingerprints(), rules);
                 if (outcomes != null) {
                     outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "exists", existing.getVersionTag(), existing.getCodeRef()));
                 }
                 continue;
             }
+
+            // 播种记录 = 桶内规范序最后一条（全局最新执行）：播种与披露共用同一变量，
+            // 报告披露的永远是实际入基线的那条
+            InteractionRecord seed = records.get(records.size() - 1);
 
             if (force) {
                 if (hadBaseline) {
@@ -82,24 +89,22 @@ public class BaselineService {
                     }
                     out.println("  Warning: existing baseline " + existing.getVersionTag() + (existing.getApprovedBy() != null ? " (approved by " + existing.getApprovedBy() + ")" : "") + " of " + invocationKey + " will be rebuilt under the current semantics; the old baseline is archived and restorable via `rollback`.");
                 }
-                // 重建取桶内规范序首条可分组记录（分桶已剔除不可分组记录）；
-                // 逐条调用会让版本标签随记录数连跳
-                manager.reestablishBaseline(records.get(0), actor, rules, codeRef);
+                // 重建取桶内最新记录（与首次建档同语义；force 也是唯一的形态收缩途径——
+                // 重建后集合只留当前形态）
+                manager.reestablishBaseline(seed, actor, rules, codeRef);
             } else {
-                for (InteractionRecord record : records) {
-                    try {
-                        manager.autoEstablishBaseline(record, actor, rules, codeRef);
-                    } catch (RuntimeException e) {
-                        // 单条建档失败（存储抖动等）不中断整批——与录制 enrich 的
-                        // 单条容错同哲学；分桶已剔除不可分组记录，这里只剩存储面故障
-                    }
+                try {
+                    manager.autoEstablishBaseline(seed, actor, rules, codeRef);
+                } catch (RuntimeException e) {
+                    // 单条建档失败（存储抖动等）不中断整批——与录制 enrich 的
+                    // 单条容错同哲学；分桶已剔除不可分组记录，这里只剩存储面故障
                 }
             }
 
             // 落库回验：建档路径吞掉单条存储故障（不中断整批），但全失败时
             // 画像不存在——此时不得上报「已建立」的假成功、不得计入计数
             InvocationProfile created = repository.findInvocationByKey(invocationKey);
-            if (created == null || created.getFingerprint() == null) {
+            if (!CliSupport.hasBaseline(created)) {
                 out.println("  " + displayLabel(records) + invocationKey + ": baseline establishment failed (storage error; see storage logs)");
                 if (outcomes != null) {
                     outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "failed", null, null));
@@ -110,11 +115,11 @@ public class BaselineService {
             // 首条记录建立画像时 totalRecords=1，回填该分组的真实记录数
             created.setTotalRecords(records.size());
             repository.saveInvocationProfile(created);
-            out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "baseline re-established under the current judgment semantics (" + created.getVersionTag() + ")" : "baseline established") + " (seed record " + records.get(0).getRecordId() + ")" + refSuffix(created.getCodeRef()));
+            out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "baseline re-established under the current judgment semantics (" + created.getVersionTag() + ")" : "baseline established") + " (seed record " + seed.getRecordId() + ")" + refSuffix(created.getCodeRef()));
             if (outcomes != null) {
                 outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), hadBaseline ? "reestablished" : "created", created.getVersionTag(), created.getCodeRef()));
             }
-            warnSeedRuleViolations(out, records.get(0), rules);
+            warnSeedRuleViolations(out, seed, rules);
         }
         return established;
     }
@@ -160,21 +165,42 @@ public class BaselineService {
     /**
      * 已存在基线与当前规则文件的声明差异告警：establish 对既有基线是幂等 no-op，
      * 不会把规则文件里的新声明刷进指纹——差异静默时用户以为「已 establish = 已刷新」。
+     * 钉定侧取认可集合全形态的声明并集（各形态携带各自建立时的声明集）。
      * 指路两条刷新路径：check 后 accept（用当前规则落候选再升格，不动种子）或
-     * --force（连种子一起从桶内最早记录重播）。
+     * --force（连种子一起从桶内最新记录重播）。
      */
-    private static void warnRulesDrift(PrintStream out, String label, DeterministicFingerprint fingerprint, InvocationRulesConfig rules) {
-        if (rules == null || !rules.hasRules() || fingerprint == null) {
+    private static void warnRulesDrift(PrintStream out, String label, List<DeterministicFingerprint> shapes, InvocationRulesConfig rules) {
+        if (rules == null || !rules.hasRules() || shapes == null || shapes.isEmpty()) {
             return;
         }
         InvocationRulesConfig.InvocationRule rule = rules.getRulesForInvocation(label);
-        String pinned = declarationDescription(fingerprint.getRequiredKeywords(), fingerprint.getForbiddenKeywords(), fingerprint.getRegexPatterns(), fingerprint.getDeclaredBehaviors());
+        Set<String> required = new TreeSet<>();
+        Set<String> forbidden = new TreeSet<>();
+        Set<String> behaviors = new TreeSet<>();
+        Map<String, RegexPattern> regexByPattern = new LinkedHashMap<>();
+        for (DeterministicFingerprint shape : shapes) {
+            if (shape.getRequiredKeywords() != null) {
+                required.addAll(shape.getRequiredKeywords());
+            }
+            if (shape.getForbiddenKeywords() != null) {
+                forbidden.addAll(shape.getForbiddenKeywords());
+            }
+            if (shape.getDeclaredBehaviors() != null) {
+                behaviors.addAll(shape.getDeclaredBehaviors());
+            }
+            if (shape.getRegexPatterns() != null) {
+                for (RegexPattern pattern : shape.getRegexPatterns()) {
+                    regexByPattern.putIfAbsent(pattern.getPattern(), pattern);
+                }
+            }
+        }
+        String pinned = declarationDescription(required, forbidden, new ArrayList<>(regexByPattern.values()), behaviors);
         String file = declarationDescription(rule.getRequiredKeywords(), rule.getForbiddenKeywords(), rule.getRegexPatterns(), rule.getBehaviors());
         if (pinned.equals(file)) {
             return;
         }
         out.println("  Warning: rules declarations for " + label + " differ from the ones pinned in this baseline (pinned " + pinned + " | file " + file + ").");
-        out.println("    establish does not refresh them: run `replay --ci` with this rules file in place and accept the candidate it lands (no re-seed), or use `--force` (re-seeds from the earliest record in the bucket).");
+        out.println("    establish does not refresh them: run `replay --ci` with this rules file in place and accept the candidate it lands (no re-seed), or use `--force` (re-seeds from the latest record in the bucket).");
     }
 
     /**

@@ -89,6 +89,22 @@ class McpServerTest {
     }
 
     /**
+     * 按 mode 挑选工具结果中的报告对象（member-check 输出多行：drift 行在前）。
+     */
+    private Map<String, Object> reportOfMode(Map<String, Object> toolResult, String mode) {
+        List<Object> list = reports(toolResult);
+        assertNotNull(list, "structuredContent.reports 必须在场");
+        for (Object item : list) {
+            Map<String, Object> report = castMap(item);
+            if (report != null && mode.equals(report.get("mode"))) {
+                return report;
+            }
+        }
+        fail("no report with mode " + mode + ": " + list);
+        return null;
+    }
+
+    /**
      * 工具结果的首份报告对象（工具报告行聚合在 structuredContent.reports）。
      */
     private Map<String, Object> firstReport(Map<String, Object> toolResult) {
@@ -308,6 +324,33 @@ class McpServerTest {
         @BeforeEach
         void init() {
             initialize("2025-11-25");
+        }
+
+        @Test
+        @DisplayName("member-check 的 memberWindow 参数透传：window 字段回显解析值（N 与 CLI 同一解析路径）")
+        void memberCheck_windowPassthrough() {
+            seedMemberChain("session-a", 1000L, "{\"v\":1}");
+            seedMemberChain("session-b", 2000L, "{\"v\":1,\"w\":{}}");
+            seedMemberChain("session-c", 3000L, "{\"v\":1}");
+            callTool("establish", "{\"approver\":\"agent:test\"}");
+
+            Map<String, Object> memberNarrow = castMap(reportOfMode(callTool("member-check", "{\"memberWindow\":\"1\"}"), "member-check").get("member"));
+            assertEquals(1.0, toDouble(memberNarrow.get("window")), "窄窗回显 1: " + memberNarrow);
+            assertEquals(Boolean.FALSE, memberNarrow.get("isMember"), "窗=1 只见最近一条（形态不同）");
+
+            Map<String, Object> memberWide = castMap(reportOfMode(callTool("member-check", "{\"memberWindow\":\"2\"}"), "member-check").get("member"));
+            assertEquals(2.0, toDouble(memberWide.get("window")), "宽窗回显 2: " + memberWide);
+            assertEquals(Boolean.TRUE, memberWide.get("isMember"), "窗=2 命中 session-a");
+            assertEquals(1.0, toDouble(memberWide.get("matched")));
+        }
+
+        /**
+         * member-check 场景链：同 taskKey 三会话三链，content 为 JSON 文本（形态可区分）。
+         */
+        private void seedMemberChain(String sessionId, long timestamp, String content) {
+            String request = "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"system\",\"content\":\"You are a helpful assistant.\"}," + "{\"role\":\"user\",\"content\":\"win probe\"}]}";
+            String response = "{\"id\":\"cmpl-" + sessionId + "\",\"model\":\"deepseek-chat\",\"choices\":[{\"index\":0,\"message\":" + "{\"role\":\"assistant\",\"content\":\"" + RecursiveJsonParser.escape(content) + "\"},\"finish_reason\":\"stop\"}]," + "\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}";
+            callTool("record", "{\"sessionId\":\"" + sessionId + "\",\"timestamp\":" + timestamp + ",\"request\":\"" + RecursiveJsonParser.escape(request) + "\",\"response\":\"" + RecursiveJsonParser.escape(response) + "\",\"invocation\":\"orderAgent\",\"taskKey\":\"win-probe\"}");
         }
 
         @Test

@@ -153,7 +153,11 @@ class SqliteStorageRepositoryTest {
         Set<String> tools = new HashSet<>();
         tools.add("queryOrder");
         fp.setToolCallSet(tools);
-        p.setFingerprint(fp);
+        DeterministicFingerprint second = new DeterministicFingerprint();
+        Set<String> secondTools = new HashSet<>();
+        secondTools.add("runPython");
+        second.setToolCallSet(secondTools);
+        p.setFingerprints(new ArrayList<>(Arrays.asList(fp, second)));
 
         repo.saveInvocationProfile(p);
 
@@ -166,8 +170,10 @@ class SqliteStorageRepositoryTest {
         assertEquals(BaselineStatus.BASELINE, loaded.getBaselineStatus());
         assertEquals("v1.0", loaded.getVersionTag());
         assertEquals(42, loaded.getTotalRecords());
-        assertNotNull(loaded.getFingerprint());
-        assertTrue(loaded.getFingerprint().getToolCallSet().contains("queryOrder"));
+        assertNotNull(loaded.getFingerprints());
+        assertEquals(2, loaded.getFingerprints().size(), "认可集合整集往返（有序，首元素=种子锚）");
+        assertTrue(loaded.getFingerprints().get(0).getToolCallSet().contains("queryOrder"));
+        assertTrue(loaded.getFingerprints().get(1).getToolCallSet().contains("runPython"));
     }
 
     @Test
@@ -224,7 +230,7 @@ class SqliteStorageRepositoryTest {
 
         ArchivedTemplateVersion archived = new ArchivedTemplateVersion();
         archived.setInvocationKey("invocation:order-flow:tmpl-1");
-        archived.setFingerprint(fp);
+        archived.setFingerprints(new ArrayList<>(Arrays.asList(fp)));
         archived.setVersionTag("v1.0");
         archived.setAlgoVersion("det-v1");
         archived.setApprovedBy("tester");
@@ -235,8 +241,9 @@ class SqliteStorageRepositoryTest {
         assertNotNull(loaded);
         assertEquals("invocation:order-flow:tmpl-1", loaded.getInvocationKey());
         assertEquals("v1.0", loaded.getVersionTag());
-        assertNotNull(loaded.getFingerprint());
-        assertTrue(loaded.getFingerprint().getToolCallSet().contains("toolX"));
+        assertNotNull(loaded.getFingerprints());
+        assertEquals(1, loaded.getFingerprints().size(), "归档行携全量集合快照");
+        assertTrue(loaded.getFingerprints().get(0).getToolCallSet().contains("toolX"));
         // 治理三列与归档时间戳写读对称
         assertEquals("det-v1", loaded.getAlgoVersion());
         assertEquals("tester", loaded.getApprovedBy());
@@ -591,7 +598,7 @@ class SqliteStorageRepositoryTest {
         p.setTotalRecords(10);
         DeterministicFingerprint fp = new DeterministicFingerprint();
         fp.setToolCallSet(new HashSet<>());
-        p.setFingerprint(fp);
+        p.setFingerprints(new ArrayList<>(Collections.singletonList(fp)));
         repo.saveInvocationProfile(p);
 
         InvocationProfile loaded = repo.findInvocationByKey("gov-key");
@@ -628,7 +635,7 @@ class SqliteStorageRepositoryTest {
         p.setTotalRecords(3);
         DeterministicFingerprint fp = new DeterministicFingerprint();
         fp.setToolCallSet(new HashSet<>());
-        p.setFingerprint(fp);
+        p.setFingerprints(new ArrayList<>(Collections.singletonList(fp)));
         p.setCodeRef("abc1234");
         repo.saveInvocationProfile(p);
 
@@ -642,7 +649,7 @@ class SqliteStorageRepositoryTest {
         fp.setToolCallSet(new HashSet<>());
         ArchivedTemplateVersion archived = new ArchivedTemplateVersion();
         archived.setInvocationKey("invocation:order-flow:ref-1");
-        archived.setFingerprint(fp);
+        archived.setFingerprints(new ArrayList<>(Collections.singletonList(fp)));
         archived.setVersionTag("v1");
         archived.setAlgoVersion("det-v1");
         archived.setApprovedBy("tester");
@@ -664,7 +671,7 @@ class SqliteStorageRepositoryTest {
         p.setTotalRecords(5);
         DeterministicFingerprint fp = new DeterministicFingerprint();
         fp.setToolCallSet(new HashSet<>());
-        p.setFingerprint(fp);
+        p.setFingerprints(new ArrayList<>(Collections.singletonList(fp)));
         repo.saveInvocationProfile(p);
     }
 
@@ -787,7 +794,7 @@ class SqliteStorageRepositoryTest {
         fp.setRegexPatterns(Collections.singletonList(new RegexPattern("^\\d+\"$", "描述\"一")));
         fp.setDeclaredBehaviors(new LinkedHashSet<>(Collections.singletonList("行为\"X")));
         fp.setHasError(false);
-        p.setFingerprint(fp);
+        p.setFingerprints(new ArrayList<>(Collections.singletonList(fp)));
 
         DeterministicFingerprint candidate = new DeterministicFingerprint();
         candidate.setTextLengthMagnitude(1);
@@ -797,7 +804,7 @@ class SqliteStorageRepositoryTest {
 
         InvocationProfile back = repo.findInvocationByKey("invocation:fp-flow:tmpl-1");
         assertNotNull(back);
-        DeterministicFingerprint bf = back.getFingerprint();
+        DeterministicFingerprint bf = back.getFingerprints().get(0);
         assertEquals(fp.getToolCallSet(), bf.getToolCallSet());
         assertEquals("String", bf.getToolParamTypes().get("k\"1"));
         assertEquals("text/plain", bf.getOutputContentType());
@@ -826,8 +833,41 @@ class SqliteStorageRepositoryTest {
         repo.saveInvocationProfile(p);
 
         InvocationProfile back = repo.findInvocationByKey("invocation:null-flow:tmpl-1");
-        assertNull(back.getFingerprint());
+        assertNull(back.getFingerprints(), "null 集合以 '[]' 落库（NOT NULL 列），读侧映射回 null");
         assertNull(back.getCandidateFingerprint());
+    }
+
+    @Test
+    void fingerprintColumn_legacySingleShapeRow_failsLoudly() throws Exception {
+        // 形态集合语义之前的旧行（单对象 JSON）不兼容读取：就地响亮失败并指路，
+        // 不静默误读（预发布承接 = 删库重建）
+        Path db = Files.createTempFile("agentassert4j-legacy", ".db");
+        SqliteStorageRepository fileRepo = new SqliteStorageRepository(db.toString());
+        fileRepo.initialize();
+        InvocationProfile p = new InvocationProfile();
+        p.setLabel("legacy-flow");
+        p.setInvocationKey("invocation:legacy-flow:tmpl-1");
+        p.setInvocationName("l");
+        p.setInvocationType(InvocationType.TOOL);
+        p.setBaselineStatus(BaselineStatus.BASELINE);
+        p.setFingerprints(new ArrayList<>(Collections.singletonList(new DeterministicFingerprint())));
+        fileRepo.saveInvocationProfile(p);
+        fileRepo.close();
+
+        try (Connection external = DriverManager.getConnection("jdbc:sqlite:" + db.toString()); Statement stmt = external.createStatement()) {
+            stmt.executeUpdate("UPDATE invocations SET fingerprint = '{\"toolCallSet\":[]}' WHERE invocation_key = 'invocation:legacy-flow:tmpl-1'");
+        }
+
+        SqliteStorageRepository reopened = new SqliteStorageRepository(db.toString());
+        reopened.initialize();
+        try {
+            reopened.findInvocationByKey("invocation:legacy-flow:tmpl-1");
+            fail("legacy 单形态行必须响亮失败");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("Legacy single-shape fingerprint payload"));
+        } finally {
+            reopened.close();
+        }
     }
 
     @Test

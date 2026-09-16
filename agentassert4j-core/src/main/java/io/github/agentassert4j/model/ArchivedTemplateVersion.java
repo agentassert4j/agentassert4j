@@ -1,11 +1,14 @@
 package io.github.agentassert4j.model;
 
+import java.util.List;
+
 /**
  * 调用点模板版本归档行 — accept/rollback 时被替换的基线按模板版本整体快照。
  *
- * <p>治理主体 = 调用点的模板版本史：除指纹与版本标签外，归档行同时留存该版本
- * 对应的模板哈希（经 prompt_texts 可反查模板原文）与获批时的语义版本、审批事实，
- * 回滚时据此恢复活跃画像的治理信息。</p>
+ * <p>治理主体 = 调用点的模板版本史：除指纹集合（该版本获批时的完整认可形态集）
+ * 与版本标签外，归档行同时留存该版本对应的模板哈希（经 prompt_texts 可反查模板
+ * 原文）与获批时的语义版本、审批事实，回滚时据此恢复活跃画像的治理信息
+ * （rollback 恢复的是整个集合快照）。</p>
  *
  * @author axy-yxa
  * @since 2026-08-26
@@ -20,7 +23,10 @@ public class ArchivedTemplateVersion {
      * 该版本对应的模板哈希
      */
     private String templateHash;
-    private DeterministicFingerprint fingerprint;
+    /**
+     * 该版本获批时的完整形态集合快照（回滚整体恢复）
+     */
+    private List<DeterministicFingerprint> fingerprints;
     private String versionTag;
     /**
      * 该基线获批时的判定语义版本（回滚恢复的依据）
@@ -52,12 +58,12 @@ public class ArchivedTemplateVersion {
         this.templateHash = templateHash;
     }
 
-    public DeterministicFingerprint getFingerprint() {
-        return fingerprint;
+    public List<DeterministicFingerprint> getFingerprints() {
+        return fingerprints;
     }
 
-    public void setFingerprint(DeterministicFingerprint fingerprint) {
-        this.fingerprint = fingerprint;
+    public void setFingerprints(List<DeterministicFingerprint> fingerprints) {
+        this.fingerprints = fingerprints;
     }
 
     public String getVersionTag() {

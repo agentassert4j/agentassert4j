@@ -120,7 +120,7 @@ final class McpTools {
                 return command;
             });
         }));
-        tools.add(McpTool.of("accept", "Promote a pending candidate fingerprint (landed by check or diff on CHANGED) to the baseline; the previous baseline is archived " + "and restorable via the CLI rollback command. Governance write: call only when the human decides the new behavior is intended. " + "Agents declare themselves with approver like \"agent:<name>\".", "{\"type\": \"object\", \"properties\": {\"invocation\": {\"type\": \"string\", \"description\": \"Invocation holding the candidate (defaults to all pending)\"}, \"approver\": {\"type\": \"string\", \"description\": \"Required approver identity; agents use agent:<name>\"}, \"ref\": {\"type\": \"string\", \"description\": \"Code reference (e.g. a git commit) the promoted baseline corresponds to\"}, \"expectedVersion\": {\"type\": \"string\", \"description\": \"Optimistic concurrency guard: refuse unless the active baseline version still equals this tag (see report)\"}}, \"required\": [\"approver\"], \"additionalProperties\": false}", CliCommands("accept"), args -> {
+        tools.add(McpTool.of("accept", "Add the pending candidate shape (landed by check or diff on CHANGED) to the invocation's approved shape set; " + "the previous set is archived as a version snapshot, restorable via the rollback tool. Governance write: call only when the human decides the new behavior is intended. " + "Agents declare themselves with approver like \"agent:<name>\".", "{\"type\": \"object\", \"properties\": {\"invocation\": {\"type\": \"string\", \"description\": \"Invocation holding the candidate (defaults to all pending)\"}, \"approver\": {\"type\": \"string\", \"description\": \"Required approver identity; agents use agent:<name>\"}, \"ref\": {\"type\": \"string\", \"description\": \"Code reference (e.g. a git commit) the promoted baseline corresponds to\"}, \"expectedVersion\": {\"type\": \"string\", \"description\": \"Optimistic concurrency guard: refuse unless the active baseline version still equals this tag (see report)\"}}, \"required\": [\"approver\"], \"additionalProperties\": false}", CliCommands("accept"), args -> {
             String approver = optionalString(args, "approver");
             if (approver == null) {
                 return missingApprover("accept");
@@ -193,7 +193,7 @@ final class McpTools {
             command.jsonOutput = true;
             return command;
         })));
-        tools.add(McpTool.of("member-check", "Member determination: the latest chain of each task is checked against its most recent chains (bounded window 5) — matching any of them passes; the member block carries matchedSession on a match, or closestSession and closestScore on a mismatch; prefixDependent marks chains that continue an earlier conversation turn (comparing them without replaying that prefix would attribute context loss to a regression). " + "Use it to judge whether a new execution still belongs to the known behavior cluster under fluctuating real model behavior. Read-only judgment: no baseline writes; mismatch findings still land candidates awaiting adjudication.", "{\"type\":\"object\",\"properties\":{" + "\"task\":{\"type\":\"string\",\"description\":\"Task chain request-text prefix\"}," + "\"invocation\":{\"type\":\"string\",\"description\":\"Invocation selector\"}}," + "\"additionalProperties\":false}", CliCommands("replay"), args -> runReplay(db, args, true, false, true)));
+        tools.add(McpTool.of("member-check", "Member determination (stability probe before accepting a new shape): the latest chain of each task is checked against its most recent chains (window, default 5) — the member block carries matchedSession(s) and the matched count (matched k of N) on a match, or closestSession and closestScore on a mismatch; prefixDependent marks chains that continue an earlier conversation turn (comparing them without replaying that prefix would attribute context loss to a regression). A high matched count means the behavior is stably reproducing (worth accepting into the approved shape set); a single old match under window=all is archaeology, not stability. " + "Use it to judge whether a new execution still belongs to the known behavior cluster under fluctuating real model behavior. Read-only judgment: no baseline writes; mismatch findings still land candidates awaiting adjudication.", "{\"type\":\"object\",\"properties\":{" + "\"task\":{\"type\":\"string\",\"description\":\"Task chain request-text prefix\"}," + "\"invocation\":{\"type\":\"string\",\"description\":\"Invocation selector\"}," + "\"memberWindow\":{\"type\":\"string\",\"description\":\"Sample window: an integer >= 1, or 'all' to scan every historical chain (one-off archaeology query)\"}}," + "\"additionalProperties\":false}", CliCommands("replay"), args -> runReplay(db, args, true, false, true)));
         tools.add(McpTool.of("re-drive", "Controlled re-drive (long-running, spends real LLM calls): re-runs recorded inputs through each point's latest archived template " + "to confirm drift with fresh evidence. Set a generous client timeout; pass maxTotalCalls/maxTotalTokens budgets; " + "prefer dryRun first for a cost estimate. CI semantics: no governance writes.", "{\"type\":\"object\",\"properties\":{" + "\"task\":{\"type\":\"string\",\"description\":\"Task chain request-text prefix\"}," + "\"invocation\":{\"type\":\"string\",\"description\":\"Invocation selector\"}," + "\"fullChain\":{\"type\":\"boolean\",\"description\":\"Re-drive every record in scope, not only drift points\"}," + "\"maxTotalCalls\":{\"type\":\"integer\",\"description\":\"Budget cap on real re-drive calls\"}," + "\"maxTotalTokens\":{\"type\":\"integer\",\"description\":\"Budget cap on total re-drive tokens\"}," + "\"dryRun\":{\"type\":\"boolean\",\"description\":\"Read-only cost estimate; no calls, no writes\"}}," + "\"additionalProperties\":false}", CliCommands("replay"), args -> runReplay(db, args, true, true, false)));
         tools.add(McpTool.of("export", "Write an acceptance pack (JSON file) from current baselines for delivery verification with verify — the cross-model or offline acceptance path. " + "Optional ref stamps the code reference (e.g. a git commit) the pack corresponds to; declared, not verified.", "{\"type\":\"object\",\"properties\":{" + "\"task\":{\"type\":\"string\",\"description\":\"Export only task chains matching this request-text prefix\"}," + "\"out\":{\"type\":\"string\",\"description\":\"Output file path (default acceptance-pack.json)\"}," + "\"includeSamples\":{\"type\":\"boolean\",\"description\":\"Attach masked per-step input/output samples\"}," + "\"ref\":{\"type\":\"string\",\"description\":\"Code reference recorded in the pack metadata\"}}," + "\"additionalProperties\":false}", CliCommands("baseline export"), args -> runCommand(capture -> {
             BaselineExportCommand command = new BaselineExportCommand();
@@ -221,8 +221,8 @@ final class McpTools {
 
     /**
      * replay 形工具的共用适配：缩域选择器 + ci 语义（读动词零治理写）；re-drive
-     * 模式叠加；memberCheck 切成员判定报告。三个模式旗标逐调用点显式给定，
-     * 不设默认重载。
+     * 模式叠加；memberCheck 切成员判定报告（window 参数透传，N|all 与 CLI 同一
+     * 解析路径）。三个模式旗标逐调用点显式给定，不设默认重载。
      */
     private static McpToolOutcome runReplay(String db, Map<String, Object> args, boolean ciMode, boolean reDrive, boolean memberCheck) {
         return runCommand(capture -> {
@@ -234,6 +234,10 @@ final class McpTools {
             command.invocation = optionalString(args, "invocation");
             command.ciMode = ciMode;
             command.memberCheck = memberCheck;
+            if (memberCheck && args.containsKey("memberWindow")) {
+                Object window = args.get("memberWindow");
+                command.memberWindow = String.valueOf(window);
+            }
             command.reDrive = reDrive;
             if (reDrive) {
                 command.fullChain = optionalBoolean(args, "fullChain");

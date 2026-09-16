@@ -100,31 +100,31 @@ public class BaselineExportCommand implements Callable<Integer> {
                 boolean selfViolating = false;
                 int unadjudicated = 0;
                 // 包 = 批准真相定格交付：步骤按调用点分组取组末记录为证据锚（recordId/
-                // 样本锚定链末执行），指纹消费画像活跃指纹（与 CI 同源）——链末判定下每
-                // 调用点一份步骤，不存在「单份快照冒充多步骤」
+                // 样本锚定链末执行），指纹消费画像认可形态集合（与 CI 同源）——链末判定
+                // 下每调用点一份步骤，不存在「单份快照冒充多步骤」
                 for (List<InteractionRecord> group : TaskAligner.invocationGroups(chain).values()) {
                     InteractionRecord anchor = group.get(group.size() - 1);
                     String key = CliSupport.invocationKeyOfRecord(anchor);
                     InvocationProfile profile = key == null ? null : repository.findInvocationByKey(key);
-                    if (profile == null || profile.getFingerprint() == null) {
+                    if (!CliSupport.hasBaseline(profile)) {
                         complete = false;
                         break;
                     }
                     BaselineStep step = new BaselineStep();
                     step.setInvocationKey(key);
                     step.setRecordId(anchor.getRecordId());
-                    step.setFingerprint(profile.getFingerprint());
+                    step.setFingerprints(profile.getFingerprints());
                     // 出厂偏离检测：链末行为与承诺的结构维不一致（或在途候选未裁决）
                     // → 计数入包并警告，任务照常入包（承诺仍良定义）。比较口径=结构维
-                    //（维度 1/2 + hasError）：判定尺的维度 3/4 是基线声明 × 当前答卷，
-                    // 候选侧声明集不进判定——规则配置漂移只动声明集时门禁判 PASS，偏离
-                    // 检测不得比门禁更严（否则警告指路的裁决对象根本不存在）
-                    if (profile.getCandidateFingerprint() != null
-                            || !structuralView(FingerprintExtractor.extract(anchor, rules, anchor.getInvocationId())).equals(structuralView(profile.getFingerprint()))) {
+                    //（维度 1/2 + hasError）的集合成员判定：判定尺的维度 3/4 是基线声明 ×
+                    // 当前答卷，候选侧声明集不进判定——规则配置漂移只动声明集时门禁判
+                    // PASS，偏离检测不得比门禁更严（否则警告指路的裁决对象根本不存在）
+                    DeterministicFingerprint structuralPeer = structuralMember(profile.getFingerprints(), FingerprintExtractor.extract(anchor, rules, anchor.getInvocationId()));
+                    if (profile.getCandidateFingerprint() != null || structuralPeer == null) {
                         unadjudicated++;
-                    } else if (selfViolatesDeclaredRules(step.getFingerprint(), anchor.getModelResponse())) {
+                    } else if (selfViolatesDeclaredRules(structuralPeer, anchor.getModelResponse())) {
                         // 自违守卫只在组末与画像一致时执行：未批准形态走偏离出口，
-                        // 不误诊为「基线自违」（approved 指纹 × 偏离响应的比对对象错位）
+                        // 不误诊为「基线自违」（approved 形态 × 偏离响应的比对对象错位）
                         complete = false;
                         selfViolating = true;
                         break;
@@ -265,5 +265,19 @@ public class BaselineExportCommand implements Callable<Integer> {
         view.setRegexPatterns(Collections.emptyList());
         view.setDeclaredBehaviors(Collections.emptySet());
         return view;
+    }
+
+    /**
+     * 结构维成员判定：链末证据与认可集合任一形态在结构维一致时返回该形态（集合序
+     * 最先命中者，供自违守卫消费其声明集），全不一致返回 null（出厂偏离）。
+     */
+    private static DeterministicFingerprint structuralMember(List<DeterministicFingerprint> shapes, DeterministicFingerprint evidence) {
+        DeterministicFingerprint evidenceView = structuralView(evidence);
+        for (DeterministicFingerprint shape : shapes) {
+            if (structuralView(shape).equals(evidenceView)) {
+                return shape;
+            }
+        }
+        return null;
     }
 }

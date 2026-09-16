@@ -2,6 +2,7 @@ package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.BaselineStep;
+import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.model.ToolCall;
@@ -12,8 +13,10 @@ import io.github.agentassert4j.result.TaskAlignment.StepKind;
 import io.github.agentassert4j.result.TaskRuleViolation;
 import io.github.agentassert4j.result.Verdict;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -351,7 +354,7 @@ class TaskAlignerTest {
             step.setInvocationKey(r.getInvocationKey());
             step.setInvocationId(r.getInvocationId());
             step.setRecordId(r.getRecordId());
-            step.setFingerprint(FingerprintExtractor.extract(r, null, r.getInvocationId()));
+            step.setFingerprints(Collections.singletonList(FingerprintExtractor.extract(r, null, r.getInvocationId())));
             steps.put(r.getInvocationKey(), Collections.singletonList(step));
         }
         return steps;
@@ -445,6 +448,81 @@ class TaskAlignerTest {
                 profileSteps(labeledRecord("g", 1000L, "order", "h1", "{\"v\":1}")), newChain, comparator, null);
 
         assertTrue(alignment.isPrefixDependent(), "前缀标记可能只在草稿记录上，必须看全链");
+    }
+
+    @Nested
+    @DisplayName("多形态基线判定 - 认可集合的链末成员判定")
+    class MultiShapeBaseline {
+
+        /**
+         * 构造带认可形态集合的基线步骤（同一调用点，responses 每个串产出一个形态）。
+         */
+        private Map<String, List<BaselineStep>> shapeSteps(String label, String hash, String... responses) {
+            List<DeterministicFingerprint> shapes = new ArrayList<>();
+            for (String response : responses) {
+                shapes.add(FingerprintExtractor.extract(labeledRecord("seed", 1000L, label, hash, response), null, label));
+            }
+            BaselineStep step = new BaselineStep();
+            step.setInvocationKey(labeledRecord("seed", 1000L, label, hash, responses[0]).getInvocationKey());
+            step.setInvocationId(label);
+            step.setFingerprints(shapes);
+            Map<String, List<BaselineStep>> steps = new LinkedHashMap<>();
+            steps.put(step.getInvocationKey(), Collections.singletonList(step));
+            return steps;
+        }
+
+        @Test
+        @DisplayName("跨链混形双绿：链末为集合任一认可形态 → PASS（共享调用点多形态的根治语义）")
+        void chainEndOfAnyApprovedShape_passes() {
+            Map<String, List<BaselineStep>> shapes = shapeSteps("order", "h1", "{\"v\":1}", "{\"v\":1,\"w\":{}}");
+
+            TaskAlignment endsWithA = TaskAligner.alignLatestPerInvocation(shapes,
+                    chain(labeledRecord("final-a", 5000L, "order", "h1", "{\"v\":1}")), comparator, null);
+            assertEquals(Verdict.PASS, endsWithA.getVerdict(), "链末=首形态 → PASS");
+
+            TaskAlignment endsWithB = TaskAligner.alignLatestPerInvocation(shapes,
+                    chain(labeledRecord("final-b", 5000L, "order", "h1", "{\"v\":1,\"w\":{}}")), comparator, null);
+            assertEquals(Verdict.PASS, endsWithB.getVerdict(), "链末=次形态（accept 追加认可）→ 同样 PASS");
+        }
+
+        @Test
+        @DisplayName("集合外形态 → CHANGED（成员判定不稀释检出力），差异挂最近似成员")
+        void chainEndOutsideSet_changed() {
+            Map<String, List<BaselineStep>> shapes = shapeSteps("order", "h1", "{\"v\":1}", "{\"v\":1,\"w\":{}}");
+
+            TaskAlignment alignment = TaskAligner.alignLatestPerInvocation(shapes,
+                    chain(labeledRecord("final-c", 5000L, "order", "h1", "{\"v\":1,\"w\":{},\"extra\":{}}")), comparator, null);
+
+            assertEquals(Verdict.CHANGED, alignment.getVerdict(), "任何未被认可的形态照常被抓");
+            assertNotNull(alignment.getSteps().get(0).getComparison(), "差异明细对最近似成员计算，信号不降级");
+        }
+
+        @Test
+        @DisplayName("命中序号注记：集合大小>1 时步骤携带命中形态的序号与集合大小")
+        void matchedShapePosition_recorded() {
+            Map<String, List<BaselineStep>> shapes = shapeSteps("order", "h1", "{\"v\":1}", "{\"v\":1,\"w\":{}}");
+
+            TaskAlignment alignment = TaskAligner.alignLatestPerInvocation(shapes,
+                    chain(labeledRecord("final-b", 5000L, "order", "h1", "{\"v\":1,\"w\":{}}")), comparator, null);
+
+            StepAlignment step = alignment.getSteps().get(0);
+            assertEquals(2, step.getBaselineShapeCount(), "集合大小注记");
+            assertEquals(2, step.getBaselineShapeIndex(), "命中第 2 形态（1 基）");
+        }
+
+        @Test
+        @DisplayName("空集合是上游契约违约 → 响亮失败（不伪装成行为差异）")
+        void emptyShapes_failLoudly() {
+            BaselineStep step = new BaselineStep();
+            step.setInvocationKey(labeledRecord("seed", 1000L, "order", "h1", "{}").getInvocationKey());
+            step.setInvocationId("order");
+            step.setFingerprints(new ArrayList<DeterministicFingerprint>());
+            Map<String, List<BaselineStep>> steps = new LinkedHashMap<>();
+            steps.put(step.getInvocationKey(), Collections.singletonList(step));
+
+            assertThrows(IllegalStateException.class, () -> TaskAligner.alignLatestPerInvocation(
+                    steps, chain(labeledRecord("final", 5000L, "order", "h1", "{\"v\":1}")), comparator, null));
+        }
     }
 
     @Test

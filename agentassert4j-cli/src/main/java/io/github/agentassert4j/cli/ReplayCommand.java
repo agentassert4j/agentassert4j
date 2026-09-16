@@ -43,8 +43,11 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--ci"}, description = "CI mode: judges the latest execution of each invocation in each task's latest chain against its approved baselines (earlier same-session records stay visible as notes, not gated); no auto-establish (refuses to judge when the chain-final invocations hold unestablished keys, exit 2); drift identity PASS is not collected (exit 0 with a warning); CHANGED findings still land candidates awaiting adjudication — no other governance writes")
     boolean ciMode;
 
-    @Option(names = {"--member-check"}, description = "Member determination: the latest chain of each task is checked against the most recent chains (bounded window) and passes if its behavior matches any of them; default pairing compares the latest chain against the previous one only")
+    @Option(names = {"--member-check"}, description = "Member determination: the latest chain of each task is checked against the most recent chains (bounded window) and passes if its behavior matches any of them; the member block carries the matched count (stability probe before accepting a new shape); default pairing compares the latest chain against the previous one only")
     boolean memberCheck;
+
+    @Option(names = {"--member-window"}, paramLabel = "N|all", description = "Member-check sample window: an integer >= 1, or 'all' to scan every historical chain (archaeology, not a stability signal). Default: 5, overridable via regression.memberSampleWindow in agentassert4j.json (finite integers only); this run's value wins (requires --member-check)")
+    String memberWindow;
 
     @Option(names = {"--re-drive"}, description = "Controlled re-drive (spends LLM calls): drift points by default, or every invocation in scope with --task/--invocation; re-drives recorded inputs with each point's latest archived template. Run --dry-run first for a cost estimate")
     boolean reDrive;
@@ -78,7 +81,33 @@ public class ReplayCommand implements Callable<Integer> {
         if (maxTotalTokens != null && maxTotalTokens < 1) {
             return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--max-total-tokens must be >= 1.", "Pass a positive token cap, or drop the flag for no cap.", "");
         }
+        if (memberWindow != null && !memberCheck) {
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--member-window requires --member-check.", "Add --member-check, or drop --member-window to keep the configured default window.", "agentassert4j replay --member-check");
+        }
+        // 解析阶梯的显式侧（配置默认在 config 加载后并入）；all 只接受单次调用
+        // 显式传入（配置默认只收有限整数）
+        Integer resolvedMemberWindow = null;
+        boolean memberAllHistory = false;
+        if (memberWindow != null) {
+            if (memberWindow.trim().equalsIgnoreCase("all")) {
+                memberAllHistory = true;
+            } else {
+                try {
+                    resolvedMemberWindow = Integer.valueOf(Integer.parseInt(memberWindow.trim()));
+                } catch (NumberFormatException e) {
+                    return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--member-window must be an integer >= 1 or 'all', got '" + memberWindow + "'.", "Pass a positive integer, 'all', or drop the flag.", "");
+                }
+                if (resolvedMemberWindow.intValue() < 1) {
+                    return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--member-window must be >= 1.", "Pass a positive integer, 'all', or drop the flag.", "");
+                }
+            }
+        }
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
+        // 解析阶梯的配置侧：显式缺省时取 regression.memberSampleWindow（有限整数，
+        // 配置面只收 N；all 仅单次调用显式传入）
+        if (memberWindow == null && config.getRegression().getMemberSampleWindow() != null) {
+            resolvedMemberWindow = config.getRegression().getMemberSampleWindow();
+        }
         StorageRepository repository = null;
         try {
             repository = CliSupport.openRepository(db, jsonOutput ? err : out);
@@ -98,7 +127,7 @@ public class ReplayCommand implements Callable<Integer> {
             CliSupport.warnUnknownBehaviors(rules, jsonOutput ? err : out);
             CliSupport.warnMalformedTaskRules(rules, jsonOutput ? err : out);
 
-            return new TaskReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(task, resolvedInvocation, ciMode, dryRun, memberCheck, reDrive, fullChain, maxTotalCalls, maxTotalTokens);
+            return new TaskReplayRunner(repository, client, comparator, rules, executionConfig, out, err, jsonOutput).run(task, resolvedInvocation, ciMode, dryRun, memberCheck, resolvedMemberWindow, memberAllHistory, reDrive, fullChain, maxTotalCalls, maxTotalTokens);
         } catch (CliFailureException e) {
             return CliSupport.fail(jsonOutput, out, err, e);
         } catch (RuntimeException e) {

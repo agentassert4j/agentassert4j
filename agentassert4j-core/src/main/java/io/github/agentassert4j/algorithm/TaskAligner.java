@@ -4,6 +4,7 @@ import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.InvocationRulesConfig.StepCount;
 import io.github.agentassert4j.config.InvocationRulesConfig.TaskRule;
 import io.github.agentassert4j.model.BaselineStep;
+import io.github.agentassert4j.model.DeterministicFingerprint;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.result.ComparisonResult;
@@ -75,7 +76,8 @@ public final class TaskAligner {
             step.setInvocationKey(record.getInvocationKey());
             step.setInvocationId(record.getInvocationId());
             step.setRecordId(record.getRecordId());
-            step.setFingerprint(FingerprintExtractor.extract(record, rules, record.getInvocationId()));
+            // 链路径两侧同为记录现场重提：基线步骤恒单元素集合（逐记录一步）
+            step.setFingerprints(Collections.singletonList(FingerprintExtractor.extract(record, rules, record.getInvocationId())));
             steps.computeIfAbsent(groupKey, k -> new ArrayList<>()).add(step);
         }
         return steps;
@@ -295,7 +297,7 @@ public final class TaskAligner {
         for (int i = 0; i < paired; i++) {
             BaselineStep b = baseSteps.get(i);
             InteractionRecord n = newRecords.get(i);
-            ComparisonResult comparison = comparator.compare(b.getFingerprint(), FingerprintExtractor.extract(n, rules, n.getInvocationId()), n.getModelResponse());
+            ComparisonResult comparison = compareAgainstShapes(step, b.getFingerprints(), FingerprintExtractor.extract(n, rules, n.getInvocationId()), n.getModelResponse(), comparator);
             compared++;
             if (firstComparison == null) {
                 firstComparison = comparison;
@@ -317,6 +319,42 @@ public final class TaskAligner {
         step.setComparison(firstComparison);
         step.setComparedPairs(compared);
         step.setSkippedPairs(0);
+    }
+
+    /**
+     * 形态集合判定：候选指纹与基线侧认可形态逐一对照——任一形态非 CHANGED 即该
+     * 配对 PASS（返回首个命中形态的对照结果，命中序在先者优先）；全不命中时返回
+     * 信号分最高的对照供差异明细（严格更高才替换，平局取集合序更早的形态），
+     * 确定性不因集合大小妥协。集合大小 >1 时把命中/最近似形态的序号与集合大小
+     * 记入步骤（多形态基线的报告注记数据源）；集合空缺是上游契约违约，就地响亮
+     * 失败——空集合配对会伪装成行为差异。
+     */
+    private static ComparisonResult compareAgainstShapes(StepAlignment step, List<DeterministicFingerprint> shapes, DeterministicFingerprint candidate, String response, DeterministicComparator comparator) {
+        if (shapes == null || shapes.isEmpty()) {
+            throw new IllegalStateException("Baseline step carries no approved shape for its invocation; re-establish the baseline before judging.");
+        }
+        ComparisonResult best = null;
+        int bestIndex = -1;
+        for (int i = 0; i < shapes.size(); i++) {
+            ComparisonResult comparison = comparator.compare(shapes.get(i), candidate, response);
+            if (comparison.getVerdict() != Verdict.CHANGED) {
+                recordShapePosition(step, shapes.size(), i);
+                return comparison;
+            }
+            if (best == null || comparison.getScore() > best.getScore()) {
+                best = comparison;
+                bestIndex = i;
+            }
+        }
+        recordShapePosition(step, shapes.size(), bestIndex);
+        return best;
+    }
+
+    private static void recordShapePosition(StepAlignment step, int count, int zeroBasedIndex) {
+        if (count > 1) {
+            step.setBaselineShapeCount(count);
+            step.setBaselineShapeIndex(zeroBasedIndex + 1);
+        }
     }
 
     private static Map<String, List<InteractionRecord>> groupByInvocation(List<InteractionRecord> records) {

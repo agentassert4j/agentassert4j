@@ -114,8 +114,9 @@ Alignment summary: PASS 3 | CHANGED 1 | missing 1 | added 1
 两条真实链按调用点配对——缺步骤 / 新增步骤 / 逐步结构 diff，文本措辞差异以低置信呈现给人看，
 **判定只看结构指纹**。整条命令零 API Key。想让框架用各点的新模板重放历史输入做受控复核，加
 `--re-drive`（花真实调用，先加 `--dry-run` 看报价，`--max-total-calls/--max-total-tokens` 预算池封顶）。
-LLM 逐轮执行本就有噪声：`replay --member-check` 让最新链只要与最近几条历史链（有界样本窗）
-任一行为匹配即通过，而非只与上一轮配对。
+LLM 逐轮执行本就有噪声：`replay --member-check` 让最新链与最近几条历史链（样本窗，默认 5，
+`--member-window N|all` 单次可调）逐一对照并给出命中计数（matched k of N——入集前的稳定性
+量尺），任一行为匹配即通过，而非只与上一轮配对。
 
 **5. 裁决，然后真实执行自动对齐**
 

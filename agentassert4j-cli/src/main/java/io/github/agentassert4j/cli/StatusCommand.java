@@ -191,7 +191,7 @@ public class StatusCommand implements Callable<Integer> {
             return;
         }
         out.println("      └ candidate diff (baseline → candidate):");
-        for (String line : FingerprintDiffRenderer.render(profile.getFingerprint(), profile.getCandidateFingerprint())) {
+        for (String line : FingerprintDiffRenderer.render(CliSupport.anchorShape(profile), profile.getCandidateFingerprint())) {
             out.println("        " + line);
         }
     }

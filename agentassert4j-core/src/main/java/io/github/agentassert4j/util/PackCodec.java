@@ -51,7 +51,8 @@ public final class PackCodec {
                 s.put("order", order++);
                 s.put("invocationKey", step.getInvocationKey());
                 s.put("recordId", step.getRecordId());
-                s.put("fingerprint", step.getFingerprint() == null ? new LinkedHashMap<>() : FingerprintJson.toMap(step.getFingerprint()));
+                // 形态集合数组载荷：首元素 = establish 种子锚，其余为 accept 追加的认可形态
+                s.put("fingerprint", FingerprintJson.shapesToMapList(step.getFingerprints()));
                 if (step.getSampleInput() != null) {
                     s.put("sampleInput", step.getSampleInput());
                 }
@@ -118,7 +119,7 @@ public final class PackCodec {
                         BaselineStep step = new BaselineStep();
                         step.setInvocationKey(asString(sm.get("invocationKey")));
                         step.setRecordId(asString(sm.get("recordId")));
-                        step.setFingerprint(sm.get("fingerprint") instanceof Map ? FingerprintJson.fromMap((Map<?, ?>) sm.get("fingerprint")) : null);
+                        step.setFingerprints(FingerprintJson.shapesFromMapList(sm.get("fingerprint")));
                         step.setSampleInput(asString(sm.get("sampleInput")));
                         step.setSampleOutput(asString(sm.get("sampleOutput")));
                         task.getSteps().add(step);

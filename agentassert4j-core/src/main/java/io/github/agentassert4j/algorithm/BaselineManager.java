@@ -4,6 +4,8 @@ import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.spi.StorageRepository;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -33,10 +35,12 @@ public class BaselineManager {
     }
 
     /**
-     * 批准新基线：候选 → 基线，旧基线按模板版本归档。
+     * 批准新形态入集：候选追加到认可集合尾部，旧集合按模板版本整体归档。
      *
-     * <p>归档与保存是两步独立写入，无跨表事务：保存失败经 StorageException 向上可见，
-     * 重试时归档去重守卫保证不产生重复归档行， accept 可安全重放。</p>
+     * <p>候选已在集合中时为幂等收尾——清候选、集合与版本不动（无新内容不产生
+     * 新治理版本，tag↔集合内容一一对应保持）。归档与保存是两步独立写入，无跨表
+     * 事务：保存失败经 StorageException 向上可见，重试时归档去重守卫保证不产生
+     * 重复归档行，accept 可安全重放。</p>
      *
      * <p>expectedActiveVersion 非空时执行乐观并发守卫：多宿主共享同一库时，
      * 判定/巡检所见与裁决写入之间活跃版本可能已被并行改写，不匹配即
@@ -61,19 +65,32 @@ public class BaselineManager {
             throw new IllegalStateException("No candidate to accept for invocation: " + invocationKey);
         }
 
-        // 旧基线归档（可回溯）；回滚恢复的旧基线已在归档中，跳过避免同 tag 重复行。
-        // 归档行携带的是旧基线自身获批时的审批人与语义版本，必须先于新审批信息写入前快照
+        List<DeterministicFingerprint> shapes = profile.getFingerprints();
+        if (shapes != null && shapes.contains(candidate)) {
+            // 幂等收尾：候选已是认可形态——集合与版本不动，只清候选（转正）
+            profile.setCandidateFingerprint(null);
+            profile.setBaselineStatus(BaselineStatus.BASELINE);
+            repository.saveInvocationProfile(profile);
+            recordGovernanceEvent(GovernanceVerb.ACCEPT, invocationKey, profile.getVersionTag(), approver, codeRef);
+            return;
+        }
+
+        // 旧集合整体归档（可回溯，快照=当时的完整认可面）；回滚恢复的旧基线已在
+        // 归档中，跳过避免同 tag 重复行。归档行携带的是旧基线自身获批时的审批人
+        // 与语义版本，必须先于新审批信息写入前快照
         archiveIfAbsent(invocationKey, profile);
 
         // 模板身份前移必须晚于归档：归档行的旧模板哈希是回滚的恢复源，
         // 顺序颠倒会把前移后的新身份归档进旧基线行
         recomputeTemplateHash(invocationKey, profile);
 
-        // 候选提升为基线
-        profile.setFingerprint(candidate);
+        // 候选形态追加到集合尾部（首元素恒为 establish 种子锚）
+        List<DeterministicFingerprint> promoted = new ArrayList<>(shapes != null ? shapes : Collections.<DeterministicFingerprint>emptyList());
+        promoted.add(candidate);
+        profile.setFingerprints(promoted);
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);
-        // 更新版本标签：跳过归档中已占用的 tag，保证 tag↔指纹一一对应（回滚后不产生同 tag 双指纹）
+        // 更新版本标签：跳过归档中已占用的 tag，保证 tag↔集合内容一一对应（回滚后不产生同 tag 双集合）
         profile.setVersionTag(nextAvailableVersionTag(invocationKey, profile.getVersionTag()));
         stampApproval(profile, approver, codeRef);
         repository.saveInvocationProfile(profile);
@@ -164,7 +181,7 @@ public class BaselineManager {
 
         // 恢复归档基线——审批人与语义版本随基线一起回退：
         // 活跃行的治理事实必须始终描述当前基线自身的获批历史
-        profile.setFingerprint(archived.getFingerprint());
+        profile.setFingerprints(archived.getFingerprints() != null ? new ArrayList<>(archived.getFingerprints()) : null);
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);
         profile.setVersionTag(versionTag);
@@ -186,13 +203,14 @@ public class BaselineManager {
      * 回归执行器在对比结果非 PASS 时调用——候选必须经持久层落库，
      * 否则 accept 在新进程中不可达（重放与裁决通常不在同一进程）。
      *
-     * <p>候选指纹与画像现役指纹一致时不登记（画像原样保留，含既未裁决的既有候选）——
-     * 与基线无差异的候选不携带裁决信息，登记只会制造「有候选却无差异」的困惑界面；
-     * 该形态出现在画像以较新记录建档（身份已前移）而对照链是更早记录的场合。</p>
+     * <p>候选指纹已属认可集合时不登记（画像原样保留，含既未裁决的既有候选）——
+     * 与基线集合无差异的候选不携带裁决信息，登记只会制造「有候选却无差异」的
+     * 困惑界面；该守卫按集合判定，accept 入集后链末回到任何已认可形态都不再
+     * 重复落候选（镜像候选 churn 的根治点）。</p>
      *
      * @param baseline  产生候选时所用基线交互记录（invocationKey 由解析器从记录重算）
      * @param candidate 回归测试提取的新指纹
-     * @return 是否实际登记（false = 与现役指纹一致未登记，或入参为空）
+     * @return 是否实际登记（false = 候选已属认可集合未登记，或入参为空）
      * @throws IllegalStateException 该调用点无画像时抛出（先录制建立基线）
      */
     public synchronized boolean recordCandidate(InteractionRecord baseline, DeterministicFingerprint candidate) {
@@ -205,7 +223,7 @@ public class BaselineManager {
         if (profile == null) {
             throw new IllegalStateException("Invocation profile not found: " + invocationKey);
         }
-        if (candidate.equals(profile.getFingerprint())) {
+        if (profile.getFingerprints() != null && profile.getFingerprints().contains(candidate)) {
             return false;
         }
 
@@ -261,7 +279,7 @@ public class BaselineManager {
         InvocationProfile grouping = InvocationResolver.resolve(record);
         InvocationProfile existing = repository.findInvocationByKey(grouping.getInvocationKey());
 
-        if (!overwrite && existing != null && existing.getFingerprint() != null) {
+        if (!overwrite && existing != null && existing.getFingerprints() != null && !existing.getFingerprints().isEmpty()) {
             // 已有基线，不覆盖
             return;
         }
@@ -273,14 +291,15 @@ public class BaselineManager {
 
         // 提取指纹作为基线
         // 规则口径必须与重放判定同源（三参提取注入维度 3-4）；
-        // 存档指纹是批准真相的定格投影：CI 基线对照经 BaselineSides.fromProfiles
+        // 存档指纹集合是批准真相的定格投影：CI 基线对照经 BaselineSides.fromProfiles
         // 以它为基线侧，候选侧（当前证据）永远现场重提
         DeterministicFingerprint fingerprint = FingerprintExtractor.extract(record, rules, record.getInvocationId());
 
         // 以解析器产出为基底：invocation_name/invocation_type 等展示列来自解析的派生结果，
         // 裸画像会违反存储层的 NOT NULL 契约
         InvocationProfile profile = existing != null ? existing : grouping;
-        profile.setFingerprint(fingerprint);
+        // 建档 = 认可当前形态，集合从单元素起步（force 重建是唯一的形态收缩途径：只留当前）
+        profile.setFingerprints(new ArrayList<>(Collections.singletonList(fingerprint)));
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);
         profile.setVersionTag(overwrite ? nextAvailableVersionTag(grouping.getInvocationKey(), profile.getVersionTag()) : "v1");
@@ -367,19 +386,19 @@ public class BaselineManager {
 
     /**
      * 归档当前基线为模板版本行——同 tag 已存在归档行时跳过（回滚恢复的基线本就在归档中）；
-     * 无版本标签的基线无回滚句柄，不归档。
+     * 无版本标签的基线无回滚句柄，不归档。归档行携带该版本获批时的完整形态集合快照。
      */
     private void archiveIfAbsent(String invocationKey, InvocationProfile profile) {
-        if (profile.getFingerprint() == null || profile.getVersionTag() == null) {
+        if (profile.getFingerprints() == null || profile.getFingerprints().isEmpty() || profile.getVersionTag() == null) {
             return;
         }
         if (repository.findArchivedVersion(invocationKey, profile.getVersionTag()) == null) {
-            // 归档行是该基线的完整快照：指纹、版本标签之外，模板哈希、语义版本与
+            // 归档行是该基线的完整快照：形态集合、版本标签之外，模板哈希、语义版本与
             // 审批事实一并留痕，回滚时据此恢复活跃行的治理信息
             ArchivedTemplateVersion archived = new ArchivedTemplateVersion();
             archived.setInvocationKey(invocationKey);
             archived.setTemplateHash(profile.getTemplateHash());
-            archived.setFingerprint(profile.getFingerprint());
+            archived.setFingerprints(new ArrayList<>(profile.getFingerprints()));
             archived.setVersionTag(profile.getVersionTag());
             archived.setAlgoVersion(profile.getAlgoVersion());
             archived.setApprovedBy(profile.getApprovedBy());
