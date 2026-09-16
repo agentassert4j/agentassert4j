@@ -187,6 +187,8 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
 
 ## 复核台账
 
+- 2026-09-15 Round 6 裁决批（D7）：audit 工具描述随 CLI 全量时间线化（「AI (actor agent:*) and human
+  writes on one timeline」——agent 透镜语义拆除，与 governance.md 契约 13/14 同批改写）。
 - 2026-09-15 Round 6 合并无裁决收口批：①member-check manifest 措辞改「no baseline writes;
   mismatch findings still land candidates awaiting adjudication」（原「no governance writes」技术上
   为真但让消费者误以为零副作用——候选登记经 renderAlignment 在任何模式的 CHANGED 步发生，CC 宿主

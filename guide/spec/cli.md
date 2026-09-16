@@ -99,8 +99,12 @@ schema、退出码契约、help 终态。
    读取侧缺省 0）；verify=链末判定同尺（本地链末执行 × 全链任务纪律，judgment 契约 11），
    verify-report/1 步骤加法字段 earlierRecords（组内草稿数，>0 才出现；不镜像 CI 的
    unapprovedEarlier——该概念属于裁决状态，verify 只读包世界）、dry-run 配对行
-   localSteps=judged 调用点数（与包侧步骤同尺）；record show=agentassert4j.record-view/1（按 recordId 回显 raw 双列与关键元数据，未命中 E-NO-DATA）；audit=agentassert4j.audit/1（agent 治理写
-   清单=治理事件时间线过滤：verb（六动词）、invocationKey、versionTag、actor、happenedAt
+   localSteps=judged 调用点数（与包侧步骤同尺）、verify 人读逐任务判定行
+   （`Per-task verdicts:` 每任务一行：任务键+结论+similarity+missing/added 计数+
+   首个差异摘要；coverage-gap 任务行 `no local chain`——快速分诊粒度，完整维度
+   明细留 --json/--report）；record show=agentassert4j.record-view/1（按 recordId 回显 raw 双列与关键元数据，未命中 E-NO-DATA）；audit=agentassert4j.audit/1（全量
+   治理时间线：AI 与人类的治理写同账本同清单，单一时间线按时间排序：verb（六动词）、
+   invocationKey、versionTag、actor、happenedAt
    恒在，codeRef 缺省省略；读动词恒 exit 0，空清单 writes=[]）；record 摄取（MCP record 工具）=
    agentassert4j.record/1（status=saved/duplicate、recordId、sessionId、invocationKey、
    protocol（实际采用的 wire 方言，含自动识别结果）、turnIndex、token 计数、hasToolCalls；
@@ -198,6 +202,7 @@ re-drive/missing/added。句式 sentence case；全角标点与「」不出现�
 
 | 日期 | 方式 | 发现 |
 |---|---|---|
+| 2026-09-15 | Round 6 裁决批（D7/D8-4）：audit 全量时间线 + verify 人读逐任务判定行 | ①audit 拆除 agent:* 过滤镜——全量治理时间线（AI 与人类写同账本，权威表述见 governance.md 同日台账行）；②verify 人读在汇总行前增 `Per-task verdicts:` 逐任务行（任务键+结论+similarity+missing/added+首个差异摘要；coverage-gap 任务出 `no local chain` 行）——快速分诊粒度，完整明细仍留 --json/--report，人读摘要/机器明细分工不变。【测试钉】VerifyExportTest 链末偏离钉与跨版本 PASS 钉各补人读行断言 |
 | 2026-09-15 | Round 6 合并无裁决收口批（观测性/文案统一，语义零变更）：种子披露 + 规则差异告警 + 空回滚文案统一 + 混形指路 | ①establish 建档/force 重建行披露 `(seed record <id>)`（种子=桶内规范序最早记录——用户当场可见批准的是哪条记录，此前只能经 status --diff 反推）；②establish exists 行遇「当前规则文件声明 ≠ 基线钉定声明」时告警并指路两条刷新路径（check→accept 无重播种 / --force 重播种）——规则刷新无幂等路径的静默缺口就此可见；③rollback 目标=活动版本时统一走「already the active baseline … use reject」话术（守卫前置到归档查找之前，BaselineManager.rollback 检查顺序调整，语义与信封不变）；④选择器零命中话术精确化（invocationKey 前缀须以 `invocation:` 起头）；⑤每次运行在 Config 行后披露 `Rules: <path> (N invocation declaration(s), M task declaration(s))`（规则生效正证行——此前只能靠「task rules do not apply」反推）；⑥ci-align 步骤 unapprovedEarlier 与 earlierRecords 成对恒出现（含 0）；⑦同调用点跨任务链一绿一红时人读混形指路注记（收敛=新会话全一形态链）；⑧export 警告补「包照写、计数在包内与 --json」口径句；⑨verify 报告 Content rules 行措辞改「pack rules section」（与步骤指纹内钉声明区分载体）。【测试钉】BaselineServiceTest 种子披露/规则告警三钉 + TaskReplayRunnerTest 生产播种后果钉（坏草稿在前的混合链建档即偏红——判定/播种不对称的现行为由钉如实钉住）+ 混形指路钉 + unapprovedEarlier=0 钉 + CommandSmokeTest 空回滚统一话术钉 |
 | 2026-09-14 | Round 5 裁决批（B3/B4）：审批溯源读面 + rollback 守卫与披露 | ①status/1 增 approvedBy/approvedAt（空串/null=未盖章）+ 人读 approver 列 + archived 列活动 tag *（机器通道不标记）；②rollback/1 增 candidateDiscarded、目标=活动版本即拒（指路 reject）；③MCP 治理动词 approver 必填的命令面影响=零（CLI 人读通道保留 OS 用户缺省）；权威表述见 governance.md 契约 11/12 与台账同日行 |
 | 2026-09-14 | Round 5 即修批（无裁决项）：status/1 缩域缺口反转修复 + establish selection 段 + dry-run ciAlign 计划 baselineVersions | ①C1 根因=JSON 路径用缩域画像算 uncovered/unestablished（人读路径的正确形态「全量+键集过滤」同文件已在，收敛两通道共用助手）；②旧钉 CommandSmokeTest「--json 通道恒全量」钉住反转产物且与 v3「两通道一致缩域」裁决相悖，同批改钉（测试错误改钉理由：其通过面正是缺陷本体）；③baseline-report/1 增 selection（requested/matched）——扇出披露对 structuredContent 机器通道可见（披露文本在 stderr，MCP structuredContent 只收 stdout 报告行） |

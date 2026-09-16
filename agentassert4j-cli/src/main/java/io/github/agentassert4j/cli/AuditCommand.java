@@ -12,25 +12,19 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 /**
- * audit 命令 — 列出 agent 驱动的治理写供人类回溯（读动词，恒退出码 0）。
+ * audit 命令 — 列出治理事件时间线供回溯（读动词，恒退出码 0）。
  *
  * <p>数据源 = 治理事件表（governance_events）的时间线：六个治理动词（accept/reject/
- * rollback/establish/force-rebuild/collect）发生时经 BaselineManager 单源落账，
- * 含 reject 与 rollback 这两个不在画像上留状态痕迹的动作。识别口径 = 操作主体以
- * {@code agent:} 前缀申报自己（机器写主体的显式申报约定，见 governance.md）；本命令
- * 是事件表的 agent 透镜，人类写经 status/report 的版本史可见、不进本清单。</p>
+ * rollback/establish/force-rebuild/collect）发生时经 BaselineManager 单源落账——
+ * 不分操作主体与通道，AI（MCP）与人类（CLI）的治理写同账本同时间线。actor 列
+ * 自解释主体：{@code agent:} 前缀是机器写的显式申报约定（见 governance.md），
+ * 其余为人类身份。</p>
  *
  * @author axy-yxa
  * @since 2026-09-08
  */
-@Command(name = "audit", aliases = {"au"}, description = "List agent-driven governance writes (actor marked agent:*) from the governance event timeline for human review", mixinStandardHelpOptions = true)
+@Command(name = "audit", aliases = {"au"}, description = "List governance writes (accept/reject/rollback/establish/force-rebuild/collect) from the governance event timeline for review — AI and human writes on one timeline", mixinStandardHelpOptions = true)
 public class AuditCommand implements Callable<Integer> {
-
-    /**
-     * agent 身份前缀——治理写主体「这是机器在操作」的显式申报约定（自由字符串，
-     * 框架不校验、不强制；申报让 audit 可区分机器写与人写）。
-     */
-    static final String AGENT_ACTOR_PREFIX = "agent:";
 
     // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
     PrintStream out = System.out;
@@ -50,23 +44,21 @@ public class AuditCommand implements Callable<Integer> {
             List<String> rows = new ArrayList<>();
             List<String> lines = new ArrayList<>();
             for (GovernanceEvent event : repository.findGovernanceEvents()) {
-                if (isAgentDriven(event.getActor())) {
-                    rows.add(rowJson(event));
-                    lines.add(humanLine(event));
-                }
+                rows.add(rowJson(event));
+                lines.add(humanLine(event));
             }
             if (rows.isEmpty()) {
                 if (jsonOutput) {
                     out.println("{\"schema\":\"" + ReportSchemas.AUDIT + "\",\"writes\":[]}");
                 } else {
-                    out.println("No agent-driven governance writes found.");
+                    out.println("No governance writes found.");
                 }
                 return 0;
             }
             if (jsonOutput) {
                 out.println("{\"schema\":\"" + ReportSchemas.AUDIT + "\",\"writes\":[" + String.join(",", rows) + "]}");
             } else {
-                out.println("Agent-driven governance writes (" + rows.size() + ", from the governance event timeline):");
+                out.println("Governance writes (" + rows.size() + ", from the governance event timeline):");
                 for (String line : lines) {
                     out.println(line);
                 }
@@ -81,10 +73,6 @@ public class AuditCommand implements Callable<Integer> {
                 repository.close();
             }
         }
-    }
-
-    static boolean isAgentDriven(String actor) {
-        return actor != null && actor.startsWith(AGENT_ACTOR_PREFIX);
     }
 
     private static String verbName(GovernanceEvent event) {

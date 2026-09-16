@@ -319,7 +319,8 @@ class JsonContractTest {
             assertTrue(audit.contains("[reject]") && audit.contains("[rollback]"), "reject/rollback 事件必须可见: " + audit);
             assertTrue(audit.contains("[accept]"), audit);
             assertTrue(audit.contains("v1"), audit);
-            assertFalse(audit.contains("[establish]"), "人类 actor（默认 OS 身份建档）不进 agent 透镜: " + audit);
+            assertTrue(audit.contains("Governance writes (4"), "全量时间线计数含人类写: " + audit);
+            assertTrue(audit.contains("[establish] queryOrder@hash-old v1 Administrator"), "人类 CLI 建档（默认 OS 身份）与 agent 写同账本可见: " + audit);
         }
 
         @Test
@@ -382,16 +383,21 @@ class JsonContractTest {
         }
 
         @Test
-        @DisplayName("audit 空清单：无 agent 治理写时报 no writes")
-        void audit_empty() throws Exception {
+        @DisplayName("audit 全量时间线：人类 CLI 治理写与 agent 写同账本；空库才空清单")
+        void audit_listsHumanWrites_alongsideAgentWrites() throws Exception {
+            assertEquals(0, execute("audit", "--db", dbPath, "--json"));
+            assertEquals("{\"schema\":\"agentassert4j.audit/1\",\"writes\":[]}", singleLineReport(), "无任何治理写时空清单");
+            assertEquals(0, execute("audit", "--db", dbPath));
+            assertTrue(stdout().contains("No governance writes found."), stdout());
+
             seedOneRecord();
             execute("baseline", "--db", dbPath);
 
             assertEquals(0, execute("audit", "--db", dbPath, "--json"));
-            assertEquals("{\"schema\":\"agentassert4j.audit/1\",\"writes\":[]}", singleLineReport());
-
+            assertTrue(singleLineReport().contains("\"verb\":\"establish\""), "人类 CLI 建档写必须进时间线: " + singleLineReport());
             assertEquals(0, execute("audit", "--db", dbPath));
-            assertTrue(stdout().contains("No agent-driven governance writes found."), stdout());
+            assertTrue(stdout().contains("Governance writes (1, from the governance event timeline)"), "人读全量计数: " + stdout());
+            assertTrue(stdout().contains("[establish]"), stdout());
         }
 
         @Test

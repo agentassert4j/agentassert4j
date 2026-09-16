@@ -125,6 +125,7 @@ public class VerifyRunner {
         List<String> uncovered = new ArrayList<>();
         List<String> unmatchedLocal = new ArrayList<>();
         List<String> taskJsons = jsonMode ? new ArrayList<>() : null;
+        List<String> taskLines = jsonMode ? null : new ArrayList<>();
         List<String> reportSections = new ArrayList<>();
         int pass = 0;
         int changed = 0;
@@ -135,6 +136,9 @@ public class VerifyRunner {
             TaskChain local = latestLocalChain(localChains, task.getTaskKey());
             if (local == null) {
                 uncovered.add(task.getTaskKey());
+                if (!jsonMode) {
+                    taskLines.add(task.getTaskKey() + ": no local chain (coverage gap)");
+                }
                 continue;
             }
             Map<String, List<BaselineStep>> baselineSteps = BaselineSides.fromPackSteps(task.getSteps());
@@ -157,8 +161,21 @@ public class VerifyRunner {
                 }
             }
             reportSections.add(renderTask(task, alignment, crossModel));
+            if (!jsonMode) {
+                taskLines.add(taskVerdictLine(task.getTaskKey(), alignment));
+            }
             if (jsonMode) {
                 taskJsons.add(taskJson(task, alignment));
+            }
+        }
+
+        // 逐任务判定行（人读快速分诊）：任务键 + 结论 + 差异信号；coverage-gap 行
+        // 在配对循环里就地生成。完整维度明细在 --json 与 --report 文件——人读摘要/
+        // 机器明细的通道分工不变
+        if (!jsonMode && !taskLines.isEmpty()) {
+            info("Per-task verdicts:");
+            for (String line : taskLines) {
+                info("  " + line);
             }
         }
 
@@ -421,6 +438,46 @@ public class VerifyRunner {
 
     private static String shortHash(String hash) {
         return hash == null || hash.length() <= 8 ? hash : hash.substring(0, 8);
+    }
+
+    /**
+     * 逐任务判定行：任务键 + 结论 + 信号分；CHANGED 时附首个差异步的维度摘要，
+     * missing/added 就近计数。信息量以「能否立刻分诊」为准，明细去 --report。
+     */
+    private static String taskVerdictLine(String taskKey, TaskAlignment alignment) {
+        StringBuilder sb = new StringBuilder(taskKey).append(": ").append(alignment.getVerdict() != null ? alignment.getVerdict() : "?");
+        double sum = 0;
+        int steps = 0;
+        String firstDiff = null;
+        int missingSteps = 0;
+        int addedSteps = 0;
+        for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
+            if (step.getKind() == TaskAlignment.StepKind.MISSING) {
+                missingSteps++;
+                continue;
+            }
+            if (step.getKind() == TaskAlignment.StepKind.ADDED) {
+                addedSteps++;
+                continue;
+            }
+            if (step.getComparison() != null) {
+                sum += step.getComparison().getScore();
+                steps++;
+                if (firstDiff == null && step.getVerdict() == Verdict.CHANGED) {
+                    firstDiff = step.getComparison().getSummary();
+                }
+            }
+        }
+        if (steps > 0) {
+            sb.append(" (similarity ").append(String.format(Locale.ROOT, "%.2f", sum / steps)).append(')');
+        }
+        if (missingSteps > 0 || addedSteps > 0) {
+            sb.append(" [missing ").append(missingSteps).append(", added ").append(addedSteps).append(']');
+        }
+        if (firstDiff != null) {
+            sb.append(" | ").append(firstDiff);
+        }
+        return sb.toString();
     }
 
     private String verifyJson(AcceptancePack pack, String digest, int pass, int changed, int missing, int added, int uncovered, int unmatchedLocal, boolean crossModel, List<String> taskJsons, List<String> uncoveredKeys, List<String> hints, String healthFragment) {

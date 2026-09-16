@@ -118,8 +118,11 @@ stateDiagram-v2
     + `statusHuman_archivedColumnMarksActive`
 12. **审批溯源读面**：approvedBy/approvedAt 随 status/1 每行回读（approvedBy 空串=未盖章、
     approvedAt null 字面量=未盖章），人读 status 表带 approver 列——「这个基线是谁批的、
-    何时批的」任何面可答；audit 仍是 agent 透镜（人类写不进清单，其溯源经 status/report
-    版本史可见）。【测试钉】`JsonContractTest.statusJson_exposesApprover`
+    何时批的」任何面可答；audit 列**全量治理时间线**（AI 与人类的治理写同账本同清单，
+    actor 列自解释主体——`agent:` 前缀=机器写申报约定，其余=人类身份；裁决=统一记录，
+    记录层本就经 BaselineManager 单源不分主体，展示层不再过滤）。【测试钉】
+    `JsonContractTest.statusJson_exposesApprover` + `rejectAndRollback_eventsListedInAudit`
+    + `audit_listsHumanWrites_alongsideAgentWrites`
 
 ## 行为矩阵
 
@@ -166,23 +169,23 @@ agent 权限配置为完全访问时，授权决策已经在 harness 层完成�
 
 1. **身份申报约定**：agent 驱动治理写时以 `--approver agent:<名称>` 申报机器身份
    （自由字符串约定，框架不校验具体值；人类用默认 OS 身份），approvedBy 原样留痕。
-   申报是诚实用法的一部分——不申报则审计视角下与人写无异，这正是申报制的本意。
+   申报让时间线的 actor 列自解释主体（`agent:` 前缀=机器写，其余=人类）。
    **MCP 通道 approver 必填**（establish/accept/reject/rollback 的 schema required +
-   服务端 E-USAGE 守卫）：机器调用方总能申报身份，缺席时 CLI 侧静默落到 OS 用户缺省
-   会让机器写从 agent 透镜中消失（人机分账的例外窗口）；CLI 人读通道保留 OS 用户
-   缺省不变。【测试钉】`McpServerTest`（schema required 四工具 + 缺 approver E-USAGE）
-2. **audit 命令**：治理事件表（governance_events）时间线的 agent 透镜——列出操作
-   主体以 `agent:` 前缀申报的全部治理事件（六动词含 reject/rollback，行结构
-   {verb, invocationKey, versionTag, actor, codeRef, happenedAt}），人读与 audit/1 双
-   通道，读动词恒 exit 0。事件在治理写发生时经 BaselineManager 单源落账（幂等早退与
-   前置失败不落事件；COLLECT 的 actor 恒 null——框架自动化，不进 agent 透镜）；事件
-   写失败按 L1 退化（记 SEVERE 不阻断治理写本体）。人类写经 status/report 的版本史可
-   见，不进本清单（审批溯源读面见契约 12）。
+   服务端 E-USAGE 守卫）：机器调用方总能申报身份，缺席申报会让机器写伪装成人类身份、
+   破坏人机分账的可读性；CLI 人读通道保留 OS 用户缺省不变。【测试钉】`McpServerTest`
+   （schema required 四工具 + 缺 approver E-USAGE）
+2. **audit 命令**：治理事件表（governance_events）时间线的**全量清单**——六动词
+   （含 reject/rollback）的全部治理事件，AI 与人类的写同账本同清单、单一时间线按
+   happenedAt 排序（行结构 {verb, invocationKey, versionTag, actor, codeRef,
+   happenedAt}），人读与 audit/1 双通道，读动词恒 exit 0。事件在治理写发生时经
+   BaselineManager 单源落账（幂等早退与前置失败不落事件；COLLECT 的 actor 恒
+   null——框架自动化动作）；事件写失败按 L1 退化（记 SEVERE 不阻断治理写本体）。
 
 ## 复核台账
 
 | 日期 | 方式 | 发现 |
 |---|---|---|
+| 2026-09-15 | Round 6 裁决批（D7）：audit 全量时间线（统一人机账本） | 维护者裁决「无论 AI 还是人类都应记录，分层统一处理不加分枝」——白盒证实记录层本就经 BaselineManager 单源落账全 actor（含 CLI 人类写），缺口仅在 audit 展示层的 agent:* 过滤镜。拆除过滤镜：audit/1 与人读清单改为全量时间线（actor 列自解释主体），`agent:` 前缀保留为机器写申报约定（身份申报契约 13 同步改写）；JsonContractTest 旧钉「人类 actor 不进 agent 透镜」随裁决翻转改钉（测试错误改钉理由：其断言面即被裁决取代的旧设计）。【测试钉】audit_listsHumanWrites_alongsideAgentWrites + rejectAndRollback_eventsListedInAudit（改钉） |
 | 2026-09-15 | Round 6 合并无裁决收口批：rollback 空回滚守卫前置 | BaselineManager.rollback 的检查顺序调整：目标=活动版本守卫提至归档查找之前——此前目标为「活动且不在归档列表」的版本时（首建未替换的画像），用户先撞「No archived template version found」而非带 reject 指路的空回滚话术，双宿主 Round 6 实测同一拒绝两档措辞。状态机契约不变（两种失败均 IllegalStateException/E-NO-DATA）；CLI 侧 RollbackCommand.ensureVersionExists 同批放行目标=活动版本给 manager 守卫承接。【测试钉】CommandSmokeTest.rollback_toActiveRefusesWithRejectPointer |
 | 2026-09-14 | Round 5 裁决批（B3/B4）：审批溯源读面 + MCP approver 必填 + rollback 守卫与披露 | ①B3 根因=approvedBy/approvedAt 一直在画像与归档行上（establish/accept/rollback 三路径盖章），读面从不渲染——audit 类注释承诺的「人类写经 status/report 可见」落空，本批兑现（契约 12）；逃逸窗口根因=MCP approver 可选 + CLI OS 用户缺省回退，机器写无痕混入人类名单，schema required + 服务端 E-USAGE 双守卫关闭；②B4 根因=nextAvailableVersionTag 只防新 accept 复用 tag，回滚恢复出的 tag 本就在归档（可逆性代价），活动 tag 因此可被 rollback 命中且顺带清候选——拒绝空回滚（指路 reject）+ candidateDiscarded 回执披露 + 归档列 * 标记（契约 11）；③MCP approver 必填是发布前收紧（对省略客户端破坏性，pre-1.0 免费） |
 

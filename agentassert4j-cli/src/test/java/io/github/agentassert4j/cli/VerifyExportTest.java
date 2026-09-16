@@ -252,6 +252,8 @@ class VerifyExportTest {
         int exit = runner.run(json, digest, null, reportPath.toString(), false);
         assertEquals(1, exit, "verify 判本地链末（异形态）vs 包承诺（批准形态）→ CHANGED（与 CI 同尺）: " + output);
         assertTrue(output.toString().contains("CHANGED 1"), output.toString());
+        assertTrue(output.toString().contains("Per-task verdicts:"), "人读逐任务判定行在场: " + output);
+        assertTrue(output.toString().contains("查订单: CHANGED (similarity"), "判定行带任务键+结论+信号分（快速分诊粒度）: " + output);
         String markdown = new String(Files.readAllBytes(reportPath), StandardCharsets.UTF_8);
         assertTrue(markdown.contains("judging the latest execution per invocation; 1 earlier record(s)"), "markdown 镜像 N 面注记: " + markdown);
 
@@ -541,7 +543,8 @@ class VerifyExportTest {
 
             assertEquals(0, exit, "同标签跨版本且行为一致 → PASS（版本差异不作缺/新增）: " + output);
             assertTrue(output.toString().contains("PASS 1"), output.toString());
-            // 逐步明细（含版本注记）在验收报告文件；stdout 只有汇总行
+            assertTrue(output.toString().contains("Per-task verdicts:"), "PASS 侧同样出逐任务判定行: " + output);
+            // 逐步明细（含版本注记）在验收报告文件；stdout 给逐任务判定行 + 汇总行
             String markdown = new String(Files.readAllBytes(reportPath), StandardCharsets.UTF_8);
             assertTrue(markdown.contains("cross-version pair h-old→h-new"), "报告必须带版本注记: " + markdown);
 
