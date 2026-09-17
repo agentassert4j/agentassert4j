@@ -1,10 +1,6 @@
 package io.github.agentassert4j.cli;
 
-import io.github.agentassert4j.algorithm.BaselineManager;
-import io.github.agentassert4j.algorithm.ComparatorConfig;
-import io.github.agentassert4j.algorithm.DeterministicComparator;
-import io.github.agentassert4j.algorithm.FingerprintExtractor;
-import io.github.agentassert4j.algorithm.JudgmentSemantics;
+import io.github.agentassert4j.algorithm.*;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.TestExecutionConfig;
 import io.github.agentassert4j.model.*;
@@ -16,14 +12,15 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.io.PrintStream;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -65,8 +62,7 @@ class TaskReplayRunnerTest {
      * 多余交互记录污染重驱计数。
      */
     private void saveTemplateText(String hash, String templateText) {
-        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempDir.resolve("task.db").toString());
-             PreparedStatement ps = conn.prepareStatement("INSERT OR IGNORE INTO prompt_texts (prompt_hash, prompt_text, created_at) VALUES (?,?,?)")) {
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempDir.resolve("task.db").toString()); PreparedStatement ps = conn.prepareStatement("INSERT OR IGNORE INTO prompt_texts (prompt_hash, prompt_text, created_at) VALUES (?,?,?)")) {
             ps.setString(1, hash);
             ps.setString(2, templateText);
             ps.setLong(3, 1L);
@@ -1002,6 +998,126 @@ class TaskReplayRunnerTest {
             assertEquals(0, runner.run(null, null, false, true, false, null, false, true, false, null, null));
             assertEquals(0, stubClient.calls);
             assertTrue(output.toString().contains("Re-drive plan"));
+        }
+
+        @Test
+        @DisplayName("等价钉：dry-run 重驱计划=真跑目标（计划/真跑/报价三面同源）")
+        void reDrive_dryRunPlanEqualsRealTargets() {
+            seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
+
+            TaskReplayRunner planRunner = newRunner(true);
+            output.reset();
+            assertEquals(0, planRunner.run(null, null, false, true, false, null, false, true, false, null, null));
+            String planLine = reportLine(output.toString(), "\"mode\":\"re-drive-dry-run\"");
+            assertNotNull(planLine, "干跑必须出重驱计划行: " + output);
+            List<String> planned = stringFieldValues(planLine, "recordId");
+
+            TaskReplayRunner humanPlanRunner = newRunner(false);
+            output.reset();
+            assertEquals(0, humanPlanRunner.run(null, null, false, true, false, null, false, true, false, null, null));
+            String estimateDry = estimateLine(output.toString());
+            assertNotNull(estimateDry, "人读干跑必须出报价行: " + output);
+
+            TaskReplayRunner realRunner = newRunner(true);
+            output.reset();
+            assertEquals(0, realRunner.run(null, null, false, false, false, null, false, true, false, null, null));
+            String driveLine = reportLine(output.toString(), "\"mode\":\"task-re-drive\"");
+            assertNotNull(driveLine, "真跑必须出重驱报告行: " + output);
+            List<String> driven = stringFieldValues(driveLine, "recordId");
+            Matcher callsUsed = Pattern.compile("\"callsUsed\":(\\d+)").matcher(driveLine);
+            assertTrue(callsUsed.find(), "真跑摘要必须带 callsUsed: " + driveLine);
+
+            assertEquals(planned, driven, "dry-run 计划与真跑目标必须同集合同顺序（单一目标解析源）");
+            assertEquals(String.valueOf(planned.size()), callsUsed.group(1), "真跑实际调用数与计划目标数同源");
+            assertTrue(estimateDry.contains(planned.size() + " API call"), "报价按同一目标集计数: " + estimateDry);
+        }
+
+        private List<String> stringFieldValues(String line, String field) {
+            List<String> values = new ArrayList<>();
+            Matcher matcher = Pattern.compile("\"" + field + "\"\\s*:\\s*\"([^\"]*)\"").matcher(line);
+            while (matcher.find()) {
+                values.add(matcher.group(1));
+            }
+            return values;
+        }
+
+        private String estimateLine(String text) {
+            for (String line : text.split("\r?\n")) {
+                if (line.contains("API call") && line.contains("Estimated")) {
+                    return line.trim();
+                }
+            }
+            return null;
+        }
+    }
+
+    @Nested
+    @DisplayName("等价钉：自动建档豁免的两条入口路径")
+    class AutoEstablishEquivalence {
+
+        private void saveInto(SqliteStorageRepository repo, String recordId, String label, String templateHash, long ts) {
+            InteractionRecord r = new InteractionRecord();
+            r.setRecordId(recordId);
+            r.setSessionId("session-1");
+            r.setTimestamp(ts);
+            r.setSeq(ts);
+            r.setInvocationId(label);
+            r.setInvocationKey("invocation:" + label + ":" + templateHash);
+            r.setTemplateHash(templateHash);
+            r.setUserInput("查订单");
+            r.setTurnIndex(0);
+            r.setModelResponse("{\"result\":\"ok\"}");
+            r.setToolCalls(new ArrayList<>());
+            r.setHasToolCalls(false);
+            repo.saveInteractionIfAbsent(r);
+        }
+
+        private void seedSharedFixture(SqliteStorageRepository repo) {
+            saveInto(repo, "rec-orig", "splitAgent", "hash-old", 1000L);
+            new BaselineService(repo).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", null, false, null, null, null, null);
+            saveInto(repo, "rec-draft", "splitAgent", "hash-new", 2000L);
+            saveInto(repo, "rec-fresh", "freshAgent", "hash-f", 3000L);
+        }
+
+        private Set<String> establishedKeys(SqliteStorageRepository repo) {
+            Set<String> keys = new LinkedHashSet<>();
+            for (InvocationProfile profile : repo.findAllInvocations()) {
+                if (CliSupport.hasBaseline(profile)) {
+                    keys.add(profile.getInvocationKey());
+                }
+            }
+            return keys;
+        }
+
+        @Test
+        @DisplayName("bare baseline 扫建与 bare replay 自动建档：裂键豁免与建档集合逐键一致")
+        void autoEstablishSweep_pathsAgreeOnSplitKeys() {
+            SqliteStorageRepository sweepRepo = new SqliteStorageRepository(tempDir.resolve("eq-sweep.db").toString());
+            SqliteStorageRepository replayRepo = new SqliteStorageRepository(tempDir.resolve("eq-replay.db").toString());
+            try {
+                sweepRepo.initialize();
+                replayRepo.initialize();
+                seedSharedFixture(sweepRepo);
+                seedSharedFixture(replayRepo);
+
+                ByteArrayOutputStream sweepOut = new ByteArrayOutputStream();
+                int swept = new BaselineService(sweepRepo).establishMissing(new PrintStream(sweepOut, true), "tester", null, false, null, null, null, null);
+                assertEquals(1, swept, "扫建面只收编全新键: " + sweepOut);
+
+                TaskReplayRunner replayRunner = new TaskReplayRunner(replayRepo, new StubLlmClient(), new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), false);
+                replayRunner.run(null, null, false, false, false, null, false, false, false, null, null);
+
+                Set<String> bySweep = establishedKeys(sweepRepo);
+                Set<String> byReplay = establishedKeys(replayRepo);
+                assertEquals(bySweep, byReplay, "两条自动建档路径产出的建档集合必须逐键一致");
+                assertTrue(bySweep.contains("invocation:freshAgent:hash-f"), "全新键两侧都收编: " + bySweep);
+                assertFalse(bySweep.contains("invocation:splitAgent:hash-new"), "裂键草稿两侧都不收编: " + bySweep);
+                assertTrue(sweepOut.toString().contains("Split key "), "扫建面披露裂键: " + sweepOut);
+                assertTrue(output.toString().contains("Split key "), "replay 面披露裂键（同源文案）: " + output);
+            } finally {
+                sweepRepo.close();
+                replayRepo.close();
+            }
         }
     }
 
