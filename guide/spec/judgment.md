@@ -134,6 +134,7 @@
 
 | 日期 | 方式 | 发现 |
 |---|---|---|
+| 2026-09-16 | Round 7 验收 Z#2 判明（设计确认，非缺陷） | invocation 级声明（requiredKeywords/behaviors）在判定侧生效的前提=**已被钉入基线指纹**（establish/accept 时刻的 extract 注入）；事后建规则文件不回溯钉定——「基线声明、当前答卷」+ F-A 同尺（候选侧声明集不进判定）的共同结论。黑盒可发现性缓解=Rules 正证行补绑定语义；刷新路径仍是 R6-D3 两条（check→accept 带 current rules / --force 重播种）。验收误判教训：先建档后建规则的探针链路全通但判定全空，黑盒须先用 doctor/status --diff 或 force 重建确认钉定态再下「通道失明」结论 |
 | 2026-09-16 | D2 结构批随批 | 基线真源=**认可形态有序集合**（establish 单元素起步/accept 尾部追加/rollback 整集恢复）；判定 = 链末指纹 ∈ 集合——任一命中 PASS，全不命中 CHANGED 且差异对最近似成员计算（平局取集合序更早，确定性不妥协）；候选守卫从「≠现役」推广为「∉集合」（镜像候选 churn 根治）；集合大小>1 时步骤注记 shapeIndex/shapeCount。【测试钉】`TaskAlignerTest.MultiShapeBaseline` + `BaselineManagerTest.MultiShapeSemantics` + `TaskReplayRunnerTest` D2 工作流钉 |
 | 2026-09-15 | B2 批（验收包钉批准真相）：包路径基线侧真源从「导出时刻现场提取的最新链快照」改为「画像活跃指纹定格（与 CI 同源）」 | ①候选侧同尺：verify 换轨 alignLatestPerInvocation（与 CI 同一判定入口，任务纪律/前缀看全链，dry-run 配对行 localSteps 改 judged 计数）；②出厂偏离检测：组末提取与批准指纹的结构维不一致（同判定尺口径——仅声明集漂移不计偏离）或在途候选 → PackTask.unadjudicatedSteps（恒序列化，缺字段读取缺省 0）+ export-report/1 总计数 + 人读警告；③自违检查重排：只在组末与画像一致时执行（未批准形态走偏离出口，不误诊自违）；④步骤=调用点（组末证据锚；stepCount 值语义=调用点数、servedModels 只取组末记录）；⑤包语义单向门（§12.4）：开发期 det-v1 不 bump |
 | 2026-09-15 | B1 批（链末判定）：契约 11 候选侧定义分形——CI 路径候选侧 = 链末执行（草稿进透明层） | 判定域按路径分形（链/成员=全记录，CI=链末）；replay 契约 19 同批重写；判定语义单向门开发期承接（det-v1 不 bump）；B2 批将把包路径候选侧同尺化为链末执行（见 B1B2 实施方案） |

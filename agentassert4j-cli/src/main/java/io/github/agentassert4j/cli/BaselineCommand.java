@@ -73,7 +73,7 @@ public class BaselineCommand implements Callable<Integer> {
                     if (invocations.length() > 0) {
                         invocations.append(",");
                     }
-                    invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(outcome.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(outcome.getLabel())).append("\",\"action\":\"").append(outcome.getAction()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(outcome.getVersionTag() != null ? outcome.getVersionTag() : "")).append("\",\"codeRef\":\"").append(RecursiveJsonParser.escape(outcome.getCodeRef() != null ? outcome.getCodeRef() : "")).append("\"}");
+                    invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(outcome.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(outcome.getLabel())).append("\",\"action\":\"").append(outcome.getAction()).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(outcome.getVersionTag() != null ? outcome.getVersionTag() : "")).append("\",\"codeRef\":\"").append(RecursiveJsonParser.escape(outcome.getCodeRef() != null ? outcome.getCodeRef() : "")).append("\",\"seedRecordId\":\"").append(RecursiveJsonParser.escape(outcome.getSeedRecordId() != null ? outcome.getSeedRecordId() : "")).append("\"}");
                 }
                 // 选择段进报告本体：扇出披露只走诊断流时，机器消费方（MCP 的
                 // structuredContent 只收 stdout 报告行）感知不到「一次调用覆盖了几个键」

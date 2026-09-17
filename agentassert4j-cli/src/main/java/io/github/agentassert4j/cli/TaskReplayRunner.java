@@ -190,10 +190,9 @@ public class TaskReplayRunner {
                 return failWithEnvelopeOnly(CliErrorCode.E_GUARD, "Refusing to judge in --ci mode: the scope holds " + CliSupport.plural(unbaselined.size(), "unbaselined invocation") + " (full list on stderr).", "Run `agentassert4j baseline` locally to review and establish baselines, then retry; or drop --ci to auto-establish.", "agentassert4j baseline");
             }
         } else {
-            // 自动建档（开发态自动化，报告可见）：只收编全新键——裂键（同标签已有
-            // 兄弟建档）是模板身份变更的治理信号，自动收编会吞掉并行方的 Hung 观察，
-            // 等显式 establish（与 --ci 的裂键处置同一条规则）
-            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), null, false, freshAutoEstablishKeys(), rules, null, null);
+            // 自动建档（开发态自动化，报告可见）：裂键豁免与披露由 establishMissing
+            // 扫建路径单源处理（同标签已有兄弟建档的新键只披露不收编）
+            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), null, false, null, rules, null, null);
         }
 
         // 判定语义守卫：任何画像由其他版本（含未标记历史行）批准即拒绝判定——
@@ -253,7 +252,7 @@ public class TaskReplayRunner {
                 }
             }
         }
-        DispositionTotals dispositions = disposeDrifts(drift, scopedKeys, ciMode, outcomes, manager, totals.pendingCandidates);
+        DispositionTotals dispositions = disposeDrifts(drift, scopedKeys, ciMode, outcomes, manager, totals.pendingCandidates, repository);
 
         // 第 3 层 受控重驱（显式开启）：逐点以最新归档模板重驱录制输入
         ReDriveTotals reDriveTotals = new ReDriveTotals();
@@ -615,7 +614,7 @@ public class TaskReplayRunner {
      */
     private static String alignmentBasisLine(boolean ciMode, boolean memberCheck) {
         if (ciMode && !memberCheck) {
-            return "Alignment basis: --ci judges the latest execution of each invocation in each task's latest chain against its approved baseline fingerprints (the profiles promoted by establish/accept).";
+            return "Alignment basis: --ci judges the latest execution of each invocation in each task's latest chain against its approved shape set (establish seeds the set, accept extends it).";
         }
         if (memberCheck) {
             return "Alignment basis: member check judges the latest chain against the most recent chains of the same task (bounded sample window).";
@@ -656,7 +655,7 @@ public class TaskReplayRunner {
         alignment.setNewChainTime(newChain.firstTimestamp());
 
         String versionNote = newChain.getRecords().size() == 1 ? "" : " (" + CliSupport.plural(judged.getRecords().size(), "invocation") + " judged from " + newChain.getRecords().size() + " records)";
-        info("Task \"" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "\": baseline comparison (--ci) — new chain (session " + newChain.getSessionId() + ")" + versionNote + " against approved baselines" + (baselineTime != null ? " (latest approval on this chain's invocations)" : ""));
+        info("Task \"" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "\": baseline comparison (--ci) — new chain (session " + newChain.getSessionId() + ")" + versionNote + " against the approved shape set" + (baselineTime != null ? " (latest approval on this chain's invocations)" : ""));
         if (rules != null && rules.hasTaskRules() && !newChain.isDeclared()) {
             info("Note: task has no declared taskKey; task rules do not apply.");
         }
@@ -679,50 +678,6 @@ public class TaskReplayRunner {
             }
         }
         return String.join(", ", names);
-    }
-
-    /**
-     * 自动建档的收编键集 = 全新键（该声明标签下没有任何已建档兄弟）。裂键——同
-     * 标签已有其他键建档——就地披露并排除：模板身份变更等显式 establish，自动
-     * 路径收编会让共享库他方的 Hung 信号凭空消失。
-     */
-    private Set<String> freshAutoEstablishKeys() {
-        Map<String, List<InteractionRecord>> buckets = CliSupport.invocationBuckets(repository);
-        Map<String, InvocationProfile> profiles = new LinkedHashMap<>();
-        for (String key : buckets.keySet()) {
-            profiles.put(key, repository.findInvocationByKey(key));
-        }
-        Map<String, String> baselinedKeyByLabel = new LinkedHashMap<>();
-        for (Map.Entry<String, List<InteractionRecord>> bucket : buckets.entrySet()) {
-            String label = firstDeclaredLabel(bucket.getValue());
-            if (!label.isEmpty() && CliSupport.hasBaseline(profiles.get(bucket.getKey()))) {
-                baselinedKeyByLabel.putIfAbsent(label, bucket.getKey());
-            }
-        }
-        Set<String> freshKeys = new LinkedHashSet<>();
-        for (Map.Entry<String, List<InteractionRecord>> bucket : buckets.entrySet()) {
-            String key = bucket.getKey();
-            String label = firstDeclaredLabel(bucket.getValue());
-            if (!CliSupport.hasBaseline(profiles.get(key)) && !label.isEmpty() && baselinedKeyByLabel.containsKey(label)) {
-                info("Split key " + CliSupport.displayKey(key) + " under label '" + label + "' left for explicit establish (a sibling invocation of this label already has a baseline; automatic establish only covers fresh invocations).");
-                info("  Run `agentassert4j baseline --invocation " + key + "` to establish it deliberately.");
-                continue;
-            }
-            freshKeys.add(key);
-        }
-        return freshKeys;
-    }
-
-    /**
-     * 桶内首个非空声明标签（无标签形状组返回空串，不参与裂键判定）。
-     */
-    private static String firstDeclaredLabel(List<InteractionRecord> records) {
-        for (InteractionRecord record : records) {
-            if (record.getInvocationId() != null && !record.getInvocationId().isEmpty()) {
-                return record.getInvocationId();
-            }
-        }
-        return "";
     }
 
     /**
@@ -936,9 +891,9 @@ public class TaskReplayRunner {
                         boolean registered = manager.recordCandidate(changedRecord, FingerprintExtractor.extract(changedRecord, rules, changedRecord.getInvocationId()));
                         if (registered) {
                             totals.pendingCandidates++;
-                            info("Candidate registered: " + CliSupport.displayKey(step.getInvocationKey()) + " (behavior change awaiting adjudication; accept promotes to baseline, reject discards).");
+                            info("Candidate registered: " + CliSupport.displayKey(step.getInvocationKey()) + " (behavior change awaiting adjudication; accept adds the shape to the approved set, reject discards).");
                         } else {
-                            info("Difference holds against the paired chain, but the record fingerprint equals the profile's active baseline; no candidate registered (nothing to adjudicate).");
+                            info("Difference holds against the paired chain, but the record fingerprint is already in the invocation's approved shape set; no candidate registered (nothing to adjudicate).");
                         }
                     }
                 } else {
@@ -1161,14 +1116,14 @@ public class TaskReplayRunner {
      * 漂移点族别，行为变化（无模板漂移）落候选时不进漂移域计数——机器消费方
      * 据此分清「本轮落了几个候选」与「几个漂移点被判 CHANGED」。
      */
-    private DispositionTotals disposeDrifts(DriftReport drift, Set<String> scopedKeys, boolean ciMode, Map<String, StepOutcome> outcomes, BaselineManager manager, int candidatesRegistered) {
+    private DispositionTotals disposeDrifts(DriftReport drift, Set<String> scopedKeys, boolean ciMode, Map<String, StepOutcome> outcomes, BaselineManager manager, int candidatesRegistered, StorageRepository repository) {
         DispositionTotals totals = new DispositionTotals();
         List<String> dispositionJsons = jsonMode ? new ArrayList<>() : null;
         for (DriftReport.DriftPoint point : drift.getSameKeyDrifts()) {
-            disposeOne(point, DriftKind.SAME_KEY, scopedKeys, ciMode, outcomes, manager, totals, dispositionJsons);
+            disposeOne(point, DriftKind.SAME_KEY, scopedKeys, ciMode, outcomes, manager, totals, dispositionJsons, repository);
         }
         for (DriftReport.DriftPoint point : drift.getLabelSplits()) {
-            disposeOne(point, DriftKind.LABEL_SPLIT, scopedKeys, ciMode, outcomes, manager, totals, dispositionJsons);
+            disposeOne(point, DriftKind.LABEL_SPLIT, scopedKeys, ciMode, outcomes, manager, totals, dispositionJsons, repository);
         }
         if (jsonMode) {
             StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.DRIFT_DISPOSITION.wireName() + "\"");
@@ -1180,7 +1135,7 @@ public class TaskReplayRunner {
         return totals;
     }
 
-    private void disposeOne(DriftReport.DriftPoint point, DriftKind kind, Set<String> scopedKeys, boolean ciMode, Map<String, StepOutcome> outcomes, BaselineManager manager, DispositionTotals totals, List<String> dispositionJsons) {
+    private void disposeOne(DriftReport.DriftPoint point, DriftKind kind, Set<String> scopedKeys, boolean ciMode, Map<String, StepOutcome> outcomes, BaselineManager manager, DispositionTotals totals, List<String> dispositionJsons, StorageRepository repository) {
         String key = point.getInvocationKey();
         String shown = CliSupport.displayKey(key);
         StepOutcome outcome = outcomes.get(key);
@@ -1210,11 +1165,17 @@ public class TaskReplayRunner {
             totals.uncollected++;
             action = "uncollected";
             info("Identity not collected (--ci writes no governance state): " + shown + " (exit stays 0; run replay in dev mode to collect)");
+        } else if (kind == DriftKind.LABEL_SPLIT && !CliSupport.hasBaseline(repository.findInvocationByKey(key))) {
+            // 裂键且新键无画像：自动建档只收编全新键（同标签已有兄弟建档），这里没有
+            // 可收编的身份——按证据缺口挂起，不得谎称建档或计入 collected
+            totals.hung++;
+            action = "hung";
+            info("Hung: " + shown + " (split key awaits explicit establish: `baseline --invocation " + key + "`)");
         } else {
             boolean advanced = manager.advanceTemplateIdentity(key);
             totals.collected++;
             action = "collected";
-            info("Collected: " + shown + " (no behavioral difference; " + (kind == DriftKind.LABEL_SPLIT && !advanced ? "new profile established with the latest template as identity" : "template identity " + shortHash(point.getProfileTemplateHash()) + " → " + shortHash(point.getLatestTemplateHash())) + ")");
+            info("Collected: " + shown + " (no behavioral difference; template identity " + shortHash(point.getProfileTemplateHash()) + " → " + shortHash(point.getLatestTemplateHash()) + ")");
         }
         if (dispositionJsons != null) {
             dispositionJsons.add("{\"invocationKey\":\"" + RecursiveJsonParser.escape(key) + "\",\"kind\":\"" + kind.wireName() + "\",\"action\":\"" + action + "\"}");
@@ -1477,13 +1438,13 @@ public class TaskReplayRunner {
         }
         boolean ciAlign = ciMode && !memberCheck;
         if (ciAlign) {
-            info("Judgment basis: the latest execution of each invocation in each task's latest chain against its approved baselines (--ci).");
+            info("Judgment basis: the latest execution of each invocation in each task's latest chain against its approved shape set (--ci).");
         }
         for (List<TaskChain> group : groups) {
             TaskChain latest = group.get(group.size() - 1);
             if (ciAlign) {
                 TaskChain judged = TaskAligner.trimToLatestPerInvocation(latest);
-                info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": latest chain session " + latest.getSessionId() + " (" + CliSupport.plural(judged.getRecords().size(), "invocation") + " judged from " + latest.getRecords().size() + " records) against approved baselines. Task rules: " + ruleApplicability(latest));
+                info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": latest chain session " + latest.getSessionId() + " (" + CliSupport.plural(judged.getRecords().size(), "invocation") + " judged from " + latest.getRecords().size() + " records) against the approved shape set. Task rules: " + ruleApplicability(latest));
             } else if (group.size() == 1) {
                 info("  Task \"" + CliSupport.abbreviateText(latest.getRequestText(), 60) + "\": single chain (" + CliSupport.plural(latest.getRecords().size(), "step") + ") → first recording self-establishes the baseline.");
             } else if (memberCheck) {

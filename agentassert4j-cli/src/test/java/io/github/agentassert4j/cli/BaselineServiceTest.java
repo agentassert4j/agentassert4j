@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -196,6 +197,44 @@ class BaselineServiceTest {
         output.reset();
         service.establishMissing(out, "tester", null, false, null, null, null, null);
         assertFalse(output.toString().contains("rules declarations"), "无规则文件（合法删除态）不得告警: " + output);
+    }
+
+    @Test
+    @DisplayName("扫建路径裂键豁免：同标签兄弟已建档时草稿新键只披露不收编；定向 --invocation 照建")
+    void sweepSkipsSplitKeys_targetedEstablishes() {
+        PrintStream out = new PrintStream(output, true);
+        // 原键（模板 hash-old）先行建档；同标签换模板（hash-new）落成草稿新键
+        repository.saveInteractionIfAbsent(makeRecord("rec-orig", "splitAgent", 1000L, "{\"v\":1}"));
+        new BaselineService(repository).establishMissing(out, "tester", null, false, null, null, null, null);
+        output.reset();
+
+        InteractionRecord draft = makeRecord("rec-draft", "splitAgent", 2000L, "{\"v\":1}");
+        draft.setTemplateHash("hash-new");
+        repository.saveInteractionIfAbsent(draft);
+
+        // 扫建：草稿新键只披露不收编
+        int established = new BaselineService(repository).establishMissing(out, "tester", null, false, null, null, null, null);
+        assertEquals(0, established, "裂键不进扫建");
+        assertTrue(output.toString().contains("Split key "), "裂键披露在场: " + output);
+        assertTrue(output.toString().contains("left for explicit establish"), "指路口径与 replay 同源: " + output);
+        assertNull(repository.findInvocationByKey(invocationKeyOfDraft()), "扫建不产出新键画像");
+
+        // 定向 --invocation：逐键显式意图，照建
+        output.reset();
+        Set<String> targeted = Collections.singleton(
+                InvocationResolver.resolve(repository.findByInvocationId("splitAgent").get(1)).getInvocationKey());
+        int targetedEstablished = new BaselineService(repository).establishMissing(out, "tester", null, false, targeted, null, null, null);
+        assertEquals(1, targetedEstablished, "定向显式建档不受豁免影响");
+        assertNotNull(repository.findInvocationByKey(targeted.iterator().next()));
+    }
+
+    private String invocationKeyOfDraft() {
+        for (InteractionRecord record : repository.findByInvocationId("splitAgent")) {
+            if ("hash-new".equals(record.getTemplateHash())) {
+                return InvocationResolver.resolve(record).getInvocationKey();
+            }
+        }
+        return null;
     }
 
     private InteractionRecord makeRecord(String recordId, String invocationId, long timestamp, String response) {

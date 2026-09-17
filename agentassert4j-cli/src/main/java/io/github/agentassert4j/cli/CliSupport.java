@@ -81,7 +81,7 @@ final class CliSupport {
         String rulesPath = ConfigLoader.resolveRulesPath();
         if (rulesPath != null) {
             InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
-            out.println("Rules: " + rulesPath + " (" + rules.getDeclaredInvocationIds().size() + " invocation declaration(s), " + rules.getDeclaredTaskKeys().size() + " task declaration(s))");
+            out.println("Rules: " + rulesPath + " (" + rules.getDeclaredInvocationIds().size() + " invocation declaration(s), " + rules.getDeclaredTaskKeys().size() + " task declaration(s); declarations bind into baselines when pinned at establish/accept)");
         }
         String url = dbOverride != null ? dbOverride : config.getStorage().getUrl();
         StorageRepository repository = new SqliteStorageRepository(expandHome(url));

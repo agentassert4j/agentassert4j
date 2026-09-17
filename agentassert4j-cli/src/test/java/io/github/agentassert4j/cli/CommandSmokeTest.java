@@ -224,7 +224,7 @@ class CommandSmokeTest {
 
         assertEquals(0, exit);
         String text = out.toString();
-        assertTrue(text.contains("Unestablished invocations (run `agentassert4j baseline` to collect)"), "新版本应进未建档段: " + text);
+        assertTrue(text.contains("Unestablished invocations (run `agentassert4j baseline` to establish; split keys need `baseline --invocation <key>`)"), "新版本应进未建档段且指路含裂键豁免: " + text);
         assertTrue(text.contains("queryOrder@hash-new"), "未建档版本以短形列出: " + text);
     }
 

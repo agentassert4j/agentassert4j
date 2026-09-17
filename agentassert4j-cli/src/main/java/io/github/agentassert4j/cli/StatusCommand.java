@@ -325,7 +325,7 @@ public class StatusCommand implements Callable<Integer> {
             out.println("Unestablished invocations: none.");
             return;
         }
-        out.println("Unestablished invocations (run `agentassert4j baseline` to collect):");
+        out.println("Unestablished invocations (run `agentassert4j baseline` to establish; split keys need `baseline --invocation <key>`):");
         for (InvocationFootprint footprint : unestablished) {
             out.println("  " + CliSupport.displayKey(footprint.invocationKey) + " (" + (footprint.label != null ? footprint.label : "no label") + ") " + CliSupport.plural(footprint.recordCount, "record") + ", latest session " + footprint.lastSessionId);
         }

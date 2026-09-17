@@ -131,6 +131,7 @@ class McpServerTest {
             String instructions = String.valueOf(result.get("instructions"));
             assertTrue(instructions.contains("latest chain"), "判定基准句必须在场: " + instructions);
             assertTrue(instructions.contains("(establish, accept, reject, rollback)"), "治理动词枚举必须含 rollback（四动词均必填 approver）: " + instructions);
+            assertTrue(instructions.contains("approved shape set"), "基线口径=认可形态集合（陈旧进程诊断标志）: " + instructions);
         }
 
         @Test
@@ -268,6 +269,19 @@ class McpServerTest {
             for (McpTool tool : McpTools.tools(dbPath)) {
                 Map<String, Object> schema = parseObject(tool.inputSchemaJson);
                 assertEquals("object", schema.get("type"), tool.name);
+            }
+        }
+
+        @Test
+        @DisplayName("check 工具带 task/invocation 缩域参数（共享库下他方在建键不冻结我方门禁的缓解面）")
+        void checkSchema_exposesScopeParams() {
+            for (McpTool tool : McpTools.tools(dbPath)) {
+                if (!tool.name.equals("check")) {
+                    continue;
+                }
+                Map<String, Object> schema = parseObject(tool.inputSchemaJson);
+                @SuppressWarnings("unchecked") Map<String, Object> properties = (Map<String, Object>) schema.get("properties");
+                assertTrue(properties.containsKey("task") && properties.containsKey("invocation"), "check 缩域参数必须在场: " + properties.keySet());
             }
         }
 

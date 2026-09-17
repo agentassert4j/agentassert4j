@@ -422,6 +422,32 @@ class TaskReplayRunnerTest {
         }
 
         @Test
+        @DisplayName("裂键处置：新键无画像但拿到 PASS outcome（双链逐记录配对）→ Hung（awaits explicit establish），不再谎称建档或计入 collected")
+        void labelSplit_noProfile_disposedAsHung() {
+            // 两条链同构（草稿=hash-new 在前、链末=hash-old 在后），裸模式逐记录配对
+            // 让 hash-new 键拿到 PASS outcome——正是 CC 宿主 V6③ 的实测路径
+            saveRecord("z-a1", "session-z1", 100L, "查订单", "order", "hash-new", "{\"result\":\"ok\"}", null);
+            saveRecord("z-b1", "session-z1", 200L, "查订单", "order", "hash-old", "{\"result\":\"ok\"}", null);
+            establishedProfile("invocation:order:hash-old", "order", "hash-old");
+            saveRecord("z-a2", "session-z2", 300L, "查订单", "order", "hash-new", "{\"result\":\"ok\"}", null);
+            saveRecord("z-b2", "session-z2", 400L, "查订单", "order", "hash-old", "{\"result\":\"ok\"}", null);
+
+            runner.run(null, null, false, false, false, null, false, false, false, null, null);
+
+            String out = output.toString();
+            assertTrue(out.contains("split key awaits explicit establish"), "处置行讲明裂键等显式建档: " + out);
+            assertFalse(out.contains("new profile established"), "D6 后不得再谎称建档: " + out);
+
+            TaskReplayRunner jsonRunner = newRunner(true);
+            output.reset();
+            jsonRunner.run(null, null, false, false, false, null, false, false, false, null, null);
+            String line = reportLine(output.toString(), "\"mode\":\"drift-disposition\"");
+            assertNotNull(line);
+            assertTrue(line.contains("\"action\":\"hung\""), "JSON 处置=hung: " + line);
+            assertFalse(line.contains("\"action\":\"collected\""), "collected 计数不得被裂键污染: " + line);
+        }
+
+        @Test
         @DisplayName("标签裂键 → 裸重放不再自动收编：注记指路显式 establish，新档不落")
         void labelSplit_bareReplay_leavesForExplicitEstablish() {
             saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-old", "{\"result\":\"ok\"}", null);

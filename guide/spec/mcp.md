@@ -187,6 +187,11 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
 
 ## 复核台账
 
+- 2026-09-16 Round 7 验收修复批：①check 工具 schema 增 task/invocation 缩域参数（与 diff
+  对齐；共享库下对端未建档键会 E-GUARD 冻结全库门禁，缩域是既定缓解面——D5）；②establish
+  的 baseline-report/1 逐键明细增 `seedRecordId`（created/reestablished 携带；CLI 面种子披露
+  的跨面对齐——D1）。透传钉 = McpServerTest checkSchema_exposesScopeParams / JsonContractTest
+  seedRecordId。
 - 2026-09-16 D2/D1 结构批：check/diff/accept 描述与 instructions 换「approved shape set」口径
   （accept = 追加入集，previous set 归档为版本快照）；member-check 工具增 memberWindow 参数
   （integer 或字符串 "all"，与 CLI --member-window 同一解析路径），描述补稳定性量尺定位

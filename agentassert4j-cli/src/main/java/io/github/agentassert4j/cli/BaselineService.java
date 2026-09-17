@@ -13,7 +13,9 @@ import io.github.agentassert4j.spi.StorageRepository;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -58,8 +60,15 @@ public class BaselineService {
     public int establishMissing(PrintStream out, String actor, String codeRef, boolean force, Set<String> invocationKeys, InvocationRulesConfig rules, List<BaselineOutcome> outcomes, String expectedVersion) {
         BaselineManager manager = new BaselineManager(repository);
         int established = 0;
+        // 全库扫建路径的裂键豁免：同标签已有兄弟建档的未建档键只披露不收编——裂键是
+        // 模板身份变更的治理信号，等显式 establish（与 replay 自动建档同一条规则）；
+        // 定向 --invocation 是逐键的显式意图，不过滤
+        Set<String> sweepSkipped = invocationKeys == null ? splitKeysSkippedBySweep(out) : Collections.<String>emptySet();
 
         for (Map.Entry<String, List<InteractionRecord>> bucket : CliSupport.invocationBuckets(repository).entrySet()) {
+            if (sweepSkipped.contains(bucket.getKey())) {
+                continue;
+            }
             String invocationKey = bucket.getKey();
             List<InteractionRecord> records = bucket.getValue();
             if (invocationKeys != null && !invocationKeys.contains(invocationKey)) {
@@ -72,7 +81,7 @@ public class BaselineService {
                 out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + existing.getVersionTag() + ")" + refSuffix(existing.getCodeRef()));
                 warnRulesDrift(out, firstBusinessLabel(records), existing.getFingerprints(), rules);
                 if (outcomes != null) {
-                    outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "exists", existing.getVersionTag(), existing.getCodeRef()));
+                    outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "exists", existing.getVersionTag(), existing.getCodeRef(), null));
                 }
                 continue;
             }
@@ -107,7 +116,7 @@ public class BaselineService {
             if (!CliSupport.hasBaseline(created)) {
                 out.println("  " + displayLabel(records) + invocationKey + ": baseline establishment failed (storage error; see storage logs)");
                 if (outcomes != null) {
-                    outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "failed", null, null));
+                    outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "failed", null, null, null));
                 }
                 continue;
             }
@@ -117,11 +126,38 @@ public class BaselineService {
             repository.saveInvocationProfile(created);
             out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "baseline re-established under the current judgment semantics (" + created.getVersionTag() + ")" : "baseline established") + " (seed record " + seed.getRecordId() + ")" + refSuffix(created.getCodeRef()));
             if (outcomes != null) {
-                outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), hadBaseline ? "reestablished" : "created", created.getVersionTag(), created.getCodeRef()));
+                outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), hadBaseline ? "reestablished" : "created", created.getVersionTag(), created.getCodeRef(), seed.getRecordId()));
             }
             warnSeedRuleViolations(out, seed, rules);
         }
         return established;
+    }
+
+    /**
+     * 全库扫建路径的裂键豁免检测：同标签下已有兄弟键建档、而本键尚无基线 → 判为裂键，
+     * 就地披露并从扫建中排除（定向 --invocation 不经过本方法）。返回被排除的键集。
+     */
+    private Set<String> splitKeysSkippedBySweep(PrintStream out) {
+        Map<String, List<InteractionRecord>> buckets = CliSupport.invocationBuckets(repository);
+        Map<String, String> labelByBucket = new LinkedHashMap<>();
+        Set<String> labelsWithBaseline = new HashSet<>();
+        for (Map.Entry<String, List<InteractionRecord>> bucket : buckets.entrySet()) {
+            String label = firstBusinessLabel(bucket.getValue());
+            labelByBucket.put(bucket.getKey(), label);
+            if (!label.isEmpty() && CliSupport.hasBaseline(repository.findInvocationByKey(bucket.getKey()))) {
+                labelsWithBaseline.add(label);
+            }
+        }
+        Set<String> skipped = new LinkedHashSet<>();
+        for (String key : buckets.keySet()) {
+            String label = labelByBucket.get(key);
+            if (!label.isEmpty() && labelsWithBaseline.contains(label) && !CliSupport.hasBaseline(repository.findInvocationByKey(key))) {
+                skipped.add(key);
+                out.println("  Split key " + CliSupport.displayKey(key) + " under label '" + label + "' left for explicit establish (a sibling invocation of this label already has a baseline; automatic establish only covers fresh invocations).");
+                out.println("    Run `baseline --invocation " + key + "` to establish it deliberately.");
+            }
+        }
+        return skipped;
     }
 
     /**
@@ -256,13 +292,19 @@ public class BaselineService {
         private final String action;
         private final String versionTag;
         private final String codeRef;
+        private final String seedRecordId;
 
-        BaselineOutcome(String invocationKey, String label, String action, String versionTag, String codeRef) {
+        BaselineOutcome(String invocationKey, String label, String action, String versionTag, String codeRef, String seedRecordId) {
             this.invocationKey = invocationKey;
             this.label = label;
             this.action = action;
             this.versionTag = versionTag;
             this.codeRef = codeRef;
+            this.seedRecordId = seedRecordId;
+        }
+
+        String getSeedRecordId() {
+            return seedRecordId;
         }
 
         String getInvocationKey() {

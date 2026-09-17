@@ -184,6 +184,7 @@ class JsonContractTest {
             assertTrue(report.contains("\"action\":\"created\""), report);
             assertTrue(report.contains("\"versionTag\":\"v1\""), report);
             assertTrue(report.contains("\"codeRef\":\"abc1234\""), report);
+            assertTrue(report.contains("\"seedRecordId\":\"rec-1\""), "created 行披露种子 recordId（MCP 面同源消费）: " + report);
             assertFalse(stdout().contains("baseline established"), "建档过程行是人类输出，不得污染 stdout: " + stdout());
             assertFalse(stdout().contains("Config: "), "配置披露在 --json 模式改走 stderr: " + stdout());
             assertTrue(stderr().contains("Config: "), "配置披露改走 stderr 供排障: " + stderr());

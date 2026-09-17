@@ -11,13 +11,13 @@ import picocli.CommandLine.Option;
  * @author axy-yxa
  * @since 2026-08-27
  */
-@Command(name = "accept", aliases = {"a"}, description = "Promote the candidate fingerprint to baseline (previous baseline archived, restorable via rollback)", mixinStandardHelpOptions = true)
+@Command(name = "accept", aliases = {"a"}, description = "Add the candidate shape to the invocation's approved shape set (the previous set is archived as a version snapshot, restorable via rollback)", mixinStandardHelpOptions = true)
 public class AcceptCommand extends AdjudicateCommand {
 
     @Option(names = {"--approver"}, description = "Approver identity recorded with the baseline and its archives (defaults to the current OS user)")
     String approver;
 
-    @Option(names = {"--ref"}, description = "Code reference (e.g. a git commit) the promoted baseline corresponds to; declared, not verified")
+    @Option(names = {"--ref"}, description = "Code reference (e.g. a git commit) the accepted shape corresponds to; declared, not verified")
     String codeRef;
 
     @Override
