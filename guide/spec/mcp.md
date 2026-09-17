@@ -80,9 +80,9 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
    链末判定将对照的键集存在未建档调用点时拒绝判定（E-GUARD 包络 + 指向 establish 的
    nextAction；早于链末的同会话草稿键不构成拒绝理由，见 replay 契约 19 守卫窄化）；
    漂移身份不收编；CHANGED 发现照落候选等裁决（除候选登记外无治理写）。check/diff 的
-   判定基准 = 每任务最新链的逐调用点链末执行对照其已批准基线（画像活跃指纹；check/diff
-   的 manifest description 与 initialize instructions 双轨声明该基准——accept 提升链末
-   形态后同链复检即绿，并注明本地 `replay` 不带 --ci 时为最新链 vs 次新链差分）。member-check 工具虽以 ciMode 语义运行，仍走链采样
+   判定基准 = 每任务最新链的逐调用点链末执行对照其已批准基线（画像认可形态集合；check/diff
+   的 manifest description 与 initialize instructions 双轨声明该基准——accept 把链末形态加入
+   认可集合后同链复检即绿，并注明本地 `replay` 不带 --ci 时为最新链 vs 次新链差分）。member-check 工具虽以 ciMode 语义运行，仍走链采样
    （最新链对最近链窗口），不受基线对照改写；其成员块字段形态——命中携带
    matchedSession、未命中携带 closestSession 与 closestScore——在 manifest description
    同句声明（可发现性，字段语义本身见 replay.md 契约 13）；member-check 的 manifest 同句如实声明
@@ -260,3 +260,4 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
 - 2026-09-09 三协议批①：契约 8 由「OpenAI 方言 only、多协议后续批」改写为三协议摄取
   （protocol 参数 + 自动识别 + protocol 字段回显）；映射矩阵与归一表移 recording.md
   「wire 方言归一」节单源承载。归一器实现与测试同批交付（McpRecordIngestionTest）。
+| 2026-09-17 | D1 术语清扫（维护者「质量优先」裁决） | 契约基准句「画像活跃指纹」→「画像认可形态集合」+「accept 提升链末形态」→「把链末形态加入认可集合」（与 D2 后代码及用户文档词表同形）；台账历史行保留原词 |

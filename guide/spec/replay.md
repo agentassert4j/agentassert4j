@@ -18,7 +18,7 @@ BaselineManager）、指纹与判定口径（judgment）、CLI 命令面注册�
 | 语义状态 | 真源 | 派生链 |
 |---|---|---|
 | 任务链 | interactions 交互历史（派生视图，无实体表） | 按 session 分组、请求文本切片；metadata 显式 `taskKey` 声明优先于 userInput 派生（损坏 metadata 按未声明退化，不中断） |
-| 对齐结果 | 基线侧 × 新链：本地模式 = 基线链记录（两侧现场重提）；CI 对照 = 画像活跃指纹定格投影（BaselineSides.fromProfiles）× 新链的链末执行视图（trimToLatestPerInvocation） | TaskAligner 配对——本地 = 逐记录全量配对；CI = alignLatestPerInvocation 链末判定（配对域只看链末记录，任务纪律与前缀看全链）；候选侧恒现场重提，基线侧按路径三源投影（链记录/验收包/画像，见 judgment 契约 11） |
+| 对齐结果 | 基线侧 × 新链：本地模式 = 基线链记录（两侧现场重提）；CI 对照 = 画像认可形态集合定格投影（BaselineSides.fromProfiles）× 新链的链末执行视图（trimToLatestPerInvocation） | TaskAligner 配对——本地 = 逐记录全量配对；CI = alignLatestPerInvocation 链末判定（配对域只看链末记录，任务纪律与前缀看全链）；候选侧恒现场重提，基线侧按路径三源投影（链记录/验收包/画像，见 judgment 契约 11） |
 | 漂移处置输入 | DriftReport（只读巡检产出） | 引擎按对齐步结果驱动三出口（出口语义归 governance） |
 | 图 | interactions 全量重建的内存邻接表 | 每次重放现场重建；快照落盘供 status 巡检（dry-run 不落盘） |
 
@@ -142,14 +142,14 @@ member-check 无论 ci 与否走链采样）→ 漂移处置 → 退出码复合
     `AnthropicMessagesClientTest` / `OpenAiResponsesClientTest`（组装逐字段钉/帧守卫敌对/
     协议头）+ `ThreeProtocolDeepSeekIntegrationTest`（三协议 DeepSeek 真机连通，key 门控）
 19. **CI 基线对照（--ci 的判定基准 = 链末判定）**：`--ci` 的对齐 = 缩域内每任务（含单链）
-    **最新链逐调用点的链末执行**对照其调用点画像活跃指纹（BaselineSides.fromProfiles 喂
+    **最新链逐调用点的链末执行**对照其调用点画像认可形态集合（BaselineSides.fromProfiles 喂
     裁剪后记录集的单源投影，候选侧恒现场重提；TaskAligner.alignLatestPerInvocation 单入口
     ——配对域只看每调用点组内最新记录，任务纪律与前缀标记看全链）——不是链对链。每调用点
-    一份步骤（paired = 调用点数），surplus/skipped 在 ci 面结构性消失；accept 提升链末形态
-    指纹后**同链复检即 PASS**（判定对象不随 accept 翻转，无镜像候选摆振；同键稳定多形态的
+    一份步骤（paired = 调用点数），surplus/skipped 在 ci 面结构性消失；accept 把链末形态加入
+    认可集合后**同链复检即 PASS**（判定对象不随 accept 翻转，无镜像候选摆振；同键稳定多形态的
     合法调用点首次 accept 后收敛恒绿）。早于链末的同会话记录是迭代草稿：不进判定，经透明层
     可见——步骤 `earlierRecords`=N（core 就近写入），`unapprovedEarlier`=M（逐早记录按自己
-    的键对自己的画像判「提取指纹 ≠ 活跃指纹或无画像」，CLI 判定注入，不冒用被判记录的
+    的键对自己的画像判「提取指纹 ∉ 认可形态集合或无画像」，CLI 判定注入，不冒用被判记录的
     画像），人读注记与 stability 视图双通道，不挡门。未建档守卫窄化到每链链末键集：草稿键
     未建档不再是判定的拒绝理由（同标签异哈希草稿 = 标签裂键，由漂移层挂起披露为证据缺口）。
     member-check 无论 ci 与否保持链采样（实现钉 `ciMode && !memberCheck` 分支）。渲染：
@@ -176,7 +176,7 @@ member-check 无论 ci 与否走链采样）→ 漂移处置 → 退出码复合
 | bare、全库无录制 | exit 2 + 录制引导（stderr in --json；机器包络见 cli 契约 7） |
 | bare、全部任务单链 | 逐任务自建基线，exit 0；声明任务有规则违例时首航即批改 exit 1（契约 14） |
 | bare、任务两链同构 | 对齐 PASS；无漂移出 0；有漂移按处置出口 |
-| `--ci`、基线齐备 | 逐任务（含单链）最新链的逐调用点链末执行 vs 画像活跃指纹；行为一致 exit 0，差异 exit 1 落候选；accept 后同链复检 exit 0（契约 19） |
+| `--ci`、基线齐备 | 逐任务（含单链）最新链的逐调用点链末执行 vs 画像认可形态集合（链末指纹∈集合即 PASS）；行为一致 exit 0，差异 exit 1 落候选；accept 后同链复检 exit 0（契约 19） |
 | `--ci`、同会话坏→好（试错后回归） | 链末=好 → 判定 PASS + 草稿透明层注记（earlierRecords/unapprovedEarlier；不挡门，契约 19 边界③） |
 | `--ci`、草稿键未建档 | 判定照常（守卫只看链末键集，不再拒绝）；同标签异哈希草稿=裂键由漂移层挂起披露（exit 1 证据缺口） |
 | `--ci`、行为变更后 accept | 下一轮 CI 对新基线 PASS → exit 0（裁决对门禁生效） |
@@ -228,3 +228,4 @@ member-check 无论 ci 与否走链采样）→ 漂移处置 → 退出码复合
 | 2026-09-08 | 优化包批实施（同日）：成员判定/首航批改/优化信号/稳定性注记/出口健康 | 契约 13–17 新增；mode 词表增 member-check 与 exit-health；对齐渲染抽出 renderAlignment 共用（task-align/member-check 两模式同源）；D9（evaluateTaskRules 提升 public）与 D3（comparedPairs/skippedPairs）随批兑现；信号/稳定性明示非判定，缺省判定语义零变更 |
 | 2026-09-04 | 盲跑复盘批（同日）：D1 同指纹候选短路 + 缩域即重驱域落地 | 契约 9 增补登记前置（候选≠现役指纹，governance.md 同步）；契约 12 增缩域分支；契约 10 增工件自愈语义——三处均来自 dogfood 门 13 盲跑的实际摩擦（无信息候选界面/定向复核无入口/工件任务长期 exit 1） |
 | 2026-09-03 | S7 成文：统一引擎落地代码全量对账（TaskReplayRunner/TaskAligner/TaskChainView） | ①调用点域采样引擎（ReplayRunner/ImpactAnalyzer/AnalysisResult）已随统一引擎批拆除，replay-report/1 模式随之退役（task-report/1 承接）；②「同键富余不判差异」与「缺步骤」的边界经测试夹具纠偏后钉清——富余=同键记录数不齐，缺步骤=键整组缺席；③重驱层为下一批次唯一人工对账项 |
+| 2026-09-17 | D1 术语清扫（维护者「质量优先」裁决） | 活约行 5 处「画像活跃指纹」→「画像认可形态集合」（真源表对齐行/契约 19 基准句/契约 19 accept 句「提升」→「加入认可集合」/透明层改「∉ 集合」——对齐 unapprovedEarlierPerGroup 的 getFingerprints().contains 实现/行为矩阵行）；台账历史行保留当时词汇不改写 |

@@ -170,6 +170,11 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 
 <img src="assets/cli-rules.png" alt="rules 命令：内置约束行为目录与 agentassert4j-rules.json 示例" width="880"/>
 
+> **声明何时生效**：规则声明在**钉入基线的时刻**绑定——`baseline`/`--force` 播种或 `accept` 入集
+> （候选指纹按当时的规则提取）。报告头的 `Rules:` 行披露当前加载的文件，但判定只消费指纹携带的
+> 钉定声明；建档后改规则文件不会静默重判历史（存在差异时 establish 会给规则漂移告警并指路
+> check→accept 无副作用刷新或 `--force` 重播种）。
+
 ## 3. 库文件运维
 
 - **单文件即全部状态**：备份 = 复制文件（建议停写窗口或接受只追加语义下的时间点快照）。
@@ -185,6 +190,12 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 - **幂等键是全库全局的**：recordId / response id 去重不区分写入方——多实例部署或多评估者共库
   并行录制时，同 id 的第二条会 duplicate 并归属首录会话（报告带 `storedSessionId` 指路）。
   并行写入方给 recordId/response id 带实例前缀（如 `zcode-r5-…`）可从根上避开撞车。
+- **共享库（多宿主/多人同库）三条运维规则**：①`--ci` 全库门禁对未建档键**fail-closed 拒绝**（E-GUARD
+  exit 2）——这是设计行为不是故障：库里有任何未建档键，门禁就不出结论；②各宿主**判自己的域**——
+  check/diff 带 `--task`/`--invocation` 缩域、establish 自己的键，别替别人裁决（跨宿主的在途候选
+  对全库可见，属共享治理面）；③想跑全库门禁，前提是库里每个键都有人 establish 过（含等待显式
+  建档的裂键——`baseline --invocation <key>` 逐个收编）。框架不引入「键归属」概念，共享库的
+  治理纪律靠这三条约定承载。
 - **库体检**：`doctor` 命令一次性输出身份/覆盖/规则三段确定性事实（骨架族形态、多步零标签链、
   未声明任务的重复请求文本任务族、未建档调用点、template_hash 缺失、规则期望错位）——零声明接入
   补声明、首次建档前自查都用它；只读不判定不建档。
@@ -225,6 +236,13 @@ agentassert4j replay --ci --json
 
 <img src="assets/cli-re-drive-dry-run.png" alt="replay --task --re-drive --dry-run：重驱计划与成本报价；示例环境未配 Key，警告行如实可见" width="720"/>
 
+- **稳定性探针（`--member-check`）**：入集前的量尺——任务最新链对最近几条历史链逐一对照（默认窗 5；
+  `--member-window N|all` 单次，`regression.memberSampleWindow` 设配置默认，只收 ≥1 整数；`all`
+  仅限单次调用）。**读数看 `matched k of N` 计数**（近邻 2/3=稳定，1/N 远古命中=考古），JSON 的
+  `isMember` 布尔=「历史任一命中」，不承载阈值——AI 消费者 accept 前以计数为准。机器面
+  `matchedSessions` 列全部命中会话，`matchedSession`（单数）=首个命中，冗余兼容字段。不带
+  `--member-check` 时 `--member-window` 单独出现按用法错误拒绝（exit 2）。
+
 ## 5. 生产打包形态
 
 交付客户的生产构件与开发态**同一份**，仅配置不同：
@@ -253,7 +271,12 @@ CLI 分析侧不受影响，仍可对既有库做巡检/验收。
 
 <img src="assets/cli-export.png" alt="baseline export：验收包落盘，附 SHA-256 与任务链/步骤数" width="880"/>
 
-3. 需要附样本供人读时加 `--include-samples`（样本强制 MASK 脱敏，判定不消费）；
+3. 导出时若存在**链末形态未裁决或在途候选**，导出警告并把 `unadjudicatedSteps` 计数写进报告
+   （在途候选按调用点**全域**计数——裁决会改变整个集合，该调用点的全部步骤一起等）；包照常写出，
+   先 accept/reject 再重导才是干净包；
+4. 每次导出=一个文件+一个 SHA-256（标识**该文件字节**，Maven 发布物模型）；重新导出产生新摘要，
+   对账认「那个文件」不认「最新导出」；
+5. 需要附样本供人读时加 `--include-samples`（样本强制 MASK 脱敏，判定不消费）；
 4. 敏感任务：确认录制时已用 `withMetadata("taskKey", <场景id>)` 声明任务键——**任务键=请求原文**会随包出境。
 
 **搬运：** 验收方核对文件 SHA-256 后接收。包内容天然脱敏（结构指纹+调用点键+声明规则段——规则是
@@ -359,6 +382,12 @@ structuredContent（`{"reports":[...]}`；失败态为 agentassert4j.error/1 包
 | 重放全红 | 看每行的 served 模型注记（配置模型 ≠ 录制模型）；`status` 看判定语义版本是否一致（exit 2 有指引） |
 | 疑似误报 | 看 summary 定位维度：参数类型→两侧词表应同源；文本不同≠差异（判定只看结构指纹）；确属噪声的字段加 `regression.ignorableFields` |
 | 纯文本回答被判 CHANGED | 多为数量级跳变（回答长度档位变了）或声明规则失配——维度 2/3 的差异明细会点名 |
+
+**7.2.1 输出面（Windows 管道乱码）**
+
+| 症状 | 处置 |
+|------|------|
+| Windows 上管道消费 CLI 输出（重定向/子进程读取）出现乱码或解码失败 | JVM 按平台默认字符集（中文 Windows 为 GBK）写 `●`/`▲` 等字形，UTF-8 消费者按 GBK 解码即乱。启动命令加 `-Dfile.encoding=UTF-8`（终端显示侧可配 `chcp 65001`）；框架自身的输出串全为 UTF-8 源码串，无字面 GBK 内容 |
 
 **7.3 调用面（重放 400/报错）**
 
