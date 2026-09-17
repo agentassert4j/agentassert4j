@@ -433,7 +433,7 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 ——文本措辞差异属预期内，结构判定依然有效；包里有而本地没执行的任务，列成**覆盖缺口**（证据不完整，
 不允许冒充通过）。这份 markdown 报告就是交付证据本身。汇总行的真实输出（演示库）：
 
-<img src="../assets/cli-verify.png" alt="verify 汇总：结构判定、跨模型标注、SHA-256 对账、报告落盘（演示库真实输出）" width="880"/>
+<img src="../assets/cli-verify.png" alt="verify 汇总：逐任务判定行、跨模型标注、SHA-256 对账、报告落盘（演示库真实输出）" width="880"/>
 
 > **伏笔去向**：包格式与版本守卫 → 第 12 章；verify 的匹配与退出码 → 第 12 章。
 

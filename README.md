@@ -191,6 +191,10 @@ added step, one structural change, each named; exit 1):
 5. **Roll back a whole set.** `rollback --version vN` restores the entire approved-set snapshot of that
    version (rolling back to the currently active version is refused with a pointer to `reject`).
 
+<img src="assets/cli-member-check.png" alt="replay --member-check: the stability probe samples the most recent chains and reports matched k of N — this run has no member match yet, the shape is not stable" width="720"/>
+
+<img src="assets/cli-ci-green.png" alt="replay --ci after accept: the chain ending the accepted shape rechecks green — PASS (shape 2 of 2)" width="720"/>
+
 When a prompt edit changes template identity under the same label, the new key is **never silently
 collected**: it surfaces as a label split, stays out of the gate (`--ci` exits 2, fail-closed), and waits
 for an explicit `baseline --invocation <key>` — a split you have not adjudicated never quietly turns

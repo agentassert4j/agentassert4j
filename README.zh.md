@@ -175,6 +175,10 @@ agentassert4j replay
 5. **整集回滚**。`rollback --version vN` 恢复该版本的**整个认可集合快照**（回滚到当前活动版本会被
    拒绝并指路 `reject`）。
 
+<img src="assets/cli-member-check.png" alt="replay --member-check：稳定性探针抽样最近几条链并给出 matched k of N——本例尚无成员命中，形态还不稳定" width="720"/>
+
+<img src="assets/cli-ci-green.png" alt="accept 后 replay --ci：以被认可形态收尾的链复检为绿——PASS (shape 2 of 2)" width="720"/>
+
 提示词编辑改了模板身份（同标签换模板）时，新键**永远不会被静默收编**：它以标签裂键浮出、被门禁
 排除在外（`--ci` 出 2、fail-closed），等显式 `baseline --invocation <key>`——未经你裁决的裂键既不会
 悄悄把门禁变绿，也不会悄悄变红。

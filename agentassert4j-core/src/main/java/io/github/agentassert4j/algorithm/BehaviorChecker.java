@@ -1,8 +1,10 @@
 package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.model.DeterministicFingerprint;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -33,11 +35,8 @@ public final class BehaviorChecker {
         descriptions.put("mustUseChinese", "output contains Chinese characters (multiline-safe)");
         builtins.put("mustUseEnglish", (fp, out) -> out != null && containsScript(out, ScriptRange.LATIN) && !containsScript(out, ScriptRange.CJK));
         descriptions.put("mustUseEnglish", "output contains Latin letters and no Chinese characters");
-        builtins.put("returnsEmptyOnError", (fp, out) -> !fp.isHasError() || out == null || out.trim().isEmpty() || out.contains("[]"));
-        descriptions.put("returnsEmptyOnError", "output is empty on error");
-        // TODO: [空数组判定宽泛] returnsEmptyOnError 的 out.contains("[]") 会把含空数组字面量的
-        //       正常输出（如 {"data":[],"message":"成功"}）误判为空输出；待改为 RecursiveJsonParser
-        //       解析后按结构判空数组/空对象
+        builtins.put("returnsEmptyOnError", (fp, out) -> !fp.isHasError() || isEmptyOutput(out));
+        descriptions.put("returnsEmptyOnError", "on error the output is empty (blank, or an empty JSON array/object root)");
         builtins.put("returnsErrorCode", (fp, out) -> fp.isHasError());
         descriptions.put("returnsErrorCode", "output contains an error-code field");
         builtins.put("noError", (fp, out) -> !fp.isHasError());
@@ -50,6 +49,23 @@ public final class BehaviorChecker {
         descriptions.put("containsCjk", "output contains CJK characters (including Japanese kana)");
         BUILTINS = Collections.unmodifiableMap(builtins);
         DESCRIPTIONS = Collections.unmodifiableMap(descriptions);
+    }
+
+    /**
+     * 空输出 = 纯空白，或 JSON 根为空数组/空对象；解析失败按非空处理
+     * （文本中出现 "[]" 字面量不构成空——结构判空只认根节点）。
+     */
+    private static boolean isEmptyOutput(String out) {
+        if (out == null || out.trim().isEmpty()) {
+            return true;
+        }
+        try {
+            Object parsed = RecursiveJsonParser.parse(out);
+            return parsed instanceof List && ((List<?>) parsed).isEmpty()
+                    || parsed instanceof Map && ((Map<?, ?>) parsed).isEmpty();
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     private enum ScriptRange {

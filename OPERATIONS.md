@@ -300,7 +300,7 @@ requiredSteps/order/counts 的包，编排纪律同样参与判定——跨模�
    - 范围外链（本地多出的任务）= 只列出，不判定。
 4. `verify` 全程只读（不落库、不改本地基线），可反复执行；markdown 报告即交付证据，归档时附包文件的 SHA-256。
 
-<img src="assets/cli-verify.png" alt="verify 汇总：结构判定 + 跨模型标注 + SHA-256 对账，markdown 报告落盘" width="880"/>
+<img src="assets/cli-verify.png" alt="verify 汇总：逐任务判定行 + 跨模型标注 + SHA-256 对账，markdown 报告落盘" width="880"/>
 
 **退出码**：`0` 全部结构一致 ｜ `1` 存在结构偏差（含缺步骤/新增步骤）｜ `2` 版本守卫拒绝/覆盖缺口/用法错误。
 
@@ -316,6 +316,8 @@ reject/rollback/collect）发生时落入治理事件时间线，agent 申报的
 agentassert4j audit              # 人类清单：[动词] 键 版本 + 主体/代码锚
 agentassert4j audit --json       # agentassert4j.audit/1 机器报告（writes 数组）
 ```
+
+<img src="assets/cli-audit.png" alt="audit：治理事件全量时间线——establish/collect/accept/rollback 逐笔可对账，主体与代码锚在列（演示库真实输出）" width="560"/>
 
 reject 与 rollback 不在画像上留状态痕迹，事件时间线是其唯一审计载体；MCP 工具清单的
 description 声明各变异动词的使用要求（如 accept 应在人类指示后调用），授权确认由

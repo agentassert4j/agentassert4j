@@ -104,6 +104,26 @@ class BehaviorCheckerTest {
     }
 
     @Test
+    void returnsEmptyOnError_hasError_emptyObject_passes() {
+        assertTrue(BehaviorChecker.check("returnsEmptyOnError", fpHasError, "{}"));
+    }
+
+    @Test
+    void returnsEmptyOnError_hasError_outputWithEmptyArrayInside_fails() {
+        assertFalse(BehaviorChecker.check("returnsEmptyOnError", fpHasError, "{\"data\":[],\"message\":\"ok\"}"));
+    }
+
+    @Test
+    void returnsEmptyOnError_hasError_nonEmptyArray_fails() {
+        assertFalse(BehaviorChecker.check("returnsEmptyOnError", fpHasError, "[1,2]"));
+    }
+
+    @Test
+    void returnsEmptyOnError_hasError_textMentioningBrackets_fails() {
+        assertFalse(BehaviorChecker.check("returnsEmptyOnError", fpHasError, "no items [] today"));
+    }
+
+    @Test
     void returnsErrorCode_hasError_passes() {
         assertTrue(BehaviorChecker.check("returnsErrorCode", fpHasError, "error"));
     }

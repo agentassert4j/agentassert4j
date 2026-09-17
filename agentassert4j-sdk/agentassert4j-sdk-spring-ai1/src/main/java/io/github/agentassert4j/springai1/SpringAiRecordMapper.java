@@ -124,9 +124,10 @@ final class SpringAiRecordMapper {
             record.setPreviousTurns(turns);
         }
 
-        // TODO: [ChatModel 层无线上原文] 请求/响应 raw 列在 ChatModel 抽象层不可得
-        //（原文在 provider HTTP 客户端内部）；需要逐字 raw 时由 provider 适配模块
-        // 在 HTTP 层拦截回填，本层不伪造
+        // 契约边界（非待办，前提经 javap 审计证实永真）：请求/响应 raw 列在 ChatModel
+        // 抽象层不可得——原文在 provider HTTP 客户端内部，本层不伪造；需要逐字 raw 的
+        // 消费面走 CLI 重驱记录或 MCP 摄取记录（wire 原文全量），SDK 面未来概念列的
+        // 回填来源届时另行设计（storage spec 契约张力行在册）
         mapOptions(prompt.getOptions(), record);
     }
 
