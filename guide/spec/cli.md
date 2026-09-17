@@ -118,9 +118,10 @@ schema、退出码契约、help 终态。
    approvedBy=null 的人读行不得出现 "null" 字样）。rollback/1 在回滚清了在途候选时携带
    `candidateDiscarded:true`（人读行同词 "in-flight candidate discarded"）——治理动词无
    静默副作用；目标=当前活动版本的回滚被拒（E-NO-DATA，消息指路 reject）。
-   member 块字段：`checked`/`window`（数字或 `"all"`）/`isMember`/`matched`（命中数）+
-   命中侧 `matchedSession`（首个，升序）与 `matchedSessions` 列表，或未命中侧
-   `closestSession`+`closestScore`——matched k of N 是「入集前稳定性量尺」的读数
+   member 块字段集恒定：`checked`/`window`（数字或 `"all"`）/`isMember`/`matched`（命中数）+
+   `matchedSessions`（全部命中会话，未命中为空数组）+ `closestSession`/`closestScore`（最接近
+   样本与信号分，命中为 null、零配对时 closestScore 为 null）——matched k of N 是「入集前稳定
+   性量尺」的读数
    （matched 4/5=稳定复现；matched 1/N 旧会话=考古命中非稳定信号）。多形态基线步骤在集合
    大小 >1 时携带 `shapeIndex`/`shapeCount`（人读注记 `(shape i of n)`）。混形指路文案 =
    accept 入集（各任务上下文形态合法）或复跑收敛。
@@ -221,3 +222,5 @@ re-drive/missing/added。句式 sentence case；全角标点与「」不出现�
 | 2026-09-05 | E1 引擎域英文迁移（第一批，全量绿 897+6skip） | 引擎域生产串清零：TaskReplayRunner 45 输出点 + ReplayCommand 运行时错误 6 处 + OpenAiCompatibleClient 4 处 + core 28 串（comparator summary / rule violation detail / 链式分歧 summary / 预估文案 / diff 摘要）；断言等义迁移 49 处（cli 33 + core 16），JSON 键集零变化；CJK 门禁 cli 主码 293→222（存量为 E2/E3 域）；盘点实证校正与遗漏文件补录见专项调研 §1.2/§1.3/§7 注记 |
 | 2026-09-05 | 英文单语裁决同步（迁移未实施，先补 spec） | 决策=英文单语（重开并关闭 09-02 双语悬项）；迁移面实测=CLI 表示层 ~160 输出点/20 文件 + core 人读诊断串（ComparisonResult.summary、TaskRuleViolation.detail——JSON 值语言随批切换，键不变）+ 180 断言/13 文件；命令缩写调研=aa 启动器别名 + 前缀匹配（与选择器哲学同款）+ r* 四族显式别名，总改动 ≈10 行；详见 docs/阶段性 专项调研 |
 | 2026-09-03 | S8 成文：命令面终态全量对账（C2-C4 落地后） | ①replay-report/1 随调用点域引擎退役，task-report/1 承接（退役事实已入测试钉）；②accept/reject 的 --all 已被 bare 语义吸收删除；③根 help 新增 exitCodeList 与心智模型描述，类头 Javadoc 典型流程同步刷新（旧 --prompt 时代示例清除） |
+| 2026-09-17 | 1.0.0 收尾批：member 块字段集恒定化 | 契约 member 块行改写（删单数 matchedSession 冗余字段；matchedSessions 与 closestSession/closestScore 两结论恒输出）——权威表述与测试钉指针见 replay.md 同日台账行；CLI 人读行不变 |
+| 2026-09-17 | 延迟池终裁（维护者裁决「明确不做」，防翻账） | ①调用点视角视图（status 深化显示点级行为波动）：判定其目标痛点已被成员判定（matched k of N）+ 认可形态集合（合法多形态入集）双重覆盖，撤销挂账不做——新公开报告形态需真实使用反馈定形，冻结前无反馈渠道；除非出现明确 issue 再议；②导出可选内容指纹（剔 meta 规范形）：维持「每导出一指纹」既有裁决为终态，不再排期——除非出现明确 issue 再议 |

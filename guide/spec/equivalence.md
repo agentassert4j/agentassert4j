@@ -28,8 +28,8 @@
 | 治理写时间线 | `governance_events` 表（经 BaselineManager 单源落账） | audit 命令 × audit 工具 × 全部治理动词 | SqliteStorageRepositoryTest 治理事件往返 + 七轮 audit 对账 | 钉在（动词全覆盖断言列增强项） |
 | 披露字段面 | 各能力的披露实现 | seed record / approvedBy / 扇出披露 / member 窗口计数 × CLI 人读 × CLI JSON × MCP | `DisclosureParityTest`（四能力抽查；新披露字段交付时按 §12.11 DoD 增行） | 抽查钉在 |
 | 术语 | 本 spec 禁词表（下节，唯一真源） | 全部用户可见输出（主码串/help/instructions/报告模板）× 文档 | doc-tools/scan_banned_terms.py（读本表扫描；私有资产，丢失可按本表重建） | 扫描器在 |
-| 退出码语义 | `CliErrorCode` 枚举 | CLI 各命令 × MCP 各工具同错误同码 | 错误路径测试逐命令钉（error/1 包络批） | 部分（新错误码随批补钉） |
-| 缩域语义 | `CliSupport` 选择器解析（目标选择器=精确+唯一前缀；缩域选择器=前缀过滤） | status / report / check / diff / export / verify / replay 各命令 | 选择器语义钉（SelectorSemantics 相关测试）+ R7 实测 | 部分（跨命令等价断言列增强项） |
+| 退出码语义 | `CliErrorCode` 枚举 | CLI 各命令 × MCP 各工具同错误同码 | 错误路径测试逐命令钉（error/1 包络批）+ 跨面同码钉 `SurfaceParityTest`（空库/未建档判定/记录未命中三条件 × CLI/MCP） | 钉在（新错误码随批补钉的义务保留） |
+| 缩域语义 | `CliSupport` 选择器解析（目标选择器=精确+唯一前缀；缩域选择器=前缀过滤） | status / report / check / diff / export / verify / replay 各命令 | 选择器语义钉（SelectorSemantics 相关测试）+ 跨面同集钉 `SurfaceParityTest`（缩域族 CLI status ≡ MCP report 同键集；目标族多键标签歧义披露列全候选）+ R7 实测 | 钉在 |
 
 ## 禁词表（术语等价类的真源；扫描器消费本表）
 
@@ -94,3 +94,4 @@
 | 日期 | 方式 | 发现 |
 |---|---|---|
 | 2026-09-17 | 成文（七轮复盘反向枚举 + 首版钉落地） | 首版九行：六行已有钉/扫描器在位，退出码与缩域两行标「部分」待增强项；禁词表首版六行（approve/approved baselines/promote the candidate/earliest record/agent 透镜/never flips） |
+| 2026-09-17 | 1.0.0 收尾批：退出码/缩域两行转钉在 | `SurfaceParityTest` 落地——①退出码等价：空库（E-NO-DATA）/未建档判定（E-GUARD）/记录未命中（E-NO-DATA）三条件 × CLI 与 MCP 同码断言；②缩域等价按两族如实钉：缩域族 CLI `status --invocation` ≡ MCP `report` 同键集（标签扇出两键、他标签不混入），目标族 `replay --invocation` 多键标签响亮拒绝（E-USAGE）且披露的候选键集与缩域族解析一致（同一解析真源在两族上的投影）；两行「部分」标注清除 |

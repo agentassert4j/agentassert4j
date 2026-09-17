@@ -1302,6 +1302,14 @@ class TaskReplayRunnerTest {
             assertEquals(1, runner.run(null, null, false, false, true, null, false, false, false, null, null));
             String report = output.toString();
             assertTrue(report.contains("No member match: closest historical chain is session session-a"), report);
+
+            ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+            assertEquals(1, jsonRunner(jsonOut).run(null, null, false, false, true, null, false, false, false, null, null));
+            String jsonReport = jsonOut.toString();
+            assertTrue(jsonReport.contains("\"isMember\":false"), jsonReport);
+            assertTrue(jsonReport.contains("\"matchedSessions\":[]"), "未命中侧 matchedSessions 常驻空数组（字段集恒定）: " + jsonReport);
+            assertTrue(jsonReport.contains("\"closestSession\":\"session-a\""), jsonReport);
+            assertTrue(jsonReport.contains("\"closestScore\":null"), "无可比样本（零配对）时 closestScore 常驻 null: " + jsonReport);
         }
 
         @Test
@@ -1324,7 +1332,9 @@ class TaskReplayRunnerTest {
             }
             assertTrue(memberLine.contains("\"checked\":5,\"window\":5"), memberLine);
             assertTrue(memberLine.contains("\"isMember\":true"), memberLine);
-            assertTrue(memberLine.contains("\"matchedSession\":\"session-2\""), "样本窗为最近 5 条（session-2..6），升序迭代首个匹配即报告: " + memberLine);
+            assertTrue(memberLine.contains("\"matchedSessions\":[\"session-2\",\"session-3\",\"session-4\",\"session-5\",\"session-6\"]"), "样本窗为最近 5 条（session-2..6）全部命中且逐会话列出: " + memberLine);
+            assertTrue(memberLine.contains("\"closestSession\":null,\"closestScore\":null"), "命中侧 closest 字段常驻为 null（字段集恒定）: " + memberLine);
+            assertFalse(memberLine.contains("\"matchedSession\":"), "单数冗余字段已删除: " + memberLine);
         }
     }
 

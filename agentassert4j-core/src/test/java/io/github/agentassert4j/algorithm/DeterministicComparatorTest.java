@@ -375,6 +375,25 @@ class DeterministicComparatorTest {
     }
 
     @Test
+    void ignorableFields_neverExemptToolDimension() {
+        // ignorableFields 只归一化输出结构维；工具调用维（参数类型）不豁免——
+        // 把参数键名配成 ignorable 不能掩盖「参数类型变了」这一行为差异
+        ComparatorConfig config = new ComparatorConfig();
+        config.setIgnorableFields(Collections.singleton("query"));
+
+        DeterministicComparator cmp = new DeterministicComparator(config);
+
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), stringMap("query", "String", "id", "Long"), "application/json", Collections.singleton("field1"), stringMap("field1", "String"), 0, null, null, false);
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), stringMap("query", "Number", "id", "Long"), "application/json", Collections.singleton("field1"), stringMap("field1", "String"), 0, null, null, false);
+
+        ComparisonResult r = cmp.compare(baseline, current, "output");
+
+        assertEquals(Verdict.CHANGED, r.getVerdict());
+        assertFalse(r.isParamTypeMatch(), "参数类型差异不得被同名的 ignorable 配置豁免");
+        assertTrue(r.isStructureMatch(), "输出结构维不受影响");
+    }
+
+    @Test
     void nullConfig_usesDefaults() {
         DeterministicComparator cmp = new DeterministicComparator(null);
 

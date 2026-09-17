@@ -16,6 +16,7 @@ import io.github.agentassert4j.model.LlmWireProtocol;
 import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.result.ComparisonResult;
 import io.github.agentassert4j.result.DriftReport;
+import io.github.agentassert4j.result.TaskAlignment;
 import io.github.agentassert4j.spi.InteractionQueryStore;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
@@ -670,6 +671,49 @@ final class CliSupport {
         if (comparison.getSummary() != null) {
             sb.append(",\"summary\":\"").append(RecursiveJsonParser.escape(comparison.getSummary())).append('"');
         }
+        return sb.toString();
+    }
+
+    /**
+     * 步骤 JSON 的公共外围（verdict/度量/富余/草稿计数/标签）。task-report 与 verify-report
+     * 两个报告面对同一步骤必须报出一致的字段集与字段顺序；各面自带前缀字段与后缀扩展，
+     * 中段永远走本片段。unapprovedEarlier 仅链末判定路径携带（与 earlierRecords 成对恒
+     * 输出），verify 面恒传 null。
+     */
+    static String stepEnvelopeFragment(TaskAlignment.StepAlignment step, Integer unapprovedEarlier) {
+        StringBuilder sb = new StringBuilder();
+        if (step.getVerdict() != null) {
+            sb.append(",\"verdict\":\"").append(step.getVerdict()).append('"');
+        }
+        if (step.getComparison() != null) {
+            sb.append(comparisonMetricsFragment(step.getComparison()));
+        }
+        if (step.getSurplusCount() > 0) {
+            sb.append(",\"surplusCount\":").append(step.getSurplusCount());
+        }
+        if (step.getEarlierRecords() > 0) {
+            sb.append(",\"earlierRecords\":").append(step.getEarlierRecords());
+            if (unapprovedEarlier != null) {
+                sb.append(",\"unapprovedEarlier\":").append(unapprovedEarlier);
+            }
+        }
+        if (step.getInvocationLabel() != null) {
+            sb.append(",\"invocationLabel\":\"").append(RecursiveJsonParser.escape(step.getInvocationLabel())).append('"');
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 版本切换注记（versionSwitch + 两侧 subdivision），两报告面共用的收尾片段；
+     * 非版本切换返回空串。
+     */
+    static String stepVersionSwitchFragment(TaskAlignment.StepAlignment step) {
+        if (!step.isVersionSwitch()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(",\"versionSwitch\":true");
+        sb.append(",\"baselineSubdivision\":\"").append(RecursiveJsonParser.escape(step.getBaselineSubdivision())).append('"');
+        sb.append(",\"newSubdivision\":\"").append(RecursiveJsonParser.escape(step.getNewSubdivision())).append('"');
         return sb.toString();
     }
 

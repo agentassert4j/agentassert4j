@@ -783,21 +783,22 @@ public class TaskReplayRunner {
             sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
             sb.append(",\"task\":{\"request\":\"").append(RecursiveJsonParser.escape(newChain.getRequestText())).append("\",\"sessionId\":\"").append(RecursiveJsonParser.escape(newChain.getSessionId())).append("\"}");
             sb.append(",\"member\":{\"checked\":").append(checked).append(",\"window\":").append(memberAllHistory ? "\"all\"" : Integer.toString(memberWindow)).append(",\"isMember\":").append(member).append(",\"matched\":").append(matched);
-            if (member) {
-                sb.append(",\"matchedSession\":\"").append(RecursiveJsonParser.escape(evidenceSample.getSessionId())).append('"');
-                sb.append(",\"matchedSessions\":[");
-                for (int i = 0; i < matchedSessions.size(); i++) {
-                    if (i > 0) {
-                        sb.append(',');
-                    }
-                    sb.append('"').append(RecursiveJsonParser.escape(matchedSessions.get(i))).append('"');
+            // 字段集恒定：matchedSessions 与 closestSession/closestScore 在两种结论下都输出
+            // （命中侧 closest 为 null，未命中侧 matchedSessions 为空数组、无可比样本时
+            // closestScore 为 null）——消费端无需按结论写条件分支
+            sb.append(",\"matchedSessions\":[");
+            for (int i = 0; i < matchedSessions.size(); i++) {
+                if (i > 0) {
+                    sb.append(',');
                 }
-                sb.append(']');
+                sb.append('"').append(RecursiveJsonParser.escape(matchedSessions.get(i))).append('"');
+            }
+            sb.append(']');
+            if (member) {
+                sb.append(",\"closestSession\":null,\"closestScore\":null");
             } else {
                 sb.append(",\"closestSession\":\"").append(RecursiveJsonParser.escape(evidenceSample.getSessionId())).append('"');
-                if (closestScore >= 0) {
-                    sb.append(",\"closestScore\":").append(plainDecimal(closestScore));
-                }
+                sb.append(",\"closestScore\":").append(closestScore >= 0 ? plainDecimal(closestScore) : "null");
             }
             sb.append('}');
             appendCommonReport(sb, newChain.getRequestText(), newChain.getSessionId(), evidence.getSteps().size(), render, evidence.getCrossVersionCount(), evidence.getBaselineTime(), evidence.getNewChainTime(), evidence.isPrefixDependent());
@@ -1704,32 +1705,11 @@ public class TaskReplayRunner {
         sb.append("\"recordId\":\"").append(RecursiveJsonParser.escape(recordId != null ? recordId : "")).append('"');
         sb.append(",\"invocationKey\":\"").append(RecursiveJsonParser.escape(step.getInvocationKey())).append('"');
         sb.append(",\"action\":\"").append(action).append('"');
-        if (step.getVerdict() != null) {
-            sb.append(",\"verdict\":\"").append(step.getVerdict()).append('"');
-        }
-        if (step.getComparison() != null) {
-            sb.append(CliSupport.comparisonMetricsFragment(step.getComparison()));
-        }
-        if (step.getSurplusCount() > 0) {
-            sb.append(",\"surplusCount\":").append(step.getSurplusCount());
-        }
-        if (step.getEarlierRecords() > 0) {
-            sb.append(",\"earlierRecords\":").append(step.getEarlierRecords());
-            if (unapprovedEarlier != null) {
-                sb.append(",\"unapprovedEarlier\":").append(unapprovedEarlier);
-            }
-        }
-        if (step.getInvocationLabel() != null) {
-            sb.append(",\"invocationLabel\":\"").append(RecursiveJsonParser.escape(step.getInvocationLabel())).append('"');
-        }
+        sb.append(CliSupport.stepEnvelopeFragment(step, unapprovedEarlier));
         if (step.getBaselineVersionTag() != null) {
             sb.append(",\"baselineVersion\":\"").append(RecursiveJsonParser.escape(step.getBaselineVersionTag())).append('"');
         }
-        if (step.isVersionSwitch()) {
-            sb.append(",\"versionSwitch\":true");
-            sb.append(",\"baselineSubdivision\":\"").append(RecursiveJsonParser.escape(step.getBaselineSubdivision())).append('"');
-            sb.append(",\"newSubdivision\":\"").append(RecursiveJsonParser.escape(step.getNewSubdivision())).append('"');
-        }
+        sb.append(CliSupport.stepVersionSwitchFragment(step));
         if (step.getBaselineShapeCount() > 1) {
             sb.append(",\"shapeIndex\":").append(step.getBaselineShapeIndex());
             sb.append(",\"shapeCount\":").append(step.getBaselineShapeCount());

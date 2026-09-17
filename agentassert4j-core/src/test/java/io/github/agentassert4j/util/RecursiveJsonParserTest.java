@@ -483,4 +483,21 @@ class RecursiveJsonParserTest {
         assertNotNull(parsed, "嵌入产物必须是合法 JSON: " + wrapped);
         assertEquals(hostile, ((Map<String, Object>) parsed).get("v"), "转义往返必须还原原文");
     }
+
+    @Test
+    void asStringMap_coercesParsedObject_valuesToStringNullsKept() {
+        Object parsed = RecursiveJsonParser.parse("{\"a\":\"x\",\"b\":1,\"c\":null}");
+        Map<String, String> out = RecursiveJsonParser.asStringMap(parsed);
+        assertNotNull(out, "JSON 对象必须被强转为 Map");
+        assertEquals("x", out.get("a"), "字符串值原样保留");
+        assertEquals("1", out.get("b"), "数值经 String.valueOf 归一");
+        assertNull(out.get("c"), "null 值保留 null 而非字面 \"null\"");
+    }
+
+    @Test
+    void asStringMap_nonMapInput_returnsNull() {
+        assertNull(RecursiveJsonParser.asStringMap(null), "null 输入返回 null");
+        assertNull(RecursiveJsonParser.asStringMap(RecursiveJsonParser.parse("[1,2]")), "数组输入返回 null");
+        assertNull(RecursiveJsonParser.asStringMap(RecursiveJsonParser.parse("\"s\"")), "标量输入返回 null");
+    }
 }

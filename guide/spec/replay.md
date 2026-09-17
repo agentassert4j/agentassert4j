@@ -86,8 +86,10 @@ member-check 无论 ci 与否走链采样）→ 漂移处置 → 退出码复合
     fullChain/缩域即域/bare 零漂移零目标/dry-run 九场景）
 13. **成员判定（--member-check）**：每任务最新链对同任务最近 N 条历史链逐一核成员资格，
     样本窗上限 5（常量钉死，防「匹配任何历史」稀释判定）；任一样本行为全匹配（步级全
-    MATCHED+PASS）即合法成员，报告 matchedSession；全不匹配取信号分最高者为最接近样本
-    （升序迭代+严格大于=平局取最早），差异报告与候选登记挂在证据对齐上。任务纪律为样本
+    MATCHED+PASS）即合法成员，报告 matchedSessions（全部命中会话，升序）；全不匹配取信号分最高者
+    为最接近样本（升序迭代+严格大于=平局取最早），差异报告与候选登记挂在证据对齐上；成员块字段集
+    恒定——matchedSessions 与 closestSession/closestScore 两种结论下都在场（命中侧 closest 为
+    null、未命中侧 matchedSessions 为空数组、零配对时 closestScore 为 null）。任务纪律为样本
     不变量，从证据对齐取一次计一份，不跨样本累计。缺省配对语义不变（最新 vs 次新）。
     mode=member-check。【测试钉】`TaskReplayRunnerTest.MemberCheck`（匹配成员/平局取最早/
     样本窗封顶与 JSON 字段）
@@ -182,7 +184,7 @@ member-check 无论 ci 与否走链采样）→ 漂移处置 → 退出码复合
 | `--ci`、行为变更后 accept | 下一轮 CI 对新基线 PASS → exit 0（裁决对门禁生效） |
 | `--ci`、长期开发态库首次切换 | 滑过两链窗口的未裁决漂移当场 CHANGED（契约 19 语义边界②，正确行为） |
 | 任一对齐 CHANGED / 缺步骤 / 新增 / 规则违规（本地模式） | exit 1（CHANGED 步落候选） |
-| --member-check、新链匹配任一最近链 | 成员 PASS，exit 0，报告 matchedSession（契约 13） |
+| --member-check、新链匹配任一最近链 | 成员 PASS，exit 0，报告 matched 计数与命中会话（契约 13） |
 | --member-check、全样本不匹配 | exit 1，按最接近样本报差异并落候选（契约 13） |
 | 漂移 + 步骤 PASS（开发态 / --ci） | 收编前移身份 / 不收编附警告；均 exit 0 |
 | 漂移 + 缺步骤 / 无可对齐链（bare） | 挂起，exit 1 |
@@ -230,3 +232,6 @@ member-check 无论 ci 与否走链采样）→ 漂移处置 → 退出码复合
 | 2026-09-03 | S7 成文：统一引擎落地代码全量对账（TaskReplayRunner/TaskAligner/TaskChainView） | ①调用点域采样引擎（ReplayRunner/ImpactAnalyzer/AnalysisResult）已随统一引擎批拆除，replay-report/1 模式随之退役（task-report/1 承接）；②「同键富余不判差异」与「缺步骤」的边界经测试夹具纠偏后钉清——富余=同键记录数不齐，缺步骤=键整组缺席；③重驱层为下一批次唯一人工对账项 |
 | 2026-09-17 | D1 术语清扫（维护者「质量优先」裁决） | 活约行 5 处「画像活跃指纹」→「画像认可形态集合」（真源表对齐行/契约 19 基准句/契约 19 accept 句「提升」→「加入认可集合」/透明层改「∉ 集合」——对齐 unapprovedEarlierPerGroup 的 getFingerprints().contains 实现/行为矩阵行）；台账历史行保留当时词汇不改写 |
 | 2026-09-17 | TODO 终裁批（维护者令「不再遗留」） | ①BehaviorChecker.returnsEmptyOnError 空输出判定改结构判空：空=纯空白或 JSON 根为空数组/空对象（RecursiveJsonParser，解析失败按非空）——修复 contains("[]") 把 {"data":[],"message":"ok"} 类正常输出误判为空、掩盖「出错应空」违规的缺陷；判定语义变更属开发期 det-v1 删库重建承接（现库无该行为声明者，零影响面）；四新钉（空对象过/内嵌空数组不过/非空数组不过/文本含[]不过）；rules 目录描述同步（empty JSON array/object root）；②SDK raw 列 TODO×2 按 N3 永真改判转正为契约注释（前提「ChatModel 层无线上原文」javap 审计证实永真，非待办） |
+| 2026-09-17 | 1.0.0 收尾批：member 块字段集恒定化（维护者裁决） | 契约 13 成员块字段收敛：删单数冗余字段 matchedSession（matchedSessions[0] 即其值，零信息损失）；matchedSessions 与 closestSession/closestScore 改两种结论下恒输出（命中侧 closest=null、未命中侧 matchedSessions=[]、零配对时 closestScore=null）——消费端无需按结论写条件分支；wire 变更属发布前免费窗口（pre-1.0 无外部消费者）。【测试钉】TaskReplayRunnerTest 窗口封顶钉改钉 + 无可比样本钉补 JSON 常驻断言 + DisclosureParityTest 补字段集断言 |
+| 2026-09-17 | 1.0.0 收尾批：stepEnvelope 单源收编 | 台账在册的「步骤外围 JSON 渲染双份」收编：CliSupport 增 stepEnvelopeFragment（verdict/度量/富余/草稿计数/标签）与 stepVersionSwitchFragment（版本切换注记），TaskReplayRunner.alignedStepJson 与 VerifyRunner.taskJson 两侧改道——两报告面对同一步骤的字段集与顺序自此单源；输出字节级零变化由两报告面既有契约钉（VerifyExportTest 等）证明 |
+| 2026-09-17 | 延迟池终裁（维护者裁决「明确不做」，防翻账） | disposition 双口径（candidatePoints=漂移处置登记 vs candidatesRegistered=行为候选对账）维持现状为终态：两者数的是真实不同的两个域，统一命名反而抹掉语义区分（Round 5 修复后三面已可对账、文档已言明口径）；除非出现明确 issue，不再复议改名 |

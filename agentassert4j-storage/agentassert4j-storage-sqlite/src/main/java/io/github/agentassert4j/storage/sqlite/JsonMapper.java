@@ -68,7 +68,7 @@ final class JsonMapper {
             tc.setSuccess(asBool(m.get("success")));
             tc.setResult(asString(m.get("result")));
             tc.setArguments(asObjectMap(m.get("arguments")));
-            tc.setArgTypes(asStringMap(m.get("argTypes")));
+            tc.setArgTypes(RecursiveJsonParser.asStringMap(m.get("argTypes")));
             result.add(tc);
         }
         return result;
@@ -193,17 +193,6 @@ final class JsonMapper {
         Map<String, Object> out = new LinkedHashMap<>();
         for (Map.Entry<?, ?> e : ((Map<?, ?>) v).entrySet()) {
             out.put(String.valueOf(e.getKey()), e.getValue());
-        }
-        return out;
-    }
-
-    private static Map<String, String> asStringMap(Object v) {
-        if (!(v instanceof Map)) {
-            return null;
-        }
-        Map<String, String> out = new LinkedHashMap<>();
-        for (Map.Entry<?, ?> e : ((Map<?, ?>) v).entrySet()) {
-            out.put(String.valueOf(e.getKey()), e.getValue() != null ? String.valueOf(e.getValue()) : null);
         }
         return out;
     }

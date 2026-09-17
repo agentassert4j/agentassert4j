@@ -148,6 +148,8 @@ class DisclosureParityTest {
         assertTrue(jsonText.contains("\"window\":5"), "JSON 同窗口: " + jsonText);
         assertTrue(jsonText.contains("\"matched\":1"), "JSON 同命中计数: " + jsonText);
         assertTrue(jsonText.contains("\"isMember\":true"), "JSON 成员判定在场: " + jsonText);
+        assertTrue(jsonText.contains("\"matchedSessions\":[\"session-m1\"]"), "JSON 命中会话列表: " + jsonText);
+        assertTrue(jsonText.contains("\"closestSession\":null,\"closestScore\":null"), "命中侧 closest 字段常驻 null: " + jsonText);
     }
 
     private void saveAgentRecord(SqliteStorageRepository repo, String recordId, String label, String templateHash, String sessionId, long ts) {

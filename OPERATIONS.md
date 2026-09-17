@@ -239,8 +239,9 @@ agentassert4j replay --ci --json
 - **稳定性探针（`--member-check`）**：入集前的量尺——任务最新链对最近几条历史链逐一对照（默认窗 5；
   `--member-window N|all` 单次，`regression.memberSampleWindow` 设配置默认，只收 ≥1 整数；`all`
   仅限单次调用）。**读数看 `matched k of N` 计数**（近邻 2/3=稳定，1/N 远古命中=考古），JSON 的
-  `isMember` 布尔=「历史任一命中」，不承载阈值——AI 消费者 accept 前以计数为准。机器面
-  `matchedSessions` 列全部命中会话，`matchedSession`（单数）=首个命中，冗余兼容字段。不带
+  `isMember` 布尔=「历史任一命中」，不承载阈值——AI 消费者 accept 前以计数为准。机器面字段集
+  恒定：`matchedSessions` 列全部命中会话（未命中为空数组），`closestSession`/`closestScore`
+  常驻（命中为 null、零配对时 closestScore 为 null）——消费端无需按结论写条件分支。不带
   `--member-check` 时 `--member-window` 单独出现按用法错误拒绝（exit 2）。
 
 ## 5. 生产打包形态

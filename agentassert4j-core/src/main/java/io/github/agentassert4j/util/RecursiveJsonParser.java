@@ -101,6 +101,22 @@ public final class RecursiveJsonParser {
         return typeMap;
     }
 
+    /**
+     * 把解析产物里的 JSON 对象强转为 Map&lt;String, String&gt;（值经 String.valueOf 归一，
+     * null 值保留 null；键序保持原序）。输入不是 Map（含 null）时返回 null——
+     * 供反序列化侧把宽松的解析类型收窄成模型字段的 String 容器。
+     */
+    public static Map<String, String> asStringMap(Object v) {
+        if (!(v instanceof Map)) {
+            return null;
+        }
+        Map<String, String> out = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> e : ((Map<?, ?>) v).entrySet()) {
+            out.put(String.valueOf(e.getKey()), e.getValue() != null ? String.valueOf(e.getValue()) : null);
+        }
+        return out;
+    }
+
     private static void collectPaths(Object node, String prefix, Set<String> paths) {
         if (node instanceof Map) {
             @SuppressWarnings("unchecked") Map<String, Object> map = (Map<String, Object>) node;

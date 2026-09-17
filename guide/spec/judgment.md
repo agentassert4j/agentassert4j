@@ -141,3 +141,4 @@
 | 2026-09-14 | A1/A2 修复批（批 1）同批修订：--ci 基线对照让画像存档指纹首次进入**判定**（基线侧） | 契约 11 由「两侧现场重提」全称表述收窄为「候选侧永远现场重提 + 基线侧三源定格投影 + 版本守卫强制可比」；真源表同步；「任何对比一律现场重提」全称命题自 verify 包路径存在起即被突破，本修订是把既有实践升格为明示模型（单向门 ×2 标注：--ci 判定基准变更 + 本规范修订） |
 | 2026-09-03 | S3 成文：FingerprintExtractor/DeterministicComparator/BehaviorChecker/JudgmentSemantics/BaselineManager 全量对账 + 测试指针核实 | ①ARCHIVED 枚举值从不写入活跃行（导读「基线三态流转」的表述易误读为活跃行三态，governance spec 成文时精确化）；②指纹序列化字节可复现（FingerprintJson 键序固定 + TreeMap/TreeSet 归一），提取器内存 HashMap 不影响；③维度 1 不受 ignorableFields 豁免为现行事实（测试未显式反向钉「维度 1 不豁免」，为可收缩项） |
 | 2026-09-17 | D1 术语清扫（维护者「质量优先」裁决） | 契约 11 两处单数旧词：「CI 对照 = 画像活跃指纹」→「画像认可形态集合」、「承诺 = 批准指纹」→「批准形态集合」（与同契约既有的集合措辞及 BaselineSides.fromProfiles 的形态集合投影对齐）；台账历史行保留原词 |
+| 2026-09-17 | 1.0.0 收尾批：S3 可收缩项补钉 | 台账在册的「维度 1 不受 ignorableFields 豁免为现行事实、测试未显式反向钉」补钉：DeterministicComparatorTest.ignorableFields_neverExemptToolDimension——把参数键名配成 ignorable 不能掩盖参数类型差异（CHANGED + paramTypeMatch=false + 结构维不受影响）；ignorableFields 的归一化边界自此只此一份语义 |

@@ -138,10 +138,10 @@ public final class FingerprintJson {
         }
         DeterministicFingerprint fp = new DeterministicFingerprint();
         fp.setToolCallSet(stringSet(m.get("toolCallSet")));
-        fp.setToolParamTypes(asStringMap(m.get("toolParamTypes")));
+        fp.setToolParamTypes(RecursiveJsonParser.asStringMap(m.get("toolParamTypes")));
         fp.setOutputContentType(asString(m.get("outputContentType")));
         fp.setOutputFieldPaths(stringSet(m.get("outputFieldPaths")));
-        fp.setOutputFieldTypeMap(asStringMap(m.get("outputFieldTypeMap")));
+        fp.setOutputFieldTypeMap(RecursiveJsonParser.asStringMap(m.get("outputFieldTypeMap")));
         fp.setTextLengthMagnitude(asInt(m.get("textLengthMagnitude")));
         fp.setRequiredKeywords(stringSet(m.get("requiredKeywords")));
         fp.setForbiddenKeywords(stringSet(m.get("forbiddenKeywords")));
@@ -199,17 +199,6 @@ public final class FingerprintJson {
             if (item != null) {
                 out.add(String.valueOf(item));
             }
-        }
-        return out;
-    }
-
-    private static Map<String, String> asStringMap(Object v) {
-        if (!(v instanceof Map)) {
-            return null;
-        }
-        Map<String, String> out = new LinkedHashMap<>();
-        for (Map.Entry<?, ?> e : ((Map<?, ?>) v).entrySet()) {
-            out.put(String.valueOf(e.getKey()), e.getValue() != null ? String.valueOf(e.getValue()) : null);
         }
         return out;
     }

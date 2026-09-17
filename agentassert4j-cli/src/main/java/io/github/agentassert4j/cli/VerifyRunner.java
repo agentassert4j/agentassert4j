@@ -508,26 +508,8 @@ public class VerifyRunner {
             StringBuilder ss = new StringBuilder("{");
             ss.append("\"invocationKey\":\"").append(RecursiveJsonParser.escape(step.getInvocationKey())).append('"');
             ss.append(",\"kind\":\"").append(step.getKind()).append('"');
-            if (step.getVerdict() != null) {
-                ss.append(",\"verdict\":\"").append(step.getVerdict()).append('"');
-            }
-            if (step.getComparison() != null) {
-                ss.append(CliSupport.comparisonMetricsFragment(step.getComparison()));
-            }
-            if (step.getSurplusCount() > 0) {
-                ss.append(",\"surplusCount\":").append(step.getSurplusCount());
-            }
-            if (step.getEarlierRecords() > 0) {
-                ss.append(",\"earlierRecords\":").append(step.getEarlierRecords());
-            }
-            if (step.getInvocationLabel() != null) {
-                ss.append(",\"invocationLabel\":\"").append(RecursiveJsonParser.escape(step.getInvocationLabel())).append('"');
-            }
-            if (step.isVersionSwitch()) {
-                ss.append(",\"versionSwitch\":true");
-                ss.append(",\"baselineSubdivision\":\"").append(RecursiveJsonParser.escape(step.getBaselineSubdivision())).append('"');
-                ss.append(",\"newSubdivision\":\"").append(RecursiveJsonParser.escape(step.getNewSubdivision())).append('"');
-            }
+            ss.append(CliSupport.stepEnvelopeFragment(step, null));
+            ss.append(CliSupport.stepVersionSwitchFragment(step));
             steps.add(ss.append('}').toString());
         }
         sb.append(String.join(",", steps)).append("]}");

@@ -83,8 +83,8 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
    判定基准 = 每任务最新链的逐调用点链末执行对照其已批准基线（画像认可形态集合；check/diff
    的 manifest description 与 initialize instructions 双轨声明该基准——accept 把链末形态加入
    认可集合后同链复检即绿，并注明本地 `replay` 不带 --ci 时为最新链 vs 次新链差分）。member-check 工具虽以 ciMode 语义运行，仍走链采样
-   （最新链对最近链窗口），不受基线对照改写；其成员块字段形态——命中携带
-   matchedSession、未命中携带 closestSession 与 closestScore——在 manifest description
+   （最新链对最近链窗口），不受基线对照改写；其成员块字段集恒定——matchedSessions（命中会话
+   列表，未命中为空数组）与 closestSession/closestScore（命中为 null）——在 manifest description
    同句声明（可发现性，字段语义本身见 replay.md 契约 13）；member-check 的 manifest 同句如实声明
    「no baseline writes; mismatch findings still land candidates awaiting adjudication」——候选
    登记不是基线治理写，但会改变 status/导出面，措辞不得让消费者误以为零副作用。理由：MCP 读动词必须与 CLI 读动词同等
@@ -261,3 +261,4 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
   （protocol 参数 + 自动识别 + protocol 字段回显）；映射矩阵与归一表移 recording.md
   「wire 方言归一」节单源承载。归一器实现与测试同批交付（McpRecordIngestionTest）。
 | 2026-09-17 | D1 术语清扫（维护者「质量优先」裁决） | 契约基准句「画像活跃指纹」→「画像认可形态集合」+「accept 提升链末形态」→「把链末形态加入认可集合」（与 D2 后代码及用户文档词表同形）；台账历史行保留原词 |
+| 2026-09-17 | 1.0.0 收尾批：member-check manifest 字段集描述同步 + record 命名终裁 | ①member-check 描述句改恒定字段集口径（always carries matchedSessions … closestSession/closestScore null on a match），契约 6 措辞同批改写（权威表述见 replay.md 契约 13）；②延迟池终裁（维护者裁决「明确不做」，防翻账）：CLI `record show`（查看）与 MCP `record`（摄取）的同名不同义维持现状为终态——manifest description 已自解释摄取语义，改名扰动 parity 映射/文档/测试全链收益不抵；除非出现明确 issue 再议 |
