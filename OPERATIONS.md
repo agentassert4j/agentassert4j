@@ -331,6 +331,9 @@ harness 权限系统执行。`--ref` 与 approver 是申报制自由串、不做
 standalone jar 本身就是 MCP server（stdio）：把行为回归能力交给 code agent / harness
 自主调用。工具面 = CLI 动词薄壳（check/diff/report/verify/doctor/graph + establish/
 accept/reject + re-drive + export）+ record 摄取（非 Java 栈上报交互的入场券）。
+其中 `graph` 回答值流问题（这个值最初从哪来、谁喂谁）：怀疑编排形状或值来源时先
+`graph` 再 `check`——只读勘察、不进判定，HIGH 边自带命中值与源/目标记录对，人读
+短形 + 图例，机器面 graph/1。
 
 ```json
 {
