@@ -78,8 +78,10 @@ agentassert4j/
 └── agentassert4j-sdk/                         ← 聚合 POM (packaging=pom)
     ├── agentassert4j-sdk-spring-ai1/          ← core + recorder + Spring AI 1.x（Boot 3.4/3.5 线）
     ├── agentassert4j-sdk-spring-ai2/          ← core + recorder + Spring AI 2.x（Boot 4 线，两代坐标同名互斥必分模块）
+    ├── agentassert4j-sdk-langchain4j1/        ← core + recorder + LangChain4j 1.x（纯程序化接入，零 Spring 依赖）
     ├── agentassert4j-spring-boot3-starter/    ← core + recorder + sdk-spring-ai1 + storage-sqlite + Boot 3 自动装配
-    └── agentassert4j-spring-boot4-starter/    ← core + recorder + sdk-spring-ai2 + storage-sqlite + Boot 4 自动装配（两代 starter 配对两条 sdk 线，Boot 版本均由用户自带，starter 不锁定）
+    ├── agentassert4j-spring-boot4-starter/    ← core + recorder + sdk-spring-ai2 + storage-sqlite + Boot 4 自动装配（两代 starter 配对两条 sdk 线，Boot 版本均由用户自带，starter 不锁定）
+    └── agentassert4j-langchain4j-spring-boot3-starter/ ← core + recorder + sdk-langchain4j1 + storage-sqlite + Boot 3 自动装配（与 Spring AI starter 同前缀同语义，混架应用共用录制器）
 ```
 
 > **裁剪说明**：曾存在的空壳模块（proxy / agent / dashboard / embedding / storage-mysql / storage-pg / sdk-lang / bom）已于
@@ -93,7 +95,7 @@ pom**。
 - 子模块的 parent 仍指向根 POM，通过 `<relativePath>../../pom.xml</relativePath>` 定位
 - 每个 artifactId 保持不变，Maven Central 发布不受影响
 - 聚合 POM 不产出 JAR，仅用于目录归类和批量构建
-- **框架适配 SDK 的命名自带版本线**：`sdk-<框架名><大版本号>`（如 `sdk-spring-ai1`，未来的 `sdk-spring-ai2`、`sdk-langchain4j1`）；starter 按 Boot 大版本命名（`spring-boot3-starter`）。一条大版本线一个模块，坐标自解释；同线内 patch/minor 靠二进制兼容，跨线**永不**在运行时嗅探版本做自动转发
+- **框架适配 SDK 的命名自带版本线**：`sdk-<框架名><大版本号>`（如 `sdk-spring-ai1`、`sdk-spring-ai2`、`sdk-langchain4j1`）；starter 按 Boot 大版本命名（`spring-boot3-starter`），引入第二框架后带框架限定名（`langchain4j-spring-boot3-starter`）。一条大版本线一个模块，坐标自解释；同线内 patch/minor 靠二进制兼容，跨线**永不**在运行时嗅探版本做自动转发
 
 ### 2.2 模块分层与依赖方向（单向，上层依赖下层）
 
@@ -105,9 +107,11 @@ Layer 2: agentassert4j-recorder      ← core + Disruptor + SLF4J API
 Layer 3: agentassert4j-cli           ← core + recorder + Picocli + storage-sqlite（组合根，默认后端随行）
          agentassert4j-sdk-spring-ai1 ← core + recorder + Spring AI 1.x
          agentassert4j-sdk-spring-ai2 ← core + recorder + Spring AI 2.x（1.x/2.x 基线互斥，各自独立模块）
+         agentassert4j-sdk-langchain4j1 ← core + recorder + LangChain4j 1.x（LangChain4j 为 provided，用户自带）
            │
 Layer 4: agentassert4j-spring-boot3-starter ← 聚合 core + sdk-spring-ai1 + storage-sqlite + 自动装配
          agentassert4j-spring-boot4-starter ← 聚合 core + sdk-spring-ai2 + storage-sqlite + 自动装配
+         agentassert4j-langchain4j-spring-boot3-starter ← 聚合 core + sdk-langchain4j1 + storage-sqlite + 自动装配
 
 存储插件（独立，只依赖 core）：
   agentassert4j-storage-sqlite       ← core + SQLite JDBC（默认）
@@ -155,7 +159,7 @@ io.github.agentassert4j/
 | L2 | recorder                  | 异步容错：RingBuffer 满则丢弃、批量写入失败记计数器不重试（失败批次丢弃，计数与日志可见，不做本地文件备份） |
 | L3 | 接入层（sdk-spring-ai1/ai2 / spring-boot3/4-starter） | 连接健壮性：上游超时透传错误、非标准格式尽力提取、版本不兼容静默退出               |
 
-**通用规则**：框架的任何故障都不应影响 Agent 主流程。宁可丢失录制数据，不可阻塞业务请求。
+**通用规则**：框架的任何故障都不应影响 Agent 主流程。宁可丢失录制数据，不可阻塞业务请求。旁路路径（录制/富化/装饰层）的「不中断」承诺按 Throwable 级别审计：递归与无界结构必须深度封顶，兜底 catch 的异常类型边界显式核对——`catch Exception` 接不住 StackOverflowError 一类 Error，穿透即砸业务。
 
 ---
 
@@ -459,6 +463,7 @@ sdk-spring-ai1 与 spring-boot3-starter 随 Spring AI 保持 17，不受此条�
 - **需求可以裁剪**：砍掉某功能若能让实现复杂度大幅下降，应建议裁剪而非硬扛。功能完整性是产品决策，技术成本是工程判断——后者先给数据，让前者有依据。
 - **先钉真源，再画数据流**（R11 的设计期义务）：方案中每个语义状态指明唯一真源与携带方式；派生表示（键、哈希、汇总、报告形态）只作投影消费——禁止用解析反推恢复语义来直接驱动判定与分组（真源缺席的重建路径必须钉在可测不变式上、回填显式字段后方可消费）；消费派生值的计算显式钉死就绪顺序并有测试；每条隐式依赖（字段必填、顺序、新鲜度）要么由生产者自动满足，要么由消费者就近校验并可见。
 - **方案前提实证**：方案赖以成立的核心假设（身份派生、配对规则、状态机收敛等语义前提）必须在读实现本身验证后方可进入实施排期；「注释这么说」「文档这么说」不构成验证。
+- **平行面镜像优先**：新增平行适配面（第二个框架/协议/存储/通道）时，字段级契约先与既有面逐字 diff 对齐，分歧点逐条显式裁决后落钉——平行面自创规则是跨面漂移的温床；wire 词表与形状组装代码出现**第二份**手写即单源化（第二份即违例，不等第三份）。
 - **新旧摩擦再审**：新需求与既有机制冲突或嫁接时，先评估旧机制自身的前提是否仍然成立、能否借此简化或退场，再决定叠加还是重构；不得仅因「旧设计已在」就给新需求套兼容壳或沿用已失效的旧假设。
 
 **落地表现**：方案讨论中主动做成本-收益分析、主动质疑过度工程、主动建议需求调整。最终决策权在维护者，但「这个优化划不划算」的判断必须先摆到桌面上。
@@ -493,6 +498,7 @@ sdk-spring-ai1 与 spring-boot3-starter 随 Spring AI 保持 17，不受此条�
 - **影响面全量核查**：删除/变更/移动任何公开符号（类/方法/参数/SPI 方法）前，grep 全库枚举生产与测试消费方，产出两份清单——「拆除清单」（随变更消亡的一切）与「存活清单」（守卫、告警、写入点、快照等必须迁入新宿主、不得随宿主类陪葬的逻辑）；兄弟路径与表面等价格子按 `guide/spec/equivalence.md` 登记表反查枚举（登记表是影响面普查的机器底册）；方案评审未附影响面矩阵不予通过
 - **新旧摩擦**：复用既有机制时核对它的成立前提是否仍被满足（前提已失效的旧假设不得随复用固化进新代码）；叠加式改动顺手评估被复用旧件本身是否应借此重构、简化或退场
 - **注释规范符合性**：对照 §12.6 全条自查
+- **外部形态假设**：桩测只能钉机制、真机才能钉形态——面向外部框架/服务的承诺（回调签名、线程模型、异步时序、方言编码）在真实调用形态上至少验证一次后再作为发布承诺；「桩按我们想象的形态调用」证明不了对方真的这么调
 
 #### 七大铁律（开发阶段强制）
 
@@ -502,7 +508,7 @@ sdk-spring-ai1 与 spring-boot3-starter 随 Spring AI 保持 17，不受此条�
 4. **测试测行为契约，不是测代码不崩**——契约场景（方言归一/排序确定性/转义往返/重放幂等/并发丢弃）必须显式覆盖。happy path 全绿但契约断裂 = 白测。
 5. **小步验证，问题前置**——大改动拆小步，每步完成做三层验证（编译 + 定向测试 + 契约对照）再进下一步。一次改 5 个模块再统一验证 = 问题堆积。
 6. **审计带对抗性视角**——主动问：哪里会断？数据丢在哪？消费者会收到什么？这个修复破坏谁？边界枚举了吗？不要只确认「代码对不对」。
-7. **注释不作证据**——注释、文档、历史结论只能引导理解；任何语义/行为/契约判定必须下沉到实现代码验证，引用注释或文档作依据时必须给出对应代码实证（类与方法级定位）。注释与代码冲突时，当前事实以代码为准；处置须判明哪侧符合方案设计与功能需求、哪侧是过时残留，修正过时侧——不得把「以代码为准」机械理解为保留一切现状，代码同样可能偏离设计。失真处置就地落定（修注释或修代码，含命名与术语残留），不让失真跨批存活；无法就地处置时记 TODO（§八）或开 issue 通报（§13.3）。
+7. **注释不作证据**——注释、文档、历史结论只能引导理解；任何语义/行为/契约判定必须下沉到实现代码验证，引用注释或文档作依据时必须给出对应代码实证（类与方法级定位）。测试作证据同样须核对消费面：「数据在场」的断言不构成「机制消费该数据」的证据——引用既有测试支撑方案前提前，先确认它断言的正是你要依赖的那个行为。注释与代码冲突时，当前事实以代码为准；处置须判明哪侧符合方案设计与功能需求、哪侧是过时残留，修正过时侧——不得把「以代码为准」机械理解为保留一切现状，代码同样可能偏离设计。失真处置就地落定（修注释或修代码，含命名与术语残留），不让失真跨批存活；无法就地处置时记 TODO（§八）或开 issue 通报（§13.3）。
 
 #### 审查报告格式
 
@@ -510,6 +516,7 @@ sdk-spring-ai1 与 spring-boot3-starter 随 Spring AI 保持 17，不受此条�
 - **视角清单勾稽**：上述各项审查视角逐项给出「发现/无问题」结论
 - **严重度分级**：HIGH（功能错误/数据丢失/不可逆风险）/ MEDIUM（降级路径错误/资源泄漏/边界缺陷）/ LOW（清理项）
 - **修复闭环**：每个修复项标注「修复后定向验证」方式
+- **未处置发现**：发现但裁定不修的项必须显式成清单（不修理由 + 触发条件 + 去向登记：spec 台账或 issue）——只报已处置项视为报告不完整
 
 ### 12.9 CLI 输出文案规范（英文原生风格）
 

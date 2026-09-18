@@ -137,6 +137,17 @@ class SpringAiRecordMapperTest {
         }
 
         @Test
+        @DisplayName("历史工具轮的方言字面量解码：字符串结果按语义原文落轮")
+        void toolTurnDialectLiteralDecoded() {
+            Prompt prompt = new Prompt(List.of(user("查一下订单"), toolResponse("call-1", "query_order", "\"REF-8841\"")));
+
+            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null, null, List.of());
+
+            TurnContext toolTurn = record.getPreviousTurns().get(1);
+            assertEquals("REF-8841", toolTurn.getContent(), "字符串字面量工具结果在历史轮里也是语义原文（与观察路径同规则）");
+        }
+
+        @Test
         @DisplayName("采样参数只序列化非空项")
         void samplingParamsSerializeNonNullOnly() {
             ToolCallingChatOptions options = DefaultToolCallingChatOptions.builder().model("deepseek-chat").temperature(0.0).maxTokens(512).build();

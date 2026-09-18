@@ -330,13 +330,21 @@ accept 扩展集合——裁决立即对门禁生效）为判定基准；不做�
 |--------|------|---------|
 | Spring Boot 3.x + Spring AI 1.x | `agentassert4j-spring-boot3-starter` | 零业务代码改动 |
 | Spring Boot 4.x + Spring AI 2.x | `agentassert4j-spring-boot4-starter` | 零业务代码改动 |
+| Spring Boot 3.x + LangChain4j 1.x | `agentassert4j-langchain4j-spring-boot3-starter` | 零业务代码改动 |
+| LangChain4j（无 Spring） | `agentassert4j-sdk-langchain4j1` + `recorder` + `storage-sqlite` | `RecordingChatModel.wrap(...)` 包住模型即可 |
 | Spring AI（无 Boot） | `agentassert4j-sdk-spring-ai1` / `-ai2` + `recorder` + `storage-sqlite` | 手动装配三个 Bean |
+| Spring AI + LangChain4j 同应用（混架） | 两个 starter | 共用录制器与存储，各自框架各被各的装饰器包装 |
 | JDK 8+ 任意栈（自封装 HTTP） | `agentassert4j-core` + `recorder` + `storage-sqlite` | 调用出口组装 `InteractionRecord` 后 `recorder.intercept(record)`——最小录制契约见 [OPERATIONS.md](OPERATIONS.md#8-最小录制契约) |
 | 自研「JSON 路由」栈（协议层无 toolCalls） | 同上 | 解析出工具名处写身份声明字段；意图识别用 rules.json 正则钉住 |
 
 Spring AI 默认在模型侧内部执行完整工具回路的，框架通过**工具回调观察装饰**把每轮工具名 / 参数 /
 结果按序记入同一条记录——业务零改动，工具维满血。重放这类记录走**链式半重放**：基线录制的旧结果
 当道具逐轮续问，决策分歧当场停下并定位到轮。
+
+LangChain4j 的工具回路编排在模型之外（AiServices 层），每个 LLM 轮次各自成记录：发起帧轮携带
+工具调用，工具结果落在下一轮的请求历史里——与 Spring AI 显式关闭内部工具执行后的逐轮形状一致。
+值溯源对两种形状同等消费：记录在调用上的工具结果与携带在下一轮 tool 轮次里的结果，都能追进下游
+工具参数。
 
 ## 身份：声明与零声明
 
@@ -369,8 +377,10 @@ agentassert4j-core                     零依赖心脏（仅 java.base）：模�
 agentassert4j-recorder                 Disruptor 异步旁路录制（不阻塞、不 OOM、丢失记账）
 agentassert4j-storage-sqlite           SQLite 存储（聚合于 agentassert4j-storage/）
 agentassert4j-sdk-spring-ai1 / -ai2    Spring AI 两代适配（含工具观察装饰）
+agentassert4j-sdk-langchain4j1         LangChain4j 1.x 适配（纯程序化零 Spring；逐轮采集）
 agentassert4j-spring-boot3-starter     Boot 3 自动装配（聚合 core+recorder+ai1+sqlite）
 agentassert4j-spring-boot4-starter     Boot 4 自动装配（聚合 core+recorder+ai2+sqlite）
+agentassert4j-langchain4j-spring-boot3-starter  LangChain4j 的 Boot 3 自动装配（聚合 core+recorder+lc4j+sqlite）
 agentassert4j-cli                      命令行工具（组合根：baseline/status/replay/verify/…）
 agentassert4j-cli-standalone           cli 的全依赖可执行形态（java -jar 直接用）
 ```

@@ -14,13 +14,13 @@
 
 ## 模块地图与分层铁律
 
-Maven reactor 共 11 个构建节点、产出 8 个 jar（聚合 POM 不产出构件）：
+Maven reactor 共 13 个构建节点、产出 10 个 jar（聚合 POM 不产出构件）：
 
 ```
-Layer 4   spring-boot3-starter          spring-boot4-starter     （自动装配聚合）
-               │ 聚合 core+recorder+         │ 聚合 core+recorder+
-               │ sdk-ai1+storage-sqlite      │ sdk-ai2+storage-sqlite
-Layer 3   sdk-spring-ai1            sdk-spring-ai2                （框架适配，两代坐标互斥必分模块）
+Layer 4   spring-boot3-starter          spring-boot4-starter     langchain4j-spring-boot3-starter
+               │ 聚合 core+recorder+         │ 聚合 core+recorder+      │ 聚合 core+recorder+
+               │ sdk-ai1+storage-sqlite      │ sdk-ai2+storage-sqlite   │ sdk-langchain4j1+storage-sqlite
+Layer 3   sdk-spring-ai1            sdk-spring-ai2            sdk-langchain4j1（纯程序化零 Spring）
           cli（组合根：core+recorder+storage-sqlite+picocli，默认后端随行）
                │
 Layer 2   recorder（core + Disruptor + SLF4J API）                （异步旁路管道）
@@ -65,7 +65,7 @@ core 内出现任何 `com.*`/`org.*`（非 JDK）import 都是缺陷。core 内�
 | `governance.md` | 治理生命周期：基线三态/候选/裁决/归档/漂移状态机 | 成文 |
 | `recording.md` | 录制管道：Disruptor/背压/脱敏/enrich/采集门 | 成文 |
 | `replay.md` | 重放与对齐：三层判定模型/检测器/对齐器/预算/退出码 | 成文 |
-| `sdk.md` | SDK/starter：两代观察装饰/链式半重放/兼容地板 | 成文 |
+| `sdk.md` | SDK/starter：两代观察装饰/LangChain4j 单点装饰/链式半重放/兼容地板 | 成文 |
 | `cli.md` | CLI 面：命令/参数/选择器/报告 schema/退出码 | 成文 |
 
 导读 Part II 各章是本规格系统的 bootstrap 原材料：对应域 spec 成文后，该章瘦身为指向 spec

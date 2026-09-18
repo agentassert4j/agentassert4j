@@ -5,7 +5,9 @@ import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.util.ArgTypeUtil;
 import io.github.agentassert4j.util.HashUtil;
 import io.github.agentassert4j.util.LlmProviderUtil;
+import io.github.agentassert4j.util.OpenAiWireUtil;
 import io.github.agentassert4j.util.RecursiveJsonParser;
+import io.github.agentassert4j.util.ToolResultNormalizer;
 import org.springframework.ai.chat.messages.*;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -206,7 +208,7 @@ final class SpringAiRecordMapper {
         }
         if (message instanceof ToolResponseMessage) {
             for (ToolResponseMessage.ToolResponse response : ((ToolResponseMessage) message).getResponses()) {
-                TurnContext turn = new TurnContext("tool", response.responseData());
+                TurnContext turn = new TurnContext("tool", ToolResultNormalizer.normalize(response.responseData()));
                 turn.setToolCallId(response.id());
                 turn.setToolName(response.name());
                 turns.add(turn);
@@ -227,28 +229,9 @@ final class SpringAiRecordMapper {
         record.setModel(model);
         record.setProvider(LlmProviderUtil.inferFromModel(model));
 
-        Map<String, Object> sampling = new LinkedHashMap<>();
-        if (options.getTemperature() != null) {
-            sampling.put("temperature", options.getTemperature());
-        }
-        if (options.getTopP() != null) {
-            sampling.put("top_p", options.getTopP());
-        }
-        if (options.getTopK() != null) {
-            sampling.put("top_k", options.getTopK());
-        }
-        if (options.getMaxTokens() != null) {
-            sampling.put("max_tokens", options.getMaxTokens());
-        }
-        if (options.getFrequencyPenalty() != null) {
-            sampling.put("frequency_penalty", options.getFrequencyPenalty());
-        }
-        if (options.getPresencePenalty() != null) {
-            sampling.put("presence_penalty", options.getPresencePenalty());
-        }
-        if (options.getStopSequences() != null && !options.getStopSequences().isEmpty()) {
-            sampling.put("stop", options.getStopSequences());
-        }
+        Map<String, Object> sampling = OpenAiWireUtil.sampling(options.getTemperature(), options.getTopP(),
+                options.getTopK(), options.getMaxTokens(), options.getFrequencyPenalty(),
+                options.getPresencePenalty(), options.getStopSequences());
         if (!sampling.isEmpty()) {
             record.setSamplingParams(RecursiveJsonParser.serialize(sampling));
         }
@@ -264,14 +247,8 @@ final class SpringAiRecordMapper {
                     continue;
                 }
                 ToolDefinition definition = callback.getToolDefinition();
-                Map<String, Object> function = new LinkedHashMap<>();
-                function.put("name", definition.name());
-                function.put("description", definition.description() != null ? definition.description() : "");
-                function.put("parameters", parseOrEmpty(definition.inputSchema()));
-                Map<String, Object> tool = new LinkedHashMap<>();
-                tool.put("type", "function");
-                tool.put("function", function);
-                tools.add(tool);
+                tools.add(OpenAiWireUtil.functionTool(definition.name(), definition.description(),
+                        parseOrEmpty(definition.inputSchema())));
             }
             if (!tools.isEmpty()) {
                 record.setToolsDefinition(RecursiveJsonParser.serialize(tools));

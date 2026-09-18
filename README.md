@@ -366,7 +366,10 @@ Channel contract and schema list in [OPERATIONS.md](OPERATIONS.md).
 |------------|--------------|--------|
 | Spring Boot 3.x + Spring AI 1.x | `agentassert4j-spring-boot3-starter` | Zero business-code changes |
 | Spring Boot 4.x + Spring AI 2.x | `agentassert4j-spring-boot4-starter` | Zero business-code changes |
+| Spring Boot 3.x + LangChain4j 1.x | `agentassert4j-langchain4j-spring-boot3-starter` | Zero business-code changes |
+| LangChain4j (no Spring) | `agentassert4j-sdk-langchain4j1` + `recorder` + `storage-sqlite` | Wrap your `ChatModel` with `RecordingChatModel.wrap(...)` |
 | Spring AI without Boot | `agentassert4j-sdk-spring-ai1` / `-ai2` + `recorder` + `storage-sqlite` | Assemble three beans manually |
+| Spring AI + LangChain4j in one app | both starters | Shared recorder/storage, each framework wrapped by its own decorator |
 | JDK 8+ any stack (hand-rolled HTTP) | `agentassert4j-core` + `recorder` + `storage-sqlite` | Build an `InteractionRecord` at the call site, hand it to `recorder.intercept(record)` — minimal recording contract in [OPERATIONS.md](OPERATIONS.md) |
 | Home-grown "JSON routing" stack (no protocol-level toolCalls) | same as above | Declare identity where you parse the tool name; pin intent routing with rules.json regexes |
 
@@ -375,6 +378,12 @@ callbacks with a pure observer: every tool name / arguments / result lands in th
 order — zero business changes, the tool dimension fully visible. Replaying such records uses a
 **chained half-replay**: recorded tool results are fed back as props round by round; the chain stops at
 the first divergent decision and pinpoints the round.
+
+LangChain4j orchestrates the tool loop outside the model (AiServices), so every LLM round is captured
+as its own record: the frame round carries the tool call, and the tool result lands in the next round's
+history — the same per-round shape as Spring AI with internal tool execution disabled. Value
+provenance consumes both shapes: tool results recorded on the call or carried in the next round's
+tool turn are equally traceable into downstream arguments.
 
 ## Identity: declared and zero-declaration
 
@@ -411,8 +420,10 @@ agentassert4j-core                     zero-dependency heart (java.base only): m
 agentassert4j-recorder                 Disruptor async out-of-band pipeline (non-blocking, bounded, every loss metered)
 agentassert4j-storage-sqlite           SQLite storage (aggregated under agentassert4j-storage/)
 agentassert4j-sdk-spring-ai1 / -ai2    Spring AI 1.x / 2.x adapters (incl. tool-observation decoration)
+agentassert4j-sdk-langchain4j1         LangChain4j 1.x adapter (pure programmatic, zero Spring; per-round capture)
 agentassert4j-spring-boot3-starter     Boot 3 auto-configuration (core+recorder+ai1+sqlite)
 agentassert4j-spring-boot4-starter     Boot 4 auto-configuration (core+recorder+ai2+sqlite)
+agentassert4j-langchain4j-spring-boot3-starter  Boot 3 auto-configuration for LangChain4j (core+recorder+lc4j+sqlite)
 agentassert4j-cli                      command-line tool (composition root: baseline/status/replay/verify/…)
 agentassert4j-cli-standalone           fully-shaded executable form of cli (java -jar, no install)
 ```

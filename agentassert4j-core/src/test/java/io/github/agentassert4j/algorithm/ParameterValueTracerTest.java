@@ -494,6 +494,44 @@ class ParameterValueTracerTest {
     }
 
     @Test
+    void traceDependency_perRoundToolTurnResult_highEdgeFromHistoryTurn() {
+        // 逐轮成记录形状：发起帧轮不带结果，工具返回住在下一轮请求历史的 tool 角色帧
+        // ——该形状的值源必须同样支撑 HIGH 溯源边（LangChain4j 面 / 关闭内部执行的
+        // Spring AI 面的采集形状）
+        InteractionRecord frameRound = record("order", null, Collections.singletonList(tc("getOrder", Collections.singletonMap("orderId", (Object) "SO-77"))), 1000);
+        frameRound.setRecordId("rec-frame");
+        InteractionRecord resultRound = record("order", "已退款 REF-8841", null, 2000);
+        resultRound.setRecordId("rec-result");
+        TurnContext toolTurn = new TurnContext("tool", "{\"orderId\":\"SO-77\",\"refundId\":\"REF-8841\"}");
+        toolTurn.setToolName("getOrder");
+        resultRound.setPreviousTurns(Collections.singletonList(toolTurn));
+        InteractionRecord logisticsFrame = record("logistics", null, Collections.singletonList(tc("traceLogistics", Collections.singletonMap("refundId", (Object) "REF-8841"))), 3000);
+        logisticsFrame.setRecordId("rec-logi");
+
+        tracer.traceDependency(Arrays.asList(frameRound, resultRound, logisticsFrame));
+
+        GraphEdge edge = findEdge(tracer.getGraph(), "invocation:order:hash", "invocation:logistics:hash");
+        assertNotNull(edge, "工具结果住在 previousTurns 的逐轮形状也必须出 HIGH 溯源边");
+        assertEquals(Confidence.HIGH, edge.getConfidence());
+        assertEquals("REF-8841", edge.getEvidenceValue());
+        assertEquals("rec-result", edge.getEvidenceSourceRecordId(), "证据源 = 携带 tool 结果帧的结果轮");
+    }
+
+    @Test
+    void extractFieldValues_userOrAssistantTurnsNotValueSource() {
+        // 历史轮次只有 user/assistant 文本时不走 tool 帧值源：人类输入不是值的上游，
+        // 值源兜底回到模型回复文本
+        InteractionRecord r = record("chat", "{\"refundId\":\"REF-OK\"}", null, 1000);
+        r.setPreviousTurns(Arrays.asList(new TurnContext("user", "{\"refundId\":\"REF-USER\"}"), new TurnContext("assistant", "{\"refundId\":\"REF-ASSISTANT\"}")));
+
+        Set<String> values = tracer.extractFieldValues(r);
+
+        assertFalse(values.contains("REF-USER"));
+        assertFalse(values.contains("REF-ASSISTANT"));
+        assertTrue(values.contains("REF-OK"), "无 tool 帧时模型回复仍是值源");
+    }
+
+    @Test
     void traceDependency_sameKeyValueFlow_noSelfEdgeNoCycle() {
         // 自环守卫：同键前执行产出值被后执行消费 → 不建 K→K 边、不触发环
         InteractionRecord first = record("lookup", "{\"orderId\":\"ORD-001\"}", Collections.singletonList(tc("tL", null)), 1000);
@@ -551,8 +589,8 @@ class ParameterValueTracerTest {
 
         @Override
         public InteractionRecord findByRecordId(String recordId) {
-        return null; // 测试桩不承载按 id 精确查询
-    }
+            return null; // 测试桩不承载按 id 精确查询
+        }
 
         public List<InteractionRecord> findBySessionId(String sessionId) {
             return data.getOrDefault(sessionId, Collections.emptyList());
@@ -606,6 +644,7 @@ class ParameterValueTracerTest {
         }
 
     }
+
     /**
      * 边存在性断言助手：精简后的图 API 以边枚举为唯一读面
      */
@@ -617,9 +656,7 @@ class ParameterValueTracerTest {
      * 按边枚举序取指定边的断言助手（含证据断言场景）。
      */
     private static GraphEdge findEdge(InMemoryDependencyGraph g, String src, String tgt) {
-        return g.getAllEdges().stream()
-                .filter(e -> e.getSource().equals(src) && e.getTarget().equals(tgt))
-                .findFirst().orElse(null);
+        return g.getAllEdges().stream().filter(e -> e.getSource().equals(src) && e.getTarget().equals(tgt)).findFirst().orElse(null);
     }
 
     /**
@@ -628,8 +665,7 @@ class ParameterValueTracerTest {
     private static List<String> edgeSignature(InMemoryDependencyGraph g) {
         List<String> out = new ArrayList<>();
         for (GraphEdge e : g.getAllEdges()) {
-            out.add(e.getSource() + ">" + e.getTarget() + "|" + e.getConfidence() + "|"
-                    + e.getEvidenceValue() + "|" + e.getEvidenceSourceRecordId() + "|" + e.getEvidenceTargetRecordId());
+            out.add(e.getSource() + ">" + e.getTarget() + "|" + e.getConfidence() + "|" + e.getEvidenceValue() + "|" + e.getEvidenceSourceRecordId() + "|" + e.getEvidenceTargetRecordId());
         }
         return out;
     }

@@ -3,6 +3,7 @@ package io.github.agentassert4j.algorithm;
 import io.github.agentassert4j.model.Confidence;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.ToolCall;
+import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 
@@ -153,9 +154,11 @@ public class ParameterValueTracer {
     /**
      * 从前序交互提取所有叶子节点的字符串值（RecursiveJsonParser 解析，深度限制 3 层）。
      *
-     * <p>值源按记录形状二选一：任一工具调用带录制结果（ToolCall.result）时取全部工具
-     * 返回——工具返回才是下游参数的真实上游；否则取模型回复文本，它是无工具调用的
-     * 声明记录（纯文本结构化技能）的唯一值源。</p>
+     * <p>值源按记录形状择一：任一工具调用带录制结果（ToolCall.result）时取全部工具
+     * 返回——工具返回才是下游参数的真实上游；否则看历史轮次里的 tool 角色结果帧——
+     * 逐轮成记录的形状（回路编排在 ChatModel 之外，发起帧与结果分家）下，工具返回
+     * 住在下一轮请求历史的 previousTurns，语义上同样是下游参数的真实上游；两者皆无
+     * 时取模型回复文本，它是无工具调用的声明记录（纯文本结构化技能）的唯一值源。</p>
      */
     public Set<String> extractFieldValues(InteractionRecord record) {
         Set<String> values = new LinkedHashSet<>();
@@ -166,6 +169,17 @@ public class ParameterValueTracer {
                 String result = call != null ? call.getResult() : null;
                 if (result == null || result.trim().isEmpty()) continue;
                 Object json = RecursiveJsonParser.parse(result);
+                if (json != null) collectLeafValues(json, values, 0);
+            }
+            return values;
+        }
+
+        if (hasToolTurnResult(record)) {
+            for (TurnContext turn : record.getPreviousTurns()) {
+                if (turn == null || !"tool".equals(turn.getRole())) continue;
+                String content = turn.getContent();
+                if (content == null || content.trim().isEmpty()) continue;
+                Object json = RecursiveJsonParser.parse(content);
                 if (json != null) collectLeafValues(json, values, 0);
             }
             return values;
@@ -186,6 +200,21 @@ public class ParameterValueTracer {
         if (record.getToolCalls() == null) return false;
         for (ToolCall call : record.getToolCalls()) {
             if (call != null && call.getResult() != null && !call.getResult().trim().isEmpty()) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 历史轮次中是否存在任一非空的 tool 角色结果帧——逐轮成记录形状下的工具返回载体
+     * （回路编排在外层发起，工具结果经回灌进下一轮请求历史）。
+     */
+    private static boolean hasToolTurnResult(InteractionRecord record) {
+        if (record.getPreviousTurns() == null) return false;
+        for (TurnContext turn : record.getPreviousTurns()) {
+            if (turn != null && "tool".equals(turn.getRole())
+                    && turn.getContent() != null && !turn.getContent().trim().isEmpty()) {
+                return true;
+            }
         }
         return false;
     }

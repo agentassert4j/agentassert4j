@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>io.github.agentassert4j</groupId>
+        <artifactId>agentassert4j-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+    <artifactId>agentassert4j-langchain4j-spring-boot3-starter</artifactId>
+    <name>AgentAssert4j LangChain4j Spring Boot 3 Starter</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.agentassert4j</groupId>
+            <artifactId>agentassert4j-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.agentassert4j</groupId>
+            <artifactId>agentassert4j-recorder</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.agentassert4j</groupId>
+            <artifactId>agentassert4j-sdk-langchain4j1</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.agentassert4j</groupId>
+            <artifactId>agentassert4j-storage-sqlite</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <!-- Boot 版本由用户应用自带，starter 不锁定：optional 不向用户传递，编译基线钉 Boot 3 线 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+            <version>${spring-boot3.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <!-- LangChain4j 由用户应用自带（sdk-langchain4j1 的地板依赖不传递）；本模块编译与
+             测试钉天花板版本——适配层只触碰地板已存在的符号，用户带低版本二进制兼容，
+             测试面借天花板核验富回调转发等新增形状 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-core</artifactId>
+            <version>${langchain4j-ceiling.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- ApplicationContextRunner 的 AssertableApplicationContext 接口层级引用 assertj，starter-test 一并供给 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <version>${spring-boot3.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- SDK 录制面 e2e（环境变量门控）：AiServices 工具回路与 OpenAI 兼容模型 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j</artifactId>
+            <version>${langchain4j-ceiling.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai</artifactId>
+            <version>${langchain4j-ceiling.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- 混架共存钉（与 Spring AI starter 同容器互不干扰） -->
+        <dependency>
+            <groupId>io.github.agentassert4j</groupId>
+            <artifactId>agentassert4j-spring-boot3-starter</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-model</artifactId>
+            <version>${spring-ai1.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>17</release>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

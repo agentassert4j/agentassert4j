@@ -353,9 +353,10 @@ accept/reject + re-drive + export）+ record 摄取（非 Java 栈上报交互�
 - 排障开关 `--diag`：逐消息向 stderr 记 method 与耗时（默认静默；stdout 只出协议消息）。
 - Java 应用的**录制**仍走 starter/SDK（进程内直录）；MCP record 动词服务非 Java 栈
   （TS/Python agent 把原生 LLM 调用的原始请求/响应 JSON 上报落库，幂等可重发）。两种来源的
-  **原文覆盖不同**：SDK 录制的记录 raw 双列恒为空——Spring AI 的 ChatModel 抽象层只交付结构化
-  消息对象、不暴露线上报文（Spring AI 1.x 与 2.x 同此，接口面经字节码核实），属框架侧既有限制
-  而非待办；MCP 上报与 CLI 重驱的记录携带逐字原文，`record show` 取证时以这两类为全量来源。
+  **原文覆盖不同**：SDK 录制的记录 raw 双列恒为空——Spring AI 的 ChatModel 抽象层与
+  LangChain4j 的 ChatModel 抽象层都只交付结构化消息对象、不暴露线上报文（Spring AI 1.x/2.x
+  与 LangChain4j 1.0.0/1.18.0 均经字节码核实），属框架侧既有限制而非待办；MCP 上报与 CLI
+  重驱的记录携带逐字原文，`record show` 取证时以这两类为全量来源。
 
 AI 自主回路的典型时序（人在 harness 权限系统里授权，不在框架里）：
 

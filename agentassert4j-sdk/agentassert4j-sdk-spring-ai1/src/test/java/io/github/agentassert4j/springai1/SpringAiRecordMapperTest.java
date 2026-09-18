@@ -5,6 +5,7 @@ import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.util.HashUtil;
 import io.github.agentassert4j.util.RecursiveJsonParser;
+import io.github.agentassert4j.util.ToolResultNormalizer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -133,6 +134,17 @@ class SpringAiRecordMapperTest {
             assertEquals("query_order", toolTurn.getToolName());
             assertEquals("{\"status\":\"shipped\"}", toolTurn.getContent());
             assertEquals(1, record.getTurnIndex());
+        }
+
+        @Test
+        @DisplayName("历史工具轮的方言字面量解码：字符串结果按语义原文落轮")
+        void toolTurnDialectLiteralDecoded() {
+            Prompt prompt = new Prompt(List.of(user("查一下订单"), toolResponse("call-1", "query_order", "\"REF-8841\"")));
+
+            InteractionRecord record = SpringAiRecordMapper.toRecord(prompt, null, 10, null, null, List.of());
+
+            TurnContext toolTurn = record.getPreviousTurns().get(1);
+            assertEquals("REF-8841", toolTurn.getContent(), "字符串字面量工具结果在历史轮里也是语义原文（与观察路径同规则）");
         }
 
         @Test
@@ -383,14 +395,14 @@ class SpringAiRecordMapperTest {
     void toolResult_dialectNormalized() {
         // Spring AI 对 String 返回整体做一层 JSON 编码——语义原文被包进引号转义
         String encoded = RecursiveJsonParser.serialize("{\"orderId\":\"SO-77\",\"refundId\":\"REF-8841\"}");
-        assertEquals("{\"orderId\":\"SO-77\",\"refundId\":\"REF-8841\"}", SpringAiRecordMapper.normalizeToolResult(encoded));
+        assertEquals("{\"orderId\":\"SO-77\",\"refundId\":\"REF-8841\"}", ToolResultNormalizer.normalize(encoded));
         // 纯文本 String 返回同样还原语义原文（编码形 "\"ok\"" → "ok"）
-        assertEquals("ok", SpringAiRecordMapper.normalizeToolResult(RecursiveJsonParser.serialize("ok")));
+        assertEquals("ok", ToolResultNormalizer.normalize(RecursiveJsonParser.serialize("ok")));
         // 对象/数组返回（POJO 工具）本就是 JSON，原样保留
-        assertEquals("{\"a\":1}", SpringAiRecordMapper.normalizeToolResult("{\"a\":1}"));
+        assertEquals("{\"a\":1}", ToolResultNormalizer.normalize("{\"a\":1}"));
         // 非JSON 纯文本与空值安全直通
-        assertEquals("订单已发货", SpringAiRecordMapper.normalizeToolResult("订单已发货"));
-        assertNull(SpringAiRecordMapper.normalizeToolResult(null));
-        assertEquals("", SpringAiRecordMapper.normalizeToolResult(""));
+        assertEquals("订单已发货", ToolResultNormalizer.normalize("订单已发货"));
+        assertNull(ToolResultNormalizer.normalize(null));
+        assertEquals("", ToolResultNormalizer.normalize(""));
     }
 }
