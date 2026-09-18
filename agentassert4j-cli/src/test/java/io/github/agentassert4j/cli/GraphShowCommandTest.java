@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -62,12 +63,31 @@ class GraphShowCommandTest {
 
         assertEquals(0, exit);
         String output = stdout.toString();
-        // 图节点身份 = 调用点键（声明锚点：invocation:标签:模板哈希）
-        assertTrue(output.contains("invocation:queryOrder:hash-r-1"), "节点必须含上游调用点键");
-        assertTrue(output.contains("invocation:refundOrder:hash-r-2"), "节点必须含下游调用点键");
-        assertTrue(output.contains("invocation:queryOrder:hash-r-1 -> invocation:refundOrder:hash-r-2"), "值流边必须渲染");
-        assertTrue(output.contains("HIGH"), "字段值精确匹配是 HIGH 置信度");
+        // 节点/边正文走 displayKey 短形——完整键不进正文行
+        assertTrue(output.contains("Nodes (2): queryOrder@hash-r-1, refundOrder@hash-r-2"), "节点行必须走短形: " + output);
+        assertTrue(output.contains("queryOrder@hash-r-1 -> refundOrder@hash-r-2  HIGH"), "值流边必须短形渲染并标 HIGH: " + output);
+        assertFalse(output.contains(" -> invocation:"), "正文边行不得残留完整键: " + output);
+        // HIGH 边证据：命中值（引号包裹）+ 源/目标记录对（ASCII 箭头）
+        assertTrue(output.contains("\"SO-77\" (r-1 -> r-2)"), "HIGH 边必须携带证据值与记录对: " + output);
+        // 图例：短形 → 完整键逐字映射（完整键是可寻址身份，可直接复制进 --invocation）
+        assertTrue(output.contains("queryOrder@hash-r-1 = invocation:queryOrder:hash-r-1"), "图例必须逐字携带完整键: " + output);
+        assertTrue(output.contains("refundOrder@hash-r-2 = invocation:refundOrder:hash-r-2"), "图例必须逐字携带完整键: " + output);
         assertTrue(output.contains("Cycles: none"));
+    }
+
+    @Test
+    @DisplayName("LOW 边仅相邻前缀提示：边行无证据值无记录对")
+    void lowEdgeRendersWithoutEvidence() {
+        saveChainRecord("r-1", "queryOrder", 1000L, null, "{\"orderId\":\"ORD-1\"}");
+        saveChainRecord("r-2", "refundOrder", 2000L, "SOMETHING_ELSE", null);
+
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("graph", "show", "--db", dbPath);
+
+        assertEquals(0, exit);
+        String output = stdout.toString();
+        assertTrue(output.contains("queryOrder@hash-r-1 -> refundOrder@hash-r-2  LOW"), "相邻前缀撞必须渲染 LOW 边: " + output);
+        assertFalse(output.contains("(r-1 -> r-2)"), "LOW 是提示不是证据，不得渲染记录对: " + output);
+        assertFalse(output.contains("\"ORD-1\""), "LOW 边行不得渲染证据值: " + output);
     }
 
     @Test

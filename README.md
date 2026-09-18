@@ -333,7 +333,7 @@ always describes the baseline that is actually active.) Five ways teams use it:
 | `record show` | Echo one stored interaction's raw wire payloads (troubleshooting/forensics) |
 | `verify` | Delivery acceptance: pack × locally recorded chains (read-only); `--dry-run` previews the pairing, `--report` writes the markdown evidence |
 | `rules` | List built-in behavior checks and rules-file syntax |
-| `graph show` | Read-only dependency graph (rebuilt from recordings on the spot) |
+| `graph show` | Read-only value-flow provenance graph (HIGH edges carry the matched value and record pair) |
 | `audit` | List governance writes from the event timeline (verb/actor/time/code ref, including reject and rollback) — AI (`agent:*`) and human writes on one timeline |
 | `mcp` | Run as a stdio MCP server (17 tools mirroring CLI verbs, for non-Java AI hosts) |
 | `doctor` | Read-only health check in three deterministic sections: identity (skeleton families, unlabeled multi-step chains, repeated request-text families worth declaring), coverage (unestablished invocations, records missing template_hash), rules (malformed declarations, expectation mismatches); advisory only (exit 0 in normal operation; not a gate) |

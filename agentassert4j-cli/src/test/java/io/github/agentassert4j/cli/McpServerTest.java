@@ -300,6 +300,20 @@ class McpServerTest {
         }
 
         @Test
+        @DisplayName("graph 工具 description 携带值溯源与证据口径（全对触达、HIGH 带值与记录对、LOW 相邻提示）")
+        void graphDescription_declaresProvenanceAndEvidence() {
+            for (McpTool tool : McpTools.tools(dbPath)) {
+                if (!tool.name.equals("graph")) {
+                    continue;
+                }
+                assertTrue(tool.description.contains("value-flow provenance"), "值溯源口径必须在场: " + tool.description);
+                assertTrue(tool.description.contains("traces back to an earlier response"), "全对触达语义必须在场: " + tool.description);
+                assertTrue(tool.description.contains("matched value and record pair"), "HIGH 边证据声明必须在场: " + tool.description);
+                assertTrue(tool.description.contains("adjacent vocabulary hints"), "LOW 边相邻提示声明必须在场: " + tool.description);
+            }
+        }
+
+        @Test
         @DisplayName("治理动词 approver 必填：schema required 四工具齐备")
         void governanceTools_requireApproverInSchema() {
             for (McpTool tool : McpTools.tools(dbPath)) {

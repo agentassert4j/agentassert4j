@@ -10,12 +10,13 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 参数值追踪器 — 通过字段值精确匹配 + 字段名前缀匹配构建依赖图谱。
+ * 参数值追踪器 — 通过字段值精确匹配 + 字段名前缀匹配构建值溯源图谱。
  *
  * <p>两层匹配策略：
  * <ul>
- *   <li>第 1 层：字段值精确 equals → HIGH 置信度</li>
- *   <li>第 2 层：字段名前缀匹配 + 值非空 → LOW 置信度</li>
+ *   <li>第 1 层：字段值精确 equals，对会话内全部更早记录触达（值溯源语义——值产生后隔步被引用
+ *       也建边）→ HIGH 置信度，携带证据（命中值 + 源/目标记录 id）</li>
+ *   <li>第 2 层：字段名前缀匹配，仅相邻对且该对未命中精确匹配 → LOW 置信度（提示，不携带证据）</li>
  * </ul>
  *
  * <p>链路构建：按 sessionId 分组 + 按 timestamp 排序，仅追踪单次会话内的数据流。</p>
@@ -60,54 +61,93 @@ public class ParameterValueTracer {
 
     /**
      * 在单个 session 的有序链中追踪数据流依赖。
-     * 第 1 层：字段值精确匹配 → HIGH；第 2 层：字段名前缀匹配 → LOW。
+     * 第 1 层：字段值精确匹配（对会话内全部更早记录触达）→ HIGH + 证据；
+     * 第 2 层：字段名前缀匹配（仅相邻对、且该对未命中精确匹配）→ LOW。
+     * 键为 null 或同键的对不建边：同键多执行不自环（自环既污染溯源图又误触环检测）。
      */
     public void traceDependency(List<InteractionRecord> chain) {
         if (chain == null || chain.size() < 2) return;
 
-        for (int i = 1; i < chain.size(); i++) {
-            InteractionRecord prev = chain.get(i - 1);
-            InteractionRecord curr = chain.get(i);
+        int n = chain.size();
+        // 逐记录提取缓存：值集/名集每记录提取一次，供全部对扫描复用
+        List<Set<String>> valueCache = new ArrayList<>(n);
+        List<Set<String>> nameCache = new ArrayList<>(n);
+        List<Set<String>> argValueCache = new ArrayList<>(n);
+        List<Set<String>> argNameCache = new ArrayList<>(n);
+        List<String> invocationKeys = new ArrayList<>(n);
+        for (int k = 0; k < n; k++) {
+            valueCache.add(null);
+            nameCache.add(null);
+            argValueCache.add(null);
+            argNameCache.add(null);
+            invocationKeys.add(invocationKeyOf(chain.get(k)));
+        }
 
-            String prevInvocation = invocationKeyOf(prev);
-            String currInvocation = invocationKeyOf(curr);
-            if (prevInvocation == null || currInvocation == null || prevInvocation.equals(currInvocation)) continue;
+        for (int i = 1; i < n; i++) {
+            String currInvocation = invocationKeys.get(i);
+            if (currInvocation == null) continue;
 
-            // ====== 第 1 层：字段值精确匹配 ======
-            Set<String> prevFieldValues = extractFieldValues(prev);
-            Set<String> currArgValues = extractArgValues(curr);
+            for (int j = 0; j < i; j++) {
+                String prevInvocation = invocationKeys.get(j);
+                if (prevInvocation == null || prevInvocation.equals(currInvocation)) continue;
 
-            boolean valueMatched = false;
-            for (String prevVal : prevFieldValues) {
-                if (isMeaningfulValue(prevVal) && currArgValues.contains(prevVal)) {
-                    graph.addEdge(prevInvocation, currInvocation, Confidence.HIGH);
-                    valueMatched = true;
-                    break; // 一条精确匹配就够了
+                // ====== 第 1 层：字段值精确匹配（j 会话内全对触达） ======
+                if (valueCache.get(j) == null) {
+                    valueCache.set(j, extractFieldValues(chain.get(j)));
                 }
-            }
+                if (argValueCache.get(i) == null) {
+                    argValueCache.set(i, extractArgValues(chain.get(i)));
+                }
+                String matchedValue = firstMeaningfulMatch(valueCache.get(j), argValueCache.get(i));
+                if (matchedValue != null) {
+                    graph.addEdge(prevInvocation, currInvocation, Confidence.HIGH,
+                            matchedValue, chain.get(j).getRecordId(), chain.get(i).getRecordId());
+                    continue;
+                }
 
-            // ====== 第 2 层：字段名前缀匹配 ======
-            if (!valueMatched) {
-                Set<String> prevFieldNames = extractFieldNames(prev);
-                Set<String> currArgNames = extractArgNames(curr);
-
-                boolean prefixMatched = false;
-                for (String pName : prevFieldNames) {
-                    if (prefixMatched) break;
-                    String pPrefix = extractPrefix(pName);
-                    if (pPrefix.length() < MIN_PREFIX_LENGTH) continue;
-                    for (String cName : currArgNames) {
-                        String cPrefix = extractPrefix(cName);
-                        if (pPrefix.equals(cPrefix)) {
-                            // 前缀匹配，建 LOW 边
-                            graph.addEdge(prevInvocation, currInvocation, Confidence.LOW);
-                            prefixMatched = true;
-                            break; // 当前对只需建一条 LOW 边
-                        }
+                // ====== 第 2 层：字段名前缀匹配（仅相邻对） ======
+                if (j == i - 1) {
+                    if (nameCache.get(j) == null) {
+                        nameCache.set(j, extractFieldNames(chain.get(j)));
+                    }
+                    if (argNameCache.get(i) == null) {
+                        argNameCache.set(i, extractArgNames(chain.get(i)));
+                    }
+                    if (prefixMatched(nameCache.get(j), argNameCache.get(i))) {
+                        graph.addEdge(prevInvocation, currInvocation, Confidence.LOW, null, null, null);
                     }
                 }
             }
         }
+    }
+
+    /**
+     * 值集与参数值集的首个有意义命中：值集 LinkedHashSet 插入序 + isMeaningfulValue 过滤
+     * ⇒ 首命中唯一确定（证据可复现的前提）。
+     */
+    private String firstMeaningfulMatch(Set<String> fieldValues, Set<String> argValues) {
+        for (String value : fieldValues) {
+            if (isMeaningfulValue(value) && argValues.contains(value)) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 字段名前缀匹配（前缀 ≥ 最小长度）：当前对只需一条命中即建 LOW 边。
+     */
+    private boolean prefixMatched(Set<String> fieldNames, Set<String> argNames) {
+        for (String pName : fieldNames) {
+            String pPrefix = extractPrefix(pName);
+            if (pPrefix.length() < MIN_PREFIX_LENGTH) continue;
+            for (String cName : argNames) {
+                if (pPrefix.equals(extractPrefix(cName))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

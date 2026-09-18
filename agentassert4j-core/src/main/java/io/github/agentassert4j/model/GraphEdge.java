@@ -5,8 +5,10 @@ package io.github.agentassert4j.model;
  *
  * <p>两种置信度：
  * <ul>
- *   <li>HIGH：字段值精确匹配（如 "ORD-2024-001" → "ORD-2024-001"）</li>
- *   <li>LOW：字段名前缀匹配（如 orderId ≈ orderRef，前缀 "order" 相同）</li>
+ *   <li>HIGH：字段值精确匹配（如 "ORD-2024-001" → "ORD-2024-001"），携带证据
+ *       （命中值 + 源/目标记录 id）</li>
+ *   <li>LOW：字段名前缀匹配（如 orderId ≈ orderRef，前缀 "order" 相同），是提示不是证据，
+ *       证据三字段为 null</li>
  * </ul>
  *
  * @author axy-yxa
@@ -17,6 +19,9 @@ public class GraphEdge {
     private String source;
     private String target;
     private Confidence confidence;
+    private String evidenceValue;
+    private String evidenceSourceRecordId;
+    private String evidenceTargetRecordId;
 
     public GraphEdge(String source, String target, Confidence confidence) {
         this.source = source;
@@ -46,5 +51,29 @@ public class GraphEdge {
 
     public void setConfidence(Confidence confidence) {
         this.confidence = confidence;
+    }
+
+    public String getEvidenceValue() {
+        return evidenceValue;
+    }
+
+    public void setEvidenceValue(String evidenceValue) {
+        this.evidenceValue = evidenceValue;
+    }
+
+    public String getEvidenceSourceRecordId() {
+        return evidenceSourceRecordId;
+    }
+
+    public void setEvidenceSourceRecordId(String evidenceSourceRecordId) {
+        this.evidenceSourceRecordId = evidenceSourceRecordId;
+    }
+
+    public String getEvidenceTargetRecordId() {
+        return evidenceTargetRecordId;
+    }
+
+    public void setEvidenceTargetRecordId(String evidenceTargetRecordId) {
+        this.evidenceTargetRecordId = evidenceTargetRecordId;
     }
 }

@@ -77,7 +77,7 @@ final class McpTools {
             command.jsonOutput = true;
             return command;
         })));
-        tools.add(McpTool.of("graph", "Runtime data-flow inspection: rebuilds the dependency graph from recorded interactions and shows who feeds whom " + "(tool arguments traced back to upstream responses) with cycle detection. Development-time survey; verdicts never consume the graph.", "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}", CliCommands("graph show"), args -> runCommand(capture -> {
+        tools.add(McpTool.of("graph", "Runtime value-flow provenance: rebuilds the graph from recorded interactions and shows who feeds whom " + "(an edge forms when a tool-call argument value traces back to an earlier response in the same session; HIGH edges carry the matched value and record pair, LOW edges are adjacent vocabulary hints) with cycle detection. Development-time survey; verdicts never consume the graph.", "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}", CliCommands("graph show"), args -> runCommand(capture -> {
             GraphShowCommand command = new GraphShowCommand();
             command.out = capture.out;
             command.err = capture.err;

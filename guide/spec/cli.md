@@ -29,9 +29,9 @@ schema、退出码契约、help 终态。
 | `verify` | 无缺省（--pack 是操作宾语） | `--pack`、`--task` 前缀、`--dry-run`、`--report`、`--json` |
 | `record show` | 按 recordId 回显一条交互的 raw wire 双列与关键元数据 | `--record-id`（必填）、`--db`、`--json` |
 | `rules` | 列内置行为目录与规则文件加载结果 | — |
-| `audit` | 列出 agent 驱动的治理写（治理事件时间线按 actor=`agent:` 过滤，六动词含 reject/rollback） | `--json` |
+| `audit` | 按治理事件时间线列出全部治理写（动词/主体/时间/代码锚，含 reject 与 rollback）——AI（`agent:*`）与人写同一条时间线，供对账 | `--json` |
 | `mcp` | 起 stdio MCP server（工具面=CLI 动词薄壳+record 摄取，契约见 mcp.md） | `--db`、`--diag`（逐消息诊断日志） |
-| `graph show` | 现场重建依赖图 | — |
+| `graph show` | 现场重建值溯源图（HIGH 边带证据） | — |
 | `doctor` | 全库体检 | `--json` |
 | `completion` | 生成 bash 补全脚本 | `--shell`（仅 bash 风格；动态值补全不做——既定裁决） |
 
@@ -224,3 +224,4 @@ re-drive/missing/added。句式 sentence case；全角标点与「」不出现�
 | 2026-09-03 | S8 成文：命令面终态全量对账（C2-C4 落地后） | ①replay-report/1 随调用点域引擎退役，task-report/1 承接（退役事实已入测试钉）；②accept/reject 的 --all 已被 bare 语义吸收删除；③根 help 新增 exitCodeList 与心智模型描述，类头 Javadoc 典型流程同步刷新（旧 --prompt 时代示例清除） |
 | 2026-09-17 | 1.0.0 收尾批：member 块字段集恒定化 | 契约 member 块行改写（删单数 matchedSession 冗余字段；matchedSessions 与 closestSession/closestScore 两结论恒输出）——权威表述与测试钉指针见 replay.md 同日台账行；CLI 人读行不变 |
 | 2026-09-17 | 延迟池终裁（维护者裁决「明确不做」，防翻账） | ①调用点视角视图（status 深化显示点级行为波动）：判定其目标痛点已被成员判定（matched k of N）+ 认可形态集合（合法多形态入集）双重覆盖，撤销挂账不做——新公开报告形态需真实使用反馈定形，冻结前无反馈渠道；除非出现明确 issue 再议；②导出可选内容指纹（剔 meta 规范形）：维持「每导出一指纹」既有裁决为终态，不再排期——除非出现明确 issue 再议 |
+| 2026-09-18 | 图谱 agent-loop 适配批（方案 A）：all-pairs 值溯源 + 边证据 + 节点短形 | ①HIGH 边触达改会话内全部更早记录（值产生后隔步被引用也建边——值溯源语义），同键/空键对守卫保留（不自环）；LOW 维持仅相邻原义；②边证据只挂 HIGH（命中值 + 源/目标记录 id，graph/1 edges 增可选 evidence，发布前免费窗口）；③人读面节点/边走 displayKey 短形 + 图例逐字全键（可寻址身份）；④措辞正名 dependency graph→value-flow provenance（命令/工具描述/README/导读）；⑤环=迭代 loop 自然图征口径落文档。【测试钉】ParameterValueTracerTest 六新钉（非相邻/LOW 限相邻/证据确定性/同键聚合/升级替换/自环守卫）+ GraphShowCommandTest 短形图例证据 + JsonContractTest evidence/LOW 缺省/字节确定性 + McpServerTest graph 描述钉；金路径 S6c 站（非相邻边+证据+图例五断言）；graph/1 契约行不在本表（OPERATIONS schema 表覆盖 evidence） |

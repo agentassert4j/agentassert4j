@@ -403,6 +403,108 @@ class ParameterValueTracerTest {
         assertTrue(hasEdge(tracer.getGraph(), "invocation:" + "skillA" + ":hash", "invocation:" + "skillB" + ":hash"), "同 timestamp 时必须按 recordId 平局决胜，保证依赖边方向确定");
     }
 
+    @Test
+    void traceDependency_nonAdjacentProvenance_highEdgeWithEvidence() {
+        // j=i-2 的输出值进 i 的参数：非相邻直接溯源（值产生后隔步被引用的典型形态）
+        InteractionRecord source = record("producer", "{\"orderId\":\"ORD-001\"}", Collections.singletonList(tc("tP", null)), 1000);
+        source.setRecordId("rec-producer");
+        InteractionRecord middle = record("noise", "{\"alpha\":\"beta-val\"}", null, 2000);
+        middle.setRecordId("rec-noise");
+        InteractionRecord consumer = record("consumer", "ok", Collections.singletonList(tc("tC", Collections.singletonMap("orderRef", (Object) "ORD-001"))), 3000);
+        consumer.setRecordId("rec-consumer");
+
+        tracer.traceDependency(Arrays.asList(source, middle, consumer));
+
+        GraphEdge edge = findEdge(tracer.getGraph(), "invocation:producer:hash", "invocation:consumer:hash");
+        assertNotNull(edge, "非相邻对值匹配必须建直接溯源 HIGH 边");
+        assertEquals(Confidence.HIGH, edge.getConfidence());
+        assertEquals("ORD-001", edge.getEvidenceValue());
+        assertEquals("rec-producer", edge.getEvidenceSourceRecordId());
+        assertEquals("rec-consumer", edge.getEvidenceTargetRecordId());
+    }
+
+    @Test
+    void traceDependency_lowOnlyAdjacent_nonAdjacentPrefixNoEdge() {
+        // 非相邻对只有字段名前缀相撞 → 不建边：LOW 维持仅相邻原义，不随 all-pairs 放宽
+        InteractionRecord source = record("producer", "{\"orderId\":\"ORD-001\"}", Collections.singletonList(tc("tP", null)), 1000);
+        InteractionRecord middle = record("noise", "{\"gamma\":\"delta-val\"}", null, 2000);
+        InteractionRecord consumer = record("consumer", "ok", Collections.singletonList(tc("tC", Collections.singletonMap("orderRef", (Object) "SOMETHING_ELSE"))), 3000);
+
+        tracer.traceDependency(Arrays.asList(source, middle, consumer));
+
+        assertEquals(0, tracer.getGraph().getAllEdges().size(), "非相邻对的前缀相撞不建边");
+    }
+
+    @Test
+    void traceDependency_evidenceDeterministic_acrossRebuilds() {
+        // 同夹具两次重建：边集、置信度、证据三元组全等——溯源证据可复现
+        InteractionRecord a = record("producer", "{\"orderId\":\"ORD-001\",\"shipId\":\"SHIP-9\"}", Collections.singletonList(tc("tP", null)), 1000);
+        a.setRecordId("rec-a");
+        InteractionRecord b = record("mid", "{\"other\":\"val-x\"}", Collections.singletonList(tc("tM", Collections.singletonMap("orderId", (Object) "ORD-001"))), 2000);
+        b.setRecordId("rec-b");
+        InteractionRecord c = record("consumer", "ok", Collections.singletonList(tc("tC", objectMap("shipId", "SHIP-9", "other", "val-x"))), 3000);
+        c.setRecordId("rec-c");
+
+        InMemoryDependencyGraph first = new InMemoryDependencyGraph();
+        new ParameterValueTracer(first).traceDependency(Arrays.asList(a, b, c));
+        InMemoryDependencyGraph second = new InMemoryDependencyGraph();
+        new ParameterValueTracer(second).traceDependency(Arrays.asList(a, b, c));
+
+        assertEquals(3, first.getAllEdges().size(), "夹具应产出三条 HIGH 边（含两条非相邻）");
+        assertEquals(edgeSignature(first), edgeSignature(second), "两次重建的边集与证据必须全等");
+    }
+
+    @Test
+    void traceDependency_sameKeyMultiExecution_singleEdgeEarliestEvidence() {
+        // 同键两次执行产出同值、第三方消费：键级聚合单边，HIGH→HIGH 保留最早证据
+        InteractionRecord firstExec = record("lookup", "{\"orderId\":\"ORD-001\"}", Collections.singletonList(tc("tL", null)), 1000);
+        firstExec.setRecordId("rec-lookup1");
+        InteractionRecord secondExec = record("lookup", "{\"orderId\":\"ORD-001\"}", Collections.singletonList(tc("tL", null)), 2000);
+        secondExec.setRecordId("rec-lookup2");
+        InteractionRecord consumer = record("refund", "ok", Collections.singletonList(tc("tR", Collections.singletonMap("orderRef", (Object) "ORD-001"))), 3000);
+        consumer.setRecordId("rec-refund");
+
+        tracer.traceDependency(Arrays.asList(firstExec, secondExec, consumer));
+
+        GraphEdge edge = findEdge(tracer.getGraph(), "invocation:lookup:hash", "invocation:refund:hash");
+        assertNotNull(edge, "同键执行与消费方之间必须建边");
+        assertEquals(1, tracer.getGraph().getAllEdges().size(), "同键两次执行必须键级聚合为单边");
+        assertEquals("rec-lookup1", edge.getEvidenceSourceRecordId(), "HIGH→HIGH 保留最早证据");
+        assertEquals("rec-refund", edge.getEvidenceTargetRecordId());
+    }
+
+    @Test
+    void traceDependency_lowUpgradedToHigh_replacesEvidence() {
+        // 先 LOW（相邻前缀撞）后 HIGH（后续同目标键执行值匹配）：置信度升级、证据替换为 HIGH 例
+        InteractionRecord producer = record("producer", "{\"orderId\":\"ORD-001\"}", Collections.singletonList(tc("tP", null)), 1000);
+        producer.setRecordId("rec-p");
+        InteractionRecord draft = record("refund", "ok", Collections.singletonList(tc("tR1", Collections.singletonMap("orderRef", (Object) "SOMETHING_ELSE"))), 2000);
+        draft.setRecordId("rec-draft");
+        InteractionRecord finalExec = record("refund", "ok", Collections.singletonList(tc("tR2", Collections.singletonMap("orderId", (Object) "ORD-001"))), 3000);
+        finalExec.setRecordId("rec-final");
+
+        tracer.traceDependency(Arrays.asList(producer, draft, finalExec));
+
+        GraphEdge edge = findEdge(tracer.getGraph(), "invocation:producer:hash", "invocation:refund:hash");
+        assertNotNull(edge);
+        assertEquals(Confidence.HIGH, edge.getConfidence(), "LOW 必须被后续 HIGH 升级");
+        assertEquals("ORD-001", edge.getEvidenceValue(), "升级时证据替换为 HIGH 例");
+        assertEquals("rec-p", edge.getEvidenceSourceRecordId());
+        assertEquals("rec-final", edge.getEvidenceTargetRecordId());
+    }
+
+    @Test
+    void traceDependency_sameKeyValueFlow_noSelfEdgeNoCycle() {
+        // 自环守卫：同键前执行产出值被后执行消费 → 不建 K→K 边、不触发环
+        InteractionRecord first = record("lookup", "{\"orderId\":\"ORD-001\"}", Collections.singletonList(tc("tL", null)), 1000);
+        InteractionRecord second = record("lookup", "ok", Collections.singletonList(tc("tL", Collections.singletonMap("orderId", (Object) "ORD-001"))), 2000);
+
+        tracer.traceDependency(Arrays.asList(first, second));
+
+        assertEquals(0, tracer.getGraph().getAllEdges().size(), "同键对不建边：自环会污染溯源图并误触环检测");
+        assertTrue(tracer.getGraph().detectCycles().isEmpty());
+    }
+
     private static Map<String, Object> objectMap(Object... kv) {
         Map<String, Object> m = new LinkedHashMap<>();
         for (int i = 0; i + 1 < kv.length; i += 2) {
@@ -509,5 +611,26 @@ class ParameterValueTracerTest {
      */
     private static boolean hasEdge(InMemoryDependencyGraph g, String src, String tgt) {
         return g.getAllEdges().stream().anyMatch(e -> e.getSource().equals(src) && e.getTarget().equals(tgt));
+    }
+
+    /**
+     * 按边枚举序取指定边的断言助手（含证据断言场景）。
+     */
+    private static GraphEdge findEdge(InMemoryDependencyGraph g, String src, String tgt) {
+        return g.getAllEdges().stream()
+                .filter(e -> e.getSource().equals(src) && e.getTarget().equals(tgt))
+                .findFirst().orElse(null);
+    }
+
+    /**
+     * 边签名：源>目标|置信|证据三元组，按邻接表枚举序——确定性比对的数据面。
+     */
+    private static List<String> edgeSignature(InMemoryDependencyGraph g) {
+        List<String> out = new ArrayList<>();
+        for (GraphEdge e : g.getAllEdges()) {
+            out.add(e.getSource() + ">" + e.getTarget() + "|" + e.getConfidence() + "|"
+                    + e.getEvidenceValue() + "|" + e.getEvidenceSourceRecordId() + "|" + e.getEvidenceTargetRecordId());
+        }
+        return out;
     }
 }

@@ -276,12 +276,12 @@ $ agentassert4j replay
 
 <img src="../assets/cli-replay.png" alt="bare replay 全项目输出：漂移点与逐任务对齐、候选登记与自动收编（演示库真实输出）" width="880"/>
 
-值得强调的是：这张图不是某个独立组件精心维护的资产——它是录制数据的**派生品**，每次重放前从录制数据
-现场重建，写一份快照。永远和录制数据一致，永不撒谎。想直接看这张图，`agentassert4j graph show` 从
-录制数据现场重建并渲染节点、边（HIGH/LOW 置信度）和环检测——只读不落盘；
-`status` 末尾展示的则是最近一次 replay 留档的快照。`graph show` 的真实输出（演示库）：
+值得强调的是：这些视图都不是某个独立组件精心维护的资产——全部是录制数据的**派生品**。漂移检测每次
+重放现场重算；值溯源图由 `agentassert4j graph show` 从交互数据现场重建并渲染——节点/边走短形、
+HIGH 边携带证据（命中值与源/目标记录对，一步看到「这个值最初从哪来」）、图例给短形→完整键的逐字
+映射，只读不落盘。永远和录制数据一致，永不撒谎。`graph show` 的真实输出（演示库）：
 
-<img src="../assets/cli-graph.png" alt="graph show：从录制数据现场重建的依赖图——节点、HIGH 置信边与环检测（演示库真实输出）" width="880"/>想让复核便宜一点的话，`--task`/`--invocation`
+<img src="../assets/cli-graph.png" alt="graph show：从录制数据现场重建的值溯源图——短形节点、带证据的 HIGH 边与图例（演示库真实输出）" width="880"/>想让复核便宜一点的话，`--task`/`--invocation`
 随时把处置缩到关心的范围——检测报告仍然全项目可见，只是处置（收编/落候选）只作用于缩域命中
 的部分。
 
@@ -481,7 +481,7 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 | `agentassert4j rollback` | 把基线回滚到指定历史版本 | `--invocation <目标>` 与 `--version <版本号>`（**均必填**） | 缺任一参数直接报错 |
 | `agentassert4j verify` | 交付验收：验收包核对本机真实执行链（只读不落库） | `--pack <文件>`（**必填**）；`--task <前缀>`（缩域）；`--dry-run`（配对预演，零判定）；`--report <md>`（交付证据）；`--json`（verify-report/1） | 版本守卫拒绝异语义包；覆盖缺口 exit 2；跨模型标注结构判定有效；规则段随包生效、缺席降级注记 |
 | `agentassert4j rules` | 展示内置约束行为目录与规则文件写法样例 | `--json`（rules/1 目录报告） | 无 |
-| `agentassert4j graph show` | 从录制数据现场重建依赖图并渲染（节点/边/置信度/环）——开发期勘察仪表 | `--json`（graph/1） | 无边时给空图提示（录制缺多轮会话数据，非故障） |
+| `agentassert4j graph show` | 从录制数据现场重建值溯源图并渲染（短形节点/边、HIGH 边证据=命中值+记录对、图例、环检测——环是迭代 loop 的自然图征，非病征）——开发期勘察仪表 | `--json`（graph/1，HIGH 边含 evidence） | 无边时给空图提示（录制缺多轮会话数据，非故障） |
 | `agentassert4j completion` | 生成 shell 补全脚本（bash 风格，zsh 经 bashcompinit 兼容；含全部短别名） | 无 | — |
 
 ---

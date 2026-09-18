@@ -699,9 +699,40 @@ class JsonContractTest {
             assertTrue(report.contains("\"source\":\"invocation:queryOrder:hash-r-1\""), report);
             assertTrue(report.contains("\"target\":\"invocation:refundOrder:hash-r-2\""), report);
             assertTrue(report.contains("\"confidence\":\"HIGH\""), report);
+            assertTrue(report.contains("\"evidence\":{\"value\":\"SO-77\",\"sourceRecordId\":\"r-1\",\"targetRecordId\":\"r-2\"}"), "HIGH 边必须携带证据三元组: " + report);
             assertFalse(report.contains("throughNodes"), "透传字段已随穿透压缩退役: " + report);
             assertTrue(report.contains("\"cycles\":[]"), report);
             assertFalse(stdout().contains("Nodes ("), "人类渲染不得污染 stdout: " + stdout());
+        }
+
+        @Test
+        @DisplayName("graph show --json：LOW 边缺省不携带 evidence 键")
+        void graphShowJson_lowEdgeOmitsEvidence() throws Exception {
+            saveChainRecord("r-1", "queryOrder", 1000L, null, "{\"orderId\":\"ORD-1\"}");
+            saveChainRecord("r-2", "refundOrder", 2000L, "SOMETHING_ELSE", null);
+
+            int exit = execute("graph", "show", "--db", dbPath, "--json");
+
+            assertEquals(0, exit);
+            String report = singleLineReport();
+            assertTrue(report.contains("\"confidence\":\"LOW\""), report);
+            assertFalse(report.contains("\"evidence\""), "LOW 是提示不是证据，载荷缺省: " + report);
+        }
+
+        @Test
+        @DisplayName("graph show --json：同库重建两次输出字节相等")
+        void graphShowJson_deterministicAcrossRuns() throws Exception {
+            saveChainRecord("r-1", "producer", 1000L, null, "{\"orderId\":\"ORD-1\",\"shipId\":\"SHIP-9\"}");
+            saveChainRecord("r-2", "midstep", 2000L, "ORD-1", "{\"other\":\"SHIP-9\"}");
+            saveChainRecord("r-3", "consumer", 3000L, "SHIP-9", null);
+
+            assertEquals(0, execute("graph", "show", "--db", dbPath, "--json"));
+            String first = singleLineReport();
+            assertEquals(0, execute("graph", "show", "--db", dbPath, "--json"));
+            String second = singleLineReport();
+
+            assertTrue(first.contains("\"edgeCount\":3"), "夹具应产出三条 HIGH 边（含非相邻直接溯源）: " + first);
+            assertEquals(first, second, "两次重建的 graph/1 必须字节相等");
         }
 
         @Test

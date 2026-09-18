@@ -22,18 +22,29 @@ public class InMemoryDependencyGraph {
     private final Map<String, Map<String, GraphEdge>> outEdges = new LinkedHashMap<>();
 
     /**
-     * 添加一条边。同一条边多次添加时保留高置信度（秩小者优先）。
+     * 添加一条边（携带证据载荷：命中值 + 源/目标记录 id；LOW 边传 null）。
+     * 同一条边多次添加时保留高置信度（秩小者优先）：
+     * LOW→HIGH 升级时替换证据（高置信度证据更有解释力）；同级重复保留最早证据
+     * （调用方迭代序确定 ⇒ 可复现）；HIGH→LOW 不降级、证据不动。
      */
-    public void addEdge(String src, String tgt, Confidence confidence) {
+    public void addEdge(String src, String tgt, Confidence confidence,
+                        String evidenceValue, String evidenceSourceRecordId, String evidenceTargetRecordId) {
         Map<String, GraphEdge> targets = outEdges.computeIfAbsent(src, k -> new LinkedHashMap<>());
         GraphEdge existing = targets.get(tgt);
         if (existing != null) {
             // 已存在：升级置信度（保留最高的）——按显式秩比较，不依赖枚举声明顺序
             if (existing.getConfidence().rank() > confidence.rank()) {
                 existing.setConfidence(confidence);
+                existing.setEvidenceValue(evidenceValue);
+                existing.setEvidenceSourceRecordId(evidenceSourceRecordId);
+                existing.setEvidenceTargetRecordId(evidenceTargetRecordId);
             }
         } else {
-            targets.put(tgt, new GraphEdge(src, tgt, confidence));
+            GraphEdge edge = new GraphEdge(src, tgt, confidence);
+            edge.setEvidenceValue(evidenceValue);
+            edge.setEvidenceSourceRecordId(evidenceSourceRecordId);
+            edge.setEvidenceTargetRecordId(evidenceTargetRecordId);
+            targets.put(tgt, edge);
         }
     }
 
