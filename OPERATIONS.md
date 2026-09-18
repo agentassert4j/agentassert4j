@@ -349,7 +349,10 @@ accept/reject + re-drive + export）+ record 摄取（非 Java 栈上报交互�
   等同构（stdio 客户端只需拉起子进程 + 读写管道）。
 - 排障开关 `--diag`：逐消息向 stderr 记 method 与耗时（默认静默；stdout 只出协议消息）。
 - Java 应用的**录制**仍走 starter/SDK（进程内直录）；MCP record 动词服务非 Java 栈
-  （TS/Python agent 把原生 LLM 调用的原始请求/响应 JSON 上报落库，幂等可重发）。
+  （TS/Python agent 把原生 LLM 调用的原始请求/响应 JSON 上报落库，幂等可重发）。两种来源的
+  **原文覆盖不同**：SDK 录制的记录 raw 双列恒为空——Spring AI 的 ChatModel 抽象层只交付结构化
+  消息对象、不暴露线上报文（Spring AI 1.x 与 2.x 同此，接口面经字节码核实），属框架侧既有限制
+  而非待办；MCP 上报与 CLI 重驱的记录携带逐字原文，`record show` 取证时以这两类为全量来源。
 
 AI 自主回路的典型时序（人在 harness 权限系统里授权，不在框架里）：
 
@@ -418,6 +421,8 @@ structuredContent（`{"reports":[...]}`；失败态为 agentassert4j.error/1 包
 | 重驱报告「archived template text missing」 | 该漂移点在 `prompt_texts` 无全文可取（旧版录制或捕获侧漏设）——重新录制即可（管道现自动派生投影并归档） |
 | 首次 bare replay 报出大量漂移 | 建档种子取桶内最新记录——混合模板历史的旧库首跑会对「画像身份落后于最新」的调用点各报一次，对齐 PASS 后逐点自动收编；属一次性收敛而非批量回归 |
 | 某任务每次 bare replay 都 exit 1（差异固定） | 库里有被 reject 的变异/测试工件链（只追加事实，对齐层如实陈述）——该任务再真实执行两轮即自然痊愈（最新 vs 次新回到干净对）；CI 不受影响（流水线库是新鲜录制） |
+| agent loop 里同一调用点每条链执行次数不同（规划器跑 1~3 次之类） | 这是 loop 主形态的正常现象，不是回归：判定只读每个调用点的**链末执行**；裸重放里次数差异进 `surplusCount` 注记、**不判差异不翻红**；确实要约束次数就声明任务纪律（`rules.tasks` 的 `requiredSteps` + `steps` min/max 范围），声明制、按任务生效 |
+| loop 链中段的草稿/中间形态要不要管 | 不挡门：链末判定路径以 `earlierRecords`/`unapprovedEarlier` 注记披露（ci-align 报告逐步骤携带）；草稿的形态只有被 `accept` 入集才参与判定——迭代节奏就是「多轮试错，收敛了再入集」 |
 | 标签裂键收编后任务仍 CHANGED | 收编只前移身份；对齐判定看的是最新两条**真实链**的现场重提比对，不消费任何治理档案——两条链结构本就不一致（模型非确定性或中间变异残留）就会持续 CHANGED。变绿路径只有一条：在当前模板下再真实执行，让最新两链结构一致（确定性输出即 PASS）后重放；`baseline --force`/`accept` 改的是画像基线与漂移身份，不改变链对链判定 |
 
 ## 8. 最小录制契约

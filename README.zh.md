@@ -51,6 +51,20 @@
   `record`（收原始 wire JSON，三协议）、`check`/`diff`、带 `approver` 的治理动词、`audit`。
   见 [OPERATIONS.md](OPERATIONS.md) 与 [给 AI 装上行为回归回路](guide/给AI装上行为回归回路.md)。
 
+## 你是什么工作形态？
+
+全部能力一张图——七种工作形态，各自的最短路径：
+
+| 工作形态 | 你醒来时带着的问题 | 最短路径 |
+|---|---|---|
+| **提示词迭代** | 「改完了——别处有没有被改坏？」 | `baseline` → 改完真实跑一遍 → `replay` → `accept`/`reject`；`replay --ci` 门禁流水线 → [形态集工作流](#迭代到满意形态集工作流) |
+| **Agent 开发（loop 形态）** | 「规划器/工具步每次跑的次数都不一样，我到底比什么？」 | loop 每一圈自动录成一条交互，零声明。判定读每个调用点的链末执行；链中段草稿以注记可见（`earlierRecords`）；纯次数差异永不翻红——真要约束次数就声明任务纪律 → [核心闭环](#核心闭环)、[OPERATIONS 任务纪律](OPERATIONS.md) |
+| **AI 应用开发（少步/单调用）** | 「就一次 LLM 调用，这框架跟我有关系吗？」 | 有：按模板哈希零声明归组，`status` → `replay`，什么都不用声明 → [身份](#身份声明与零声明) |
+| **换模型 / 稳定性核验** | 「同一套提示词换了模型，行为还在吗？」 | 新模型上真实跑同任务再 `replay`：指纹与模型无关，结构判定跨模型成立，报告附 token/成本对照 → [四维指纹](#四维指纹判定看什么) |
+| **内网交付验收** | 「客户环境模型不一样——证明行为还在。」 | 己侧 `baseline export`，对方真实执行后 `verify --pack`：结构判定跨模型有效 → [交付验收](#交付验收第二个工作流) |
+| **AI 自主修正回路** | 「让 AI 自己改提示词、自己验证、自己迭代。」 | `agentassert4j mcp` stdio server（17 工具）：`record` → `check`/`diff` → 带 `approver` 的治理 → `audit` → [OPERATIONS MCP](OPERATIONS.md) |
+| **团队回溯定责** | 「行为坏了——哪次改的？谁批准的？」 | 基线携带 `--ref` 代码锚；`audit` 是全部治理写的单一时间线 → [代码锚](#代码锚接进你已有的-git-工作流) |
+
 ## 核心闭环
 
 <img src="assets/hero-loop.zh.png" alt="核心闭环：你的 Agent 旁路录制进单文件 SQLite，baseline 播种认可形态集合，改提示词真实跑一遍后 replay 出漂移检测与逐步对齐报告，accept / reject 裁决，export → verify 交付验收" width="880"/>

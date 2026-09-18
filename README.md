@@ -55,6 +55,20 @@ by line, is the most painful ritual in agent development. Four real moments, one
   with `approver`, `audit`. See [OPERATIONS.md](OPERATIONS.md) and
   [给 AI 装上行为回归回路](guide/给AI装上行为回归回路.md).
 
+## Which workflow are you?
+
+Every capability on one map — seven shapes of work, each with its shortest path:
+
+| Workflow | The question you wake up with | Shortest path |
+|---|---|---|
+| **Prompt iteration** | "The edit is done — did anything else break?" | `baseline` → edit + really run once → `replay` → `accept` / `reject`; `replay --ci` gates the pipeline → [shape-set workflow](#iterating-until-its-good-the-shape-set-workflow) |
+| **Agent development (loops)** | "My planner and tool steps run a different number of times each run — what do I even compare?" | Every loop iteration records as its own interaction, no annotations needed. Judgment reads each invocation's chain-final execution; mid-chain drafts stay visible as notes (`earlierRecords`); a count change alone never flips a run red — pin counts with task rules when you actually care → [core loop](#the-core-loop), [OPERATIONS task rules](OPERATIONS.md) |
+| **AI app development (few or single calls)** | "It's one LLM call — is this still for me?" | Yes: zero-declaration grouping by template hash, `status` → `replay`, nothing to declare → [identity](#identity-declared-and-zero-declaration) |
+| **Model switch / stability check** | "Same prompts, new model — is the behavior still there?" | Record the same task on the new model and `replay`: the fingerprint is model-agnostic, so structure verdicts hold and the report carries the token/cost delta → [fingerprint dimensions](#four-fingerprint-dimensions-what-the-verdict-reads) |
+| **Intranet delivery acceptance** | "The customer's environment runs a different model — prove it still behaves." | `baseline export` on your side, really execute on theirs, `verify --pack`: structural verdicts stay valid across models → [delivery acceptance](#delivery-acceptance-the-second-workflow) |
+| **AI-driven self-correction** | "Let the AI edit prompts, verify, and iterate itself." | `agentassert4j mcp` stdio server (17 tools): `record` → `check` / `diff` → governance with `approver` → `audit` → [OPERATIONS MCP](OPERATIONS.md) |
+| **Team forensics** | "Behavior broke — which change did it, and who approved what?" | Baselines carry `--ref` code anchors; `audit` is the single timeline of every governance write → [code anchors](#code-anchors-in-team-workflows) |
+
 ## The core loop
 
 <img src="assets/hero-loop.en.png" alt="The core loop: your agent is recorded out-of-band into a single-file SQLite; baseline seeds the approved shape set; after a prompt edit really runs, replay produces drift detection and a step-by-step alignment report; accept / reject adjudicate; export → verify delivers acceptance" width="880"/>
