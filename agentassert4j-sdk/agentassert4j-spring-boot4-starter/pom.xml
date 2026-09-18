@@ -59,6 +59,26 @@
             <version>${spring-boot4.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- SDK 录制面 e2e（环境变量门控）：OpenAI 兼容 ChatModel 与 ChatClient 工具 loop -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-openai</artifactId>
+            <version>${spring-ai2.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-client-chat</artifactId>
+            <version>${spring-ai2.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- 2.x 的 OpenAI 模块只带 openai-java 核心（实现客户端由应用自选）：测试域取 OkHttp 实现 -->
+        <dependency>
+            <groupId>com.openai</groupId>
+            <artifactId>openai-java-client-okhttp</artifactId>
+            <version>4.39.1</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
