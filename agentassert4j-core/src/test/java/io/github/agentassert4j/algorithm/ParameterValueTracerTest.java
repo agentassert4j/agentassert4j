@@ -115,7 +115,7 @@ class ParameterValueTracerTest {
         Set<String> values = tracer.extractFieldValues(r);
 
         assertTrue(values.contains("ORD-001"));
-        // number values: 99.9 → "99.9"
+        // 数值：99.9 → "99.9"
         assertTrue(values.stream().anyMatch(v -> v.contains("99")));
     }
 

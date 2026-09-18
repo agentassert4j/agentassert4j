@@ -233,7 +233,7 @@ class DeterministicComparatorTest {
 
         ComparisonResult r = comparator.compare(baseline, current, "non-empty output");
 
-        // behavior "nonEmptyOutput" passes → d4=1.0
+        // behavior "nonEmptyOutput" 满足 → d4=1.0
         assertTrue(r.isBehaviorMatch());
         assertTrue(r.getScore() > 0.0);
     }
@@ -245,9 +245,9 @@ class DeterministicComparatorTest {
 
         ComparisonResult r = comparator.compare(baseline, current, "output");
 
-        // d1: no tools → toolCall match (both empty) → d1=1.0
-        // d2: same magnitude → 1.0
-        // score = 1.0*0.60 + 1.0*0.40 = 1.0
+        // 维度 1：无工具调用 → 工具调用匹配（两侧均空）→ d1=1.0
+        // 维度 2：同一数量级 → 1.0
+        // 得分 = 1.0*0.60 + 1.0*0.40 = 1.0
         assertEquals(1.0, r.getScore(), 0.001);
         assertEquals(Verdict.PASS, r.getVerdict());
     }
@@ -507,7 +507,7 @@ class DeterministicComparatorTest {
 
         ComparisonResult r = comparator.compare(baseline, current, null);
 
-        // null → treated as "" → no keyword match issues
+        // null → 视同空串 → 不产生关键词匹配问题
         assertEquals(Verdict.PASS, r.getVerdict());
     }
 

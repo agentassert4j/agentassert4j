@@ -129,9 +129,6 @@ public final class BehaviorChecker {
         return true;
     }
 
-    /**
-     * 获取所有内置 behavior 名称。
-     */
     public static Set<String> getBuiltinBehaviorNames() {
         return BUILTINS.keySet();
     }

@@ -155,9 +155,6 @@ public class InvocationRulesConfig {
         return rules.getOrDefault(invocationId, InvocationRule.EMPTY);
     }
 
-    /**
-     * 获取所有已声明的调用点标签
-     */
     public Set<String> getDeclaredInvocationIds() {
         return Collections.unmodifiableSet(rules.keySet());
     }

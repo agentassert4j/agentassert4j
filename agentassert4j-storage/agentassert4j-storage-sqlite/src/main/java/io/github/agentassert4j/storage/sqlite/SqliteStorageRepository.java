@@ -173,7 +173,7 @@ public class SqliteStorageRepository implements StorageRepository {
     /**
      * 模板文本随行归档：捕获侧在记录上携带的模板原文（瞬态字段，不对应
      * interactions 列）以 templateHash 为键写入 prompt_texts，供 status 巡检
-     * 展示基线面对的模板原文。同 hash 首写为准；文本写失败只降级不拖累
+     * 展示基线所用的模板原文。同 hash 首写为准；文本写失败只降级不拖累
      * 交互记录本身——旁路数据永不阻塞主数据。
      */
     private void persistTemplateTextQuietly(InteractionRecord r) {
@@ -453,7 +453,7 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     /**
-     * verb 列反解——未知线上值按 null 退化（宁缺勿错注记），不抛错中断时间线读取。
+     * verb 列反解——未知线上值按 null 退化（宁可缺失也不留错误注记），不抛错中断时间线读取。
      */
     private static GovernanceVerb governanceVerbOf(String wireName) {
         if (wireName == null) {

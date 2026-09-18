@@ -263,7 +263,7 @@ public final class ConfigLoader {
      * 抛 {@link IllegalStateException} 而非静默换源（用户会以为配置已生效）
      * 2. 当前工作目录
      * 3. 用户主目录下的 .agentassert4j/
-     * 4. Classpath
+     * 4. Classpath 类路径资源
      */
     private static String findAndRead(String filename, String pathProperty, StringBuilder origin) {
         // 1. 系统属性指定的路径
@@ -299,7 +299,7 @@ public final class ConfigLoader {
             }
         }
 
-        // 4. Classpath
+        // 4. Classpath 类路径资源
         String content = loadFromClasspath(filename);
         if (content != null) {
             origin.append("classpath:").append(filename);

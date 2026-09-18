@@ -138,7 +138,7 @@ public class OpenAiCompatibleClient extends AbstractHttpLlmClient {
         StringBuilder messages = new StringBuilder();
         boolean wroteAny = false;
 
-        // system message
+        // system 消息
         if (request.getSystemPrompt() != null && !request.getSystemPrompt().isEmpty()) {
             messages.append("{\"role\":\"system\",\"content\":\"").append(RecursiveJsonParser.escape(request.getSystemPrompt())).append("\"}");
             wroteAny = true;
@@ -197,7 +197,7 @@ public class OpenAiCompatibleClient extends AbstractHttpLlmClient {
             }
         }
 
-        // user message
+        // user 消息
         if (request.getUserInput() != null) {
             if (wroteAny) messages.append(",");
             if (request.isMultimodalInput()) {
