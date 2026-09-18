@@ -16,11 +16,11 @@
     <name>AgentAssert4j SDK Integrations</name>
 
     <modules>
-        <module>agentassert4j-sdk-spring-ai1</module>
-        <module>agentassert4j-sdk-spring-ai2</module>
-        <module>agentassert4j-sdk-langchain4j1</module>
-        <module>agentassert4j-spring-boot3-starter</module>
-        <module>agentassert4j-spring-boot4-starter</module>
-        <module>agentassert4j-langchain4j-spring-boot3-starter</module>
+        <module>agentassert4j-spring-ai1</module>
+        <module>agentassert4j-spring-ai2</module>
+        <module>agentassert4j-langchain4j</module>
+        <module>agentassert4j-starter-spring-ai1</module>
+        <module>agentassert4j-starter-spring-ai2</module>
+        <module>agentassert4j-starter-langchain4j</module>
     </modules>
 </project>

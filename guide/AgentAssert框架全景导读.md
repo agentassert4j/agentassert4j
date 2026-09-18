@@ -69,7 +69,7 @@ AgentAssert4j 解决的就是这个「心里没底」。它的思路用人话说
 
 ## 第 0 幕 · 两个坐标和一行配置
 
-小王在 pom 里加了 `agentassert4j-spring-boot3-starter` 依赖，在 application.yml 里把数据库路径指到
+小王在 pom 里加了 `agentassert4j-starter-spring-ai1` 依赖，在 application.yml 里把数据库路径指到
 `var/agentassert4j.db`——其实这一行也可以不写（有默认值），但他习惯把数据文件归置好。重启应用：
 照常启动，日志没有任何新报错，接口时延看不出变化，业务功能一切照旧。唯一的变化是 var/ 目录下多了
 一个 SQLite 文件。
@@ -542,7 +542,7 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 - 两代 SDK 差异：包名各自隔离（`springai1`/`springai2`、`springboot`/`springboot4`，两代坐标同名互斥必分模块）；缓存 token 在 ai1 走反射尽力提取（只探缓存读与思考 token，缓存写不留值）、ai2 走 `Usage` 接口直读（缓存读/写与思考 token 齐全）；Spring AI 2.x 的工具循环移到 ChatClient 的 Advisor 链（ChatModel 之上），装饰器天然逐轮可见。
 - **JDK8 手动路径**（第 8 幕老陈的系统）：不引 starter，手动装配 core + recorder + storage-sqlite 三个 jar，在自己的 LLM 调用出口组装 `InteractionRecord` 后调用 `recorder.intercept(record)`，并自行 `start()/stop()`。core 是全框架唯一零依赖模块，这是 JDK8 客户能接入的原因。
 
-**表结构（接入面写进记录的标记）**：`recorder_version` 列写 SDK 版本串（如 `agentassert4j-sdk-spring-ai1`），`api_protocol` 固定 `openai-chat`——描述落库数据的协议形状而非上游供应商；`provider` 由模型名前缀启发推断（deepseek→deepseek、gpt/o1/o3/o4→openai、claude→anthropic、qwen/qwq→qwen、gemini→gemini、llama→ollama、其余归 custom）。
+**表结构（接入面写进记录的标记）**：`recorder_version` 列写 SDK 版本串（如 `agentassert4j-spring-ai1`），`api_protocol` 固定 `openai-chat`——描述落库数据的协议形状而非上游供应商；`provider` 由模型名前缀启发推断（deepseek→deepseek、gpt/o1/o3/o4→openai、claude→anthropic、qwen/qwq→qwen、gemini→gemini、llama→ollama、其余归 custom）。
 
 **生命周期与并发契约**：Bean 关停顺序由 Spring destroy 方法保证（close 存储在 stop 录制器之后——录制器 stop 会先 flush 剩余数据再关 Disruptor，超时 10 秒强制关闭）。用户自备录制器注册 Bean 时必须显式设 destroy 方法名为 `stop`（Spring 的 destroy 推断只认 close/shutdown，否则关停后 flush 线程在 Windows 上锁住库文件）。
 

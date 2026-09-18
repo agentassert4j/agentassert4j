@@ -17,10 +17,10 @@
 Maven reactor 共 13 个构建节点、产出 10 个 jar（聚合 POM 不产出构件）：
 
 ```
-Layer 4   spring-boot3-starter          spring-boot4-starter     langchain4j-spring-boot3-starter
+Layer 4   starter-spring-ai1          starter-spring-ai2     starter-langchain4j
                │ 聚合 core+recorder+         │ 聚合 core+recorder+      │ 聚合 core+recorder+
-               │ sdk-ai1+storage-sqlite      │ sdk-ai2+storage-sqlite   │ sdk-langchain4j1+storage-sqlite
-Layer 3   sdk-spring-ai1            sdk-spring-ai2            sdk-langchain4j1（纯程序化零 Spring）
+               │ spring-ai1+storage-sqlite      │ spring-ai2+storage-sqlite   │ langchain4j+storage-sqlite
+Layer 3   spring-ai1            spring-ai2            langchain4j（纯程序化零 Spring）
           cli（组合根：core+recorder+storage-sqlite+picocli，默认后端随行）
                │
 Layer 2   recorder（core + Disruptor + SLF4J API）                （异步旁路管道）

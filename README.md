@@ -88,14 +88,14 @@ whole-set snapshot, and the same truth travels into CI and the acceptance pack. 
 ## Quick start
 
 Spring Boot 3 + Spring AI 1.x shown (for Boot 4 + Spring AI 2.x use
-`agentassert4j-spring-boot4-starter`; every other stack, see the [integration matrix](#integration-matrix)).
+`agentassert4j-starter-spring-ai2`; every other stack, see the [integration matrix](#integration-matrix)).
 
 **1. Add the starter, then use your ChatClient exactly as before**
 
 ```xml
 <dependency>
     <groupId>io.github.agentassert4j</groupId>
-    <artifactId>agentassert4j-spring-boot3-starter</artifactId>
+    <artifactId>agentassert4j-starter-spring-ai1</artifactId>
     <version>1.0.0</version>
 </dependency>
 ```
@@ -364,11 +364,11 @@ Channel contract and schema list in [OPERATIONS.md](OPERATIONS.md).
 
 | Your stack | Dependencies | Effort |
 |------------|--------------|--------|
-| Spring Boot 3.x + Spring AI 1.x | `agentassert4j-spring-boot3-starter` | Zero business-code changes |
-| Spring Boot 4.x + Spring AI 2.x | `agentassert4j-spring-boot4-starter` | Zero business-code changes |
-| Spring Boot 3.x + LangChain4j 1.x | `agentassert4j-langchain4j-spring-boot3-starter` | Zero business-code changes |
-| LangChain4j (no Spring) | `agentassert4j-sdk-langchain4j1` + `recorder` + `storage-sqlite` | Wrap your `ChatModel` with `RecordingChatModel.wrap(...)` |
-| Spring AI without Boot | `agentassert4j-sdk-spring-ai1` / `-ai2` + `recorder` + `storage-sqlite` | Assemble three beans manually |
+| Spring Boot 3.x + Spring AI 1.x | `agentassert4j-starter-spring-ai1` | Zero business-code changes |
+| Spring Boot 4.x + Spring AI 2.x | `agentassert4j-starter-spring-ai2` | Zero business-code changes |
+| Spring Boot 3.x + LangChain4j 1.x | `agentassert4j-starter-langchain4j` | Zero business-code changes |
+| LangChain4j (no Spring) | `agentassert4j-langchain4j` + `recorder` + `storage-sqlite` | Wrap your `ChatModel` with `RecordingChatModel.wrap(...)` |
+| Spring AI without Boot | `agentassert4j-spring-ai1` / `-ai2` + `recorder` + `storage-sqlite` | Assemble three beans manually |
 | Spring AI + LangChain4j in one app | both starters | Shared recorder/storage, each framework wrapped by its own decorator |
 | JDK 8+ any stack (hand-rolled HTTP) | `agentassert4j-core` + `recorder` + `storage-sqlite` | Build an `InteractionRecord` at the call site, hand it to `recorder.intercept(record)` — minimal recording contract in [OPERATIONS.md](OPERATIONS.md) |
 | Home-grown "JSON routing" stack (no protocol-level toolCalls) | same as above | Declare identity where you parse the tool name; pin intent routing with rules.json regexes |
@@ -419,11 +419,11 @@ Invocation identity is derived deterministically from each record, in priority o
 agentassert4j-core                     zero-dependency heart (java.base only): model / SPI / algorithm / verdict
 agentassert4j-recorder                 Disruptor async out-of-band pipeline (non-blocking, bounded, every loss metered)
 agentassert4j-storage-sqlite           SQLite storage (aggregated under agentassert4j-storage/)
-agentassert4j-sdk-spring-ai1 / -ai2    Spring AI 1.x / 2.x adapters (incl. tool-observation decoration)
-agentassert4j-sdk-langchain4j1         LangChain4j 1.x adapter (pure programmatic, zero Spring; per-round capture)
-agentassert4j-spring-boot3-starter     Boot 3 auto-configuration (core+recorder+ai1+sqlite)
-agentassert4j-spring-boot4-starter     Boot 4 auto-configuration (core+recorder+ai2+sqlite)
-agentassert4j-langchain4j-spring-boot3-starter  Boot 3 auto-configuration for LangChain4j (core+recorder+lc4j+sqlite)
+agentassert4j-spring-ai1 / -ai2    Spring AI 1.x / 2.x adapters (incl. tool-observation decoration)
+agentassert4j-langchain4j         LangChain4j 1.x adapter (pure programmatic, zero Spring; per-round capture)
+agentassert4j-starter-spring-ai1     Boot 3 auto-configuration (core+recorder+ai1+sqlite)
+agentassert4j-starter-spring-ai2     Boot 4 auto-configuration (core+recorder+ai2+sqlite)
+agentassert4j-starter-langchain4j  Boot 3 auto-configuration for LangChain4j (core+recorder+lc4j+sqlite)
 agentassert4j-cli                      command-line tool (composition root: baseline/status/replay/verify/…)
 agentassert4j-cli-standalone           fully-shaded executable form of cli (java -jar, no install)
 ```

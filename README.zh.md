@@ -83,14 +83,14 @@
 ## 快速开始
 
 以 Spring Boot 3 + Spring AI 1.x 为例（Boot 4 + Spring AI 2.x 线换
-`agentassert4j-spring-boot4-starter`；其余所有栈见[接入矩阵](#接入矩阵)）。
+`agentassert4j-starter-spring-ai2`；其余所有栈见[接入矩阵](#接入矩阵)）。
 
 **1. 加 starter 依赖，然后像平常一样使用你的 ChatClient**
 
 ```xml
 <dependency>
     <groupId>io.github.agentassert4j</groupId>
-    <artifactId>agentassert4j-spring-boot3-starter</artifactId>
+    <artifactId>agentassert4j-starter-spring-ai1</artifactId>
     <version>1.0.0</version>
 </dependency>
 ```
@@ -328,11 +328,11 @@ accept 扩展集合——裁决立即对门禁生效）为判定基准；不做�
 
 | 你的栈 | 依赖 | 接入成本 |
 |--------|------|---------|
-| Spring Boot 3.x + Spring AI 1.x | `agentassert4j-spring-boot3-starter` | 零业务代码改动 |
-| Spring Boot 4.x + Spring AI 2.x | `agentassert4j-spring-boot4-starter` | 零业务代码改动 |
-| Spring Boot 3.x + LangChain4j 1.x | `agentassert4j-langchain4j-spring-boot3-starter` | 零业务代码改动 |
-| LangChain4j（无 Spring） | `agentassert4j-sdk-langchain4j1` + `recorder` + `storage-sqlite` | `RecordingChatModel.wrap(...)` 包住模型即可 |
-| Spring AI（无 Boot） | `agentassert4j-sdk-spring-ai1` / `-ai2` + `recorder` + `storage-sqlite` | 手动装配三个 Bean |
+| Spring Boot 3.x + Spring AI 1.x | `agentassert4j-starter-spring-ai1` | 零业务代码改动 |
+| Spring Boot 4.x + Spring AI 2.x | `agentassert4j-starter-spring-ai2` | 零业务代码改动 |
+| Spring Boot 3.x + LangChain4j 1.x | `agentassert4j-starter-langchain4j` | 零业务代码改动 |
+| LangChain4j（无 Spring） | `agentassert4j-langchain4j` + `recorder` + `storage-sqlite` | `RecordingChatModel.wrap(...)` 包住模型即可 |
+| Spring AI（无 Boot） | `agentassert4j-spring-ai1` / `-ai2` + `recorder` + `storage-sqlite` | 手动装配三个 Bean |
 | Spring AI + LangChain4j 同应用（混架） | 两个 starter | 共用录制器与存储，各自框架各被各的装饰器包装 |
 | JDK 8+ 任意栈（自封装 HTTP） | `agentassert4j-core` + `recorder` + `storage-sqlite` | 调用出口组装 `InteractionRecord` 后 `recorder.intercept(record)`——最小录制契约见 [OPERATIONS.md](OPERATIONS.md#8-最小录制契约) |
 | 自研「JSON 路由」栈（协议层无 toolCalls） | 同上 | 解析出工具名处写身份声明字段；意图识别用 rules.json 正则钉住 |
@@ -376,11 +376,11 @@ LangChain4j 的工具回路编排在模型之外（AiServices 层），每个 LL
 agentassert4j-core                     零依赖心脏（仅 java.base）：模型 / SPI / 算法 / 判定
 agentassert4j-recorder                 Disruptor 异步旁路录制（不阻塞、不 OOM、丢失记账）
 agentassert4j-storage-sqlite           SQLite 存储（聚合于 agentassert4j-storage/）
-agentassert4j-sdk-spring-ai1 / -ai2    Spring AI 两代适配（含工具观察装饰）
-agentassert4j-sdk-langchain4j1         LangChain4j 1.x 适配（纯程序化零 Spring；逐轮采集）
-agentassert4j-spring-boot3-starter     Boot 3 自动装配（聚合 core+recorder+ai1+sqlite）
-agentassert4j-spring-boot4-starter     Boot 4 自动装配（聚合 core+recorder+ai2+sqlite）
-agentassert4j-langchain4j-spring-boot3-starter  LangChain4j 的 Boot 3 自动装配（聚合 core+recorder+lc4j+sqlite）
+agentassert4j-spring-ai1 / -ai2    Spring AI 两代适配（含工具观察装饰）
+agentassert4j-langchain4j         LangChain4j 1.x 适配（纯程序化零 Spring；逐轮采集）
+agentassert4j-starter-spring-ai1     Boot 3 自动装配（聚合 core+recorder+ai1+sqlite）
+agentassert4j-starter-spring-ai2     Boot 4 自动装配（聚合 core+recorder+ai2+sqlite）
+agentassert4j-starter-langchain4j  LangChain4j 的 Boot 3 自动装配（聚合 core+recorder+lc4j+sqlite）
 agentassert4j-cli                      命令行工具（组合根：baseline/status/replay/verify/…）
 agentassert4j-cli-standalone           cli 的全依赖可执行形态（java -jar 直接用）
 ```

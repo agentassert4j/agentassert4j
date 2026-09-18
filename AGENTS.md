@@ -76,12 +76,12 @@ agentassert4j/
 │
 │  ── 框架适配 SDK（聚合在 agentassert4j-sdk/ 下）──
 └── agentassert4j-sdk/                         ← 聚合 POM (packaging=pom)
-    ├── agentassert4j-sdk-spring-ai1/          ← core + recorder + Spring AI 1.x（Boot 3.4/3.5 线）
-    ├── agentassert4j-sdk-spring-ai2/          ← core + recorder + Spring AI 2.x（Boot 4 线，两代坐标同名互斥必分模块）
-    ├── agentassert4j-sdk-langchain4j1/        ← core + recorder + LangChain4j 1.x（纯程序化接入，零 Spring 依赖）
-    ├── agentassert4j-spring-boot3-starter/    ← core + recorder + sdk-spring-ai1 + storage-sqlite + Boot 3 自动装配
-    ├── agentassert4j-spring-boot4-starter/    ← core + recorder + sdk-spring-ai2 + storage-sqlite + Boot 4 自动装配（两代 starter 配对两条 sdk 线，Boot 版本均由用户自带，starter 不锁定）
-    └── agentassert4j-langchain4j-spring-boot3-starter/ ← core + recorder + sdk-langchain4j1 + storage-sqlite + Boot 3 自动装配（与 Spring AI starter 同前缀同语义，混架应用共用录制器）
+    ├── agentassert4j-spring-ai1/          ← core + recorder + Spring AI 1.x（Boot 3.4/3.5 线）
+    ├── agentassert4j-spring-ai2/          ← core + recorder + Spring AI 2.x（Boot 4 线，两代坐标同名互斥必分模块）
+    ├── agentassert4j-langchain4j/        ← core + recorder + LangChain4j 1.x（纯程序化接入，零 Spring 依赖）
+    ├── agentassert4j-starter-spring-ai1/    ← core + recorder + spring-ai1 + storage-sqlite + Boot 3 自动装配
+    ├── agentassert4j-starter-spring-ai2/    ← core + recorder + spring-ai2 + storage-sqlite + Boot 4 自动装配（两代 starter 配对两条 sdk 线，Boot 版本均由用户自带，starter 不锁定）
+    └── agentassert4j-starter-langchain4j/ ← core + recorder + langchain4j + storage-sqlite + Boot 3 自动装配（与 Spring AI starter 同前缀同语义，混架应用共用录制器）
 ```
 
 > **裁剪说明**：曾存在的空壳模块（proxy / agent / dashboard / embedding / storage-mysql / storage-pg / sdk-lang / bom）已于
@@ -95,7 +95,7 @@ pom**。
 - 子模块的 parent 仍指向根 POM，通过 `<relativePath>../../pom.xml</relativePath>` 定位
 - 每个 artifactId 保持不变，Maven Central 发布不受影响
 - 聚合 POM 不产出 JAR，仅用于目录归类和批量构建
-- **框架适配 SDK 的命名自带版本线**：`sdk-<框架名><大版本号>`（如 `sdk-spring-ai1`、`sdk-spring-ai2`、`sdk-langchain4j1`）；starter 按 Boot 大版本命名（`spring-boot3-starter`），引入第二框架后带框架限定名（`langchain4j-spring-boot3-starter`）。一条大版本线一个模块，坐标自解释；同线内 patch/minor 靠二进制兼容，跨线**永不**在运行时嗅探版本做自动转发
+- **框架适配模块命名**：适配器 = `agentassert4j-<框架名>`，版本线数字仅在两线并存时附加（`spring-ai1`/`spring-ai2`）；单线不带（`langchain4j`，将来出现断代的大版本线时再增带数字的平行模块）。starter = 前缀式 `agentassert4j-starter-<框架名[线]>`（`starter-spring-ai1`/`starter-spring-ai2`/`starter-langchain4j`），Boot 大版本由框架线蕴含（1:1 配对），不再写 `spring-boot` token——避免 `spring-ai…spring-boot…` 双 token 冗余；某框架线确需同时供多个 Boot 大版本时，Boot 线号后置（如 `starter-langchain4j-boot4`）。一条大版本线一个模块，坐标自解释；同线内 patch/minor 靠二进制兼容，跨线**永不**在运行时嗅探版本做自动转发
 
 ### 2.2 模块分层与依赖方向（单向，上层依赖下层）
 
@@ -105,13 +105,13 @@ Layer 1: agentassert4j-core          ← 零外部依赖，纯 java.base
 Layer 2: agentassert4j-recorder      ← core + Disruptor + SLF4J API
            │
 Layer 3: agentassert4j-cli           ← core + recorder + Picocli + storage-sqlite（组合根，默认后端随行）
-         agentassert4j-sdk-spring-ai1 ← core + recorder + Spring AI 1.x
-         agentassert4j-sdk-spring-ai2 ← core + recorder + Spring AI 2.x（1.x/2.x 基线互斥，各自独立模块）
-         agentassert4j-sdk-langchain4j1 ← core + recorder + LangChain4j 1.x（LangChain4j 为 provided，用户自带）
+         agentassert4j-spring-ai1 ← core + recorder + Spring AI 1.x
+         agentassert4j-spring-ai2 ← core + recorder + Spring AI 2.x（1.x/2.x 基线互斥，各自独立模块）
+         agentassert4j-langchain4j ← core + recorder + LangChain4j 1.x（LangChain4j 为 provided，用户自带）
            │
-Layer 4: agentassert4j-spring-boot3-starter ← 聚合 core + sdk-spring-ai1 + storage-sqlite + 自动装配
-         agentassert4j-spring-boot4-starter ← 聚合 core + sdk-spring-ai2 + storage-sqlite + 自动装配
-         agentassert4j-langchain4j-spring-boot3-starter ← 聚合 core + sdk-langchain4j1 + storage-sqlite + 自动装配
+Layer 4: agentassert4j-starter-spring-ai1 ← 聚合 core + spring-ai1 + storage-sqlite + 自动装配
+         agentassert4j-starter-spring-ai2 ← 聚合 core + spring-ai2 + storage-sqlite + 自动装配
+         agentassert4j-starter-langchain4j ← 聚合 core + langchain4j + storage-sqlite + 自动装配
 
 存储插件（独立，只依赖 core）：
   agentassert4j-storage-sqlite       ← core + SQLite JDBC（默认）
@@ -157,7 +157,7 @@ io.github.agentassert4j/
 |----|---------------------------|--------------------------------------------------|
 | L1 | core                      | 防御性校验：null 输入返回安全默认值，解析失败退化为空集合，从不中断流程           |
 | L2 | recorder                  | 异步容错：RingBuffer 满则丢弃、批量写入失败记计数器不重试（失败批次丢弃，计数与日志可见，不做本地文件备份） |
-| L3 | 接入层（sdk-spring-ai1/ai2 / spring-boot3/4-starter） | 连接健壮性：上游超时透传错误、非标准格式尽力提取、版本不兼容静默退出               |
+| L3 | 接入层（spring-ai1/ai2 / spring-boot3/4-starter） | 连接健壮性：上游超时透传错误、非标准格式尽力提取、版本不兼容静默退出               |
 
 **通用规则**：框架的任何故障都不应影响 Agent 主流程。宁可丢失录制数据，不可阻塞业务请求。旁路路径（录制/富化/装饰层）的「不中断」承诺按 Throwable 级别审计：递归与无界结构必须深度封顶，兜底 catch 的异常类型边界显式核对——`catch Exception` 接不住 StackOverflowError 一类 Error，穿透即砸业务。
 
@@ -370,7 +370,7 @@ wait on the recording pipeline.
 禁止在测试中使用 9+ 语法与 API：文本块、`var`、`List.of`/`Map.of`/`Set.of`、`String.repeat`/
 `isBlank`、无参 `orElseThrow()`、`Stream.toList()`、`Path.of`、switch 箭头——
 用 `Arrays.asList`/`Collections.singleton*`/`Collectors.toList()`/`Paths.get` 等 8 时代的等价写法。
-sdk-spring-ai1 与 spring-boot3-starter 随 Spring AI 保持 17，不受此条约束。
+spring-ai1 与 starter-spring-ai1 随 Spring AI 保持 17，不受此条约束。
 
 **针对什么写**（测契约，不测实现）：
 
