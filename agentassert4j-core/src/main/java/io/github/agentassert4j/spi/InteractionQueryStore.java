@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 交互记录查询域 SPI — 分析管道（分组/指纹/图谱/影响分析）的读取面。
+ * 交互记录查询域 SPI — 分析管道（分组/指纹/图谱/影响分析）的读取入口。
  *
  * <p>实现方必须保证返回顺序确定性（按 timestamp、seq、record_id 稳定排序），
  * 同一数据重复查询返回相同顺序——依赖边构建的可复现性依赖这一点。</p>
@@ -32,7 +32,7 @@ public interface InteractionQueryStore {
     List<InteractionRecord> findBySessionId(String sessionId);
 
     /**
-     * 按 record_id 精确查询单条交互（排障/取证面：回显原始 wire 双列）。
+     * 按 record_id 精确查询单条交互（排障/取证用途：回显原始 wire 双列）。
      * record_id 全局幂等，命中至多一条；未命中返回 null。
      */
     InteractionRecord findByRecordId(String recordId);

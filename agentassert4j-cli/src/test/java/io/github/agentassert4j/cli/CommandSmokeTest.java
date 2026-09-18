@@ -164,7 +164,7 @@ class CommandSmokeTest {
     }
 
     @Test
-    @DisplayName("乱写显示短形 establish：E-NO-DATA 响亮报错，非假成功")
+    @DisplayName("乱写显示短形 establish：E-NO-DATA 明确报错，非假成功")
     void baseline_bogusDisplayForm_loudZeroHit() {
         seedOneRecord("session-1", 1000L, "aaaabbbb00000001");
 
@@ -175,8 +175,8 @@ class CommandSmokeTest {
 
         assertEquals(2, exit);
         String failure = err.toString();
-        assertTrue(failure.contains("No invocation matching"), "零命中必须响亮（失败行走 stderr）: " + failure);
-        assertFalse(out.toString().contains("already has a baseline"), "不得出现假成功话术");
+        assertTrue(failure.contains("No invocation matching"), "零命中必须显式失败（失败行走 stderr）: " + failure);
+        assertFalse(out.toString().contains("already has a baseline"), "不得出现假成功拒绝信息");
     }
 
     @Test
@@ -322,7 +322,7 @@ class CommandSmokeTest {
 
         assertEquals(2, exit);
         String err = errOut.toString();
-        assertTrue(err.contains("already the active baseline"), "空回滚守卫话术优先于「不在归档列表」: " + err);
+        assertTrue(err.contains("already the active baseline"), "空回滚守卫拒绝信息优先于「不在归档列表」: " + err);
         assertTrue(err.contains("use reject"), "必须指路丢候选的专门动词: " + err);
     }
 

@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets;
  * stdio 传输 — 换行分隔 framing、UTF-8、行预算与通道纪律。
  *
  * <p>server 的 stdout 只写协议消息（单行 JSON + 换行，逐消息 flush）——写失败即客户端
- * 已断开，静默收摊；stdin EOF 同为正常生命周期终点。CRLF 行尾容忍（裁掉尾随 CR）；
+ * 已断开，静默结束；stdin EOF 同为正常生命周期终点。CRLF 行尾容忍（裁掉尾随 CR）；
  * 空行跳过不回应；超行预算的行排空至换行后按 invalid request 回应（防超大行拖垮内存，
  * record 携带 base64 多模态可达 MB 级，预算取 2 000 万字符留足余量）。</p>
  *

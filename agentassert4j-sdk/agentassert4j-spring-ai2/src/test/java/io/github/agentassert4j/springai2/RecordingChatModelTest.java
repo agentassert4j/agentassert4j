@@ -179,7 +179,7 @@ class RecordingChatModelTest {
     }
 
     @Test
-    @DisplayName("编排观察：直调姿势下内部消费的 toolCalls 按序进同一条记录")
+    @DisplayName("编排观察：直调方式下内部消费的 toolCalls 按序进同一条记录")
     void internalToolLoop_observedIntoSingleRecord() {
         AtomicInteger callCount = new AtomicInteger();
         ToolCallback tool = stubTool("get_order", callCount);
@@ -210,7 +210,7 @@ class RecordingChatModelTest {
     }
 
     @Test
-    @DisplayName("换装发生在 mutate 副本上：业务 options 与原始回调零触碰")
+    @DisplayName("观察回调替换发生在 mutate 副本上：业务 options 与原始回调零触碰")
     void decorateUsesCopy_businessOptionsNeverMutated() {
         AtomicInteger callCount = new AtomicInteger();
         ToolCallback tool = stubTool("get_order", callCount);

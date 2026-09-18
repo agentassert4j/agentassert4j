@@ -30,7 +30,7 @@ import java.nio.charset.StandardCharsets;
  * 载体时，从结果帧的关联键合成最小合法发起帧，同一配对只合成一次；system 恒走协议
  * 的 system 位，历史 system 帧一律跳过。</p>
  *
- * <p>健康探测口径统一为传输层可达性而非鉴权校验：GET models 端点，2xx/404/405 均算
+ * <p>健康探测规则统一为传输层可达性而非鉴权校验：GET models 端点，2xx/404/405 均算
  * 可达——鉴权有效性在首个真实调用暴露（重放调用必然发生，无需在健康检查里验证）。</p>
  *
  * @author axy-yxa

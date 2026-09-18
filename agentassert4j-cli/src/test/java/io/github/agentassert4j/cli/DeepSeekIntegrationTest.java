@@ -509,7 +509,7 @@ class DeepSeekIntegrationTest {
             System.out.println("[6.2] toolCallSet=" + candidateFp.getToolCallSet() + ", Verdict=" + result.getComparison().getVerdict() + ", Score=" + String.format("%.4f", result.getComparison().getScore()));
 
             // 重放按基线记录原样携带 tools 定义；模型是否发起工具调用仍是
-            // 采样随机变量（不服从时判定面解释差异，不视为引擎缺陷）
+            // 采样存在随机性（个别不服从的结果属判定可解释的差异，不视为引擎缺陷）
         }
 
         @Test
@@ -568,7 +568,7 @@ class DeepSeekIntegrationTest {
             Double costPerCall = CostEstimator.estimateCallCostUsd("deepseek-chat", 1000L, 500L);
             assertNotNull(costPerCall);
             assertTrue(costPerCall > 0);
-            System.out.println("[8.1] CostEstimator 预估口径单价: $" + costPerCall);
+            System.out.println("[8.1] CostEstimator 预估规则单价: $" + costPerCall);
 
             // DeepSeek Chat 定价（2026参考）: input $0.27/M, output $1.10/M
             double realCost = inTokens * 0.27 / 1_000_000 + outTokens * 1.10 / 1_000_000;

@@ -121,7 +121,7 @@ public class TaskAlignment {
         private int surplusCount;
         /**
          * 本步骤实际执行的配对判定数——首个 CHANGED 即停后剩余配对不再比对，
-         * 聚合口径只承认这里计入的配对
+         * 聚合规则只承认这里计入的配对
          */
         private int comparedPairs;
         /**
@@ -142,7 +142,7 @@ public class TaskAlignment {
         private String baselineVersionTag;
         /**
          * MATCHED 且首个配对两侧细分哈希不同 = 同一调用点跨模板版本配对
-         * （行为对照含提示词混杂变量，报告尾提示受控实验口径）
+         * （行为对照含提示词混杂变量，报告尾提示受控实验规则）
          */
         private boolean versionSwitch;
         /**

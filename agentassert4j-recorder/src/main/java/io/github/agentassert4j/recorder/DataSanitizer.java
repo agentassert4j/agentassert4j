@@ -100,7 +100,7 @@ public class DataSanitizer {
      */
     private void sanitizeToolCallInPlace(ToolCall tc) {
         // 脱敏 arguments（Map<String, Object>，任意深度递归——嵌套结构里的
-        // 敏感键是最典型形态，只做顶层匹配等于漏掉主阵地）
+        // 敏感键是最典型形态，只做顶层匹配会漏掉大部分敏感键）
         if (tc.getArguments() != null && !sensitiveFieldsLower.isEmpty()) {
             Object sanitized = sanitizeValueTree(tc.getArguments());
             tc.setArguments((Map<String, Object>) sanitized);

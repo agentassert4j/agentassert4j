@@ -11,7 +11,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * 基线生命周期管理 — 框架只报告差异（侦探），接受与否由开发者裁决（法官）。
+ * 基线生命周期管理 — 框架只报告差异，接受与否由开发者裁决。
  *
  * <p>治理主体 = 调用点（invocation）的模板版本史。三态流转：BASELINE（当前认可的
  * 行为标准）→ 变更产生 CANDIDATE（待 accept/reject）→ accept 后旧基线按模板版本
@@ -75,7 +75,7 @@ public class BaselineManager {
             return;
         }
 
-        // 旧集合整体归档（可回溯，快照=当时的完整认可面）；回滚恢复的旧基线已在
+        // 旧集合整体归档（可回溯，快照=当时的完整已认可集合）；回滚恢复的旧基线已在
         // 归档中，跳过避免同 tag 重复行。归档行携带的是旧基线自身获批时的审批人
         // 与语义版本，必须先于新审批信息写入前快照
         archiveIfAbsent(invocationKey, profile);
@@ -124,8 +124,8 @@ public class BaselineManager {
     }
 
     /**
-     * 将调用点的模板身份前移到最新可分组记录的模板哈希（漂移自动收编的写入口，
-     * 与 accept 的前移同一重算口径）。
+     * 将调用点的模板身份前移到最新可分组记录的模板哈希（漂移自动并入基线的写入口，
+     * 与 accept 的前移同一重算规则）。
      *
      * <p>画像不存在、无可用记录凭据或最新模板哈希为空时保守保留原值并返回 false——
      * 不产出错误身份；哈希一致时幂等返回 false。指纹、候选、版本标签与审批链均不动。</p>
@@ -167,7 +167,7 @@ public class BaselineManager {
         }
         checkExpectedVersion(profile, expectedActiveVersion);
         // 空回滚守卫先于归档查找：目标=活动版本时「不在归档列表」不是用户真实意图，
-        // 拒绝话术必须带 reject 指路（丢候选的专门动词）
+        // 拒绝信息必须带 reject 指路（丢候选的专门动词）
         if (versionTag.equals(profile.getVersionTag())) {
             throw new IllegalStateException("Target version " + versionTag + " is already the active baseline of " + invocationKey + "; rollback would change nothing. To discard an in-flight candidate, use reject.");
         }
@@ -186,13 +186,13 @@ public class BaselineManager {
         profile.setBaselineStatus(BaselineStatus.BASELINE);
         profile.setVersionTag(versionTag);
         // 模板哈希随归档快照恢复：回滚把调用点身份一并退回该版本获批时的模板，
-        // 否则基线描述旧模板行为、身份却挂着新模板，下轮检测即误报漂移
+        // 否则基线描述旧模板行为、身份却对应新模板，下轮检测即误报漂移
         profile.setTemplateHash(archived.getTemplateHash());
         profile.setAlgoVersion(archived.getAlgoVersion());
         profile.setApprovedBy(archived.getApprovedBy());
         profile.setApprovedAt(archived.getApprovedAt());
         // 代码锚随归档快照一起回退：活跃行的锚必须始终描述当前基线自身的获批坐标，
-        // 否则行为是旧版本、标注却挂着新提交，审计账本说谎
+        // 否则行为是旧版本、标注却对应新提交，审计记录就会失真
         profile.setCodeRef(archived.getCodeRef());
         repository.saveInvocationProfile(profile);
         recordGovernanceEvent(GovernanceVerb.ROLLBACK, invocationKey, versionTag, actor, null);
@@ -205,8 +205,8 @@ public class BaselineManager {
      *
      * <p>候选指纹已属认可集合时不登记（画像原样保留，含既未裁决的既有候选）——
      * 与基线集合无差异的候选不携带裁决信息，登记只会制造「有候选却无差异」的
-     * 困惑界面；该守卫按集合判定，accept 入集后链末回到任何已认可形态都不再
-     * 重复落候选（镜像候选 churn 的根治点）。</p>
+     * 困惑观感；该守卫按集合判定，accept 入集后链末回到任何已认可形态都不再
+     * 重复落候选（这是重复落候选问题的根治点）。</p>
      *
      * @param baseline  产生候选时所用基线交互记录（invocationKey 由解析器从记录重算）
      * @param candidate 回归测试提取的新指纹
@@ -246,7 +246,7 @@ public class BaselineManager {
 
     /**
      * 乐观并发守卫：期望版本非空且与活跃版本不符时就地拒绝——
-     * 多宿主并发改写的违约在此可见，不推迟到裁决落地之后。
+     * 多宿主并发改写的违约在此可见，不推迟到裁决完成之后。
      */
     private void checkExpectedVersion(InvocationProfile profile, String expectedActiveVersion) {
         if (expectedActiveVersion != null && !expectedActiveVersion.equals(profile.getVersionTag())) {
@@ -262,7 +262,7 @@ public class BaselineManager {
      *
      * @param record   该调用点的任一已录制交互
      * @param approver 重建操作者身份
-     * @param rules    规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
+     * @param rules    规则配置（维度 3-4 规则，与重放判定同源；null = 无规则）
      * @throws IllegalStateException 该调用点无画像且无录制数据可解析时抛出
      */
     public synchronized void reestablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef) {
@@ -290,8 +290,8 @@ public class BaselineManager {
         }
 
         // 提取指纹作为基线
-        // 规则口径必须与重放判定同源（三参提取注入维度 3-4）；
-        // 存档指纹集合是批准真相的定格投影：CI 基线对照经 BaselineSides.fromProfiles
+        // 规则必须与重放判定同源（三参提取注入维度 3-4）；
+        // 存档指纹集合是已批准事实的定格投影：CI 基线对照经 BaselineSides.fromProfiles
         // 以它为基线侧，候选侧（当前证据）永远现场重提
         DeterministicFingerprint fingerprint = FingerprintExtractor.extract(record, rules, record.getInvocationId());
 
@@ -311,10 +311,10 @@ public class BaselineManager {
     }
 
     /**
-     * 治理事件并行落账（只挂真实写入路径——本方法只在实际治理写完成后被调用，
-     * 幂等早退与前置失败路径不产生事件）。L1 退化：事件写失败记 SEVERE 不阻断
+     * 治理事件并行写入（只挂真实写入路径——本方法只在实际治理写完成后被调用，
+     * 幂等早退与前置失败路径不产生事件）。退化语义：事件写失败记 SEVERE 不阻断
      * 治理写本体——事件缺失经日志可见，审计失败不得阻止治理动作；happenedAt
-     * 由存储实现方写入时刻盖章。
+     * 由存储实现方写入时刻写入审批记录。
      */
     private void recordGovernanceEvent(GovernanceVerb verb, String invocationKey, String versionTag, String actor, String codeRef) {
         try {
@@ -336,11 +336,11 @@ public class BaselineManager {
      */
     private void stampApproval(InvocationProfile profile, String approver, String codeRef) {
         profile.setAlgoVersion(JudgmentSemantics.VERSION);
-        // 空白身份归一为 null：approvedBy=null 是「未经审批链盖章」的异常信号，
+        // 空白身份归一为 null：approvedBy=null 是「未经审批链写入审批记录」的异常信号，
         // 空白串落库会稀释该信号。core 只归一调用方传入的身份，不嗅探环境
         profile.setApprovedBy(approver == null || approver.trim().isEmpty() ? null : approver.trim());
         profile.setApprovedAt(System.currentTimeMillis());
-        // 代码锚同样空白归一为 null：申报制字段，空缺合法，归一后回显口径统一
+        // 代码锚同样空白归一为 null：申报制字段，空缺合法，归一后回显规则统一
         profile.setCodeRef(codeRef == null || codeRef.trim().isEmpty() ? null : codeRef.trim());
     }
 
@@ -366,7 +366,7 @@ public class BaselineManager {
     }
 
     /**
-     * 按最新可分组记录重算画像模板哈希（accept 版本前移与漂移收编共用的口径）。
+     * 按最新可分组记录重算画像模板哈希（accept 版本前移与漂移并入基线共用的规则）。
      * 身份凭据 = 存储键与现算键一致且可解析的最新记录；凭据缺失（记录损坏或全部
      * 不可用）或其模板哈希为空时保守保留原值。只改内存画像不落库，由调用方随
      * 其余字段一并写入。

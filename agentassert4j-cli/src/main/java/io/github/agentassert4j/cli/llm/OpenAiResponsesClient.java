@@ -20,7 +20,7 @@ import java.util.Map;
  * 恒用 items 数组（message item 的文本 part 按 role 取 input_text/output_text）；工具
  * 历史帧为 function_call / function_call_output item 对（call_id 配对是该文法硬约束，
  * 违规 400），录制侧无发起帧载体时按已知 call_id/name 合成最小合法发起 item 且同一
- * 配对只合成一次；范式多模态的 image_url 直通（该文法同形收 url 与 data-URI）。有状态
+ * 配对只合成一次；规范形多模态的 image_url 直通（该文法同形收 url 与 data-URI）。有状态
  * 成员（previous_response_id/store）不携带——重放是无状态全量输入。max_output_tokens
  * 缺省不报（该文法无必填上限）。响应解析与 MCP 摄取共用
  * {@link OpenAiResponsesWireFormat} 的 finish 派生器。</p>
@@ -153,7 +153,7 @@ public class OpenAiResponsesClient extends AbstractHttpLlmClient {
     }
 
     /**
-     * function_call item：arguments 是字符串形（范式 Map/JSON 文本序列化为字符串），
+     * function_call item：arguments 是字符串形（规范形 Map/JSON 文本序列化为字符串），
      * 缺载体时以空对象字符串占位（文法只看结构与 call_id 配对）。
      */
     private static String functionCallItem(String callId, String toolName, String arguments) {
@@ -164,9 +164,9 @@ public class OpenAiResponsesClient extends AbstractHttpLlmClient {
     }
 
     /**
-     * 范式多模态数组（OpenAI content 数组）转该文法的 content parts：text part 直转
+     * 规范形多模态数组（OpenAI content 数组）转该文法的 content parts：text part 直转
      * （input_text）、image_url 直通（该文法的 input_image 同形收 url 与 data-URI）；
-     * 形态不符的 part 跳过（宁缺勿非法）。
+     * 形态不符的 part 跳过（宁可丢弃也不产出非法数据）。
      */
     private static String convertMultimodal(String paradigmJson) {
         List<Object> parts = new ArrayList<>();
@@ -198,7 +198,7 @@ public class OpenAiResponsesClient extends AbstractHttpLlmClient {
     }
 
     /**
-     * 范式工具定义（OpenAI tools 嵌套形）转该文法扁平形；解析失败或缺 name 的
+     * 规范形工具定义（OpenAI tools 嵌套形）转该文法扁平形；解析失败或缺 name 的
      * 定义跳过——宁可不带也不构造非法请求（与 chat 侧「损坏定义不带」同策略）。
      */
     private static String buildTools(List<String> toolDefinitions) {
@@ -231,7 +231,7 @@ public class OpenAiResponsesClient extends AbstractHttpLlmClient {
 
     /**
      * 解析 OpenAI Responses 响应体：message item 的 output_text 拼接为正文、
-     * function_call item 为工具调用（arguments 字符串二次解析）、usage 按总量口径
+     * function_call item 为工具调用（arguments 字符串二次解析）、usage 按总量规则
      * 提取、finish 由 status×output 形态经共享派生器。非合法 JSON 对象抛
      * {@link LlmApiException}；缺成员退化不中断。
      */

@@ -1,7 +1,7 @@
 package io.github.agentassert4j.cli;
 
 /**
- * 带机器错误分类的命令失败 — 错误码在抛出点钉死，命令层不做消息反推。
+ * 带机器错误分类的命令失败 — 错误码在抛出点锁定，命令层不做消息反推。
  * 人类通道照常输出消息本体；--json 模式下由 {@code CliSupport.fail} 组装
  * agentassert4j.error/1 包络写 stdout。
  *

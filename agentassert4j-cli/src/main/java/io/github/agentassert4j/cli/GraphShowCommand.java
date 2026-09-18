@@ -15,11 +15,11 @@ import java.util.TreeSet;
 import java.util.concurrent.Callable;
 
 /**
- * graph show 命令 — 现场重建值溯源图并渲染（只读，不落盘）。
+ * graph show 命令 — 现场重建值溯源图并渲染（只读，不写任何文件）。
  *
  * <p>图是派生数据：本命令每次从交互记录重建，永远反映最新录制状态。
  * HIGH 边 = 会话内值溯源（工具参数值回溯到任一更早记录的输出，携带命中值与源/目标记录对）；
- * LOW 边 = 相邻对的字段名前缀提示（不携带证据）。人读面节点/边走 displayKey 短形，
+ * LOW 边 = 相邻对的字段名前缀提示（不携带证据）。人读输出中节点/边走 displayKey 短形，
  * 完整键在图例逐字可寻址；JSON 面保持完整键（机器契约不变）。
  * 多轮工具会话之外的数据建不出边——空图说明录制数据缺会话链，不是图功能故障。</p>
  *
@@ -29,7 +29,7 @@ import java.util.concurrent.Callable;
 @Command(name = "show", description = "Rebuild and inspect the value-flow provenance graph (nodes/edges/evidence/cycles)", mixinStandardHelpOptions = true)
 public class GraphShowCommand implements Callable<Integer> {
 
-    // 证据值人读截断预算：走 abbreviateText 单源（空白折叠 + 截断 + ASCII 省略号），
+    // 证据值人读截断预算：走 abbreviateText 唯一定义处（空白折叠 + 截断 + ASCII 省略号），
     // JSON 叶子值可含换行，裸截断会破坏单行报告格式
     private static final int EVIDENCE_DISPLAY_BUDGET = 40;
 

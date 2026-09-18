@@ -20,9 +20,9 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 退出码与缩域两等价类的跨面钉 —— 同一失败条件在 CLI 与 MCP 两入口必须报同一
+ * 退出码与缩域两等价类的跨入口等价断言 —— 同一失败条件在 CLI 与 MCP 两入口必须报同一
  * 错误码；同一选择器串在 status / report / replay 与 MCP status 解析出同一目标
- * 键集。登记表真源：guide/spec/equivalence.md。
+ * 键集。登记表唯一权威来源：guide/spec/equivalence.md。
  *
  * @author axy-yxa
  * @since 2026-09-17
@@ -104,8 +104,8 @@ class SurfaceParityTest {
             assertTrue(byStatus.contains("invocation:order:hash-a") && byStatus.contains("invocation:order:hash-b"), "两个 order 键都在场: " + byStatus);
             assertFalse(byStatus.contains("invocation:stock:hash-c"), "其他标签的键不得混入: " + byStatus);
 
-            // 目标族（replay --invocation）：多键标签按歧义响亮拒绝，且披露的候选键集
-            // 必须与缩域族解析出的集合一致——同一解析真源在两族上的投影
+            // 目标族（replay --invocation）：多键标签按歧义显式拒绝，且披露的候选键集
+            // 必须与缩域族解析出的集合一致——同一解析唯一权威来源在两族上的投影
             String envelope = cliErrorEnvelope("replay", "--db", dbPath, "--invocation", "order", "--json");
             assertTrue(envelope.contains("\"errorCode\":\"E-USAGE\""), "多键标签=目标族歧义: " + envelope);
             for (String key : byStatus) {

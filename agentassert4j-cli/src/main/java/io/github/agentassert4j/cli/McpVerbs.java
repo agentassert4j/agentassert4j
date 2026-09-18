@@ -44,7 +44,7 @@ final class McpVerbs {
     }
 
     /**
-     * --ci 逃生舱是 CLI 旗标（MCP 的 check/diff 恒为 ci 语义），该子句在 MCP 面不可达，随映射一并摘除。
+     * --ci 应急开关是 CLI 旗标（MCP 的 check/diff 恒为 ci 语义），该子句在 MCP 面不可达，随映射一并摘除。
      */
     static String channelize(String text) {
         if (text == null || text.isEmpty()) {

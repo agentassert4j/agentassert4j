@@ -51,7 +51,7 @@ public class BaselineService {
      * @param invocationKeys  仅处理这些调用点键（null = 全部；由 CliSupport 统一解析阶梯
      *                        产出——标签扇出/显示短形/唯一前缀在解析层收敛为键集合，
      *                        匹配职责不残留本层）
-     * @param rules           规则配置（维度 3-4 口径，与重放判定同源；null = 无规则）
+     * @param rules           规则配置（维度 3-4 规则，与重放判定同源；null = 无规则）
      * @param outcomes        逐调用点结果收集（null = 不收集；人类结果行已就地打印，
      *                        明细供 --json 报告组装）
      * @param expectedVersion 乐观并发守卫的期望活跃版本标签，null = 不设守卫
@@ -60,7 +60,7 @@ public class BaselineService {
     public int establishMissing(PrintStream out, String actor, String codeRef, boolean force, Set<String> invocationKeys, InvocationRulesConfig rules, List<BaselineOutcome> outcomes, String expectedVersion) {
         BaselineManager manager = new BaselineManager(repository);
         int established = 0;
-        // 全库扫建路径的裂键豁免：同标签已有兄弟建档的未建档键只披露不收编——裂键是
+        // 全库扫建路径的裂键豁免：同标签已有兄弟建档的未建档键只披露、不并入基线——裂键是
         // 模板身份变更的治理信号，等显式 establish（与 replay 自动建档同一条规则）；
         // 定向 --invocation 是逐键的显式意图，不过滤
         Set<String> sweepSkipped = invocationKeys == null ? splitKeysSkippedBySweep(out) : Collections.<String>emptySet();
@@ -106,7 +106,7 @@ public class BaselineService {
                     manager.autoEstablishBaseline(seed, actor, rules, codeRef);
                 } catch (RuntimeException e) {
                     // 单条建档失败（存储抖动等）不中断整批——与录制 enrich 的
-                    // 单条容错同哲学；分桶已剔除不可分组记录，这里只剩存储面故障
+                    // 单条容错同哲学；分桶已剔除不可分组记录，这里只剩存储层故障
                 }
             }
 
@@ -274,7 +274,7 @@ public class BaselineService {
     }
 
     /**
-     * 人读行的申报锚后缀：只回显已落库的锚（真源在画像行），调用方声明值
+     * 人读行的申报锚后缀：只回显已落库的锚（唯一权威来源在画像行），调用方声明值
      * 未经空白归一前不进输出。
      */
     private static String refSuffix(String codeRef) {

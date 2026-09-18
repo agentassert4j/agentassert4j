@@ -379,7 +379,7 @@ class RecursiveJsonParserTest {
     /**
      * 深度攻击防护：超限嵌套必须按解析失败契约安全退化为 null，
      * 绝不能以 StackOverflowError 逃逸——Error 不在 catch(Exception) 的拦截面内，
-     * 一旦穿透会击穿 RegressionTestExecutor 的单条记录异常隔离。
+     * 一旦穿透会破坏 RegressionTestExecutor 的单条记录异常隔离。
      */
     @Test
     void parse_deepNestingBeyondLimit_degradesToNullWithoutStackOverflow() {
@@ -426,7 +426,7 @@ class RecursiveJsonParserTest {
 
     @Test
     void extractPaths_structureDiff_onEmptyContainerChange_isVisible() {
-        // 历史缺陷探针：{"a":{}} 与 {"b":[]} 曾双双产出空路径集——结构差异完全不可见
+        // 边界探针：{"a":{}} 与 {"b":[]} 若产出空路径集，结构差异将完全不可见
         Map<String, Object> base = (Map<String, Object>) RecursiveJsonParser.parse("{\"a\":{}}");
         Map<String, Object> current = (Map<String, Object>) RecursiveJsonParser.parse("{\"b\":[]}");
         Set<String> basePaths = RecursiveJsonParser.extractFieldPaths(base);

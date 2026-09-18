@@ -93,7 +93,7 @@ class AgentAssert4jAutoConfigurationTest {
             assertFalse(p.isRecordUndeclaredChat());
             assertTrue(p.isEnabled());
 
-            // 消费映射行为钉：yml 值必须流经 builder 进入录制器行为
+            // 消费映射行为断言：yml 值必须流经 builder 进入录制器行为
             // （绑定钉只证 Properties 字段吸收，证明不了 AutoConfig 的 12 连调没漏）
             InteractionRecorder recorder = context.getBean(InteractionRecorder.class);
             InteractionRecord probe = new InteractionRecord();
@@ -154,7 +154,7 @@ class AgentAssert4jAutoConfigurationTest {
         runner.withBean("chatModel", StubChatModel.class).withPropertyValues("agentassert4j.storage.url=" + dbPath).run(context -> {
             ChatModel model = context.getBean("chatModel", ChatModel.class);
             ChatResponse response;
-            // 采集门：未声明且无工具调用的纯对话不录——管道测试走标准声明姿势。
+            // 采集门：未声明且无工具调用的纯对话不录——管道测试走标准声明方式。
             // 显式 finally 关闭：弹出 ThreadLocal 作用域，防止声明泄漏进测试线程
             RecordingContext scope = RecordingContext.start(null).withInvocationId("order-flow");
             try {

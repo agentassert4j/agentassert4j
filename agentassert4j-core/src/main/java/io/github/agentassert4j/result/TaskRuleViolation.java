@@ -4,7 +4,7 @@ package io.github.agentassert4j.result;
  * 任务规则违规 — 任务链违反 rules.tasks 声明纪律的单条判定明细。
  *
  * <p>违规折叠进既有二值判定（链级 CHANGED），不引入新的 verdict 值；
- * 呈现顺序钉死为规则声明序：requiredSteps → requiredOrder → steps。</p>
+ * 呈现顺序锁定为规则声明序：requiredSteps → requiredOrder → steps。</p>
  *
  * @author axy-yxa
  * @since 2026-09-01

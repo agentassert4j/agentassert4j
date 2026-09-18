@@ -8,7 +8,7 @@ import java.util.*;
 /**
  * MCP 分发器 — JSON-RPC 校验、握手状态机、方法路由与工具结果组装。
  *
- * <p>方法面封闭五方法（initialize / notifications/initialized / tools/list / tools/call /
+ * <p>协议方法封闭为五个（initialize / notifications/initialized / tools/list / tools/call /
  * ping）；未知请求回 -32601，未知通知静默忽略（对通知回错即协议违规）。错误分类法：
  * 请求结构级缺陷（含未知工具名）走 JSON-RPC 协议错误码；已知工具的参数语义错误与命令
  * exit 2 走 isError:true 结果体，结构化本体复用 agentassert4j.error/1 包络。工具结果

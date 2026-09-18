@@ -26,7 +26,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 映射器契约钉：LangChain4j 请求/响应/历史到交互记录的逐字段对齐。
+ * 映射器契约测试：LangChain4j 请求/响应/历史到交互记录的逐字段对齐。
  *
  * @author axy-yxa
  * @since 2026-09-18

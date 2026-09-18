@@ -24,10 +24,10 @@ import java.util.*;
 /**
  * verify 执行流程 — 验收包（导入参照）× 本地录制链（现场重提）的交付验收比对。
  *
- * <p>包内指纹作为基线侧（导出侧画像活跃指纹的定格交付）、本地录制链的链末执行
+ * <p>包内指纹作为基线侧（导出侧画像活跃指纹的固定快照交付）、本地录制链的链末执行
  * （每调用点最新记录）现场重提作为当前侧，走链末判定入口（与 CI 门禁同一把尺：
  * 任务纪律与前缀看全链）；验收包只读：不落库、不改本地基线与候选状态。包判定语义
- * 与当前引擎不一致时拒绝判定；包任务未执行属证据缺口，不允许冒充通过。</p>
+ * 与当前引擎不一致时拒绝判定；包任务未执行属证据缺口，不得计为通过。</p>
  *
  * @author axy-yxa
  * @since 2026-08-30
@@ -116,7 +116,7 @@ public class VerifyRunner {
             return dryRunPlan(pack, tasks, localChains);
         }
 
-        // 维度 3/4 与任务纪律的比对口径来自基线侧声明：包内嵌规则段是验收侧的规则真源，
+        // 维度 3/4 与任务纪律的比对规则来自基线侧声明：包内嵌规则段是验收侧的规则唯一权威来源，
         // 不读本地规则文件；无规则段的包退化为空规则——两侧默认 match，报告注记降级
         InvocationRulesConfig packRules = InvocationRulesConfig.fromMap(pack.getRules());
         boolean rulesEmbedded = packRules.hasRules();
@@ -231,7 +231,7 @@ public class VerifyRunner {
         if (uncovered.isEmpty()) {
             return 0;
         }
-        // 覆盖缺口：包任务未在本地执行属证据缺口，不允许冒充通过——报告已在 stdout，
+        // 覆盖缺口：包任务未在本地执行属证据缺口，不得计为通过——报告已在 stdout，
         // 包络作收尾行显式说明缺口与补证路径
         return fail(CliErrorCode.E_NO_DATA, "Verification incomplete: no local execution for " + CliSupport.plural(uncovered.size(), "pack task") + ".", "Run the uncovered tasks in your agent, then re-run verify; `verify --dry-run` lists pairings.", "agentassert4j verify --dry-run");
     }

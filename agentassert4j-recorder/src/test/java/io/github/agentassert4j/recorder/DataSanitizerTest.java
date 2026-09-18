@@ -125,7 +125,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitize_nullConfig_returnsDefensiveCopy() {
-        // 原断言（同实例返回）钉住的是跨线程共享可变状态的缺陷，随无条件深拷贝修复改写
+        // 原断言（同实例返回）锁定的是跨线程共享可变状态的缺陷，随无条件深拷贝修复改写
         DataSanitizer sanitizer = new DataSanitizer(null);
         InteractionRecord record = createTestRecord();
         InteractionRecord result = sanitizer.sanitize(record);
@@ -390,7 +390,7 @@ class DataSanitizerTest {
 
     @Test
     void sanitize_maskStrategy_nestedObjectValue_producesValidJson() {
-        // 审计探针场景：敏感键的值是嵌套对象，旧实现截断在内部第一个分隔符产出非法 JSON
+        // 审计探针场景：敏感键的值是嵌套对象，截断在内部第一个分隔符会产出非法 JSON
         DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "redacted"));
         String json = "{\"redacted\": {\"a\":1}, \"b\":2}";
 

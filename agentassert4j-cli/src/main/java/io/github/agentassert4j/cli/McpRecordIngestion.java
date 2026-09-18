@@ -18,19 +18,19 @@ import io.github.agentassert4j.util.RecursiveJsonParser;
 import java.util.*;
 
 /**
- * record 摄取 — 非 Java 栈的入场券：把一次完成的 LLM 交互的原始 wire 报文
+ * record 摄取 — 非 Java 栈的接入路径：把一次完成的 LLM 交互的原始 wire 报文
  * （OpenAI chat / Anthropic Messages / OpenAI Responses 的请求与响应 JSON）
  * 解析成落库交互记录。
  *
  * <p>协议由显式 protocol 参数声明或按响应形态自动识别；落库记录是协议中立的
- * OpenAI chat 范式形——协议差异在本边界归一（工具定义转范式嵌套形、图像转
+ * OpenAI chat 规范形形——协议差异在本边界归一（工具定义转规范形嵌套形、图像转
  * data-URI、finish/usage 按方言归一表折算），跨协议重放的比较在结构指纹层天然
  * 成立。字段映射与 SDK 捕获侧（SpringAiRecordMapper）同源：模板即 system/
  * instructions、末位 user 输入即本轮输入、其余消息进 previousTurns、响应侧提取
  * 正文/工具调用/用量。身份派生走与录制管道同一顺序——哈希投影先行、后键派生；
  * wire 摄取无骨架，未声明标签时锚到 template/adhoc。幂等由存储层 INSERT OR
  * IGNORE 承接，recordId 取值三层：调用方申报 &gt; 响应 id &gt; 内容哈希（重发同一
- * 报文自然去重）。不可转换的 part（历史轮图像等）宁缺勿非法——丢弃并经 stderr
+ * 报文自然去重）。不可转换的 part（历史轮图像等）宁可丢弃也不产出非法数据——丢弃并经 stderr
  * 可见告警。</p>
  *
  * @author axy-yxa
@@ -162,9 +162,9 @@ final class McpRecordIngestion {
     }
 
     /**
-     * wire 方言到范式记录的映射器 — 每协议一实现。请求面映射可产出丢弃告警
-     * （不可转换的 part 宁缺勿非法，丢弃必须可见）；响应面形态不符静默退化
-     * （对应字段保持 null，与既有 chat 摄取口径一致）。
+     * wire 方言到规范形记录的映射器 — 每协议一实现。请求面映射可产出丢弃告警
+     * （不可转换的 part 宁可丢弃也不产出非法数据，丢弃必须可见）；响应面形态不符静默退化
+     * （对应字段保持 null，与既有 chat 摄取规则一致）。
      */
     private interface WireRecordMapper {
 
@@ -191,7 +191,7 @@ final class McpRecordIngestion {
         Long timestamp = longArg(args, "timestamp");
         record.setTimestamp(timestamp != null ? timestamp : System.currentTimeMillis());
         // apiProtocol 标记「这条记录按哪个方言的 wire 报文摄取」；落库数据本身恒为
-        // OpenAI chat 范式形（协议差异已在映射器边界归一）
+        // OpenAI chat 规范形形（协议差异已在映射器边界归一）
         record.setApiProtocol(protocol.wireName());
         record.setModel(memberString(request, "model"));
         record.setRecorderVersion(RECORDER_VERSION);
@@ -279,7 +279,7 @@ final class McpRecordIngestion {
         }
 
         /**
-         * 请求消息面映射（与 SDK 捕获侧同契约）：system/developer 即模板（多帧末者为准，
+         * 请求消息映射（与 SDK 捕获侧同契约）：system/developer 即模板（多帧末者为准，
          * 不入轮次）；末位 user 消息即本轮输入（content 为数组按多模态落库）；其余进
          * previousTurns。
          */
@@ -377,7 +377,7 @@ final class McpRecordIngestion {
      * Anthropic Messages 方言映射：顶层 system 即模板（字符串或 text 块拼接）；
      * assistant 轮的 tool_use 块与 user 轮的 tool_result 块按 id+name 保真为
      * 发起帧与结果帧（结果帧的名字由同请求内配对回填——该方言的结果块自身无名字）；
-     * image 块在末位输入转范式 data-URI，历史轮无载体丢弃并告警。
+     * image 块在末位输入转规范形 data-URI，历史轮无载体丢弃并告警。
      */
     private static final class AnthropicWireMapper implements WireRecordMapper {
 
@@ -464,7 +464,7 @@ final class McpRecordIngestion {
             Map<?, ?> usage = memberMap(response, "usage");
             if (usage != null) {
                 record.setUsageRaw(RecursiveJsonParser.serialize(usage));
-                // input_tokens 是非缓存口径：总量 = 三会计数求和（缺项按 0）
+                // input_tokens 是非缓存规则：总量 = 三项计数求和（缺项按 0）
                 record.setInputTokens(AnthropicMessagesWireFormat.totalInputTokens(usage));
                 record.setOutputTokens(orZero(memberInt(usage, "output_tokens")));
                 Integer cacheRead = memberInt(usage, "cache_read_input_tokens");
@@ -482,7 +482,7 @@ final class McpRecordIngestion {
         }
 
         /**
-         * 末位输入映射：块数组含 image 块时转范式多模态数组（text 块转范式 text part、
+         * 末位输入映射：块数组含 image 块时转规范形多模态数组（text 块转规范形 text part、
          * image 块的 base64 source 转 data-URI）；纯 text 块数组拼接为文本——与
          * chat 摄取的纯文本形态可比。
          */
@@ -637,8 +637,8 @@ final class McpRecordIngestion {
         }
 
         /**
-         * 工具定义扁平形（{name,description,input_schema}）转范式嵌套形；缺 name 的
-         * 残缺条目跳过——宁可不录也不产出无名范式。
+         * 工具定义扁平形（{name,description,input_schema}）转规范形嵌套形；缺 name 的
+         * 残缺条目跳过——宁可不录也不产出无名规范形。
          */
         private static String toolsDefinition(Object toolsObj) {
             if (!(toolsObj instanceof List) || ((List<?>) toolsObj).isEmpty()) {
@@ -819,7 +819,7 @@ final class McpRecordIngestion {
         }
 
         /**
-         * 末位输入映射：content 为 part 数组且含图像 part 时转范式多模态数组
+         * 末位输入映射：content 为 part 数组且含图像 part 时转规范形多模态数组
          * （input_image 的 image_url 直通——url 与 data-URI 形均合法）；纯文本
          * part 聚合为文本。
          */
@@ -919,7 +919,7 @@ final class McpRecordIngestion {
         }
 
         /**
-         * 工具定义扁平形（{type:"function",name,description,parameters}）转范式
+         * 工具定义扁平形（{type:"function",name,description,parameters}）转规范形
          * 嵌套形；缺 name 的残缺条目跳过。
          */
         private static String toolsDefinition(Object toolsObj) {

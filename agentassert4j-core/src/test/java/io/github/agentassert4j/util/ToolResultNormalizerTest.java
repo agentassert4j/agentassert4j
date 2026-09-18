@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * 工具结果方言归一的契约钉：字符串字面量解一层，其余形态透传。
+ * 工具结果方言归一的契约测试：字符串字面量解一层，其余形态透传。
  *
  * @author axy-yxa
  * @since 2026-09-18

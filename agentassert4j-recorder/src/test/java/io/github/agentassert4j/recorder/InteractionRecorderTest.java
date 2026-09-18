@@ -250,7 +250,7 @@ class InteractionRecorderTest {
 
     @Test
     void captureGate_default_recordsBareChat() throws Exception {
-        // 默认全量录制：未声明纯对话也进管道（任务链完整性优先于流量卫生，
+        // 默认全量录制：未声明纯对话也进管道（任务链完整性优先于流量成本，
         // 链条终点的最终回答组装往往正是纯文本调用）
         RecorderConfig config = RecorderConfig.builder().batchSize(1).flushIntervalMs(100).ringBufferSize(1024).build();
 
@@ -291,7 +291,7 @@ class InteractionRecorderTest {
 
     @Test
     void filteredWarnRhythm_firstThenEveryInterval() {
-        // 告警节律：首条被滤记录一次，此后每满 100 条重申一次
+        // 告警间隔规则：首条被滤记录一次，此后每满 100 条重申一次
         assertTrue(InteractionRecorder.shouldWarnOnFilter(1));
         assertFalse(InteractionRecorder.shouldWarnOnFilter(2));
         assertFalse(InteractionRecorder.shouldWarnOnFilter(99));
@@ -465,7 +465,7 @@ class InteractionRecorderTest {
     @Test
     void droppedCount_closesOverRingBufferFullDrops() throws Exception {
         // 消费线程被存储写入阻塞 → RingBuffer 填满 → 生产侧 tryNext 失败丢弃。
-        // 总丢弃口径必须含该路径，且 written + dropped 闭合到 recorded。
+        // 总丢弃规则必须含该路径，且 written + dropped 闭合到 recorded。
         CountDownLatch releaseStorage = new CountDownLatch(1);
         InMemoryStorageRepository blockingRepo = new InMemoryStorageRepository() {
             @Override

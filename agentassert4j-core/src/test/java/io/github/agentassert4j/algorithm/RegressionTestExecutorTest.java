@@ -69,7 +69,7 @@ class RegressionTestExecutorTest {
         assertEquals("anthropic-messages", executor.buildReplayRequest(baseline, "p", null, config).getWireProtocol());
         assertNull(executor.buildReplayRequest(makeBaseline("hash", "input"), "p", null, config).getWireProtocol(), "记录无方言时请求不带提示（路由客户端走配置/兜底）");
 
-        // 方言血统随重放产物传递：按基线方言发射产生的新记录标注同一方言，
+        // wire 方言随重放产物传递：按基线方言发射产生的新记录标注同一方言，
         // 后续再重放不回退错方言
         InteractionRecord current = executor.buildCurrentRecord(baseline, new LlmResponse(), "p", null);
         assertEquals("anthropic-messages", current.getApiProtocol());
@@ -635,7 +635,7 @@ class RegressionTestExecutorTest {
 
             RegressionTestResult result = chainedExecutor(client).execute(chainBaseline(), "new prompt", null, TestExecutionConfig.defaults());
 
-            assertEquals(3, client.requests.size(), "两轮决策 + 末轮收口 = 3 次调用（调用次数闭合）");
+            assertEquals(3, client.requests.size(), "两轮决策 + 末轮收尾 = 3 次调用（调用次数闭合）");
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
             assertEquals(Verdict.PASS, result.getComparison().getVerdict());
             assertEquals(30, result.getInputTokens().intValue(), "token 遥测跨轮聚合");
@@ -696,11 +696,11 @@ class RegressionTestExecutorTest {
 
             assertEquals(3, client.requests.size());
             assertEquals(Verdict.CHANGED, result.getComparison().getVerdict());
-            assertTrue(result.getComparison().getSummary().contains("round 3"), "末轮多出的编排定位到收口轮: " + result.getComparison().getSummary());
+            assertTrue(result.getComparison().getSummary().contains("round 3"), "末轮多出的编排定位到收尾轮: " + result.getComparison().getSummary());
         }
 
         @Test
-        @DisplayName("结果道具缺失（录制时工具失败）→ 退回单发重放")
+        @DisplayName("工具结果数据缺失（录制时工具失败）→ 退回单发重放")
         void missingResult_fallsBackToSingleShot() {
             InteractionRecord baseline = chainBaseline();
             baseline.getToolCalls().get(0).setResult(null);
@@ -710,7 +710,7 @@ class RegressionTestExecutorTest {
             RegressionTestResult result = chainedExecutor(client).execute(baseline, "new prompt", null, TestExecutionConfig.defaults());
 
             assertEquals(1, client.requests.size(), "单发重放只发一次");
-            assertFalse(RegressionTestExecutor.isChainReplayable(baseline), "结果道具缺失不再是链式资格");
+            assertFalse(RegressionTestExecutor.isChainReplayable(baseline), "结果数据缺失不再是链式资格");
             assertEquals(TestResultStatus.SUCCESS, result.getStatus());
         }
     }

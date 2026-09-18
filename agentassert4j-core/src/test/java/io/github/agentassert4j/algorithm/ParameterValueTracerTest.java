@@ -159,7 +159,7 @@ class ParameterValueTracerTest {
 
     @Test
     void extractFieldValues_prefersToolResult_overModelResponse() {
-        // 字段值真源=录制的工具返回；模型回复文本在结果可用时不得混入
+        // 字段值的唯一来源=录制的工具返回；模型回复文本在结果可用时不得混入
         ToolCall call = tc("query", null);
         call.setResult("{\"orderId\":\"ORD-9\"}");
         InteractionRecord r = record("s1", "{\"orderId\":\"ORD-1\"}", Collections.singletonList(call), 0L);
@@ -646,7 +646,7 @@ class ParameterValueTracerTest {
     }
 
     /**
-     * 边存在性断言助手：精简后的图 API 以边枚举为唯一读面
+     * 边存在性断言助手：精简后的图 API 以边枚举为唯一读取入口
      */
     private static boolean hasEdge(InMemoryDependencyGraph g, String src, String tgt) {
         return g.getAllEdges().stream().anyMatch(e -> e.getSource().equals(src) && e.getTarget().equals(tgt));
@@ -660,7 +660,7 @@ class ParameterValueTracerTest {
     }
 
     /**
-     * 边签名：源>目标|置信|证据三元组，按邻接表枚举序——确定性比对的数据面。
+     * 边签名：源>目标|置信|证据三元组，按邻接表枚举序——确定性比对的依据。
      */
     private static List<String> edgeSignature(InMemoryDependencyGraph g) {
         List<String> out = new ArrayList<>();

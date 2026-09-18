@@ -56,7 +56,7 @@ class CostEstimatorPriceOverrideTest {
     }
 
     @Test
-    @DisplayName("覆盖价进入计价口径（合并语义端到端）")
+    @DisplayName("覆盖价进入计价规则（合并语义端到端）")
     void overrideFeedsCostEstimation() {
         Map<String, double[]> prices = baseTable();
         CostEstimator.applyPriceOverrides(prices, "{\"gpt-4o\":{\"input\":0.000001,\"output\":0.000002}}");

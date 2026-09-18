@@ -22,7 +22,7 @@ import java.util.*;
  * }
  * </pre>
  * 录制侧旋钮不走本文件：Boot 应用经 application.yml（starter 绑定），非 Boot 应用
- * 经 {@code RecorderConfig.builder()} 程序化装配——本文件是 CLI/MCP 操作面的配置。
+ * 经 {@code RecorderConfig.builder()} 程序化装配——本文件是 CLI/MCP 操作入口的配置。
  *
  * @author axy-yxa
  * @since 2026-08-26
@@ -35,7 +35,7 @@ public class AgentAssert4jConfig {
 
     /**
      * 配置文件未知键告警（加载时收集，doctor 呈现）——拼错/放错层级的键
-     * 静默无效是排障黑洞，就近可见优于静默忽略。
+     * 静默无效是最难排查的故障形态，就近可见优于静默忽略。
      */
     private List<String> configNotes = new ArrayList<>();
 
@@ -68,8 +68,8 @@ public class AgentAssert4jConfig {
 
         Map<String, Object> root = (Map<String, Object>) parsed;
 
-        // 未知键就近可见：拼错/放错层级的配置键静默无效是排障黑洞（实测中
-        // 「protocol 放顶层不生效」即此坑）。只告警不拒绝——未知键不影响既有语义。
+        // 未知键就近可见：拼错/放错层级的配置键静默无效是最难排查的故障形态（实测中
+        // 「protocol 放顶层不生效」即该已知问题）。只告警不拒绝——未知键不影响既有语义。
         List<String> notes = new ArrayList<>();
         config.storage = StorageConfig.fromJson(getMap(root, "storage"), config.storage);
         config.regression = RegressionConfig.fromJson(getMap(root, "regression"), config.regression, notes);
@@ -102,7 +102,7 @@ public class AgentAssert4jConfig {
     }
 
     /**
-     * 已知根段与 llm 段键集——未知键检测的对照面，键必须与解析路径一一对应。
+     * 已知根段与 llm 段键集——未知键检测的对照基准，键必须与解析路径一一对应。
      */
     private static final Set<String> ROOT_KEYS = new HashSet<>(Arrays.asList("storage", "regression", "llm"));
     private static final Set<String> LLM_KEYS = new HashSet<>(Arrays.asList("protocol", "apiKey", "endpoint", "model", "timeoutMs", "maxRetries", "maxTokens", "temperature", "extraBody"));
@@ -227,8 +227,8 @@ public class AgentAssert4jConfig {
         private List<String> ignorableFields = new ArrayList<>();
         /**
          * 成员判定（member-check）的样本窗默认——有限整数，null = 用内置默认 5。
-         * 配置面只收 N：all 仅限单次调用显式传入（常驻无界默认会把稳定性量尺
-         * 静默变成考古 oracle）。
+         * 配置面只收 N：all 仅限单次调用显式传入（常驻无界默认会把稳定性度量
+         * 静默变成对久远历史的比对）。
          */
         private Integer memberSampleWindow;
 

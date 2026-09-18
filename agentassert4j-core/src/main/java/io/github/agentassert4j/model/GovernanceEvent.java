@@ -1,10 +1,10 @@
 package io.github.agentassert4j.model;
 
 /**
- * 治理事件 — 治理动作发生时落账的时间线真源行（只追加，不修改）。
+ * 治理事件 — 治理动作发生时写入的时间线唯一权威来源行（只追加，不修改）。
  *
  * <p>reject 与 rollback 不在画像/归档行上留下状态痕迹（无状态痕迹的动作没有派生
- * 重建路径，只能发生时落账），事件是它们唯一的审计载体；其余动词的事件是状态变迁的
+ * 重建路径，只能发生时写入），事件是它们唯一的审计载体；其余动词的事件是状态变迁的
  * 并行时间线。audit 命令按 actor 的 agent:* 前缀过滤本表（agent 透镜），全量时间线
  * 是事件表本体。</p>
  *
@@ -14,11 +14,11 @@ package io.github.agentassert4j.model;
 public class GovernanceEvent {
 
     /**
-     * 发生时刻（毫秒 epoch）——由存储实现方在写入时刻盖章，调用方不携带
+     * 发生时刻（毫秒 epoch）——由存储实现方在写入时刻写入审批记录，调用方不携带
      */
     private Long happenedAt;
     /**
-     * 操作主体（agent 以 agent: 前缀申报；框架自动化的收编为 null）
+     * 操作主体（agent 以 agent: 前缀申报；框架并入时操作主体为 null）
      */
     private String actor;
     private GovernanceVerb verb;

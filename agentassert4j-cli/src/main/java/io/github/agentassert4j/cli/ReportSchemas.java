@@ -1,9 +1,9 @@
 package io.github.agentassert4j.cli;
 
 /**
- * 报告面 schema 名单源 — 各单行 JSON 报告 "schema" 字段的取值。写出方与读回方
+ * 报告 schema 名的唯一定义处 — 各单行 JSON 报告 "schema" 字段的取值。写出方与读回方
  * （如 MCP structuredContent 的错误包络抽取）一律引用本清单，禁止裸写字面量；
- * 新增报告面在此登记。
+ * 新增报告在此登记。
  *
  * @author axy-yxa
  * @since 2026-09-10

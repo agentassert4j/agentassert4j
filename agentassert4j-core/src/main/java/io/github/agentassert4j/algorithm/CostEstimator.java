@@ -16,7 +16,7 @@ import java.util.logging.Logger;
 /**
  * 成本估算 — 价格快照驱动的执行前预估与调用计价。
  *
- * <p>价格真源是随 jar 分发的精选快照（model_prices.json，按主流模型族裁剪，
+ * <p>价格的权威来源是随 jar 分发的精选快照（model_prices.json，按主流模型族裁剪，
  * 发布前从 LiteLLM 的 MIT 价格库重新生成），键为模型族名，查找按最长包含
  * 匹配把带日期的变体归入族价。快照外的模型族经 {@code agentassert4j-prices.json}
  * 覆盖文件补充（查找链同规则文件，格式同快照，并集覆盖：同族改价、新族补充）。
@@ -24,7 +24,7 @@ import java.util.logging.Logger;
  * token 消耗，不编造费用，也永不参与判定。</p>
  *
  * <p>两个入口共用同一张表：{@link #estimate} 用「假设 1000 输入
- * 500 输出 token」的固定口径做执行前预估文案；{@link #estimateCallCostUsd}
+ * 500 输出 token」的固定规则做执行前预估文案；{@link #estimateCallCostUsd}
  * 用调用实际 token 数在捕获时刻计价，冻结进记录的成本列。</p>
  *
  * @author axy-yxa
@@ -35,7 +35,7 @@ public final class CostEstimator {
     private static final Logger LOG = Logger.getLogger(CostEstimator.class.getName());
 
     /**
-     * 预估口径的假设 token 量：单次调用 1000 输入 / 500 输出
+     * 预估规则的假设 token 量：单次调用 1000 输入 / 500 输出
      */
     private static final long PREVIEW_INPUT_TOKENS = 1000;
     private static final long PREVIEW_OUTPUT_TOKENS = 500;
@@ -79,7 +79,7 @@ public final class CostEstimator {
     /**
      * 覆盖文件的 mtime 变化时（含从无到有、删除）重建生效价格表；快照恒为基底。
      * 覆盖路径每次刷新时重新解析——路径若在类初始化时解析一次，进程启动后才创建的
-     * 覆盖文件将永久不可见（Round 4 双宿主实测的确切病灶）。双检锁 + 不可变整表
+     * 覆盖文件将永久不可见（实测确认过的缺陷）。双检锁 + 不可变整表
      * 发布，读取方无锁。
      */
     private static void refreshOverridesIfChanged() {
@@ -105,7 +105,7 @@ public final class CostEstimator {
                     overrideJson = ConfigLoader.loadPriceOverrides();
                 } catch (RuntimeException e) {
                     // 显式 prices.path 不可读等加载失败必须降级为快照兜底并就近可见：
-                    // 价格配置问题不允许穿透录制隔离防线杀死业务调用
+                    // 价格配置问题不允许穿透录制隔离边界而中断业务调用
                     LOG.log(Level.SEVERE, "Failed to load price overrides (agentassert4j-prices.json); falling back to the bundled snapshot.", e);
                 }
                 if (overrideJson != null) {
@@ -152,7 +152,7 @@ public final class CostEstimator {
      * 由捕获侧在调用时刻调用，结果冻结进记录的成本列。
      *
      * @param model        模型名称（优先 served 模型，回退请求模型）
-     * @param inputTokens  输入 token 总量（归一口径，含供应商缓存语义的合成）
+     * @param inputTokens  输入 token 总量（归一规则，含供应商缓存语义的合成）
      * @param outputTokens 输出 token 量
      * @return 费用（美元）；模型无价格时 null
      */

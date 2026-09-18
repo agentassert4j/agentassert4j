@@ -200,7 +200,7 @@ class BaselineServiceTest {
     }
 
     @Test
-    @DisplayName("扫建路径裂键豁免：同标签兄弟已建档时草稿新键只披露不收编；定向 --invocation 照建")
+    @DisplayName("扫建路径裂键豁免：同标签兄弟已建档时草稿新键只披露、不并入基线；定向 --invocation 照建")
     void sweepSkipsSplitKeys_targetedEstablishes() {
         PrintStream out = new PrintStream(output, true);
         // 原键（模板 hash-old）先行建档；同标签换模板（hash-new）落成草稿新键
@@ -212,11 +212,11 @@ class BaselineServiceTest {
         draft.setTemplateHash("hash-new");
         repository.saveInteractionIfAbsent(draft);
 
-        // 扫建：草稿新键只披露不收编
+        // 扫建：草稿新键只披露、不并入基线
         int established = new BaselineService(repository).establishMissing(out, "tester", null, false, null, null, null, null);
         assertEquals(0, established, "裂键不进扫建");
         assertTrue(output.toString().contains("Split key "), "裂键披露在场: " + output);
-        assertTrue(output.toString().contains("left for explicit establish"), "指路口径与 replay 同源: " + output);
+        assertTrue(output.toString().contains("left for explicit establish"), "指路规则与 replay 同源: " + output);
         assertNull(repository.findInvocationByKey(invocationKeyOfDraft()), "扫建不产出新键画像");
 
         // 定向 --invocation：逐键显式意图，照建

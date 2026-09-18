@@ -15,7 +15,7 @@ import java.util.concurrent.Callable;
  * audit 命令 — 列出治理事件时间线供回溯（读动词，恒退出码 0）。
  *
  * <p>数据源 = 治理事件表（governance_events）的时间线：六个治理动词（accept/reject/
- * rollback/establish/force-rebuild/collect）发生时经 BaselineManager 单源落账——
+ * rollback/establish/force-rebuild/collect）发生时经 BaselineManager 统一写入——
  * 不分操作主体与通道，AI（MCP）与人类（CLI）的治理写同账本同时间线。actor 列
  * 自解释主体：{@code agent:} 前缀是机器写的显式申报约定（见 governance.md），
  * 其余为人类身份。</p>

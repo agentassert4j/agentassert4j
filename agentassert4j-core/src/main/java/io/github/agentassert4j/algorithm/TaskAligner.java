@@ -51,8 +51,8 @@ public final class TaskAligner {
      *
      * @param baseline   基线链（次新链）
      * @param newChain   新链（最新链）
-     * @param comparator 对比器（CLI 工厂单源构造，ignorableFields 口径与重放一致）
-     * @param rules      规则配置（维度 3-4 口径，两侧同源；null = 无规则）
+     * @param comparator 对比器（CLI 工厂统一构造，ignorableFields 规则与重放一致）
+     * @param rules      规则配置（维度 3-4 规则，两侧同源；null = 无规则）
      */
     public static TaskAlignment align(TaskChain baseline, TaskChain newChain, DeterministicComparator comparator, InvocationRulesConfig rules) {
         TaskAlignment alignment = align(baselineStepsOf(baseline, rules), newChain, comparator, rules);
@@ -85,12 +85,12 @@ public final class TaskAligner {
 
     /**
      * 基线侧步骤由调用方给定的对齐。调用方步骤可能按完整 invocationKey 预分组
-     * （验收包路径，步骤无标签字段）——入口统一按组键函数重整，两侧分组口径一致。
+     * （验收包路径，步骤无标签字段）——入口统一按组键函数重整，两侧分组规则一致。
      *
      * @param baselineSteps 基线侧步骤（每键有序，指纹为比对依据）
      * @param newChain      新链（最新链）
      * @param comparator    对比器
-     * @param rules         规则配置（新链侧现场重提口径；null = 无规则）
+     * @param rules         规则配置（新链侧现场重提规则；null = 无规则）
      */
     public static TaskAlignment align(Map<String, List<BaselineStep>> baselineSteps, TaskChain newChain, DeterministicComparator comparator, InvocationRulesConfig rules) {
         TaskAlignment alignment = alignPairs(baselineSteps, newChain, comparator, rules, null);
@@ -100,7 +100,7 @@ public final class TaskAligner {
 
     /**
      * 链内逐调用点分组（声明标签优先跨模板版本，无标签退完整键；组内保持链序）。
-     * 分组口径的唯一公开真源——链对链对齐、链末判定、验收导出/校验消费同一实现，
+     * 分组规则的唯一权威来源——链对链对齐、链末判定、验收导出/校验消费同一实现，
      * 调用方不得手写第二套分组规则。
      */
     public static Map<String, List<InteractionRecord>> invocationGroups(TaskChain chain) {
@@ -129,7 +129,7 @@ public final class TaskAligner {
      * 链末判定：基线侧步骤 × 新链「每调用点最新执行」配对——CI 门禁与交付验收
      * 共用的判定入口。任务纪律与前缀标记用全链评估：次数/顺序规则必须看见任务的
      * 全部调用（裁剪链会误判「恰好两次」类规则），会话前缀可能挂在被裁剪的中间
-     * 记录上。rules 同时喂新侧指纹提取（维度 3/4 口径）与任务纪律——配对与纪律
+     * 记录上。rules 同时提供给新侧指纹提取（维度 3/4 规则）与任务纪律——配对与纪律
      * 都以 rules 照传，仅纪律的评估链是全长。
      */
     public static TaskAlignment alignLatestPerInvocation(Map<String, List<BaselineStep>> baselineSteps, TaskChain newChain, DeterministicComparator comparator, InvocationRulesConfig rules) {
@@ -145,7 +145,7 @@ public final class TaskAligner {
 
     /**
      * 纯配对核心：分组 + 逐组配对 + 前缀标记，不评任务纪律——纪律折叠由两个公开
-     * 入口按各自口径（传入链 / 全长链）追加。fullChainGroupSizes 非 null 时（链末
+     * 入口按各自规则（传入链 / 全长链）追加。fullChainGroupSizes 非 null 时（链末
      * 判定路径）按全链组大小填步骤的 earlierRecords（透明层数据源）。
      */
     private static TaskAlignment alignPairs(Map<String, List<BaselineStep>> baselineSteps, TaskChain pairingChain, DeterministicComparator comparator, InvocationRulesConfig rules, Map<String, Integer> fullChainGroupSizes) {
@@ -222,7 +222,7 @@ public final class TaskAligner {
      * 呈现顺序 = 规则声明序：requiredSteps → requiredOrder → steps。
      *
      * <p>public 供同引擎的多链消费方复用：成员判定在样本循环外对新链只评一次
-     * （结果不随基线样本变化），单链首航批改在无配对可用时直接评。</p>
+     * （结果不随基线样本变化），单链首次判定即生效在无配对可用时直接评。</p>
      */
     public static List<TaskRuleViolation> evaluateTaskRules(TaskChain newChain, InvocationRulesConfig rules) {
         if (rules == null || !rules.hasTaskRules() || !newChain.isDeclared()) {
@@ -326,8 +326,8 @@ public final class TaskAligner {
      * 配对 PASS（返回首个命中形态的对照结果，命中序在先者优先）；全不命中时返回
      * 信号分最高的对照供差异明细（严格更高才替换，平局取集合序更早的形态），
      * 确定性不因集合大小妥协。集合大小 >1 时把命中/最近似形态的序号与集合大小
-     * 记入步骤（多形态基线的报告注记数据源）；集合空缺是上游契约违约，就地响亮
-     * 失败——空集合配对会伪装成行为差异。
+     * 记入步骤（多形态基线的报告注记数据源）；集合空缺是上游契约违约，就地显式失败
+     * 失败——空集合配对会被误判为行为差异。
      */
     private static ComparisonResult compareAgainstShapes(StepAlignment step, List<DeterministicFingerprint> shapes, DeterministicFingerprint candidate, String response, DeterministicComparator comparator) {
         if (shapes == null || shapes.isEmpty()) {
@@ -370,7 +370,7 @@ public final class TaskAligner {
 
     /**
      * 记录侧分组键：声明标签优先（可跨模板版本配对），无标签退完整键。
-     * 标签统一编码后入键，与 {@link #groupKeyOfStepKey} 的解析口径逐字一致。
+     * 标签统一编码后入键，与 {@link #groupKeyOfStepKey} 的解析规则逐字一致。
      */
     private static String groupKeyOfRecord(InteractionRecord record) {
         String label = record.getInvocationId();
@@ -386,7 +386,7 @@ public final class TaskAligner {
 
     /**
      * 步骤侧分组键：声明标签来自步骤的内存字段（实时步骤由记录装配，验收包步骤
-     * 由装载时 {@link #declaredLabelOfKey} 从键解析回填），口径与记录侧逐字一致。
+     * 由装载时 {@link #declaredLabelOfKey} 从键解析回填），规则与记录侧逐字一致。
      */
     private static String groupKeyOfStep(BaselineStep step) {
         String label = step.getInvocationId();
@@ -401,7 +401,7 @@ public final class TaskAligner {
     }
 
     /**
-     * 从键解析声明标签：分组器锚点 1 保证声明记录的键首段=编码标签（组件内原生
+     * 从键解析声明标签：分组器保证声明记录的键首段=编码标签（组件内原生
      * 冒号已转义）；无声明形态返回 null。供验收包装载侧回填步骤标签。
      */
     public static String declaredLabelOfKey(String invocationKey) {
@@ -416,7 +416,7 @@ public final class TaskAligner {
 
     /**
      * 取键中的细分哈希（invocation 第三段；skeleton/template/adhoc 第二段；
-     * adhoc:no-anchor 无细分）。未知形态返回 null——注记缺失好过错注记。
+     * adhoc:no-anchor 无细分）。未知形态返回 null——注记缺失好过错误的注记。
      */
     private static String subdivisionOf(String invocationKey) {
         if (invocationKey == null) {

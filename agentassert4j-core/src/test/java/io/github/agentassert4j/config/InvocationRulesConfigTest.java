@@ -147,8 +147,8 @@ class InvocationRulesConfigTest {
     @DisplayName("InvocationRule 不可变契约")
     class InvocationRuleImmutability {
 
-        // 旧断言钉住 setter 的空值安全——setters 已随不可变化改造移除
-        // （共享 EMPTY 单例的污染风险大于 setter 便利性），改钉不可变契约
+        // 旧断言锁定 setter 的空值安全——setters 已随不可变化改造移除
+        // （共享 EMPTY 单例的污染风险大于 setter 便利性），改为锁定不可变契约
 
         @Test
         @DisplayName("解析产物集合不可修改")

@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * OpenAiResponsesClient 的组装与解析矩阵 — 请求体逐字段钉（instructions/input
+ * OpenAiResponsesClient 的组装与解析矩阵 — 请求体逐字段断言（instructions/input
  * items 文法/function_call 对/扁平 tools/max_output_tokens 缺省不报）、帧守卫
  * 敌对（缺配对键跳过+告警/同配对去重/system 帧跳过）、多模态直通、协议头与端点
  * 路径、响应归一（output_text 拼接/function_call/usage/finish 派生）。
@@ -64,7 +64,7 @@ class OpenAiResponsesClientTest {
     class RequestBody {
 
         @Test
-        @DisplayName("标准请求逐字段钉：instructions/input items/max_output_tokens 缺省不报")
+        @DisplayName("标准请求逐字段断言：instructions/input items/max_output_tokens 缺省不报")
         void goldenRequest() {
             String body = client.buildRequestBody(baseRequest(), "gpt-4o");
             Map<?, ?> parsed = (Map<?, ?>) RecursiveJsonParser.parse(body);
@@ -168,7 +168,7 @@ class OpenAiResponsesClientTest {
         }
 
         @Test
-        @DisplayName("范式工具定义转扁平形（type 在顶层）；损坏定义宁可不带")
+        @DisplayName("规范形工具定义转扁平形（type 在顶层）；损坏定义宁可不带")
         void tools_paradigmToFlat_damagedSkipped() {
             LlmRequest request = new LlmRequest();
             request.setUserInput("hi");

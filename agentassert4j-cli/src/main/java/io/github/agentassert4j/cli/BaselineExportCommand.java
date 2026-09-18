@@ -28,7 +28,7 @@ import java.util.concurrent.Callable;
  *
  * <p>包内容天然脱敏：只携带结构指纹与调用点键；--include-samples 附加的样本强制
  * MASK 且输入/输出双侧脱敏开启（不受环境 recorder 配置影响——写入包内前完成脱敏）。
- * 导出打印文件 SHA-256 供交付双方对账（完整性优于保密性，加密进后备池）。</p>
+ * 导出打印文件 SHA-256 供交付双方核对（完整性优于保密性，加密进后备池）。</p>
  *
  * @author axy-yxa
  * @since 2026-08-30
@@ -99,9 +99,9 @@ public class BaselineExportCommand implements Callable<Integer> {
                 boolean complete = true;
                 boolean selfViolating = false;
                 int unadjudicated = 0;
-                // 包 = 批准真相定格交付：步骤按调用点分组取组末记录为证据锚（recordId/
+                // 包 = 已批准事实的固定快照交付：步骤按调用点分组取组末记录为证据锚（recordId/
                 // 样本锚定链末执行），指纹消费画像认可形态集合（与 CI 同源）——链末判定
-                // 下每调用点一份步骤，不存在「单份快照冒充多步骤」
+                // 下每调用点一份步骤，不存在「单份快照被计为多步骤」
                 for (List<InteractionRecord> group : TaskAligner.invocationGroups(chain).values()) {
                     InteractionRecord anchor = group.get(group.size() - 1);
                     String key = CliSupport.invocationKeyOfRecord(anchor);
@@ -115,8 +115,8 @@ public class BaselineExportCommand implements Callable<Integer> {
                     step.setRecordId(anchor.getRecordId());
                     step.setFingerprints(profile.getFingerprints());
                     // 出厂偏离检测：链末行为与承诺的结构维不一致（或在途候选未裁决）
-                    // → 计数入包并警告，任务照常入包（承诺仍良定义）。比较口径=结构维
-                    //（维度 1/2 + hasError）的集合成员判定：判定尺的维度 3/4 是基线声明 ×
+                    // → 计数入包并警告，任务照常入包（承诺仍良定义）。比较规则=结构维
+                    //（维度 1/2 + hasError）的集合成员判定：判定器的维度 3/4 是基线声明 ×
                     // 当前答卷，候选侧声明集不进判定——规则配置漂移只动声明集时门禁判
                     // PASS，偏离检测不得比门禁更严（否则警告指路的裁决对象根本不存在）
                     DeterministicFingerprint structuralPeer = structuralMember(profile.getFingerprints(), FingerprintExtractor.extract(anchor, rules, anchor.getInvocationId()));
@@ -237,7 +237,7 @@ public class BaselineExportCommand implements Callable<Integer> {
 
     /**
      * 自违检查：以与生产判定完全同源的语义自比较（指纹对自己、响应对自己）评估
-     * 基线响应是否满足自己声明的内容规则——单一真源，不复制第二套 dim3 判定。
+     * 基线响应是否满足自己声明的内容规则——唯一权威实现，不复制第二套 dim3 判定。
      */
     private static boolean selfViolatesDeclaredRules(DeterministicFingerprint fingerprint, String response) {
         if (fingerprint == null) {
@@ -249,7 +249,7 @@ public class BaselineExportCommand implements Callable<Integer> {
 
     /**
      * 结构维视图（维度 1/2 + hasError，维度 3/4 声明集置空）——出厂偏离检测的比较
-     * 口径与判定尺对齐：候选侧声明集不进判定，仅声明集漂移不是行为偏离。
+     * 规则与判定器对齐：候选侧声明集不进判定，仅声明集漂移不是行为偏离。
      */
     private static DeterministicFingerprint structuralView(DeterministicFingerprint fingerprint) {
         DeterministicFingerprint view = new DeterministicFingerprint();

@@ -20,7 +20,7 @@ import java.util.concurrent.Callable;
  * doctor 命令 — 库体检：身份/覆盖/规则三段确定性体检（只读，不判定、不建档）。
  *
  * <p>面向零声明接入与首次建档前的自我检查：哪里值得声明标签/任务键、哪些录制
- * 尚未收编、规则文件配了却没生效。所有建议都来自计数与重复性等确定性事实，
+ * 尚未并入基线、规则文件配了却没生效。所有建议都来自计数与重复性等确定性事实，
  * 无模糊匹配；本命令退出码恒 0，不承 CI gating 职责。--json 提供机器通道
  * （agentassert4j.doctor/1）：计数全量、样本封顶，与人类通道同源采集。</p>
  *
@@ -189,7 +189,7 @@ public class DoctorCommand implements Callable<Integer> {
     }
 
     /**
-     * 覆盖段：未收编录制与哈希投影缺口。
+     * 覆盖段：尚未并入基线的录制与哈希投影缺口。
      */
     private void printCoverageSection(DoctorFindings findings) {
         out.println("Coverage check:");

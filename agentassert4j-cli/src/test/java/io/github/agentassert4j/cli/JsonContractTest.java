@@ -238,7 +238,7 @@ class JsonContractTest {
         }
 
         @Test
-        @DisplayName("export --json：包元数据报告（对账 SHA-256），包文件照常落盘")
+        @DisplayName("export --json：包元数据报告（核对 SHA-256），包文件照常写入磁盘")
         void exportJson_metadataReport() throws Exception {
             seedOneRecord();
             execute("baseline", "--db", dbPath);
@@ -341,7 +341,7 @@ class JsonContractTest {
             String report = singleLineReport();
             assertTrue(report.contains("\"approvedBy\":\"wang\""), "审批人必须可读: " + report);
             assertTrue(report.contains("\"approvedAt\":"), "审批时刻必须可读: " + report);
-            assertFalse(report.contains("\"approvedAt\":null"), "建档即盖章，approvedAt 不缺席: " + report);
+            assertFalse(report.contains("\"approvedAt\":null"), "建档即写入审批记录，approvedAt 不缺席: " + report);
 
             assertEquals(0, execute("status", "--db", dbPath));
             String human = stdout();
@@ -505,7 +505,7 @@ class JsonContractTest {
         void rollbackHuman_factsRenderOnlyWhenPresent() throws Exception {
             seedOneRecord();
             // 经 core 以 null 操作者建档：CLI 路径审批人恒有 OS 用户兜底，
-            // approvedBy=null 只能来自 API 侧，属「未经审批链盖章」的合法形态
+            // approvedBy=null 只能来自 API 侧，属「未经审批链写入审批记录」的合法形态
             new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), null, "abc1234", false, null, null, null, null);
             execute("baseline", "--db", dbPath, "--force", "--ref", "def5678");
 
@@ -577,7 +577,7 @@ class JsonContractTest {
         }
 
         @Test
-        @DisplayName("status --json --invocation 换算：Note 行走 err，stdout 恒单行 JSON（通道纯净性钉）")
+        @DisplayName("status --json --invocation 换算：Note 行走 err，stdout 恒单行 JSON（通道纯净性断言）")
         void statusJson_conversionNoteRoutesToStderr() throws Exception {
             seedOneRecord();
             execute("baseline", "--db", dbPath);
@@ -809,15 +809,15 @@ class JsonContractTest {
             String report = singleLineReport();
             assertTrue(report.startsWith("{\"schema\":\"agentassert4j.doctor/1\""), report);
             assertTrue(report.contains("\"identity\":{\"skeletonCount\":0"), "未声明骨架的记录不进骨架族: " + report);
-            assertTrue(report.contains("\"unestablishedInvocations\":1"), "建档前调用点属未收编: " + report);
+            assertTrue(report.contains("\"unestablishedInvocations\":1"), "建档前调用点属未并入: " + report);
             assertTrue(report.contains("\"recordsMissingTemplateHash\":0"), report);
             assertTrue(report.contains("\"expectationMismatches\":0"), report);
             assertFalse(stdout().contains("Identity check:"), "人类渲染不得污染 stdout: " + stdout());
         }
 
         /**
-         * 带落库调用点键的记录——足迹枚举只认存储键（enrich 写入口径），
-         * 机器通道的未收编计数以此为前提。
+         * 带落库调用点键的记录——足迹枚举只认存储键（enrich 写入规则），
+         * 机器通道的未并入计数以此为前提。
          */
         private void seedKeyedRecord() {
             InteractionRecord record = new InteractionRecord();

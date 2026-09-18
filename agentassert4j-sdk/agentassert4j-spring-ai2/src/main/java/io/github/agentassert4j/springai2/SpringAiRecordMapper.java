@@ -42,7 +42,7 @@ final class SpringAiRecordMapper {
 
     /**
      * 组装一次调用的完整交互记录，并合并编排观察缓冲（直调 ChatModel 且模型实现
-     * 内部消费工具调用的姿势：响应无可见 toolCalls 时观察缓冲承载完整编排 [A, B, …]，
+     * 内部消费工具调用的方式：响应无可见 toolCalls 时观察缓冲承载完整编排 [A, B, …]，
      * 参数经 RecursiveJsonParser 解析后用 ArgTypeUtil.derive 派生类型，与 native
      * 路径同词表；响应自带 toolCalls 时缓冲静默丢弃，避免同一决策双计）。
      * response 为 null 时只落请求面字段；context 由调用方在业务线程捕获传入——
@@ -271,7 +271,7 @@ final class SpringAiRecordMapper {
 
     private static void mapResponse(ChatResponse response, InteractionRecord record) {
         if (response.getMetadata() != null) {
-            // record_id 身份真源 = LLM 响应 id（与 MCP 摄取面同源，跨面去重依赖它）；
+            // record_id 身份的唯一权威来源 = LLM 响应 id（与 MCP 摄取侧同源，跨入口去重依赖它）；
             // 缺失（无 id 的 provider/mock/stream 聚合）时留空，录制管道回退 UUID
             String responseId = response.getMetadata().getId();
             if (responseId != null && !responseId.trim().isEmpty()) {

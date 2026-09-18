@@ -5,7 +5,7 @@ import io.github.agentassert4j.model.LlmFinishReason;
 import java.util.Map;
 
 /**
- * Anthropic Messages 方言的 wire 归一 — finish_reason 词表映射、usage 口径求和、
+ * Anthropic Messages 方言的 wire 归一 — finish_reason 词表映射、usage 规则求和、
  * image 块源拆解。wire 摄取（MCP record）与重放客户端共用同一归一器——
  * 同一方言不得有两套词表。
  *
@@ -40,7 +40,7 @@ public final class AnthropicMessagesWireFormat {
     }
 
     /**
-     * input_tokens 总量口径：Anthropic 的 input_tokens 是非缓存口径，总量 =
+     * input_tokens 总量规则：Anthropic 的 input_tokens 是非缓存规则，总量 =
      * input_tokens + cache_creation_input_tokens + cache_read_input_tokens
      * （缺项按 0 计，null 容器按空）。
      */
@@ -54,9 +54,9 @@ public final class AnthropicMessagesWireFormat {
     }
 
     /**
-     * image 块的 source（{type:"base64",media_type,data}）拆解为范式 data-URI
+     * image 块的 source（{type:"base64",media_type,data}）拆解为规范形 data-URI
      * （data:{media_type};base64,{data}）；形态不符返回 null，由调用方丢弃并告警
-     * （宁缺勿非法——不可转换的 part 不进请求）。
+     * （宁可丢弃也不产出非法数据——不可转换的 part 不进请求）。
      */
     public static String imageDataUri(Object source) {
         if (!(source instanceof Map)) {

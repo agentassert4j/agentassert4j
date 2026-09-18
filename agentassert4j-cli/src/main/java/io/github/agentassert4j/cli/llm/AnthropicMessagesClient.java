@@ -18,8 +18,8 @@ import java.util.*;
  * （配置键 llm.maxTokens，null = 内置 {@link #DEFAULT_MAX_TOKENS} 默认）；工具历史帧
  * 按逐对重建——assistant 携带 tool_use 块发起、紧随的 user 消息携带配对 tool_use_id
  * 的 tool_result 块（该文法硬约束，违规 400），录制侧无发起帧载体时按已知 id/name
- * 合成最小合法发起帧且同一配对只合成一次；范式多模态的 data-URI 图像拆解回
- * base64 source（http URL 形该文法不收，丢弃并告警——宁缺勿非法）。响应解析与
+ * 合成最小合法发起帧且同一配对只合成一次；规范形多模态的 data-URI 图像拆解回
+ * base64 source（http URL 形该文法不收，丢弃并告警——宁可丢弃也不产出非法数据）。响应解析与
  * MCP 摄取共用 {@link AnthropicMessagesWireFormat} 归一器。</p>
  *
  * @author axy-yxa
@@ -92,7 +92,7 @@ public class AnthropicMessagesClient extends AbstractHttpLlmClient {
      * messages 组装：历史轮逐帧展开 + 末位输入。工具帧逐对重建（发起块与结果块相邻、
      * 配对键一致）；缺失配对键的结果帧跳过并告警——绝不构造会被 400 拒绝的请求。
      * 相邻同角色消息合并为单条消息的 content 块数组（该文法的规范交替形——官方服务端
-     * 对连续同角色做静默合并，严格旧实现则直接拒绝；user 消息内 tool_result 块按文法
+     * 对连续同角色做静默合并而非直接拒绝；user 消息内 tool_result 块按文法
      * 要求前置于自由文本块）。
      */
     private static String buildMessages(LlmRequest request) {
@@ -237,9 +237,9 @@ public class AnthropicMessagesClient extends AbstractHttpLlmClient {
     }
 
     /**
-     * 范式多模态数组（OpenAI content 数组）转该文法块数组：text part 直转、
+     * 规范形多模态数组（OpenAI content 数组）转该文法块数组：text part 直转、
      * data-URI 图像拆解回 base64 source；http URL 形图像该文法不收——丢弃并告警
-     * （宁缺勿非法）。不可转换的 part 全部丢弃后数组为空时退化为纯文本空输入，
+     * （宁可丢弃也不产出非法数据）。不可转换的 part 全部丢弃后数组为空时退化为纯文本空输入，
      * 仍构造合法请求。
      */
     private static List<Object> convertMultimodal(String paradigmJson) {
@@ -290,7 +290,7 @@ public class AnthropicMessagesClient extends AbstractHttpLlmClient {
     }
 
     /**
-     * 范式工具定义（OpenAI tools 嵌套形）转该文法扁平形，并做方言必填字段矫正：
+     * 规范形工具定义（OpenAI tools 嵌套形）转该文法扁平形，并做方言必填字段矫正：
      * input_schema 是该文法的必填成员——无参数工具补空对象 schema、缺 type 的
      * schema 补 "type":"object"（只补缺不覆盖显式值）；参数损坏（非对象）的定义
      * 跳过——宁可不带也不构造非法请求（与 chat 侧「损坏定义不带」同策略）。
@@ -354,7 +354,7 @@ public class AnthropicMessagesClient extends AbstractHttpLlmClient {
 
     /**
      * 解析 Anthropic Messages 响应体：text 块空串直拼为正文、tool_use 块为工具调用
-     * （input 是对象形参数）、usage 三会计数求和为总量（缺项按 0）、stop_reason 经
+     * （input 是对象形参数）、usage 三项计数求和为总量（缺项按 0）、stop_reason 经
      * 共享归一器。非合法 JSON 对象抛 {@link LlmApiException}；缺成员退化不中断。
      */
     @Override

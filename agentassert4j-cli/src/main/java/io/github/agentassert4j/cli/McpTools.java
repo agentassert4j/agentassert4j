@@ -11,12 +11,12 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 
 /**
- * MCP 工具面 — 既有 CLI 命令的薄壳（零新判定能力）+ record 摄取。
+ * MCP 工具面 — 既有 CLI 命令的转发封装（零新判定能力）+ record 摄取。
  *
  * <p>适配方式：同包直调命令类，命令实例的 out/err 流字段替换为捕获流、jsonOutput 恒真
  * （命令产出的 stdout JSON 报告行成为工具结果本体）、db 注入 server 绑定值；不经 picocli
  * 参数解析，无全局 System 流替换。读动词（check/diff/re-drive）走 ci 语义——不自动建档、
- * 不收编漂移，治理写只能经变异动词（establish/accept/reject）发生；变异动词的使用要求
+ * 不并入漂移，治理写只能经变更动词（establish/accept/reject）发生；变更动词的使用要求
  * 写在 manifest description，授权确认由 harness 权限系统执行。</p>
  *
  * <p>manifest 即面向 AI 的文档；工具名与 CLI 动词同词（人类通道与机器通道术语同形）。
@@ -213,7 +213,7 @@ final class McpTools {
     }
 
     /**
-     * 工具封装的 CLI 命令路径声明（面一致性真源，见 McpTool.cliCommands）。
+     * 工具封装的 CLI 命令路径声明（面一致性唯一权威来源，见 McpTool.cliCommands）。
      */
     private static List<String> CliCommands(String... paths) {
         return Arrays.asList(paths);

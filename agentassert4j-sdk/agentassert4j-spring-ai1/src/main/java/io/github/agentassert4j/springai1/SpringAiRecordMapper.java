@@ -269,7 +269,7 @@ final class SpringAiRecordMapper {
 
     private static void mapResponse(ChatResponse response, InteractionRecord record) {
         if (response.getMetadata() != null) {
-            // record_id 身份真源 = LLM 响应 id（与 MCP 摄取面同源，跨面去重依赖它）；
+            // record_id 身份的唯一权威来源 = LLM 响应 id（与 MCP 摄取侧同源，跨入口去重依赖它）；
             // 缺失（无 id 的 provider/mock/stream 聚合）时留空，录制管道回退 UUID
             String responseId = response.getMetadata().getId();
             if (responseId != null && !responseId.trim().isEmpty()) {

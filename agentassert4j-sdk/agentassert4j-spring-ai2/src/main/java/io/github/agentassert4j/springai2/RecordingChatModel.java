@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>粒度说明：2.x 的工具调用循环由 ChatClient 的 ToolCallingAdvisor 在
  * ChatModel 之上驱动，每个 LLM 轮次都是一次独立 call——装饰器天然逐轮可见，
- * 无需关闭任何执行选项；直调 ChatModel 且模型实现内部消费工具调用的姿势
+ * 无需关闭任何执行选项；直调 ChatModel 且模型实现内部消费工具调用的方式
  * 由编排观察装饰恢复工具维度（名称/参数/结果按序捕获进同一条记录）。</p>
  *
  * <p>录制失败只记 WARN 不抛出——框架任何故障不影响业务调用。</p>
@@ -61,7 +61,7 @@ public final class RecordingChatModel implements ChatModel {
     public ChatResponse call(Prompt prompt) {
         long start = System.currentTimeMillis();
         RecordingContext context = RecordingContext.currentOrNull();
-        // 梯 2 编排观察：换装观察回调（mutate 副本），模型实现内部消费的工具调用按序进缓冲
+        // 观察装饰：在 mutate 副本上替换为观察回调，模型实现内部消费的工具调用按序进缓冲
         ToolInvocationObserver observer = new ToolInvocationObserver();
         Prompt observed = observer.decorate(prompt);
         ChatResponse response = delegate.call(observed);

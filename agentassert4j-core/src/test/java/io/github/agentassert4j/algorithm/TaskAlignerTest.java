@@ -224,7 +224,7 @@ class TaskAlignerTest {
     }
 
     @Test
-    @DisplayName("违规呈现顺序钉死：requiredSteps → requiredOrder → steps")
+    @DisplayName("违规呈现顺序锁定：requiredSteps → requiredOrder → steps")
     void taskRule_violationOrder_deterministic() {
         InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"tasks\":{\"t1\":{\"requiredSteps\":[\"Z\"],\"requiredOrder\":[\"A\",\"C\"],\"steps\":{\"A\":{\"min\":5}}}}}");
         TaskAlignment alignment = TaskAligner.align(declaredChain("t1", labeled("b1", 1000L, "invocation:a:h1", "A", "答A")), declaredChain("t1", labeled("n1", 5000L, "invocation:a:h1", "A", "答A")), comparator, rules);
@@ -511,7 +511,7 @@ class TaskAlignerTest {
         }
 
         @Test
-        @DisplayName("空集合是上游契约违约 → 响亮失败（不伪装成行为差异）")
+        @DisplayName("空集合是上游契约违约 → 显式失败（不被误判为行为差异）")
         void emptyShapes_failLoudly() {
             BaselineStep step = new BaselineStep();
             step.setInvocationKey(labeledRecord("seed", 1000L, "order", "h1", "{}").getInvocationKey());

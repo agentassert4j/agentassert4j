@@ -64,7 +64,7 @@ class ArgTypeUtilTest {
         try {
             Locale.setDefault(new Locale("tr", "TR"));
             Map<String, String> types = ArgTypeUtil.derive(Collections.singletonMap((String) "userID", (Object) "SO-1"));
-            assertTrue(types.containsKey("userid"), "tr-TR 下必须与 Locale.ROOT 口径一致，实际键集: " + types.keySet());
+            assertTrue(types.containsKey("userid"), "tr-TR 下必须与 Locale.ROOT 规则一致，实际键集: " + types.keySet());
         } finally {
             Locale.setDefault(original);
         }

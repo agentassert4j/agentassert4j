@@ -32,7 +32,7 @@ public enum GovernanceVerb {
      */
     FORCE_REBUILD("force-rebuild"),
     /**
-     * 漂移身份自动收编（versionTag = 当前版本；actor 恒 null——框架自动化无主体）
+     * 漂移身份自动并入基线（versionTag = 当前版本；actor 恒 null——框架自动化无主体）
      */
     COLLECT("collect");
 

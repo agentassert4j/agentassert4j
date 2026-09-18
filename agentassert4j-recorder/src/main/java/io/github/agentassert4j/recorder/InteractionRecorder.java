@@ -136,7 +136,7 @@ public class InteractionRecorder implements RecordingInterceptor {
             record.setInvocationId(config.getDefaultInvocationId());
         }
 
-        // 采集门：默认全量录制（任务链完整性优先于流量卫生，链条终点的最终
+        // 采集门：默认全量录制（任务链完整性优先于流量成本，链条终点的最终
         // 回答组装往往正是纯文本调用）；recordUndeclaredChat=false 时未声明且
         // 无可见工具调用的纯对话被过滤——过滤是决策不是故障，与丢弃分列。
         // 被滤记录不进入管道、不占用 RingBuffer 与 seq，独立计数保证
@@ -150,12 +150,12 @@ public class InteractionRecorder implements RecordingInterceptor {
             return;
         }
 
-        // 与 stop() 互斥：无锁窗口内关停完成会把事件发布进已停摆的
+        // 与 stop() 互斥：无锁窗口内关停完成会把事件发布进已停止的
         // RingBuffer——记录永久滞留且计数不闭合。无竞争锁开销纳秒级，
         // 相比 tryNext 本身可忽略
         try {
-            // record_id 身份真源 = LLM 响应 id（SDK 捕获侧与 MCP 摄取侧同源写入，
-            // INSERT OR IGNORE 的跨面去重依赖其全局唯一）；捕获侧未携带（无 id 的
+            // record_id 身份的唯一权威来源 = LLM 响应 id（SDK 捕获侧与 MCP 摄取侧同源写入，
+            // INSERT OR IGNORE 的跨入口去重依赖其全局唯一）；捕获侧未携带（无 id 的
             // provider、mock、stream 聚合元数据缺失）时回退 UUID——仅覆盖同一记录
             // 对象重复拦截的去重场景
             if (record.getRecordId() == null || record.getRecordId().isEmpty()) {
@@ -265,8 +265,8 @@ public class InteractionRecorder implements RecordingInterceptor {
     }
 
     /**
-     * 过滤告警节律：首条被滤记录告警一次，此后每满 100 条重申一次。告警本体经
-     * SLF4J 发射，节律提取为纯函数以便确定性验证。
+     * 过滤告警间隔规则：首条被滤记录告警一次，此后每满 100 条重申一次。告警本体经
+     * SLF4J 发射，间隔规则提取为纯函数以便确定性验证。
      */
     static boolean shouldWarnOnFilter(long filteredTotal) {
         return filteredTotal == 1 || filteredTotal % FILTERED_WARN_INTERVAL == 0;
@@ -274,7 +274,7 @@ public class InteractionRecorder implements RecordingInterceptor {
 
     /**
      * 总丢弃数 = 生产侧（RingBuffer 满/发布异常）+ 消费侧（缓冲超限）。
-     * 两个计数器分属不同线程域，聚合口径以本方法为准。
+     * 两个计数器分属不同线程域，聚合规则以本方法为准。
      */
     public long getDroppedCount() {
         return droppedCount.get() + consumerDroppedCount.get();
@@ -290,7 +290,7 @@ public class InteractionRecorder implements RecordingInterceptor {
 
     /**
      * 生命周期状态：start() 与 stop() 之间为 true；enabled=false 的录制器恒为
-     * false（整体 no-op）。生命周期断言与嵌入方的状态探视经此查询。
+     * false（整体 no-op）。生命周期断言与嵌入方的状态查询经此查询。
      */
     public boolean isStarted() {
         return started;

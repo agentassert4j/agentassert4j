@@ -41,7 +41,7 @@
         <!-- Spring AI 两代坐标同名互斥，不入 dependencyManagement，由 sdk 模块各自引用 -->
         <spring-ai1.version>1.0.0</spring-ai1.version>
         <spring-ai2.version>2.0.0</spring-ai2.version>
-        <!-- LangChain4j 适配线：sdk 模块编译钉地板（宣称支持的最老 GA），starter 编译测试用天花板 -->
+        <!-- LangChain4j 适配线：sdk 模块编译以最低支持版本为基线（宣称支持的最老 GA），starter 编译测试用最高验证版本 -->
         <langchain4j.version>1.0.0</langchain4j.version>
         <langchain4j-ceiling.version>1.18.0</langchain4j-ceiling.version>
         <!-- Boot 3.4 是 spring-ai 1.x 要求的最低线；3.4.0 的 spring-framework 6.2.0 与 spring-ai 1.0.0 传递的 6.2.6 混线（checkFlag 缺失），取线内对齐一致的最早 patch 3.4.5 -->

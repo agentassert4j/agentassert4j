@@ -389,7 +389,7 @@ class BaselineManagerTest {
         @Test
         @DisplayName("invocationId 为空 → 安全忽略")
         void emptyInvocationId_establishedViaDerivedAnchor() {
-            // 原断言钉住「无 invocationId 一律忽略建档」——形状组一等公民后该行为废止：
+            // 原断言锁定「无 invocationId 一律忽略建档」——形状组一等公民后该行为废止：
             // 未声明记录按派生身份（模板/形状锚点）正常建档，派生不依赖声明位
             InteractionRecord r = new InteractionRecord();
             manager.autoEstablishBaseline(r, "tester", null, null);
@@ -467,7 +467,7 @@ class BaselineManagerTest {
         }
 
         @Test
-        @DisplayName("候选守卫按集合判定：∈ 集合的任何形态都不再落候选（镜像 churn 根治钉）")
+        @DisplayName("候选守卫按集合判定：∈ 集合的任何形态都不再落候选（镜像 churn 根治断言）")
         void candidateGuard_setMembership() {
             String key = "invocation:order-flow:skl-1";
             InvocationProfile profile = makeProfileWithBaseline(key, "order-flow");
@@ -563,7 +563,7 @@ class BaselineManagerTest {
         }
 
         @Test
-        @DisplayName("空白审批人归一为 null——null 是「未经审批链盖章」的异常信号")
+        @DisplayName("空白审批人归一为 null——null 是「未经审批链写入审批记录」的异常信号")
         void blankApprover_normalizedToNull() {
             InvocationProfile profile = makeProfileWithCandidate("gk-blank", "skill-blank");
             repo.saveInvocationProfile(profile);
@@ -831,7 +831,7 @@ class BaselineManagerTest {
     }
 
     @Nested
-    @DisplayName("模板身份前移 - approve 前移、rollback 恢复、显式收编")
+    @DisplayName("模板身份前移 - approve 前移、rollback 恢复、显式并入基线")
     class TemplateIdentity {
 
         private static final String KEY = "invocation:order-flow:skl-1";
@@ -848,7 +848,7 @@ class BaselineManagerTest {
             InvocationProfile updated = repo.findInvocationByKey(KEY);
             assertEquals("h2", updated.getTemplateHash(), "画像身份必须前移到最新记录哈希");
             assertEquals("h1", repo.archivedBaselines.get(0).getTemplateHash(), "归档行必须先于前移快照旧哈希，回滚才有恢复源");
-            // 收敛闭环：approve 后检测不再命中
+            // 收敛完成：approve 后检测不再命中
             assertFalse(DriftDetector.detect(repo).hasDrift());
         }
 
@@ -888,12 +888,12 @@ class BaselineManagerTest {
             manager.rollback(KEY, "v1", null, "tester");
 
             assertEquals("h1", repo.findInvocationByKey(KEY).getTemplateHash(), "回滚必须把身份一并退回旧模板");
-            // 身份回拨后与新模板记录重新构成漂移——状态机下轮再收编，属预期可见行为
+            // 身份回拨后与新模板记录重新构成漂移——状态机下轮再次并入基线，属预期可见行为
             assertTrue(DriftDetector.detect(repo).hasDrift());
         }
 
         @Test
-        @DisplayName("显式收编前移一次后幂等，再次调用返回 false")
+        @DisplayName("显式并入基线前移一次后幂等，再次调用返回 false")
         void advanceTemplateIdentity_isIdempotent() {
             repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", "h1"));
             repo.saveInteractionIfAbsent(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
@@ -955,7 +955,7 @@ class BaselineManagerTest {
         }
 
         @Test
-        @DisplayName("画像未携带模板哈希时收编补齐（null → 最新记录哈希）")
+        @DisplayName("画像未携带模板哈希时并入基线补齐（null → 最新记录哈希）")
         void advanceFillsMissingProfileIdentity() {
             repo.saveInvocationProfile(candidateProfileWithIdentity(KEY, "order-flow", null));
             repo.saveInteractionIfAbsent(skeletonRecord("r-1", "order-flow", "skl-1", "h2", 1000L));
@@ -1041,7 +1041,7 @@ class BaselineManagerTest {
             repo.saveInvocationProfile(profile);
             manager.reject(key, null, "agent:codex");
             manager.rollback(key, "v1", null, "agent:codex");
-            // 漂移收编的凭据：画像模板哈希落后于最新同键记录
+            // 漂移并入基线的凭据：画像模板哈希落后于最新同键记录
             InvocationProfile stale = repo.findInvocationByKey(key);
             stale.setTemplateHash("stale-hash");
             repo.saveInvocationProfile(stale);
@@ -1051,13 +1051,13 @@ class BaselineManagerTest {
             List<GovernanceVerb> verbs = new ArrayList<>();
             for (GovernanceEvent event : repo.governanceEvents) {
                 verbs.add(event.getVerb());
-                assertNotNull(event.getHappenedAt(), "happenedAt 由实现方盖章");
+                assertNotNull(event.getHappenedAt(), "happenedAt 由实现方写入审批记录");
             }
             assertEquals(Arrays.asList(GovernanceVerb.ESTABLISH, GovernanceVerb.ACCEPT, GovernanceVerb.REJECT,
                     GovernanceVerb.ROLLBACK, GovernanceVerb.COLLECT, GovernanceVerb.FORCE_REBUILD), verbs);
             assertEquals("tester", repo.governanceEvents.get(0).getActor());
             assertEquals("agent:codex", repo.governanceEvents.get(1).getActor());
-            assertNull(repo.governanceEvents.get(4).getActor(), "收编是框架自动化，actor 恒 null");
+            assertNull(repo.governanceEvents.get(4).getActor(), "并入基线是框架自动化，actor 恒 null");
         }
 
         @Test
@@ -1091,7 +1091,7 @@ class BaselineManagerTest {
         }
 
         @Test
-        @DisplayName("幂等不落事件：重复建档/哈希一致收编/前置失败路径零事件")
+        @DisplayName("幂等不落事件：重复建档/哈希一致并入基线/前置失败路径零事件")
         void idempotentPaths_noEvents() {
             InteractionRecord seed = makeToolRecord("skill-1", "toolA");
             manager.autoEstablishBaseline(seed, "tester", null, null);
@@ -1101,7 +1101,7 @@ class BaselineManagerTest {
             manager.autoEstablishBaseline(seed, "tester", null, null);
             assertEquals(1, repo.governanceEvents.size());
 
-            // 哈希一致返回 false：收编不落事件
+            // 哈希一致返回 false：并入不落事件
             String key = repo.invocationProfiles.keySet().iterator().next();
             assertFalse(manager.advanceTemplateIdentity(key));
             assertEquals(1, repo.governanceEvents.size());

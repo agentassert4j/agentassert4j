@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * streaming-only 装饰器契约钉：仅实现流式接口的模型经 wrapStreaming 包装后
+ * streaming-only 装饰器契约测试：仅实现流式接口的模型经 wrapStreaming 包装后
  * 回调透传与聚合录制齐备。
  *
  * @author axy-yxa

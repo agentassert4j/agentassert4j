@@ -172,7 +172,7 @@ class AgentAssert4jConfigTest {
     }
 
     @Nested
-    @DisplayName("未知键检测对照面（键集 ↔ 解析路径契约钉）")
+    @DisplayName("未知键检测对照基准（键集 ↔ 解析路径契约测试）")
     class UnknownKeyDetection {
 
         @Test
@@ -232,7 +232,7 @@ class AgentAssert4jConfigTest {
 
             AgentAssert4jConfig unknown = AgentAssert4jConfig.fromJson("{\"regression\":{\"memberWindw\":3}}");
             assertNull(unknown.getRegression().getMemberSampleWindow());
-            assertEquals(1, unknown.getConfigNotes().size(), "未知 regression 键告警（键集对照面兜住拼写错误）: " + unknown.getConfigNotes());
+            assertEquals(1, unknown.getConfigNotes().size(), "未知 regression 键告警（键集对照兜住拼写错误）: " + unknown.getConfigNotes());
         }
     }
 }

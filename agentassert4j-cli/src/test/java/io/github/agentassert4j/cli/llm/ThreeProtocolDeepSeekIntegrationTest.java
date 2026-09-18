@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 /**
  * 三协议发射客户端的 DeepSeek 真机连通测试 — anthropic-messages 走 DeepSeek 的
  * Anthropic 兼容端点、openai-responses 走 Responses 端点（openai-chat 形已有
- * DeepSeekIntegrationTest 覆盖）。验收口径为「请求被真实端点接受 + 响应可解析
+ * DeepSeekIntegrationTest 覆盖）。验收尾径为「请求被真实端点接受 + 响应可解析
  * 归一」，不要求兼容端点回填全部方言字段。
  *
  * <p>运行方式：</p>
@@ -58,7 +58,7 @@ class ThreeProtocolDeepSeekIntegrationTest {
         assertTrue(response.getContent().toLowerCase().contains("paris"), "常识问题应命中: " + response.getContent());
         assertEquals("stop", response.getFinishReason());
         assertNotNull(response.getServedModel(), "服务端报告模型在场（别名映射归服务端，不钉具体值）");
-        assertTrue(response.getInputTokens() > 0, "usage 总量口径已归一: " + response.getInputTokens());
+        assertTrue(response.getInputTokens() > 0, "usage 总量规则已归一: " + response.getInputTokens());
         assertTrue(response.getOutputTokens() > 0);
     }
 

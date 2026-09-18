@@ -9,7 +9,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * LlmWireProtocol 枚举契约测试 — 封闭词表的线上值钉死与解析往返。
+ * LlmWireProtocol 枚举契约测试 — 封闭词表的线上值锁定与解析往返。
  *
  * @author axy-yxa
  * @since 2026-09-09
@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class LlmWireProtocolTest {
 
     @Test
-    @DisplayName("wireName 三值钉死（配置键/工具参数/apiProtocol 列共用词形）")
+    @DisplayName("wireName 三值锁定（配置键/工具参数/apiProtocol 列共用词形）")
     void wireNames_frozen() {
         assertEquals("openai-chat", LlmWireProtocol.OPENAI_CHAT.wireName());
         assertEquals("anthropic-messages", LlmWireProtocol.ANTHROPIC_MESSAGES.wireName());

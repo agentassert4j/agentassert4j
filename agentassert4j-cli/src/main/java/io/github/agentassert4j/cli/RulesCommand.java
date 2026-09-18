@@ -12,7 +12,7 @@ import java.util.concurrent.Callable;
 /**
  * rules 命令 — 展示内置约束行为目录与规则文件的写法入口。
  *
- * <p>合法 behavior 名以 BehaviorChecker 的内置库为唯一真源，这里只补
+ * <p>合法 behavior 名以 BehaviorChecker 的内置库为唯一权威来源，这里只补
  * 面向用户的语义说明；目录不展示就没人知道 --rules.json 里 behaviors
  * 能写什么，写错的名字会被静默忽略（加载时有告警，但预防优于纠错）。</p>
  *

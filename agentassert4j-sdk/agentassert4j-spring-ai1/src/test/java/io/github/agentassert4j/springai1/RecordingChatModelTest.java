@@ -214,7 +214,7 @@ class RecordingChatModelTest {
     }
 
     @Test
-    @DisplayName("换装发生在 options 副本上：业务 options 与原始回调零触碰")
+    @DisplayName("观察回调替换发生在 options 副本上：业务 options 与原始回调零触碰")
     void decorateUsesCopy_businessOptionsNeverMutated() {
         AtomicInteger callCount = new AtomicInteger();
         ToolCallback tool = stubTool("get_order", callCount);
@@ -238,7 +238,7 @@ class RecordingChatModelTest {
     }
 
     @Test
-    @DisplayName("响应自带 native toolCalls 时（ChatClient 逐轮姿势）观察缓冲静默丢弃，不双计")
+    @DisplayName("响应自带 native toolCalls 时（ChatClient 逐轮方式）观察缓冲静默丢弃，不双计")
     void nativeToolCallsPresent_observationDiscarded() {
         AtomicInteger callCount = new AtomicInteger();
         ToolCallback tool = stubTool("get_order", callCount);

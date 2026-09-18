@@ -7,8 +7,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * comparisonMetricsFragment 的 wire 契约：task-report 与 verify-report 两个报告面
- * 共用同一 dims 词表与 contentRules 合成规则，片段形态以本测试钉死——维度键名
+ * comparisonMetricsFragment 的 wire 契约：task-report 与 verify-report 两份报告
+ * 共用同一 dims 词表与 contentRules 合成规则，片段形态以本测试锁定——维度键名
  * 或合成规则变化属于机器契约变更，须同步 spec 并评审。
  *
  * @author axy-yxa

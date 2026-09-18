@@ -73,7 +73,7 @@ class VerifyExportTest {
         r.setTimestamp(timestamp);
         r.setSeq(timestamp);
         r.setUserInput(userInput);
-        // 键与生产 enrich 同口径派生（存储键与现算键不得分叉）
+        // 键与生产 enrich 同规则派生（存储键与现算键不得分叉）
         r.setInvocationKey("invocation:" + label + ":" + templateHash);
         r.setInvocationId(label);
         r.setTemplateHash(templateHash);
@@ -178,7 +178,7 @@ class VerifyExportTest {
         String json = exportPack(tempDir.resolve("verify.db").toString(), false, "ab\"12");
 
         assertTrue(json.contains("\"codeRef\":"), "包本体必须携带 codeRef 键: " + json);
-        assertEquals("ab\"12", PackCodec.fromJson(json).getMeta().getCodeRef(), "锚经转义落盘，读回必须逐字保真");
+        assertEquals("ab\"12", PackCodec.fromJson(json).getMeta().getCodeRef(), "锚经转义写入磁盘，读回必须逐字保真");
     }
 
     @Test
@@ -217,7 +217,7 @@ class VerifyExportTest {
     @DisplayName("同键多记录往返：uniform 多记录链折叠为每调用点一步（组末锚）→ 全 PASS")
     void roundtrip_multiRecordSameKey_pass() throws Exception {
         // 同一调用点键的两条同形态记录：链末判定下每调用点一份步骤（组末为证据锚），
-        // 指纹消费画像批准真相——uniform 链链末与画像一致，往返必自洽
+        // 指纹消费画像已批准事实——uniform 链链末与画像一致，往返必自洽
         saveRecord("r1", "s1", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         saveRecord("r2", "s1", 2000L, null, "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
@@ -341,7 +341,7 @@ class VerifyExportTest {
     }
 
     @Test
-    @DisplayName("指纹真源+同尺钉：导出时规则缺席（仅声明集漂移）→ 不计偏离（与门禁同尺），包步骤携带画像批准指纹")
+    @DisplayName("指纹唯一权威来源+同尺断言：导出时规则缺席（仅声明集漂移）→ 不计偏离（与门禁同尺），包步骤携带画像批准指纹")
     void export_stepsCarryApprovedFingerprints() throws Exception {
         Path rulesFile = tempDir.resolve("rules.json");
         Files.write(rulesFile, "{\"invocations\":{\"verdict\":{\"requiredKeywords\":[\"DONE\"]}}}".getBytes(StandardCharsets.UTF_8));
@@ -354,7 +354,7 @@ class VerifyExportTest {
         }
         // 导出时规则文件缺席：链末现场提取只缺声明集（结构维一致），门禁会判 PASS——
         // 偏离检测不得比门禁更严（否则警告指路的裁决对象不存在）→ 计数 0；
-        // 包步骤指纹仍携带画像批准真相（声明规则维在场）
+        // 包步骤指纹仍携带画像已批准事实（声明规则维在场）
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
         Object parsed = RecursiveJsonParser.parse(json);
         Map<?, ?> task = (Map<?, ?>) ((List<?>) ((Map<?, ?>) parsed).get("tasks")).get(0);
@@ -381,7 +381,7 @@ class VerifyExportTest {
     }
 
     @Test
-    @DisplayName("配对精确相等：前缀同名的本地链不得冒充包任务证据")
+    @DisplayName("配对精确相等：前缀同名的本地链不得被当作包任务证据")
     void pairing_exactMatchOnly() throws Exception {
         saveRecord("r1", "s1", 1000L, "V1", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
@@ -396,7 +396,7 @@ class VerifyExportTest {
 
             int exit = runner.run(json, "digest", null, null, false);
 
-            assertEquals(2, exit, "包任务无精确匹配链 = 覆盖缺口（前缀同名链不得冒充）: " + output);
+            assertEquals(2, exit, "包任务无精确匹配链 = 覆盖缺口（前缀同名链不得被当作包任务证据）: " + output);
             String report = output.toString();
             assertTrue(report.contains("coverage gaps 1"), "V1 必须列为覆盖缺口: " + report);
             assertTrue(report.contains("out-of-scope chains 1"), "V10 链必须列为范围外: " + report);
@@ -505,17 +505,17 @@ class VerifyExportTest {
     }
 
     @Test
-    @DisplayName("参照等价：包=批准真相定格——本地链末偏离判红；库内路径两轮结构变化照判")
+    @DisplayName("参照等价：包=已批准事实定格——本地链末偏离判红；库内路径两轮结构变化照判")
     void referenceEquivalence() throws Exception {
         saveRecord("b1", "s-old", 1000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"verdict\":\"DONE\"}", "dev-model");
         establishBaselines();
         saveRecord("n1", "s-new", 9000L, "查订单", "invocation:verdict:h-verdict", "verdict", "h-verdict", "{\"status\":\"FAILED\"}", "dev-model");
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
 
-        // 包路径：包指纹=画像批准真相（b1 形态）；本地链末（n1 形态）偏离 → 如实 CHANGED
+        // 包路径：包指纹=画像已批准事实（b1 形态）；本地链末（n1 形态）偏离 → 如实 CHANGED
         VerifyRunner packRunner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
         int packExit = packRunner.run(json, "digest", null, null, false);
-        assertEquals(1, packExit, "包=批准真相：本地链末偏离承诺必须判红: " + output);
+        assertEquals(1, packExit, "包=已批准事实：本地链末偏离承诺必须判红: " + output);
 
         // 库内路径：两条链喂同一对齐核 → 两轮间的结构变化 = CHANGED
         List<TaskChain> chains = TaskChainView.resolveAll(repository);

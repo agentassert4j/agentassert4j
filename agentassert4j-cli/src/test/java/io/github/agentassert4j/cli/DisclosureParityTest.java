@@ -22,9 +22,9 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 披露等价钉 — seed record / approvedBy / 扇出披露 / member 窗口四能力在
- * CLI 人读、CLI JSON、MCP 三格抽查同形（登记表真源：guide/spec/equivalence.md
- * 披露字段面行；member 窗口的 MCP 格由 McpServerTest 窗口透传钉覆盖）。
+ * 披露等价断言 — seed record / approvedBy / 扇出披露 / member 窗口四能力在
+ * CLI 人读、CLI JSON、MCP 三格抽查同形（登记表唯一权威来源：guide/spec/equivalence.md
+ * 披露字段行；member 窗口的 MCP 格由 McpServerTest 窗口透传断言覆盖）。
  *
  * @author axy-yxa
  * @since 2026-09-17

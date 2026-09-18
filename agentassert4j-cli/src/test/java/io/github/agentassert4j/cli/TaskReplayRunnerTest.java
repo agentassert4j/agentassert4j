@@ -318,7 +318,7 @@ class TaskReplayRunnerTest {
     }
 
     @Nested
-    @DisplayName("漂移处置状态机：收编 / 候选 / 挂起")
+    @DisplayName("漂移处置状态机：并入基线 / 候选 / 挂起")
     class DriftStateMachine {
 
         /**
@@ -332,7 +332,7 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("漂移 + 对齐 PASS（开发态）→ 自动收编前移身份，退出码 0，检测收敛")
+        @DisplayName("漂移 + 对齐 PASS（开发态）→ 自动并入基线前移身份，退出码 0，检测收敛")
         void driftPass_dev_collects() {
             seedSkeletonDrift("{\"result\":\"ok\"}");
 
@@ -341,11 +341,11 @@ class TaskReplayRunnerTest {
             assertEquals("hash-new", repository.findInvocationByKey("invocation:order:skl-1").getTemplateHash(), "画像身份必须前移到最新记录哈希");
             assertTrue(output.toString().contains("Collected:"));
             runner.run(null, null, false, false, false, null, false, false, false, null, null);
-            assertTrue(output.toString().contains("template identities consistent"), "收编后检测不应再命中");
+            assertTrue(output.toString().contains("template identities consistent"), "并入基线后检测不应再命中");
         }
 
         @Test
-        @DisplayName("漂移 + 对齐 PASS（--ci）→ 不收编，警告可见，退出码 0，身份不动")
+        @DisplayName("漂移 + 对齐 PASS（--ci）→ 不并入，警告可见，退出码 0，身份不动")
         void driftPass_ci_keepsStale() {
             seedSkeletonDrift("{\"result\":\"ok\"}");
 
@@ -368,7 +368,7 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("漂移 + 缺步骤 → 挂起：不收编不落候选，退出码 1")
+        @DisplayName("漂移 + 缺步骤 → 挂起：不并入不落候选，退出码 1")
         void driftWithMissingStep_hangs() {
             saveSkeletonRecord("a-1", "session-a", 1000L, "查订单", "order", "skl-1", "hash-new", "{\"result\":\"ok\"}");
             establishedProfile("invocation:order:skl-1", "order", "hash-old");
@@ -421,7 +421,7 @@ class TaskReplayRunnerTest {
         @DisplayName("裂键处置：新键无画像但拿到 PASS outcome（双链逐记录配对）→ Hung（awaits explicit establish），不再谎称建档或计入 collected")
         void labelSplit_noProfile_disposedAsHung() {
             // 两条链同构（草稿=hash-new 在前、链末=hash-old 在后），裸模式逐记录配对
-            // 让 hash-new 键拿到 PASS outcome——正是 CC 宿主 V6③ 的实测路径
+            // 让 hash-new 键拿到 PASS outcome——与真实宿主实测过的路径一致
             saveRecord("z-a1", "session-z1", 100L, "查订单", "order", "hash-new", "{\"result\":\"ok\"}", null);
             saveRecord("z-b1", "session-z1", 200L, "查订单", "order", "hash-old", "{\"result\":\"ok\"}", null);
             establishedProfile("invocation:order:hash-old", "order", "hash-old");
@@ -444,7 +444,7 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("标签裂键 → 裸重放不再自动收编：注记指路显式 establish，新档不落")
+        @DisplayName("标签裂键 → 裸重放不再自动并入基线：注记指路显式 establish，新档不落")
         void labelSplit_bareReplay_leavesForExplicitEstablish() {
             saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-old", "{\"result\":\"ok\"}", null);
             saveRecord("b-1", "session-b", 2000L, "查订单", "order", "hash-new", "{\"result\":\"ok\"}", null);
@@ -452,7 +452,7 @@ class TaskReplayRunnerTest {
 
             runner.run(null, null, false, false, false, null, false, false, false, null, null);
 
-            assertNull(repository.findInvocationByKey("invocation:order:hash-new"), "裂键新档必须留给显式 establish（自动建档只收编全新键）");
+            assertNull(repository.findInvocationByKey("invocation:order:hash-new"), "裂键新档必须留给显式 establish（自动建档只并入基线全新键）");
             assertTrue(output.toString().contains("left for explicit establish"), "注记指路显式建档: " + output);
             assertTrue(output.toString().contains("baseline --invocation invocation:order:hash-new"), "指路必须带可复制的键: " + output);
         }
@@ -620,7 +620,7 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("生产路径钉：establishMissing 以桶内最新记录播种（认可时刻定标当前行为），坏草稿在前的混合链建档即绿")
+        @DisplayName("生产路径断言：establishMissing 以桶内最新记录播种（认可时刻定标当前行为），坏草稿在前的混合链建档即绿")
         void productionEstablish_seedsLatest_mixedChainGoesGreen() {
             saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
             InteractionRecord chainFinal = saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
@@ -652,7 +652,7 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("多形态工作流钉：跨任务混形 accept 入集后双绿，链末回到任一认可形态不再落候选")
+        @DisplayName("多形态工作流断言：跨任务混形 accept 入集后双绿，链末回到任一认可形态不再落候选")
         void mixedShapes_acceptSecondShape_bothTasksGreen() {
             InteractionRecord good = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
             establishFromRecord(good);
@@ -669,7 +669,7 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("链末判定哲学钉：坏草稿在前、好链末在后 → PASS + exit 0 + 透明层计数（草稿不挡门）")
+        @DisplayName("链末判定哲学断言：坏草稿在前、好链末在后 → PASS + exit 0 + 透明层计数（草稿不挡门）")
         void badDraftFirst_ciGatesChainFinal_passes() {
             saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"changed\":true}", null);
             InteractionRecord good = saveRecord("a-2", "session-a", 2000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
@@ -702,7 +702,7 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("首航：单链任务 CI 也判定（不再 selfEstablished 跳过）；任务规则违规折 exit 1")
+        @DisplayName("首次判定：单链任务 CI 也判定（不再 selfEstablished 跳过）；任务规则违规折 exit 1")
         void singleChain_judged_andTaskRulesFold() {
             InteractionRecord seed = saveDeclaredTaskRecord("a-1", "session-a", 1000L, "{\"result\":\"ok\"}");
             establishFromRecord(seed);
@@ -712,13 +712,13 @@ class TaskReplayRunnerTest {
             output.reset();
             int exit = ruleRunner.run(null, null, true, false, false, null, false, false, false, null, null);
 
-            assertEquals(1, exit, "requiredSteps 缺失在 CI 首航即批改");
+            assertEquals(1, exit, "requiredSteps 缺失在 CI 首次判定即生效");
             assertTrue(output.toString().contains("baseline comparison (--ci)"), "单链任务必须发生基线对照: " + output);
             assertFalse(output.toString().contains("first recording becomes the baseline"), "CI 模式不得走 selfEstablished 跳过");
         }
 
         @Test
-        @DisplayName("报告钉：mode=ci-align 可区分，步骤显示 baselineVersion，成本只出 current 侧")
+        @DisplayName("报告断言：mode=ci-align 可区分，步骤显示 baselineVersion，成本只出 current 侧")
         void reportShape_ciAlign() {
             InteractionRecord seed = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
             establishFromRecord(seed);
@@ -757,7 +757,7 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("两链窗口钉：C2 vs C3 链对链 PASS，而 CI 对照画像 CHANGED（窗口外漂移被点破）")
+        @DisplayName("两链窗口断言：C2 vs C3 链对链 PASS，而 CI 对照画像 CHANGED（窗口外漂移被点破）")
         void twoChainWindow_ciExposesUnadjudicatedDrift() {
             InteractionRecord seed = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
             establishFromRecord(seed);
@@ -774,7 +774,7 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("处置对账：行为候选已落时 candidatesRegistered=1 而 candidatePoints=0（双口径分列）")
+        @DisplayName("处置核对：行为候选已落时 candidatesRegistered=1 而 candidatePoints=0（双规则分列）")
         void dispositionCounts_behaviorCandidateWithoutDrift() {
             InteractionRecord seed = saveRecord("a-1", "session-a", 1000L, "查订单", "order", "hash-a", "{\"result\":\"ok\"}", null);
             establishFromRecord(seed);
@@ -787,7 +787,7 @@ class TaskReplayRunnerTest {
             String dispositionLine = reportLine(output.toString(), "\"mode\":\"drift-disposition\"");
             assertNotNull(dispositionLine, "必须有处置报告行: " + output);
             assertTrue(dispositionLine.contains("\"candidatePoints\":0"), "无模板漂移点时漂移域计数为 0: " + dispositionLine);
-            assertTrue(dispositionLine.contains("\"candidatesRegistered\":1"), "对齐域候选计数必须与 Candidate registered 行同源对账: " + dispositionLine);
+            assertTrue(dispositionLine.contains("\"candidatesRegistered\":1"), "对齐域候选计数必须与 Candidate registered 行同源核对: " + dispositionLine);
         }
 
         @Test
@@ -899,7 +899,7 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("重驱 PASS → 对齐收编 + 重驱通过，退出码 0，恰一次调用")
+        @DisplayName("重驱 PASS → 对齐并入基线 + 重驱通过，退出码 0，恰一次调用")
         void reDrive_pass() {
             seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
 
@@ -1001,7 +1001,7 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("等价钉：dry-run 重驱计划=真跑目标（计划/真跑/报价三面同源）")
+        @DisplayName("等价断言：dry-run 重驱计划=真跑目标（计划/真跑/报价三侧同源）")
         void reDrive_dryRunPlanEqualsRealTargets() {
             seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
 
@@ -1052,7 +1052,7 @@ class TaskReplayRunnerTest {
     }
 
     @Nested
-    @DisplayName("等价钉：自动建档豁免的两条入口路径")
+    @DisplayName("等价断言：自动建档豁免的两条入口路径")
     class AutoEstablishEquivalence {
 
         private void saveInto(SqliteStorageRepository repo, String recordId, String label, String templateHash, long ts) {
@@ -1102,7 +1102,7 @@ class TaskReplayRunnerTest {
 
                 ByteArrayOutputStream sweepOut = new ByteArrayOutputStream();
                 int swept = new BaselineService(sweepRepo).establishMissing(new PrintStream(sweepOut, true), "tester", null, false, null, null, null, null);
-                assertEquals(1, swept, "扫建面只收编全新键: " + sweepOut);
+                assertEquals(1, swept, "扫建路径只并入基线全新键: " + sweepOut);
 
                 TaskReplayRunner replayRunner = new TaskReplayRunner(replayRepo, new StubLlmClient(), new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), false);
                 replayRunner.run(null, null, false, false, false, null, false, false, false, null, null);
@@ -1110,8 +1110,8 @@ class TaskReplayRunnerTest {
                 Set<String> bySweep = establishedKeys(sweepRepo);
                 Set<String> byReplay = establishedKeys(replayRepo);
                 assertEquals(bySweep, byReplay, "两条自动建档路径产出的建档集合必须逐键一致");
-                assertTrue(bySweep.contains("invocation:freshAgent:hash-f"), "全新键两侧都收编: " + bySweep);
-                assertFalse(bySweep.contains("invocation:splitAgent:hash-new"), "裂键草稿两侧都不收编: " + bySweep);
+                assertTrue(bySweep.contains("invocation:freshAgent:hash-f"), "全新键两侧都并入基线: " + bySweep);
+                assertFalse(bySweep.contains("invocation:splitAgent:hash-new"), "裂键草稿两侧都不并入: " + bySweep);
                 assertTrue(sweepOut.toString().contains("Split key "), "扫建面披露裂键: " + sweepOut);
                 assertTrue(output.toString().contains("Split key "), "replay 面披露裂键（同源文案）: " + output);
             } finally {
@@ -1339,11 +1339,11 @@ class TaskReplayRunnerTest {
     }
 
     @Nested
-    @DisplayName("首航批改与出口健康摘要")
+    @DisplayName("首次判定即生效与出口健康摘要")
     class FirstVoyageAndExitHealth {
 
         @Test
-        @DisplayName("首航即批改：单链任务违反声明任务规则 → 退出码 1 并报告违规")
+        @DisplayName("首次判定即生效：单链任务违反声明任务规则 → 退出码 1 并报告违规")
         void firstVoyage_taskRuleViolation_exits1() {
             saveDeclaredTaskRecord("a-1", "session-a", 1000L, "{\"result\":\"ok\"}");
             establishedProfile("invocation:order:hash-a", "order", "hash-a");

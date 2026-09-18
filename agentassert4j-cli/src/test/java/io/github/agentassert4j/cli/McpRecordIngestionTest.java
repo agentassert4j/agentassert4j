@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * record 摄取的三协议矩阵测试 — 每协议 wire 夹具经 ingest 全链路落库后逐字段
- * 回读断言：范式归一（模板/末位输入/工具帧/多模态/工具定义嵌套形）、finish 与
+ * 回读断言：规范形归一（模板/末位输入/工具帧/多模态/工具定义嵌套形）、finish 与
  * usage 归一表全值、响应形态自动识别与显式 protocol 覆盖、敌对输入退化不中断。
  *
  * @author axy-yxa
@@ -91,7 +91,7 @@ class McpRecordIngestionTest {
     }
 
     @Nested
-    @DisplayName("OpenAI chat 摄取（重构回归钉）")
+    @DisplayName("OpenAI chat 摄取（重构回归断言）")
     class OpenAiChat {
 
         @Test
@@ -116,7 +116,7 @@ class McpRecordIngestionTest {
         }
 
         @Test
-        @DisplayName("assistant tool_calls 历史帧收编为发起帧（与 anthropic/responses 结构一致）")
+        @DisplayName("assistant tool_calls 历史帧并入基线为发起帧（与 anthropic/responses 结构一致）")
         void assistantToolCalls_becomeInitFrames() {
             String request = "{\"model\":\"deepseek-chat\",\"messages\":[" + "{\"role\":\"user\",\"content\":\"Query order 42\"}," + "{\"role\":\"assistant\",\"content\":\"Looking up.\",\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"getOrder\",\"arguments\":\"{\\\"orderId\\\":\\\"42\\\"}\"}}]}," + "{\"role\":\"tool\",\"tool_call_id\":\"call_1\",\"content\":\"ORDER-42 found\"}," + "{\"role\":\"user\",\"content\":\"Summarize\"}]}";
             String response = "{\"id\":\"chatcmpl-hist\",\"model\":\"deepseek-chat\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Done.\"},\"finish_reason\":\"stop\"}]}";
@@ -170,7 +170,7 @@ class McpRecordIngestionTest {
             assertEquals(0, record.getTurnIndex());
             assertEquals("Paris.", record.getModelResponse());
             assertEquals("stop", record.getFinishReason());
-            // input_tokens 是非缓存口径：总量 = 10 + 3 + 2
+            // input_tokens 是非缓存规则：总量 = 10 + 3 + 2
             assertEquals(15, record.getInputTokens());
             assertEquals(2, record.getOutputTokens());
             assertEquals(Integer.valueOf(2), record.getCacheReadTokens());
@@ -193,7 +193,7 @@ class McpRecordIngestionTest {
         }
 
         @Test
-        @DisplayName("tool_use 响应块→toolCalls（对象形参数直取）；tools 扁平定义转范式嵌套形")
+        @DisplayName("tool_use 响应块→toolCalls（对象形参数直取）；tools 扁平定义转规范形嵌套形")
         void toolUseResponse_andFlatTools() {
             String request = "{\"model\":\"claude-3-5\",\"max_tokens\":1024,\"system\":\"You call tools.\"," + "\"messages\":[{\"role\":\"user\",\"content\":\"Query order 42\"}]," + "\"tools\":[{\"name\":\"getOrder\",\"description\":\"Fetch an order\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"orderId\":{\"type\":\"string\"}}}}]}";
             String response = "{\"id\":\"msg_t\",\"model\":\"claude-3-5\"," + "\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"getOrder\",\"input\":{\"orderId\":\"42\"}}]," + "\"stop_reason\":\"tool_use\",\"usage\":{\"input_tokens\":20,\"output_tokens\":5}}";
@@ -210,7 +210,7 @@ class McpRecordIngestionTest {
             assertFalse(record.getToolCalls().get(0).getArgTypes().isEmpty());
             assertEquals("tool_calls", record.getFinishReason());
             assertNull(record.getModelResponse(), "纯 tool_use 响应无正文");
-            // 工具定义范式嵌套形（范式 = OpenAI tools 形）
+            // 工具定义规范形嵌套形（规范形 = OpenAI tools 形）
             assertTrue(record.getToolsDefinition().contains("\"function\":{\"name\":\"getOrder\""), record.getToolsDefinition());
             assertTrue(record.getToolsDefinition().contains("\"parameters\":"), record.getToolsDefinition());
         }
@@ -255,7 +255,7 @@ class McpRecordIngestionTest {
         }
 
         @Test
-        @DisplayName("末位 user image 块转范式 data-URI；历史轮 image 丢弃并告警")
+        @DisplayName("末位 user image 块转规范形 data-URI；历史轮 image 丢弃并告警")
         void imageBlocks_paradigmAndWarning() {
             String request = "{\"model\":\"claude-3-5\",\"max_tokens\":1024," + "\"messages\":[" + "{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"first\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"AAAA\"}}]}," + "{\"role\":\"assistant\",\"content\":\"ok\"}," + "{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"describe\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/jpeg\",\"data\":\"BBBB\"}}]}]}";
             String response = "{\"id\":\"msg_i\",\"model\":\"claude-3-5\",\"content\":[{\"type\":\"text\",\"text\":\"a cat\"}],\"stop_reason\":\"end_turn\"}";
@@ -349,7 +349,7 @@ class McpRecordIngestionTest {
             assertEquals("ORDER-42 found", turns.get(2).getContent());
             assertEquals("call_1", turns.get(2).getToolCallId());
             assertEquals("getOrder", turns.get(2).getToolName(), "输出帧名字由同请求配对回填");
-            // 工具定义扁平形转范式嵌套形
+            // 工具定义扁平形转规范形嵌套形
             assertTrue(record.getToolsDefinition().contains("\"function\":{\"name\":\"getOrder\""), record.getToolsDefinition());
         }
 
@@ -381,7 +381,7 @@ class McpRecordIngestionTest {
         }
 
         @Test
-        @DisplayName("末位 input_image 直通范式多模态（url 与 data-URI 形均合法）")
+        @DisplayName("末位 input_image 直通规范形多模态（url 与 data-URI 形均合法）")
         void inputImage_passthrough() {
             String request = "{\"model\":\"gpt-4o\",\"input\":[{\"type\":\"message\",\"role\":\"user\",\"content\":[" + "{\"type\":\"input_text\",\"text\":\"describe\"}," + "{\"type\":\"input_image\",\"image_url\":\"data:image/png;base64,AAAA\"}]}]}";
             String response = "{\"id\":\"resp_m\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"gpt-4o\"," + "\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"a cat\"}]}]}";
@@ -480,7 +480,7 @@ class McpRecordIngestionTest {
     }
 
     @Nested
-    @DisplayName("跨源可比性（范式归一的价值主张）")
+    @DisplayName("跨源可比性（规范形归一的价值主张）")
     class CrossSourceComparability {
 
         /**

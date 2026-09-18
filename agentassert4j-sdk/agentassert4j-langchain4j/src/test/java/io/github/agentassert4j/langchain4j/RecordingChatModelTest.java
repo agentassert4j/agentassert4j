@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 阻塞装饰器契约钉：透传保真、监听器单次触发、录制面与流式入口行为。
+ * 阻塞装饰器契约测试：透传保真、监听器单次触发、录制面与流式入口行为。
  *
  * @author axy-yxa
  * @since 2026-09-18
@@ -98,7 +98,7 @@ class RecordingChatModelTest {
     }
 
     /**
-     * 编译期可见的扩展回调面：钉代理对未知方法的转发机制。
+     * 编译期可见的扩展回调：验证代理对未知方法的转发机制。
      */
     interface RichHandler extends StreamingChatResponseHandler {
 

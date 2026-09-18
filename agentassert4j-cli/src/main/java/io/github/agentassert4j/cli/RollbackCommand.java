@@ -69,7 +69,7 @@ public class RollbackCommand implements Callable<Integer> {
             if (jsonOutput) {
                 out.println("{\"schema\":\"" + ReportSchemas.ROLLBACK + "\",\"invocationKey\":\"" + RecursiveJsonParser.escape(invocationKey) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(version) + "\",\"status\":\"" + reloaded.getBaselineStatus() + "\",\"approvedBy\":\"" + RecursiveJsonParser.escape(reloaded.getApprovedBy() != null ? reloaded.getApprovedBy() : "") + "\"" + (discardedCandidate ? ",\"candidateDiscarded\":true" : "") + ",\"codeRef\":\"" + RecursiveJsonParser.escape(reloaded.getCodeRef() != null ? reloaded.getCodeRef() : "") + "\",\"ok\":true}");
             } else {
-                // 审批事实按在场渲染：approvedBy=null 是合法形态（未经审批链盖章），
+                // 审批事实按在场渲染：approvedBy=null 是合法形态（未经审批链写入审批记录），
                 // 人读输出不得出现 "null" 字样
                 StringBuilder facts = new StringBuilder();
                 if (reloaded.getApprovedBy() != null) {
@@ -109,7 +109,7 @@ public class RollbackCommand implements Callable<Integer> {
     /**
      * 版本不存在时列出全部可选归档版本——rollback 的 --version 是必填值，
      * 可选值没有发现渠道时用户只能猜，这里是猜错的出口。目标=活动版本时放行给
-     * BaselineManager 的空回滚守卫：那里的话术带 reject 指路，比「不在归档列表」
+     * BaselineManager 的空回滚守卫：那里的拒绝信息带 reject 指路，比「不在归档列表」
      * 更接近用户的真实意图（丢候选）。
      */
     private static void ensureVersionExists(StorageRepository repository, String invocationKey, String version) {

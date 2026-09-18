@@ -253,7 +253,7 @@ class SqliteStorageRepositoryTest {
 
     @Test
     void archiveAndFindBaseline_nullApprovedAtRoundTripsAsNull() {
-        // 可空治理列的写读对称：approvedAt=null 绑定与读回的 wasNull 两侧都要钉住
+        // 可空治理列的写读对称：approvedAt=null 绑定与读回的 wasNull 两侧都要断言到
         ArchivedTemplateVersion archived = new ArchivedTemplateVersion();
         archived.setInvocationKey("invocation:null-at:tmpl-1");
         archived.setVersionTag("v1");
@@ -318,7 +318,7 @@ class SqliteStorageRepositoryTest {
     @Test
     void saveInteractions_runtimeExceptionMidBatch_rollsBackWholeBatch() {
         // RuntimeException 路径必须先显式回滚：finally 恢复 autoCommit 对未决事务
-        // 是隐式提交，不回滚就会把半批数据落盘、破坏整批原子性
+        // 是隐式提交，不回滚就会把半批数据写入磁盘、破坏整批原子性
         SqliteStorageRepository failing = new SqliteStorageRepository(":memory:") {
             private int calls = 0;
 
@@ -335,7 +335,7 @@ class SqliteStorageRepositoryTest {
             List<InteractionRecord> batch = Arrays.asList(createSampleRecord("rec-atom-1", "s-atom", "sk-atom", "h1"), createSampleRecord("rec-atom-2", "s-atom", "sk-atom", "h1"), createSampleRecord("rec-atom-3", "s-atom", "sk-atom", "h1"));
 
             assertThrows(IllegalStateException.class, () -> failing.saveInteractions(batch));
-            assertTrue(failing.findByInvocationId("sk-atom").isEmpty(), "半批不得落盘——失败批次必须整批回滚");
+            assertTrue(failing.findByInvocationId("sk-atom").isEmpty(), "半批不得写入磁盘——失败批次必须整批回滚");
         } finally {
             failing.close();
         }
@@ -458,7 +458,7 @@ class SqliteStorageRepositoryTest {
 
     @Test
     void schemaVersionStamped() throws Exception {
-        // user_version 是跨连接可见的落盘语义：用独立连接读文件库验证，不借仓库内部连接
+        // user_version 是跨连接可见的写入磁盘语义：用独立连接读文件库验证，不借仓库内部连接
         Path db = Files.createTempFile("agentassert4j-version", ".db");
         SqliteStorageRepository fileRepo = new SqliteStorageRepository(db.toString());
         try {
@@ -677,8 +677,8 @@ class SqliteStorageRepositoryTest {
 
     @Test
     void storageFailure_throwsStorageException_neverSwallowed() throws Exception {
-        // 存储底层损坏（表被外力拆除，库锁死/磁盘满的同级故障形态）：读写必须
-        // 上抛 StorageException，不得伪装成成功或空结果
+        // 存储底层损坏（表被外部删除，库被锁/磁盘满的同级故障形态）：读写必须
+        // 上抛 StorageException，不得被误报为成功或空结果
         Path db = Files.createTempFile("agentassert4j-broken", ".db");
         SqliteStorageRepository brokenRepo = new SqliteStorageRepository(db.toString());
         Connection outsider = null;
@@ -839,7 +839,7 @@ class SqliteStorageRepositoryTest {
 
     @Test
     void fingerprintColumn_legacySingleShapeRow_failsLoudly() throws Exception {
-        // 形态集合语义之前的旧行（单对象 JSON）不兼容读取：就地响亮失败并指路，
+        // 形态集合语义之前的旧行（单对象 JSON）不兼容读取：就地显式失败并指路，
         // 不静默误读（预发布承接 = 删库重建）
         Path db = Files.createTempFile("agentassert4j-legacy", ".db");
         SqliteStorageRepository fileRepo = new SqliteStorageRepository(db.toString());
@@ -862,7 +862,7 @@ class SqliteStorageRepositoryTest {
         reopened.initialize();
         try {
             reopened.findInvocationByKey("invocation:legacy-flow:tmpl-1");
-            fail("legacy 单形态行必须响亮失败");
+            fail("legacy 单形态行必须显式失败");
         } catch (IllegalStateException expected) {
             assertTrue(expected.getMessage().contains("Legacy single-shape fingerprint payload"));
         } finally {
@@ -895,7 +895,7 @@ class SqliteStorageRepositoryTest {
         assertEquals(hostile.getInvocationKey(), events.get(0).getInvocationKey());
         assertEquals(hostile.getCodeRef(), events.get(0).getCodeRef());
         assertEquals(hostile.getNote(), events.get(0).getNote());
-        assertNotNull(events.get(0).getHappenedAt(), "happenedAt 由实现方盖章");
+        assertNotNull(events.get(0).getHappenedAt(), "happenedAt 由实现方写入审批记录");
         assertEquals(GovernanceVerb.COLLECT, events.get(1).getVerb());
         assertNull(events.get(1).getActor());
         assertTrue(events.get(0).getHappenedAt() <= events.get(1).getHappenedAt(), "时间升序");

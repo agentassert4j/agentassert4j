@@ -15,7 +15,7 @@ import java.io.PrintStream;
 import java.util.concurrent.Callable;
 
 /**
- * replay 命令 — 全项目变更检测与真实对齐判定：库是一切真源，提示词内容只从
+ * replay 命令 — 全项目变更检测与真实对齐判定：库是一切数据的唯一权威来源，提示词内容只从
  * 应用→录制→库流入引擎，命令行只负责缩域。bare 执行 = 身份检测 + 逐任务对齐 +
  * 漂移处置，零 LLM 调用零参数即完整默认能力。
  *

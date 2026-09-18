@@ -136,7 +136,7 @@ class ConfigLoaderTest {
         @Test
         @DisplayName("显式路径不可读 → 抛 IllegalStateException")
         void explicitPathUnreadable_failsFast() {
-            // 旧断言钉住「显式路径失败静默换源」行为——该行为会让用户以为配置已生效，
+            // 旧断言锁定「显式路径失败静默换源」行为——该行为会让用户以为配置已生效，
             // 随显式路径 fail-fast 契约改写为必须显式报错
             System.setProperty(ConfigLoader.CONFIG_PATH_PROPERTY, "/nonexistent/path.json");
             IllegalStateException ex = assertThrows(IllegalStateException.class, ConfigLoader::loadAgentAssert4jConfig);

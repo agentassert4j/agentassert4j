@@ -8,11 +8,11 @@ import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.LlmTimeoutException;
 
 /**
- * 协议路由客户端 — 重放面的单一 LlmClient 装配：每次调用按三级优先解析
+ * 协议路由客户端 — 重放链路的单一 LlmClient 装配：每次调用按三级优先解析
  * wire 方言并分派到对应方言客户端。
  *
  * <p>解析优先级：显式配置的 {@code llm.protocol}（跨协议重放是显式意图）&gt;
- * 请求携带的记录方言提示（LlmRequest.wireProtocol，重放装配侧塞入基线记录的
+ * 请求携带的记录方言提示（LlmRequest.wireProtocol，重放装配侧注入基线记录的
  * apiProtocol——同协议原样重放零配置）&gt; openai-chat 兜底。提示值不在封闭
  * 词表内（历史脏数据）时同样兜底，不抛错——重放不被单条脏记录中断。</p>
  *

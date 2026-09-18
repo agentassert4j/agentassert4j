@@ -62,7 +62,7 @@ public final class RecordingChatModel implements ChatModel {
     public ChatResponse call(Prompt prompt) {
         long start = System.currentTimeMillis();
         RecordingContext context = RecordingContext.currentOrNull();
-        // 梯 2 编排观察：换装观察回调（options 副本），内部回路的工具调用按序进缓冲
+        // 观察装饰：在 options 副本上替换为观察回调，内部回路的工具调用按序进缓冲
         ToolInvocationObserver observer = new ToolInvocationObserver();
         Prompt observed = observer.decorate(prompt);
         ChatResponse response = delegate.call(observed);

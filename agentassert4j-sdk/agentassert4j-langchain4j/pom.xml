@@ -27,7 +27,7 @@
             <artifactId>slf4j-api</artifactId>
         </dependency>
         <!-- LangChain4j 由接入方自带；本模块编译钉宣称支持的最老 GA（1.0.0），
-             适配层只触碰地板已存在的符号，高版本二进制兼容 -->
+             适配层只触碰最低支持版本已存在的符号，高版本二进制兼容 -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-core</artifactId>

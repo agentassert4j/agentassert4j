@@ -2,7 +2,7 @@ package io.github.agentassert4j.cli;
 
 /**
  * 机器失败包络（agentassert4j.error/1）的错误码封闭词表。
- * wireName 是冻结的 JSON 线上值；新增族 = 公开契约变更，须同步 spec 与 wire 测试钉。
+ * wireName 是冻结的 JSON 线上值；新增族 = 公开契约变更，须同步 spec 与 wire 断言测试。
  *
  * @author axy-yxa
  * @since 2026-09-08

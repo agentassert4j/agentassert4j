@@ -78,7 +78,7 @@ class InMemoryDependencyGraphTest {
 
     @Test
     void addEdge_duplicateNeverDowngrades() {
-        // 高置信边被后续低置信重复添加不得降级——合并方向钉死为「只升不降」
+        // 高置信边被后续低置信重复添加不得降级——合并方向锁定为「只升不降」
         InMemoryDependencyGraph g = new InMemoryDependencyGraph();
         g.addEdge("A", "B", Confidence.HIGH, "ORD-1", "rec-a", "rec-b");
         g.addEdge("A", "B", Confidence.LOW, null, null, null);

@@ -29,7 +29,7 @@ public final class FingerprintExtractor {
      *
      * <p>规则查找键是记录上的业务标签；未声明调用点（无标签）统一落到空键——
      * 调用方可用空键为未声明调用点统一注入断言。rules 传 null 时维度 3-4
-     * 保持空集口径（无规则声明即无该维断言）。</p>
+     * 保持空集规则（无规则声明即无该维断言）。</p>
      *
      * @param record       交互记录
      * @param rules        规则配置（null 时维度 3-4 为空集）

@@ -12,7 +12,7 @@ import java.util.concurrent.Callable;
 /**
  * record show 命令 — 按 recordId 回显一条交互的 raw wire 双列与关键元数据。
  *
- * <p>排障/取证面：报告与指纹只承载结构结论，正文原文只存在 raw 双列里。
+ * <p>排障/取证用途：报告与指纹只承载结构结论，正文原文只存在 raw 双列里。
  * wire 摄取的记录双列恒在；SDK 捕获的记录可能无 raw（ChatModel 层不含 wire），
  * 此时如实标注缺失。超长正文全量输出——本命令的职责就是给全文。</p>
  *

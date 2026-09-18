@@ -158,7 +158,7 @@ public class RegressionTestExecutor {
 
     /**
      * 重放请求的控制变量装配：历史轮注入（system 帧归模板域跳过）、采样温度/模型
-     * 与录制工具定义原样复用。单发重放与链式半重放共用本装配——两侧口径分叉
+     * 与录制工具定义原样复用。单发重放与链式半重放共用本装配——两侧规则分叉
      * 即构成假差异。
      */
     private void applyReplayControls(LlmRequest request, InteractionRecord baseline, TestExecutionConfig config) {
@@ -175,7 +175,7 @@ public class RegressionTestExecutor {
         if (baseline.getPreviousTurns() != null) {
             for (TurnContext turn : baseline.getPreviousTurns()) {
                 // system 帧不注入：系统提示属模板域由 systemPrompt 承载，
-                // 重复入列会产生第二条 system 消息（渲染侧已有同款跳过，此处补纵深）
+                // 重复入列会产生第二条 system 消息（渲染侧已有同款跳过，此处补一层防御）
                 if ("system".equalsIgnoreCase(turn.getRole())) {
                     continue;
                 }
@@ -256,7 +256,7 @@ public class RegressionTestExecutor {
         current.setReasoningTokens(response.getReasoningTokens());
         current.setLatencyMs(response.getLatencyMs());
 
-        // wire 方言血统随基线传递：本记录按基线方言的文法发射产生，重放路由
+        // wire wire 方言沿用基线：本记录按基线方言的文法发射产生，重放路由
         // （applyReplayControls 消费 apiProtocol）据此在同协议再重放时保持方言一致
         current.setApiProtocol(baseline.getApiProtocol());
 
@@ -289,7 +289,7 @@ public class RegressionTestExecutor {
 
 
     /**
-     * 链式半重放资格：基线带完整工具编排且每个调用都有录制结果（结果道具齐备）。
+     * 链式半重放资格：基线带完整工具编排且每个调用都有录制结果（结果数据齐备）。
      * 任一结果缺失（录制时工具执行失败等）则无法合成「当时输入」，退回单发重放。
      */
     static boolean isChainReplayable(InteractionRecord baseline) {
@@ -305,11 +305,11 @@ public class RegressionTestExecutor {
     }
 
     /**
-     * 链式半重放（编排观察记录的专用重放契约）：拿基线录制的旧结果当道具，
+     * 链式半重放（编排观察记录的专用重放契约）：用基线录制的旧结果作为每轮回放输入，
      * 逐轮重建「当时输入」逐轮比对模型决策。每轮把响应的 tool_calls 与基线编排的
      * 下一个片段逐项比对（工具名 + 参数解析后严格相等）；全部轮次匹配则末轮四维
-     * 比对收口；某轮分歧则精确到轮的定位后立即停止（分歧即停：旧结果配新决策是
-     * 虚构演进，链条停在真相失效处）。合成帧的 tool_call_id 用合成关联值，结果帧
+     * 比对收尾；某轮分歧则精确到轮的定位后立即停止（分歧即停：旧结果配新决策是
+     * 用旧事实推导新决策，链条停在事实失效处）。合成帧的 tool_call_id 用合成关联值，结果帧
      * 携带基线录制内容（内容无损）。分歧轮次不做候选落库——编排未走完，指纹不完整。
      */
     private RegressionTestResult executeChained(InteractionRecord baseline, String newSystemPrompt, String userInput, TestExecutionConfig config) {
@@ -341,7 +341,7 @@ public class RegressionTestExecutor {
                 }
             }
 
-            // 末轮收口：编排全部复现后模型给出最终答复——四维比对对象
+            // 末轮收尾：编排全部复现后模型给出最终答复——四维比对对象
             round++;
             response = chainChat(baseline, newSystemPrompt, null, synthesized, config);
             usage.accumulate(response);

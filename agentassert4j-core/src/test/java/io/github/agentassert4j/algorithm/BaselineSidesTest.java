@@ -15,7 +15,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 基线侧投影组件的单元测试 — 两个工厂方法的投影属性与输入违约响亮度。
+ * 基线侧投影组件的单元测试 — 两个工厂方法的投影属性与输入违约的显式失败行为。
  *
  * @author axy-yxa
  * @since 2026-09-14
@@ -99,13 +99,13 @@ class BaselineSidesTest {
         }
 
         @Test
-        @DisplayName("画像缺席或指纹为空 → 响亮失败（CI 守卫先于此入口，到达即数据违约）")
+        @DisplayName("画像缺席或指纹为空 → 显式失败（CI 守卫先于此入口，到达即数据违约）")
         void missingProfileOrFingerprint_throws() {
             InteractionRecord a = record("r-1", "invocation:order:hash-a", "order", "{\"result\":\"ok\"}");
             InvocationProfile empty = profile("invocation:order:hash-a", "v1");
 
-            assertThrows(IllegalStateException.class, () -> BaselineSides.fromProfiles(Arrays.asList(a), key -> null), "画像缺席必须响亮");
-            assertThrows(IllegalStateException.class, () -> BaselineSides.fromProfiles(Arrays.asList(a), key -> empty), "活跃指纹缺失必须响亮");
+            assertThrows(IllegalStateException.class, () -> BaselineSides.fromProfiles(Arrays.asList(a), key -> null), "画像缺席必须显式失败");
+            assertThrows(IllegalStateException.class, () -> BaselineSides.fromProfiles(Arrays.asList(a), key -> empty), "活跃指纹缺失必须显式失败");
         }
     }
 
@@ -114,7 +114,7 @@ class BaselineSidesTest {
     class FromPackSteps {
 
         @Test
-        @DisplayName("按完整键分组并从键回填声明标签（verify 路径的收编实现）")
+        @DisplayName("按完整键分组并从键回填声明标签（verify 路径的并入基线实现）")
         void groupsAndBackfillsLabel() {
             BaselineStep stepA = new BaselineStep();
             stepA.setInvocationKey("invocation:order:hash-a");

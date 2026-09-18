@@ -230,7 +230,7 @@ final class LangChain4jRecordMapper {
 
     /**
      * 工具结果文本提取。text() 在结果为多元素或非文本 contents 的新版本上会抛错
-     * （结果载荷从单一字符串演进为内容列表，编译地板上又看不见列表访问器）——
+     * （结果载荷从单一字符串演进为内容列表，编译最低支持版本上又看不见列表访问器）——
      * 抛错时反射读 contents() 逐元素取文本，反射不可得再退到 toString，
      * 保证该路径永不中断录制。
      */
@@ -300,7 +300,7 @@ final class LangChain4jRecordMapper {
 
     /**
      * 类型化工具参数 schema 转为 OpenAI function 形状的普通映射——wire 键词取
-     * {@link OpenAiWireUtil} 单源，未知 schema 类型退化为空对象不中断录制。
+     * {@link OpenAiWireUtil} 唯一定义处，未知 schema 类型退化为空对象不中断录制。
      * 深度封顶防御：schema 嵌套超限时截断并记 WARN（就近可见），录制路径绝不
      * 把深层递归的失败外溢到业务调用。
      */
@@ -376,7 +376,7 @@ final class LangChain4jRecordMapper {
     }
 
     private static void mapResponse(ChatResponse response, InteractionRecord record) {
-        // record_id 身份真源 = LLM 响应 id（与 MCP 摄取面同源，跨面去重依赖它）；
+        // record_id 身份的唯一权威来源 = LLM 响应 id（与 MCP 摄取侧同源，跨入口去重依赖它）；
         // 缺失（无 id 的 provider/mock/流式聚合）时留空，录制管道回退 UUID
         String responseId = response.id();
         if (responseId != null && !responseId.trim().isEmpty()) {

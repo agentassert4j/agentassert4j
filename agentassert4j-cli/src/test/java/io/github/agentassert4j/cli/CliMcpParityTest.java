@@ -20,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * CLI↔MCP 面一致性契约测试 — MCP 工具面是 CLI 命令面的完整封装，这层封装
- * 关系以每个 McpTool 显式声明的 cliCommands 为真源。本测试双向钉死：
- * ①每个可执行 CLI 命令都被某个工具声明（漏声明 = MCP 面缺能力，当场红）；
+ * 关系以每个 McpTool 显式声明的 cliCommands 为唯一权威来源。本测试双向锁定：
+ * ①每个可执行 CLI 命令都被某个工具声明（漏声明 = MCP 面缺能力，当场失败）；
  * ②每条声明都指向真实的 picocli 命令路径（防声明拼错）；
  * ③被声明命令的 CLI 参数被对应工具的入参覆盖（豁免显式登记）。
  *

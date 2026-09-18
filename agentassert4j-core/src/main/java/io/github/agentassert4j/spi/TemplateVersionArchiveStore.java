@@ -17,7 +17,7 @@ import java.util.List;
 public interface TemplateVersionArchiveStore {
 
     /**
-     * 写入归档行。archivedAt 由实现方在写入时刻盖章。
+     * 写入归档行。archivedAt 由实现方在写入时刻写入审批记录。
      */
     void archiveTemplateVersion(ArchivedTemplateVersion archived);
 

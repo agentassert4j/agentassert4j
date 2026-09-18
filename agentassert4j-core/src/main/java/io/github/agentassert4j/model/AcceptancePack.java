@@ -49,7 +49,7 @@ public class AcceptancePack {
     }
 
     /**
-     * 包元信息 — 导出环境与判定口径的版本守卫依据
+     * 包元信息 — 导出环境与判定规则的版本守卫依据
      */
     public static class PackMeta {
 
@@ -135,7 +135,7 @@ public class AcceptancePack {
         private boolean declared;
         private long baselineTime;
         /**
-         * 出厂偏离检测计数：组末行为与批准真相不一致（在途候选、或链末提取指纹 ≠
+         * 出厂偏离检测计数：组末行为与已批准事实不一致（在途候选、或链末提取指纹 ≠
          * 画像活跃指纹）的步骤数。承诺（画像指纹）仍良定义故任务照常入包，交付方
          * 应先裁决再导出；恒序列化（0 也写），旧包缺字段读取侧缺省 0
          */

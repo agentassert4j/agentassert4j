@@ -5,11 +5,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * OpenAI chat wire 词形单源 — 记录列（samplingParams / toolsDefinition）与重放请求
+ * OpenAI chat wire 词表的唯一定义处 — 记录列（samplingParams / toolsDefinition）与重放请求
  * 共用的形状约定在此一处定义。
  *
  * <p>各框架适配 mapper 把框架侧参数与工具定义映射为该形状落库；键名与信封结构
- * 是跨面等价的冻结契约（与三协议摄取、重放发射侧同形），新增适配线只消费本类，
+ * 是跨实现等价的冻结契约（与三协议摄取、重放发射侧同形），新增适配线只消费本类，
  * 不再各自手写键名字面量。JSON-Schema 键词供「类型化 schema 树 → 形状映射」的
  * 转换器（LangChain4j 一类）共用。</p>
  *

@@ -18,7 +18,7 @@ import java.util.logging.Logger;
  * 显式装配，无运行时插件发现。</p>
  *
  * <p>错误契约：SQL 失败一律抛 {@link StorageException}，绝不静默吞掉——
- * 吞掉会把磁盘满/库锁死伪装成"成功"或"无数据"。录制管道在上层捕获并计入失败计数。</p>
+ * 吞掉会让磁盘满/库被锁被误报为"成功"或"无数据"。录制管道在上层捕获并计入失败计数。</p>
  *
  * @author axy-yxa
  * @since 2026-08-26
@@ -208,7 +208,7 @@ public class SqliteStorageRepository implements StorageRepository {
             throw e;
         } catch (RuntimeException e) {
             // 运行时异常同样必须先显式回滚：finally 恢复 autoCommit 在 sqlite-jdbc
-            // 下对未决事务是隐式提交，不回滚就会把半批数据落盘、破坏整批原子性
+            // 下对未决事务是隐式提交，不回滚就会把半批数据写入磁盘、破坏整批原子性
             rollbackQuietly();
             throw e;
         } finally {
@@ -323,7 +323,7 @@ public class SqliteStorageRepository implements StorageRepository {
     /**
      * 模板原文落库（随交互记录写入同源触发）：INSERT OR IGNORE 同 hash 首写为准——
      * 模板文本由内容哈希定键，覆盖写只会带来逐批写放大与 created_at 漂移；交互主
-     * 数据的落库不受影响。写入面不对 SPI 暴露（同包测试直测）。
+     * 数据的落库不受影响。写入入口不对 SPI 暴露（同包测试直测）。
      */
     synchronized void saveTemplateText(String hash, String templateText) {
         String sql = "INSERT OR IGNORE INTO prompt_texts (prompt_hash, prompt_text, created_at) VALUES (?,?,?)";
@@ -408,7 +408,7 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     /**
-     * 治理事件追加：happened_at 由本实现写入时刻盖章（调用方不携带时钟）；
+     * 治理事件追加：happened_at 由本实现写入时刻写入审批记录（调用方不携带时钟）；
      * 自增主键即写入序，同刻事件的读取序由 rowid 决胜。
      */
     @Override

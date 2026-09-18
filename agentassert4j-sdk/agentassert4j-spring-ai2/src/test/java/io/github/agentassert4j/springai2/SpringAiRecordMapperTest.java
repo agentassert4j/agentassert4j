@@ -272,7 +272,7 @@ class SpringAiRecordMapperTest {
     class ResponseMapping {
 
         @Test
-        @DisplayName("响应 id 成为 record_id 身份真源（与 MCP 摄取面同源）；缺失留空回退录制管道")
+        @DisplayName("响应 id 成为 record_id 身份的唯一权威来源（与 MCP 摄取侧同源）；缺失留空回退录制管道")
         void responseIdBecomesRecordId() {
             ChatResponse withId = new ChatResponse(List.of(new Generation(new AssistantMessage("ok"))),
                     ChatResponseMetadata.builder().id("chatcmpl-pin-1").build());

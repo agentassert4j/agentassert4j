@@ -15,7 +15,7 @@ import java.util.Collections;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * DriftDetector 单元测试 — 漂移检测的对照关系、凭据口径与退化行为。
+ * DriftDetector 单元测试 — 漂移检测的对照关系、凭据规则与退化行为。
  *
  * @author axy-yxa
  * @since 2026-09-03

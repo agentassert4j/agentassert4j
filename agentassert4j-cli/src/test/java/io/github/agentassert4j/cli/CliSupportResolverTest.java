@@ -146,7 +146,7 @@ class CliSupportResolverTest {
     }
 
     @Test
-    @DisplayName("阶梯等价钉：同输入两族解析出同一键集合（多键策略是唯一差异）")
+    @DisplayName("阶梯等价断言：同输入两族解析出同一键集合（多键策略是唯一差异）")
     void ladder_singularPlural_sameKeySet() {
         saveRecord("r1", "queryOrder", "hash-a");
         saveRecord("r2", "hexCase", "abcdef12");
@@ -163,7 +163,7 @@ class CliSupportResolverTest {
     }
 
     @Test
-    @DisplayName("阶梯键空间钉：未建档已录键可解析（显示短形/唯一前缀/目标族）")
+    @DisplayName("阶梯键空间断言：未建档已录键可解析（显示短形/唯一前缀/目标族）")
     void ladder_resolvesUnestablishedRecordedKeys() {
         saveRecord("r1", "queryOrder", "abcdef1234567890");
         // 不 establishAll——键已录而无画像
@@ -261,7 +261,7 @@ class CliSupportResolverTest {
     }
 
     @Test
-    @DisplayName("选例过滤器：显示短形未命中 → E-NO-DATA 响亮报错（静默裸返回已消灭）")
+    @DisplayName("选例过滤器：显示短形未命中 → E-NO-DATA 明确报错（静默裸返回已消灭）")
     void businessFilter_displayFormMiss_loudZeroHit() {
         saveRecord("r1", "queryOrder", "abcdef1234567890");
 

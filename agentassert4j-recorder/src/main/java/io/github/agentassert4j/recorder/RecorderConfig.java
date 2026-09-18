@@ -47,7 +47,7 @@ public final class RecorderConfig {
      */
     private final boolean sanitizeModelResponse;
     /**
-     * 采集门开关：true（默认）时全量录制——任务链的完整性优先于流量卫生，
+     * 采集门开关：true（默认）时全量录制——任务链的完整性优先于流量成本，
      * 链条终点（最终回答组装）往往正是纯文本调用；false 时未声明且无可见
      * 工具调用的纯对话被过滤（超大流量场景的量级卫生选项），过滤量独立
      * 计数并告警。声明了 invocationId/templateId 或带可见 toolCalls 的调用不受
@@ -57,7 +57,7 @@ public final class RecorderConfig {
     /**
      * 录制总开关：false 时录制器不启动管道、不消费任何记录——生产打包形态
      * 的门（发布后的正常运行不录制，需要取证时临时打开）。默认 true。
-     * Spring starter 另有同键条件装配（agentassert4j.enabled），两层防线语义一致
+     * Spring starter 另有同键条件装配（agentassert4j.enabled），两层防护语义一致
      */
     private final boolean enabled;
     /**

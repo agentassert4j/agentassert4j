@@ -23,7 +23,7 @@ import java.util.Set;
  * <p>LangChain4j 主流模型类把阻塞与流式拆成两个独立类（如 OpenAiStreamingChatModel
  * 只实现 StreamingChatModel），此类承接这类 Bean；同时实现两个接口的混合模型由
  * {@link RecordingChatModel} 一次收全（其流式入口在 delegate 实现流式接口时照常
- * 录制）。拦截点与防双触发策略同 RecordingChatModel：钉在 doChat 单点、doChat 内
+ * 录制）。拦截点与防双触发策略同 RecordingChatModel：固定在 doChat 单点、doChat 内
  * 委托 delegate.chat、listeners() 返回空清单。</p>
  *
  * <p>录制失败只记 WARN 不抛出——框架任何故障不影响业务调用。</p>
@@ -73,7 +73,7 @@ public final class RecordingStreamingChatModel implements StreamingChatModel {
 
     @Override
     public List<ChatModelListener> listeners() {
-        // 空清单是双触发防线：录制委托走 delegate.chat，内模型模板触发其自带
+        // 空清单是双触发防护：录制委托走 delegate.chat，内模型模板触发其自带
         // 监听器恰一次；此处若透传，装饰层模板会再触发一遍
         return Collections.emptyList();
     }

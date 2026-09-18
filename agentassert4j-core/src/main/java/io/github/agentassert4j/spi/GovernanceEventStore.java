@@ -7,7 +7,7 @@ import java.util.List;
 /**
  * 治理事件域接口 — 治理动作时间线的写入与全量读取（audit 的单一数据源）。
  *
- * <p>事件是只追加真源：无状态痕迹的动作（reject/rollback）只能经本接口发生时落账，
+ * <p>事件记录只追加，是治理动作的唯一权威记录：无状态痕迹的动作（reject/rollback）只能经本接口发生时写入，
  * 不存在从画像/归档行派生重建的路径。</p>
  *
  * @author axy-yxa
@@ -16,7 +16,7 @@ import java.util.List;
 public interface GovernanceEventStore {
 
     /**
-     * 追加一条治理事件；happenedAt 由实现方在写入时刻盖章（调用方不携带时钟）。
+     * 追加一条治理事件；happenedAt 由实现方在写入时刻写入审批记录（调用方不携带时钟）。
      */
     void appendGovernanceEvent(GovernanceEvent event);
 

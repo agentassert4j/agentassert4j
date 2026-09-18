@@ -121,7 +121,7 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 | `agentassert4j.recorder.sanitize-user-input` | `false` | 脱敏 userInput（影响回归重放，默认关） |
 | `agentassert4j.recorder.sanitize-model-response` | `false` | 脱敏 modelResponse |
 | `agentassert4j.recorder.record-undeclared-chat` | `true` | `false` 时未声明且无可见工具调用的纯对话被过滤（量级卫生选项） |
-| `agentassert4j.recorder.enabled` | `true` | 录制器开关：`false` 时管道不启动（自动装配仍在，与总开关构成两层防线） |
+| `agentassert4j.recorder.enabled` | `true` | 录制器开关：`false` 时管道不启动（自动装配仍在，与总开关构成两层防护） |
 
 非 Boot 应用（原生 Java / 非 Boot Spring）：程序化装配 `RecorderConfig.builder()`——
 旋钮与上表一一对应；Spring Java Config 姿势：`@Bean` 方法内经 builder 映射宿主自己的
@@ -194,7 +194,7 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
   exit 2）——这是设计行为不是故障：库里有任何未建档键，门禁就不出结论；②各宿主**判自己的域**——
   check/diff 带 `--task`/`--invocation` 缩域、establish 自己的键，别替别人裁决（跨宿主的在途候选
   对全库可见，属共享治理面）；③想跑全库门禁，前提是库里每个键都有人 establish 过（含等待显式
-  建档的裂键——`baseline --invocation <key>` 逐个收编）。框架不引入「键归属」概念，共享库的
+  建档的裂键——`baseline --invocation <key>` 逐个并入基线）。框架不引入「键归属」概念，共享库的
   治理纪律靠这三条约定承载。
 - **库体检**：`doctor` 命令一次性输出身份/覆盖/规则三段确定性事实（骨架族形态、多步零标签链、
   未声明任务的重复请求文本任务族、未建档调用点、template_hash 缺失、规则期望错位）——零声明接入
@@ -207,13 +207,13 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 流水线里的一段式姿势（前置：应用带 recorder 跑一遍冒烟/e2e——新模板真实运行、归档入库）：
 
 ```bash
-# 全项目门禁：--ci 拒绝为无基线调用点自动建档（防无人审的绿灯），漂移身份不收编
+# 全项目门禁：--ci 拒绝为无基线调用点自动建档（防无人审的绿灯），漂移身份不并入
 agentassert4j replay --ci --json
 ```
 
 - **零写死、零 API Key**：bare 缺省即全项目变更检测与逐任务对齐，判定零 LLM 调用；
   `--re-drive` 受控复核属人工动作，不进流水线缺省。
-- **退出码分流**：`0` 绿灯放行（`--ci` 下漂移未收编仍出 0，附「Identity not collected」警告——收敛动作
+- **退出码分流**：`0` 绿灯放行（`--ci` 下漂移未并入仍出 0，附「Identity not collected」警告——收敛动作
   留给人侧 replay 或 accept）；`1` 存在行为差异或证据缺口（对齐 CHANGED/缺步骤/新增步骤/
   任务规则违规/漂移挂起）——人裁决 accept/reject；`2` 用法或基础设施故障（含 `--ci` 无基线
   拒绝、判定语义不符、重驱预算耗尽/全败）——修环境，不算回归。
@@ -261,22 +261,22 @@ CLI 分析侧不受影响，仍可对既有库做巡检/验收。
 角色：开发侧（出证据）与验收侧（客户环境，模型/部署可不同）。验收侧 CLI 建议用 standalone jar
 随交付物料携带（见 §1.1），只要求 JRE 8+。
 
-<img src="assets/acceptance-flow.zh.png" alt="交付验收流程：开发侧导出 → SHA-256 对账 → 验收侧真实执行 → verify 报告" width="760"/>
+<img src="assets/acceptance-flow.zh.png" alt="交付验收流程：开发侧导出 → SHA-256 核对 → 验收侧真实执行 → verify 报告" width="760"/>
 
 **开发侧：**
 
 1. 确认基线干净：`agentassert4j status`——全部调用点 BASELINE、无未裁决候选（候选先 accept/reject 清场）；
-2. 导出：`agentassert4j baseline export --out acceptance-pack.json --ref <git提交号>` → 记录打印的 **SHA-256** 与任务链/步骤数；`--ref` 是申报制代码锚（不校验），验收方凭它对账"这份行为承诺来自哪个交付版本"；
+2. 导出：`agentassert4j baseline export --out acceptance-pack.json --ref <git提交号>` → 记录打印的 **SHA-256** 与任务链/步骤数；`--ref` 是申报制代码锚（不校验），验收方凭它核对"这份行为承诺来自哪个交付版本"；
    被排除的链在输出与 `--json` 报告的 `excluded` 数组中列出并给出原因（存在未建档步骤 / 基线违反自身
    声明规则）——排除属导出守卫，先把该链的基线建干净或修正规则声明再重导；
 
-<img src="assets/cli-export.png" alt="baseline export：验收包落盘，附 SHA-256 与任务链/步骤数" width="880"/>
+<img src="assets/cli-export.png" alt="baseline export：验收包写入磁盘，附 SHA-256 与任务链/步骤数" width="880"/>
 
 3. 导出时若存在**链末形态未裁决或在途候选**，导出警告并把 `unadjudicatedSteps` 计数写进报告
    （在途候选按调用点**全域**计数——裁决会改变整个集合，该调用点的全部步骤一起等）；包照常写出，
    先 accept/reject 再重导才是干净包；
 4. 每次导出=一个文件+一个 SHA-256（标识**该文件字节**，Maven 发布物模型）；重新导出产生新摘要，
-   对账认「那个文件」不认「最新导出」；
+   核对认「那个文件」不认「最新导出」；
 5. 需要附样本供人读时加 `--include-samples`（样本强制 MASK 脱敏，判定不消费）；
 4. 敏感任务：确认录制时已用 `withMetadata("taskKey", <场景id>)` 声明任务键——**任务键=请求原文**会随包出境。
 
@@ -301,7 +301,7 @@ requiredSteps/order/counts 的包，编排纪律同样参与判定——跨模�
    - 范围外链（本地多出的任务）= 只列出，不判定。
 4. `verify` 全程只读（不落库、不改本地基线），可反复执行；markdown 报告即交付证据，归档时附包文件的 SHA-256。
 
-<img src="assets/cli-verify.png" alt="verify 汇总：逐任务判定行 + 跨模型标注 + SHA-256 对账，markdown 报告落盘" width="880"/>
+<img src="assets/cli-verify.png" alt="verify 汇总：逐任务判定行 + 跨模型标注 + SHA-256 核对，markdown 报告写入磁盘" width="880"/>
 
 **退出码**：`0` 全部结构一致 ｜ `1` 存在结构偏差（含缺步骤/新增步骤）｜ `2` 版本守卫拒绝/覆盖缺口/用法错误。
 
@@ -318,7 +318,7 @@ agentassert4j audit              # 人类清单：[动词] 键 版本 + 主体/�
 agentassert4j audit --json       # agentassert4j.audit/1 机器报告（writes 数组）
 ```
 
-<img src="assets/cli-audit.png" alt="audit：治理事件全量时间线——establish/collect/accept/rollback 逐笔可对账，主体与代码锚在列（演示库真实输出）" width="560"/>
+<img src="assets/cli-audit.png" alt="audit：治理事件全量时间线——establish/collect/accept/rollback 逐笔可核对，主体与代码锚在列（演示库真实输出）" width="560"/>
 
 reject 与 rollback 不在画像上留状态痕迹，事件时间线是其唯一审计载体；MCP 工具清单的
 description 声明各变异动词的使用要求（如 accept 应在人类指示后调用），授权确认由
@@ -329,7 +329,7 @@ harness 权限系统执行。`--ref` 与 approver 是申报制自由串、不做
 ## 6.2 MCP 接入（AI 自主验证回路）
 
 standalone jar 本身就是 MCP server（stdio）：把行为回归能力交给 code agent / harness
-自主调用。工具面 = CLI 动词薄壳（check/diff/report/verify/doctor/graph + establish/
+自主调用。工具面 = CLI 动词的转发封装（check/diff/report/verify/doctor/graph + establish/
 accept/reject + re-drive + export）+ record 摄取（非 Java 栈上报交互的入场券）。
 其中 `graph` 回答值流问题（这个值最初从哪来、谁喂谁）：怀疑编排形状或值来源时先
 `graph` 再 `check`——只读勘察、不进判定，HIGH 边自带命中值与源/目标记录对，人读
@@ -382,7 +382,7 @@ structuredContent（`{"reports":[...]}`；失败态为 agentassert4j.error/1 包
 |------|------|
 | 落库数与业务调用量对不上 | 读应用日志计数账本：dropped（缓冲满，调大 batch/flush 或接受丢弃）、failed（批量写失败看 ERROR）、filtered（采集门，策略性） |
 | status 看不到画像 | 建档守卫剔除了解析失败的记录——看命令告警行；`baseline` 幂等可重跑 |
-| status 报「Unestablished invocations」 | 已录制但无基线画像的键（提示词新版本或零声明调用点）——重跑 `baseline` 收编（幂等），或确认属待废弃版本 |
+| status 报「Unestablished invocations」 | 已录制但无基线画像的键（提示词新版本或零声明调用点）——重跑 `baseline` 并入基线（幂等），或确认属待废弃版本 |
 | CLI 报「库版本高于支持值」 | 库由更新版本的框架创建——升级 CLI，或（预发布阶段）删库重建 |
 
 **7.2 判定面**
@@ -423,11 +423,11 @@ structuredContent（`{"reports":[...]}`；失败态为 agentassert4j.error/1 包
 | `baseline --force` 重建范围比预期大 | `--invocation` 的键前缀会先换算成业务标签，该标签下的**全部模板桶**一起重建（标签=业务身份，输出会透明列出）——只想重建单个模板桶时用完整 invocationKey 作目标 |
 | 报告出现「cross-version pair」 | 同一声明调用点两侧提示词版本不同——判定照常但含混杂变量；受控复核用 `replay --re-drive`（先 `--dry-run` 看报价）逐点以最新归档模板重放 |
 | 重驱报告「archived template text missing」 | 该漂移点在 `prompt_texts` 无全文可取（旧版录制或捕获侧漏设）——重新录制即可（管道现自动派生投影并归档） |
-| 首次 bare replay 报出大量漂移 | 建档种子取桶内最新记录——混合模板历史的旧库首跑会对「画像身份落后于最新」的调用点各报一次，对齐 PASS 后逐点自动收编；属一次性收敛而非批量回归 |
+| 首次 bare replay 报出大量漂移 | 建档种子取桶内最新记录——混合模板历史的旧库首跑会对「画像身份落后于最新」的调用点各报一次，对齐 PASS 后逐点自动并入基线；属一次性收敛而非批量回归 |
 | 某任务每次 bare replay 都 exit 1（差异固定） | 库里有被 reject 的变异/测试工件链（只追加事实，对齐层如实陈述）——该任务再真实执行两轮即自然痊愈（最新 vs 次新回到干净对）；CI 不受影响（流水线库是新鲜录制） |
 | agent loop 里同一调用点每条链执行次数不同（规划器跑 1~3 次之类） | 这是 loop 主形态的正常现象，不是回归：判定只读每个调用点的**链末执行**；裸重放里次数差异进 `surplusCount` 注记、**不判差异不翻红**；确实要约束次数就声明任务纪律（`rules.tasks` 的 `requiredSteps` + `steps` min/max 范围），声明制、按任务生效 |
 | loop 链中段的草稿/中间形态要不要管 | 不挡门：链末判定路径以 `earlierRecords`/`unapprovedEarlier` 注记披露（ci-align 报告逐步骤携带）；草稿的形态只有被 `accept` 入集才参与判定——迭代节奏就是「多轮试错，收敛了再入集」 |
-| 标签裂键收编后任务仍 CHANGED | 收编只前移身份；对齐判定看的是最新两条**真实链**的现场重提比对，不消费任何治理档案——两条链结构本就不一致（模型非确定性或中间变异残留）就会持续 CHANGED。变绿路径只有一条：在当前模板下再真实执行，让最新两链结构一致（确定性输出即 PASS）后重放；`baseline --force`/`accept` 改的是画像基线与漂移身份，不改变链对链判定 |
+| 标签裂键并入后任务仍 CHANGED | 并入只前移身份；对齐判定看的是最新两条**真实链**的现场重提比对，不消费任何治理档案——两条链结构本就不一致（模型非确定性或中间变异残留）就会持续 CHANGED。变绿路径只有一条：在当前模板下再真实执行，让最新两链结构一致（确定性输出即 PASS）后重放；`baseline --force`/`accept` 改的是画像基线与漂移身份，不改变链对链判定 |
 
 ## 8. 最小录制契约
 

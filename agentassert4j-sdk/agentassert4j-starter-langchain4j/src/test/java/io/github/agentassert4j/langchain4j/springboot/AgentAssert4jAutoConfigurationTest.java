@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * LangChain4j 线自动装配契约测试：双类型包装、退出、复用用户 Bean、
- * 真管道落库、天花板版本的富回调转发与两框架共存。
+ * 真管道落库、最高验证版本的富回调转发与两框架共存。
  *
  * @author axy-yxa
  * @since 2026-09-18
@@ -53,7 +53,7 @@ class AgentAssert4jAutoConfigurationTest {
     private final ApplicationContextRunner runner = new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(AgentAssert4jAutoConfiguration.class));
 
     /**
-     * 阻塞面桩：经模板方法进入 doChat，返回带 id/用量/结束原因的固定响应。
+     * 阻塞接口桩：经模板方法进入 doChat，返回带 id/用量/结束原因的固定响应。
      */
     static class Lc4jStubChatModel implements ChatModel {
 
@@ -265,7 +265,7 @@ class AgentAssert4jAutoConfigurationTest {
     }
 
     /**
-     * 富回调桩：流式入口触发一个非核心回调（编译期仅天花板可见的形状）。
+     * 富回调桩：流式入口触发一个非核心回调（编译期仅最高验证版本可见的形状）。
      */
     static class RichCallbackStub extends Lc4jStubChatModel implements StreamingChatModel {
 

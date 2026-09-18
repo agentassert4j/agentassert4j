@@ -3,8 +3,8 @@ package io.github.agentassert4j.model;
 /**
  * LLM wire 协议方言的封闭词表 — 单一值集同时约束配置键 llm.protocol、
  * record 摄取工具的 protocol 参数与交互记录的 apiProtocol 落库值，
- * 四处同形杜绝双真源。wireName 是冻结的线上值；新增协议 = 公开契约变更，
- * 须同步 spec 与测试钉。
+ * 四处同形杜绝两处独立定义。wireName 是冻结的线上值；新增协议 = 公开契约变更，
+ * 须同步 spec 与断言测试。
  *
  * @author axy-yxa
  * @since 2026-09-09
@@ -13,7 +13,7 @@ public enum LlmWireProtocol {
 
     /**
      * OpenAI Chat Completions 兼容方言（含 DeepSeek/Qwen/vLLM 等 OpenAI 兼容端点）。
-     * 内部范式记录与请求的 wire 表示恒为该形——其余协议只在客户端边界与摄取边界转换。
+     * 内部规范形记录与请求的 wire 表示恒为该形——其余协议只在客户端边界与摄取边界转换。
      */
     OPENAI_CHAT("openai-chat"),
 
@@ -24,7 +24,7 @@ public enum LlmWireProtocol {
 
     /**
      * OpenAI Responses 方言。有状态成员（previous_response_id/store）不属于本框架
-     * 的支持面——重放是无状态全量输入。
+     * 的适用范围——重放是无状态全量输入。
      */
     OPENAI_RESPONSES("openai-responses");
 
@@ -43,7 +43,7 @@ public enum LlmWireProtocol {
 
     /**
      * 线上值解析；null/未知值返回 null，由调用方决定错误文案与处置——
-     * 配置面（客户端构造）与摄取面（工具参数校验）的报错语境不同。
+     * 客户端构造与摄取参数校验的报错语境不同。
      */
     public static LlmWireProtocol fromWireName(String value) {
         if (value == null) {

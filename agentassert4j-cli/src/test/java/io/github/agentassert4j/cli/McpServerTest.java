@@ -131,7 +131,7 @@ class McpServerTest {
             String instructions = String.valueOf(result.get("instructions"));
             assertTrue(instructions.contains("latest chain"), "判定基准句必须在场: " + instructions);
             assertTrue(instructions.contains("(establish, accept, reject, rollback)"), "治理动词枚举必须含 rollback（四动词均必填 approver）: " + instructions);
-            assertTrue(instructions.contains("approved shape set"), "基线口径=认可形态集合（陈旧进程诊断标志）: " + instructions);
+            assertTrue(instructions.contains("approved shape set"), "基线规则=认可形态集合（陈旧进程诊断标志）: " + instructions);
         }
 
         @Test
@@ -286,7 +286,7 @@ class McpServerTest {
         }
 
         @Test
-        @DisplayName("变异动词 description 声明治理写；establish/accept 另声明 agent 身份申报")
+        @DisplayName("变更动词 description 声明治理写；establish/accept 另声明 agent 身份申报")
         void mutationTools_declareGovernanceWrite() {
             for (McpTool tool : McpTools.tools(dbPath)) {
                 boolean mutation = tool.name.equals("establish") || tool.name.equals("accept") || tool.name.equals("reject");
@@ -300,13 +300,13 @@ class McpServerTest {
         }
 
         @Test
-        @DisplayName("graph 工具 description 携带值溯源与证据口径（全对触达、HIGH 带值与记录对、LOW 相邻提示）")
+        @DisplayName("graph 工具 description 携带值溯源与证据规则（全对触达、HIGH 带值与记录对、LOW 相邻提示）")
         void graphDescription_declaresProvenanceAndEvidence() {
             for (McpTool tool : McpTools.tools(dbPath)) {
                 if (!tool.name.equals("graph")) {
                     continue;
                 }
-                assertTrue(tool.description.contains("value-flow provenance"), "值溯源口径必须在场: " + tool.description);
+                assertTrue(tool.description.contains("value-flow provenance"), "值溯源规则必须在场: " + tool.description);
                 assertTrue(tool.description.contains("traces back to an earlier response"), "全对触达语义必须在场: " + tool.description);
                 assertTrue(tool.description.contains("matched value and record pair"), "HIGH 边证据声明必须在场: " + tool.description);
                 assertTrue(tool.description.contains("adjacent vocabulary hints"), "LOW 边相邻提示声明必须在场: " + tool.description);

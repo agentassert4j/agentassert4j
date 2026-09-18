@@ -4,7 +4,7 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
 /**
- * AgentAssert4j 命令行入口 — 库是一切真源：提示词内容只从应用→录制→库流入引擎，
+ * AgentAssert4j 命令行入口 — 库是一切数据的唯一权威来源：提示词内容只从应用→录制→库流入引擎，
  * bare 命令即全项目完整默认能力，参数只做缩域或开关。
  *
  * <p>典型流程：</p>

@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * InvocationResolver 的单元测试 — invocationKey 派生规则即身份契约，
- * 黄金键测试钉住字面键值：键值一经发布不可变，变更即身份纪元事件
+ * 黄金键测试锁定字面键值：键值一经发布不可变，变更即身份纪元事件
  * （历史基线全部失配），必须走显式设计。
  *
  * @author axy-yxa
@@ -143,7 +143,7 @@ class InvocationResolverTest {
 
         @Test
         void skeletonText_beatsProjection_singleSource() {
-            // 文本与投影并存时文本现算优先——真源唯一，即使投影被错误手工设置
+            // 文本与投影并存时文本现算优先——唯一权威来源唯一，即使投影被错误手工设置
             InteractionRecord r = record(null, null, false);
             r.setTemplateSkeleton(SKELETON);
             r.setSkeletonHash("stale-projection-hash");

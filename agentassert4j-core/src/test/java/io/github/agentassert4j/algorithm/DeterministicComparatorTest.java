@@ -123,7 +123,7 @@ class DeterministicComparatorTest {
     @Test
     void changedVerdict_addedFieldsOnly() {
         // 二值语义：字段集相等才算无差异——新增字段也是输出结构维的可行动差异
-        // （旧三态下新增字段不影响 verdict 的口径随权重退役一并废除）
+        // （旧三态下新增字段不影响 verdict 的规则随权重退役一并废除）
         DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", Collections.singleton("field1"), Collections.singletonMap("field1", "String"), 0, null, null, false);
         // current 多了 field2
         DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "application/json", new HashSet<>(Arrays.asList("field1", "field2")), stringMap("field1", "String", "field2", "String"), 0, null, null, false);
@@ -135,7 +135,7 @@ class DeterministicComparatorTest {
         assertEquals(Verdict.CHANGED, r.getVerdict());
         assertTrue(r.getAddedFields().contains("field2"));
         assertTrue(r.getRemovedFields().isEmpty());
-        // 展示分与判定同口径：纯新增字段也须扣结构分（新增与删除同罚），不再出现满分 CHANGED
+        // 展示分与判定同规则：纯新增字段也须扣结构分（新增与删除同罚），不再出现满分 CHANGED
         assertTrue(r.getScore() < 1.0, "score=" + r.getScore());
     }
 
@@ -407,7 +407,7 @@ class DeterministicComparatorTest {
 
     @Test
     void verdictEnum_isBinary() {
-        // 判定枚举的面契约：只有 PASS/CHANGED 两值——
+        // 判定枚举的契约：只有 PASS/CHANGED 两值——
         // 三态消亡后任何「中间严重度」的回归都应被视为语义回退
         assertEquals(2, Verdict.values().length);
         assertNotNull(Verdict.valueOf("PASS"));
@@ -429,7 +429,7 @@ class DeterministicComparatorTest {
 
         ComparisonResult r = cmp.compare(baseline, current, "output");
 
-        assertEquals(Verdict.PASS, r.getVerdict(), "ignorableFields 归一化覆盖一切字段（含 error 类叶子名），这是用户显式声明的口径");
+        assertEquals(Verdict.PASS, r.getVerdict(), "ignorableFields 归一化覆盖一切字段（含 error 类叶子名），这是用户显式声明的规则");
     }
 
     @Test

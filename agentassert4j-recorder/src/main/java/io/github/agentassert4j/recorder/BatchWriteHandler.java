@@ -57,7 +57,7 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
 
     /**
      * 计数器由录制器持有注入：stop→restart 会创建新 handler，实例级计数
-     * 会让聚合口径（recorded = written + dropped + failed）在第二生命周期破裂。
+     * 会让聚合规则（recorded = written + dropped + failed）在第二生命周期破裂。
      */
     public BatchWriteHandler(InteractionWriteStore repository, RecorderConfig config, AtomicLong writtenCount, AtomicLong failedCount, AtomicLong droppedCount) {
         this.writtenCount = writtenCount;
@@ -171,7 +171,7 @@ public class BatchWriteHandler implements EventHandler<InteractionEvent> {
      * 由存储层空串兜底承接。
      * 两个哈希都是文本的派生投影（全模板哈希=sha256(templateText)，骨架哈希=sha256(templateSkeleton)），
      * 落库记录重算键与模板全文归档都以此为凭据，同样只在缺失时回填——捕获侧显式设置的优先。
-     * 单条补全失败不拦截落库——原始交互数据是真源，派生字段缺失可事后重建。
+     * 单条补全失败不拦截落库——原始交互数据是唯一权威来源，派生字段缺失可事后重建。
      */
     private void enrich(List<InteractionRecord> records) {
         for (InteractionRecord record : records) {

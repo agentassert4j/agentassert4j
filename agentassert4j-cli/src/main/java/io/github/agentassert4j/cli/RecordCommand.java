@@ -3,7 +3,7 @@ package io.github.agentassert4j.cli;
 import picocli.CommandLine.Command;
 
 /**
- * record 命令 — 已录制交互的排障/取证查看面（读取 raw wire 双列）。
+ * record 命令 — 已录制交互的排障/取证命令（读取 raw wire 双列）。
  *
  * @author axy-yxa
  * @since 2026-09-09

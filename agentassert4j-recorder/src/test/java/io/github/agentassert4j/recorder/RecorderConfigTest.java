@@ -28,7 +28,7 @@ class RecorderConfigTest {
         assertEquals(SanitizeStrategy.MASK, config.getSanitizeStrategy());
         assertFalse(config.isSanitizeUserInput());
         assertFalse(config.isSanitizeModelResponse());
-        // 采集门默认全量录制：任务链完整性优先于流量卫生
+        // 采集门默认全量录制：任务链完整性优先于流量成本
         assertTrue(config.isRecordUndeclaredChat());
         // 总开关默认开启：接入即录制
         assertTrue(config.isEnabled());

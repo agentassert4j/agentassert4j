@@ -11,9 +11,9 @@ import java.util.Map;
 import java.util.function.Function;
 
 /**
- * 基线侧投影组件 — 全部「基线对照」路径的基线侧步骤单源工厂。
+ * 基线侧投影组件 — 全部「基线对照」路径的基线侧步骤唯一定义处工厂。
  *
- * <p>判定基线的统一不变式：候选侧（当前证据）永远现场重提；基线侧 = 批准真相的
+ * <p>判定基线的统一不变式：候选侧（当前证据）永远现场重提；基线侧 = 已批准事实的
  * 定格投影，按路径三源取用——链路径 = 上一条真实链的记录（两侧同为记录，对称
  * 现场重提）；验收包 = 导出时刻的定格提取；CI 对照 = 画像活跃指纹（establish/
  * accept 时刻的定格提取）。三个工厂方法只做投影，产物统一喂对齐器：链路径进
@@ -30,7 +30,7 @@ public final class BaselineSides {
 
     /**
      * 验收包步骤投影：按完整 invocationKey 分组并从键回填声明标签
-     * （包步骤无标签字段，标签是分组口径的必需品）。
+     * （包步骤无标签字段，标签是分组规则的必需品）。
      */
     public static Map<String, List<BaselineStep>> fromPackSteps(List<BaselineStep> packSteps) {
         Map<String, List<BaselineStep>> baselineSteps = new LinkedHashMap<>();
@@ -48,7 +48,7 @@ public final class BaselineSides {
      * 新链分组键逐字相等，对齐只可能 MATCHED（CI 面缺步骤/新增步骤结构性不可能）。
      *
      * <p>解析不到画像或画像无认可形态即抛 IllegalStateException——CI 路径的未建档
-     * 守卫先于此入口，到达即为数据违约，宁可响亮失败不做静默缺步（缺步会伪装成
+     * 守卫先于此入口，到达即为数据违约，宁可显式失败也不静默缺步（缺步会被误判为
      * 行为差异）。</p>
      *
      * @param newChainRecords 新链记录（候选侧同一批；只取身份，指纹不用）

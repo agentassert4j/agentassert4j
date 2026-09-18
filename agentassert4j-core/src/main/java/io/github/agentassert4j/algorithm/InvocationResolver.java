@@ -26,7 +26,7 @@ import java.util.stream.Stream;
  *       （防御程序化构造记录）。</li>
  * </ol>
  *
- * <p>骨架哈希取值：骨架文本现算（内存新鲜记录，唯一真源），退记录上的落库投影
+ * <p>骨架哈希取值：骨架文本现算（内存新鲜记录，唯一权威来源），退记录上的落库投影
  * （存储读侧映射，供 recordCandidate/建档等落库记录重算键不分叉）。键文法对任意
  * 输入单射：所有可控组件经 {@link #encodeComponent} 百分号编码后才参与拼装，文法
  * 结构字符（冒号、加号、方括号、逗号）不可能出自组件内部——任何团队的命名规范都
@@ -36,7 +36,7 @@ import java.util.stream.Stream;
  * （键、变量、历史）不参与判定，因此 adhoc 分支以输入派生键是合法的。</p>
  *
  * <p>派生规则一经发布即冻结为身份契约：任何变更都等价于身份纪元事件（历史基线
- * 全部失配），必须走显式设计。黄金键测试钉住本类产出的字面键值。</p>
+ * 全部失配），必须走显式设计。黄金键测试锁定本类产出的字面键值。</p>
  *
  * @author axy-yxa
  * @since 2026-08-26
@@ -102,7 +102,7 @@ public final class InvocationResolver {
     }
 
     /**
-     * 骨架哈希：骨架文本现算优先（唯一真源），退落库投影（读侧映射，重算键不分叉）；
+     * 骨架哈希：骨架文本现算优先（唯一权威来源），退落库投影（读侧映射，重算键不分叉）；
      * 双缺返回 null = 该记录无骨架身份
      */
     private static String skeletonHashOf(InteractionRecord record) {
@@ -166,7 +166,7 @@ public final class InvocationResolver {
     /**
      * 参数类型的「键:值」对流（视图列），原文可读。归一化 toLowerCase()：
      * SDK 提供 "String"、JSON Schema 提供 "string"、其他栈可能提供 "STRING" → 统一小写；
-     * 值可能为 null（存储层反序列化的开放面）：按 "null" 归一，杜绝 NPE 击穿 resolve
+     * 值可能为 null（存储层反序列化的输入）：按 "null" 归一，避免 NPE 中断 resolve
      */
     private static Stream<String> paramPairs(InteractionRecord record) {
         if (record.getToolCalls() == null) return Stream.empty();

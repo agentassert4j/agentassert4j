@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * 录制上下文契约钉：ThreadLocal 作用域嵌套与恢复。
+ * 录制上下文契约测试：ThreadLocal 作用域嵌套与恢复。
  *
  * @author axy-yxa
  * @since 2026-09-18

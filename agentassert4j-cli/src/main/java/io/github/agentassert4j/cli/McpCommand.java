@@ -12,7 +12,7 @@ import java.util.concurrent.Callable;
 /**
  * mcp 命令 — standalone 进程即 MCP server（stdio）。
  *
- * <p>绑定单一数据库（--db，缺省走配置 storage.url），工具面见 McpTools（CLI 动词薄壳
+ * <p>绑定单一数据库（--db，缺省走配置 storage.url），工具面见 McpTools（CLI 动词转发封装
  * + record 摄取）。协议输出走独立构造的 stdout 文件描述符流（UTF-8、单行 JSON、逐消息
  * flush）——绝不与 System.out 混用，工具执行产出经命令实例捕获流隔离。stdin EOF 或
  * 断管 = 客户端会话结束，静默退出 exit 0（server 无会话状态，状态全在 SQLite）。</p>

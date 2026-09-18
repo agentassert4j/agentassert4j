@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * AnthropicMessagesClient 的组装与解析矩阵 — 请求体逐字段钉（system 顶层/max_tokens
+ * AnthropicMessagesClient 的组装与解析矩阵 — 请求体逐字段断言（system 顶层/max_tokens
  * 兜定/工具帧逐对重建/多模态 data-URI 拆解）、帧守卫敌对（缺配对键跳过+告警/同配对
  * 去重）、协议头与端点路径、响应归一（正文拼接/工具调用/usage 三项求和/finish 归一）。
  *
@@ -65,7 +65,7 @@ class AnthropicMessagesClientTest {
     class RequestBody {
 
         @Test
-        @DisplayName("标准请求逐字段钉：model/max_tokens 兜定/system 顶层/末位 user/温度")
+        @DisplayName("标准请求逐字段断言：model/max_tokens 兜定/system 顶层/末位 user/温度")
         void goldenRequest() {
             String body = client.buildRequestBody(baseRequest(), "claude-3-5");
             Map<?, ?> parsed = (Map<?, ?>) RecursiveJsonParser.parse(body);
@@ -208,7 +208,7 @@ class AnthropicMessagesClientTest {
         }
 
         @Test
-        @DisplayName("范式工具定义转扁平形；损坏定义宁可不带")
+        @DisplayName("规范形工具定义转扁平形；损坏定义宁可不带")
         void tools_paradigmToFlat_damagedSkipped() {
             LlmRequest request = new LlmRequest();
             request.setUserInput("hi");

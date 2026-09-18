@@ -15,7 +15,7 @@ import java.util.*;
  * 全文变更后裂出未建档新键，其声明标签与既有画像标签相同）。无画像对照的全新键不进
  * 漂移集——无对照即无漂移语义，由建档路径与巡检视图承接。</p>
  *
- * <p>记录凭据口径：存储键与现算键一致的记录才可作为身份凭据（单条损坏或键不一致的
+ * <p>记录凭据规则：存储键与现算键一致的记录才可作为身份凭据（单条损坏或键不一致的
  * 记录倒序回退跳过）；最新可分组记录无模板哈希时该画像记为零模板点排除出检测集——
  * 无模板身份即无漂移语义。单键查询失败安全跳过并计数，不中断巡检。比较两侧都是
  * 显式携带的哈希字段，严格相等，无模糊匹配。</p>
@@ -121,7 +121,7 @@ public final class DriftDetector {
      * 键桶内最新可分组记录：按规范序（时间、序号、记录 ID）倒序扫描，返回首个现算键
      * 与存储键一致的记录。单条损坏或键不一致即跳过回退；全部不可用返回 null。
      * 返回记录的模板哈希可为 null（零模板点），由调用方决定保守语义。
-     * 检测、治理身份前移与重驱取点共用本口径（存储键×现算键双一致才可作身份凭据）。
+     * 检测、治理身份前移与重驱取点共用本规则（存储键×现算键双一致才可作身份凭据）。
      */
     public static InteractionRecord latestIdentityRecord(List<InteractionRecord> records, String expectedKey) {
         List<InteractionRecord> ordered = new ArrayList<>(records);
@@ -142,7 +142,7 @@ public final class DriftDetector {
     }
 
     /**
-     * 存储查询的确定性排序口径（时间 → 序号 → 记录 ID），与本仓 SQLite 读侧一致；
+     * 存储查询的确定性排序规则（时间 → 序号 → 记录 ID），与本仓 SQLite 读侧一致；
      * 核心算法不依赖各存储实现对排序的自觉
      */
     static Comparator<InteractionRecord> canonicalOrder() {

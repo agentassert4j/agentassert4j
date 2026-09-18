@@ -54,7 +54,7 @@ public class StatusCommand implements Callable<Integer> {
             DriftReport drift = DriftDetector.detect(repository);
             Map<String, TemplateDriftState> driftByInvocationKey = templateDriftByInvocationKey(drift, allProfiles);
             Map<String, String> labelsByInvocationKey = businessLabelsByInvocationKey(repository);
-            // 缩域两通道一致生效（v3 实测：JSON 静默忽略缩域被双宿主点名为排障黑洞）；
+            // 缩域两通道一致生效（实测确认：JSON 静默忽略缩域曾造成最难排查的故障形态）；
             // 全量快照 = 不传 --invocation 时的缺省形态。解析走统一阶梯的键集合语义
             // （标签扇出其全部桶），换算 Note 行走诊断通道保 --json 的 stdout 单行契约
             List<String> narrowedKeys = CliSupport.resolveInvocationKeys(repository, invocation, true, jsonOutput ? err : out);
@@ -137,8 +137,8 @@ public class StatusCommand implements Callable<Integer> {
      * 否则用户对着自己的代码认不出哪行是哪个 调用点。
      */
     private static Map<String, String> businessLabelsByInvocationKey(StorageRepository repository) {
-        // 记录是 label 与键的关联真源：label-split 产生的后继键不是首记录键，
-        // 只登记首记录键会让分裂后的键在巡检面失名——逐记录登记全部键
+        // 记录是 label 与键的关联唯一权威来源：label-split 产生的后继键不是首记录键，
+        // 只登记首记录键会让分裂后的键无法出现在巡检输出中——逐记录登记全部键
         Map<String, String> result = new LinkedHashMap<>();
         for (String invocationId : CliSupport.recordedInvocationIds(repository)) {
             for (InteractionRecord record : repository.findByInvocationId(invocationId)) {
@@ -197,7 +197,7 @@ public class StatusCommand implements Callable<Integer> {
     }
 
     /**
-     * 画像模板身份的漂移三态：与 replay 共用同一检测器单一真源，巡检不跑 replay
+     * 画像模板身份的漂移三态：与 replay 共用同一检测器唯一权威实现，巡检不跑 replay
      * 就能看见「哪里漂了」。
      */
     private static Map<String, TemplateDriftState> templateDriftByInvocationKey(DriftReport drift, List<InvocationProfile> profiles) {
@@ -274,7 +274,7 @@ public class StatusCommand implements Callable<Integer> {
     /**
      * 已录制业务标签中尚无对应基线画像的（记录标签 → 分组 → 画像缺失）。
      * established 判定必须用全量画像——缩域子集会把库内已建档键误判为未覆盖；
-     * 缩域只过滤显示范围（标签按首记录键 ∈ 选择集），两通道共用本口径。
+     * 缩域只过滤显示范围（标签按首记录键 ∈ 选择集），两通道共用本规则。
      */
     private static List<String> uncoveredBusinessTagsInScope(StorageRepository repository, List<InvocationProfile> allProfiles, List<String> narrowedKeys) {
         List<String> uncovered = new ArrayList<>();
@@ -302,7 +302,7 @@ public class StatusCommand implements Callable<Integer> {
     /**
      * 已录制但尚无基线画像的调用点段：新版本键与零声明键在建档前在此可见，
      * 否则它们只会在对齐报告的缺/新增步骤里被动暴露。established 判定用全量
-     * 画像，缩域 = 解析键集合直配（与人读/JSON 两通道同一口径）。
+     * 画像，缩域 = 解析键集合直配（与人读/JSON 两通道同一规则）。
      */
     private static List<InvocationFootprint> unestablishedFootprintsInScope(StorageRepository repository, List<String> narrowedKeys) {
         List<InvocationFootprint> unestablished = unestablishedFootprints(repository, repository.findAllInvocations());

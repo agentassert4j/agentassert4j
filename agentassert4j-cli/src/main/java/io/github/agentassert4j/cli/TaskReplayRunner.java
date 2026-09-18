@@ -24,21 +24,21 @@ import java.util.*;
  *       漂移键经依赖图扩散为下游波及集，检测报告全项目、不随缩域收窄；</li>
  *   <li><b>真实对齐</b>：本地模式逐任务（同名请求链）最新 vs 次新按调用点对齐；
  *       {@code --ci} 模式改为基线对照——每任务最新链的<b>逐调用点链末执行</b>对照
- *       其调用点画像的活跃指纹（批准真相的单份定格投影，BaselineSides.fromProfiles；
+ *       其调用点画像的活跃指纹（已批准事实的单份定格投影，BaselineSides.fromProfiles；
  *       早于链末的同会话记录是迭代草稿，经透明层注记可见、不进判定），
- *       单链任务同判（首航即批改）；步级产出 PASS/CHANGED 与任务纪律违规；</li>
+ *       单链任务同判（首次判定即生效）；步级产出 PASS/CHANGED 与任务纪律违规；</li>
  *   <li><b>受控重驱</b>：花 LLM 钱的显式复核层（--re-drive 开启，逐漂移点注入
  *       最新归档模板）。</li>
  * </ul>
  *
- * <p>漂移处置状态机把每个漂移点收敛到三个出口之一：对齐 PASS → 开发态自动收编
- * （{@code --ci} 模式不收编漂移身份、附警告——CHANGED 候选照落等裁决，除候选
+ * <p>漂移处置状态机把每个漂移点收敛到三个出口之一：对齐 PASS → 开发态自动并入基线
+ * （{@code --ci} 模式不并入漂移身份、附警告——CHANGED 候选照落等裁决，除候选
  * 登记外流水线无治理写）；CHANGED → 落候选等待人工裁决；
  * 证据缺口（缺步骤/新增/规则违规/无可对齐证据）→ 挂起。缩域命中的键才处置，
  * 域外漂移只进检测报告。</p>
  *
  * <p>引擎入口继承六项守卫：判定语义版本守卫、{@code --ci} 未建档拒绝判定、
- * 换模型告警（含配置缺省时比对客户端实际生效模型）、依赖图重建与快照落盘、
+ * 换模型告警（含配置缺省时比对客户端实际生效模型）、依赖图重建与快照写入磁盘、
  * 全败按基础设施故障退出（重驱层）、served 模型不一致就地标注。</p>
  *
  * <p>退出码契约：1 = 行为差异或证据缺口（没跑够）；2 = 用法/数据/预算/环境问题
@@ -53,7 +53,7 @@ public class TaskReplayRunner {
 
     /**
      * 成员判定样本窗的内置默认——「任一历史链匹配即合法成员」的宽容度默认有界，
-     * 否则历史无限增长后新链总能匹配到某条旧链，稳定性量尺被稀释成考古 oracle。
+     * 否则历史无限增长后新链总能匹配到某条旧链，稳定性度量被稀释成对久远历史的比对。
      * 本次调用的显式值（--member-window N|all）与配置默认（regression.memberSampleWindow，
      * 只收有限整数）在本值之上解析；all 仅限单次调用显式传入。
      */
@@ -132,7 +132,7 @@ public class TaskReplayRunner {
      *
      * @param taskPrefix     任务文本前缀选择器（--task，与 --invocation 可复合 AND；null = 全部任务）
      * @param invocationKey  已解析的调用点键（--invocation，命中含该键记录的任务链；null = 不缩域）
-     * @param ciMode         CI 模式：不自动建档，缩域内存在未建档调用点拒绝判定，漂移 PASS 不收编
+     * @param ciMode         CI 模式：不自动建档，缩域内存在未建档调用点拒绝判定，漂移 PASS 不并入
      * @param dryRun         只读预演：漂移集 + 对齐计划 + 重驱成本预估，不建档、不处置
      * @param memberCheck    成员判定模式（--member-check）：最新链对同任务最近 N 条历史链
      *                       逐一核成员资格，任一行为匹配即合法成员；缺省为最新 vs 次新配对
@@ -164,7 +164,7 @@ public class TaskReplayRunner {
         try {
             scoped = selectChains(chains, taskPrefix, invocationKey);
         } catch (CliFailureException e) {
-            // 选择器歧义在抛出点已钉错误码；引擎入口自洽翻译，不依赖命令层接住
+            // 选择器歧义在抛出点已固定错误码；引擎入口自洽翻译，不依赖命令层捕获
             return fail(e.errorCode, CliSupport.describe(e), e.hint, e.nextAction);
         }
         if (scoped.isEmpty()) {
@@ -191,7 +191,7 @@ public class TaskReplayRunner {
             }
         } else {
             // 自动建档（开发态自动化，报告可见）：裂键豁免与披露由 establishMissing
-            // 扫建路径单源处理（同标签已有兄弟建档的新键只披露不收编）
+            // 扫建路径统一处理（同标签已有兄弟建档的新键只披露、不并入基线）
             new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), null, false, null, rules, null, null);
         }
 
@@ -231,7 +231,7 @@ public class TaskReplayRunner {
 
         // 同调用点跨任务链混形指路：认可集合满足一边、另一边是集合外形态——判定本身
         // 已逐任务如实报告，这里补的是「另一边的形态怎么处置」：不同任务上下文合理
-        // 触发不同形态（公共工具的常态），各自 accept 入集即全绿；真回归则复跑收敛
+        // 触发不同形态（公共工具的常态），各自 accept 入集即全部通过；真回归则复跑收敛
         if (verdictsByKey != null) {
             for (Map.Entry<String, Map<String, Verdict>> entry : verdictsByKey.entrySet()) {
                 Set<Verdict> verdicts = new HashSet<>(entry.getValue().values());
@@ -242,7 +242,7 @@ public class TaskReplayRunner {
             }
         }
 
-        // 漂移处置状态机：每个缩域内的漂移点收敛到 收编/候选/挂起 之一
+        // 漂移处置状态机：每个缩域内的漂移点收敛到 并入基线/候选/挂起 之一
         Set<String> scopedKeys = new HashSet<>();
         for (TaskChain chain : scoped) {
             for (InteractionRecord record : chain.getRecords()) {
@@ -332,7 +332,7 @@ public class TaskReplayRunner {
         }
         if (narrowed) {
             // 每键取域内最新记录（规范序升序遍历、后写覆盖=最新链胜出）。
-            // --invocation 命名目标时进一步限定为该键：过滤器点名了重驱对象，
+            // --invocation 命名目标时进一步限定为该键：过滤器显式指定了重驱对象，
             // 同链其他调用点不在委托范围（共享会话的链会因无请求文本的中间态
             // 记录混入多个调用点，不得连带重驱）
             Map<String, InteractionRecord> latest = new LinkedHashMap<>();
@@ -474,7 +474,7 @@ public class TaskReplayRunner {
 
     /**
      * 重驱 dry-run 的机器计划行：目标记录清单与费用预估——manifest 承诺的
-     * cost estimate 就此兑现。预估口径 = 目标记录自身的历史 token 按其模型
+     * 成本预估就此落实。预估规则 = 目标记录自身的历史 token 按其模型
      * 单价折算，属参考值而非报价承诺。
      */
     private String reDrivePlanJson(List<InteractionRecord> planned, String fallbackModel) {
@@ -610,7 +610,7 @@ public class TaskReplayRunner {
     /**
      * 判定基准行（三轨）：--ci 基线对照（最新链 vs 画像活跃指纹）、成员判定
      * （最新链 vs 最近链采样）、本地链对链（最新 vs 次新差分）。用户以本行对齐
-     * 自己的心智模型——通道写错基准是双宿主实测点名的认知断点源头。
+     * 自己的理解——通道写错基准是实测确认过的理解偏差源头。
      */
     private static String alignmentBasisLine(boolean ciMode, boolean memberCheck) {
         if (ciMode && !memberCheck) {
@@ -711,7 +711,7 @@ public class TaskReplayRunner {
 
     /**
      * 链内各调用点画像的最新审批时刻——基线对照报告的 baselineTime 语义
-     * （对照的是何时批准的真相）；全部未盖章（null）时返回 null，报告按在场省略。
+     * （对照的是何时批准的事实）；全部未写入审批记录（null）时返回 null，报告按在场省略。
      */
     private static Long latestApprovedAt(Collection<InvocationProfile> profiles) {
         Long latest = null;
@@ -727,9 +727,9 @@ public class TaskReplayRunner {
      * 成员判定模式（--member-check）：最新链对同任务最近 N 条历史链（样本窗 =
      * 本次解析值：显式 N|all > 配置默认 > 内置 5）逐一核成员资格。行为全匹配的
      * 第一条（时间升序）即证据样本；命中计数（matched of checked）量化稳定性——
-     * 这是「入集前量尺」的本体：matched 4/5 = 稳定复现，matched 1/N（旧会话）=
-     * 考古命中非稳定信号。全不匹配时取信号分最高者为最接近样本（升序迭代 +
-     * 严格大于 = 平局取最早），差异报告与候选登记都挂在证据对齐上。任务纪律为
+     * 这是「入集前度量」的本体：matched 4/5 = 稳定复现，matched 1/N（旧会话）=
+     * 命中久远记录属非稳定信号。全不匹配时取信号分最高者为最接近样本（升序迭代 +
+     * 严格大于 = 平局取最早），差异报告与候选登记都以证据对齐为准。任务纪律为
      * 样本不变量，从证据对齐取一次计一份，绝不跨样本累计。
      */
     private void alignMemberGroup(List<TaskChain> group, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager) {
@@ -975,7 +975,7 @@ public class TaskReplayRunner {
     /**
      * 各模式共享的报告尾段（summary/signal/stability/steps/ruleViolations/时间/成本/前缀），
      * 附加到已含 schema/mode/task 头部的构建器上。baselineTime 为 Long：画像对照
-     * 的 approvedAt 缺席（未经审批链盖章）时整体省略该字段。
+     * 的 approvedAt 缺席（未经审批链写入审批记录）时整体省略该字段。
      */
     private void appendCommonReport(StringBuilder sb, String request, String sessionId, int total, AlignmentRender render, int crossVersion, Long baselineTime, Long newChainTime, boolean prefixDependent) {
         sb.append(",\"summary\":{\"total\":").append(total).append(",\"pass\":").append(render.pass).append(",\"changed\":").append(render.changed).append(",\"inherited\":0,\"postDivergence\":0,\"skipped\":0,\"missing\":").append(render.missing).append(",\"added\":").append(render.added).append(",\"crossVersion\":").append(crossVersion);
@@ -1026,7 +1026,7 @@ public class TaskReplayRunner {
 
     /**
      * 任务组的稳定性事实（纯读侧派生，不进判定）：同任务 N 条链里，逐调用点
-     * 统计历史指纹形态数——声明标签相同的步骤同点计数（与对齐分组同口径）。
+     * 统计历史指纹形态数——声明标签相同的步骤同点计数（与对齐分组同规则）。
      * 指纹提取与判定同源，波动数 M > 1 的点即「追噪音风险点」。
      */
     private Stability stabilityOf(List<TaskChain> group) {
@@ -1111,9 +1111,9 @@ public class TaskReplayRunner {
     }
 
     /**
-     * 漂移处置：PASS→收编（开发态）/未收编（--ci）；CHANGED→落候选；证据缺口或
+     * 漂移处置：PASS→并入基线（开发态）/未并入（--ci）；CHANGED→落候选；证据缺口或
      * 域外→挂起/仅报告。返回处置计数供退出码复合与 JSON 报告。
-     * candidatesRegistered 是对齐层的跨域对账口径：candidatePoints 只覆盖身份
+     * candidatesRegistered 是对齐层的跨域核对规则：candidatePoints 只覆盖身份
      * 漂移点族别，行为变化（无模板漂移）落候选时不进漂移域计数——机器消费方
      * 据此分清「本轮落了几个候选」与「几个漂移点被判 CHANGED」。
      */
@@ -1167,8 +1167,8 @@ public class TaskReplayRunner {
             action = "uncollected";
             info("Identity not collected (--ci writes no governance state): " + shown + " (exit stays 0; run replay in dev mode to collect)");
         } else if (kind == DriftKind.LABEL_SPLIT && !CliSupport.hasBaseline(repository.findInvocationByKey(key))) {
-            // 裂键且新键无画像：自动建档只收编全新键（同标签已有兄弟建档），这里没有
-            // 可收编的身份——按证据缺口挂起，不得谎称建档或计入 collected
+            // 裂键且新键无画像：自动建档只并入基线全新键（同标签已有兄弟建档），这里没有
+            // 可并入基线的身份——按证据缺口挂起，不得谎称建档或计入 collected
             totals.hung++;
             action = "hung";
             info("Hung: " + shown + " (split key awaits explicit establish: `baseline --invocation " + key + "`)");
@@ -1386,8 +1386,8 @@ public class TaskReplayRunner {
     }
 
     /**
-     * 单链任务首航：第一份录制自建基线；已声明 taskKey 且配了任务规则时，
-     * 首航即批改——「基线声明、当前答卷」的纪律从第一份答卷就生效，
+     * 单链任务首次判定：第一份录制自建基线；已声明 taskKey 且配了任务规则时，
+     * 首次判定即生效——「基线声明、当前答卷」的纪律从第一份答卷就生效，
      * 违规与对齐模式同语义（折叠进退出码 1），不必等第二条链才能评。
      */
     private void printSelfEstablished(TaskChain only, AlignmentTotals totals) {
@@ -1464,7 +1464,7 @@ public class TaskReplayRunner {
     }
 
     /**
-     * ci-align 计划面的基线版本集：链末判定将对照的调用点（链末视图首现序）的
+     * ci-align 计划输出的基线版本集：链末判定将对照的调用点（链末视图首现序）的
      * 画像活跃版本——计划要讲清「将对照谁」；未建档调用点版本为 null 显式可见，
      * 不靠缺席暗示。
      */
@@ -1523,8 +1523,8 @@ public class TaskReplayRunner {
     }
 
     /**
-     * 漂移检测报告（人类面）：同键漂移、标签裂键与不可检测计数。
-     * 批量漂移多为「建档种子≠最新模板」的一次性收敛——首次全量对账后逐点收编，
+     * 漂移检测报告（人读格式）：同键漂移、标签裂键与不可检测计数。
+     * 批量漂移多为「建档种子≠最新模板」的一次性收敛——首次全量核对后逐点并入基线，
      * 不一定是批量回归，文案显式引导该认知。
      */
     private void printDriftReport(DriftReport drift) {

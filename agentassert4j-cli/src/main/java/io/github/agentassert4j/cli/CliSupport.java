@@ -43,7 +43,7 @@ final class CliSupport {
 
     /**
      * 把 stdout/stderr 换成 UTF-8 直写通道。Windows 控制台默认 GBK 时，
-     * CLI 输出的中文与 JSON 符号会以错误编码落盘/显示；这里绕过控制台
+     * CLI 输出的中文与 JSON 符号会以错误编码写入磁盘/显示；这里绕过控制台
      * 编码器，直接以 UTF-8 字节写标准流文件描述符——UTF-8 终端与 CI
      * 日志收集器按 UTF-8 解码即正确。仅 main 入口调用，不影响测试注入
      * 的 PrintStream。
@@ -74,11 +74,11 @@ final class CliSupport {
     static StorageRepository openRepository(String dbOverride, PrintStream out) {
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
         // 隐式查找链（cwd → home → classpath）命中了哪个文件必须就地披露——
-        // 错误目录下运行时旧配置静默生效是最难查的排障黑洞
+        // 错误目录下运行时旧配置静默生效是最难排查的故障形态
         String configSource = ConfigLoader.describeMainConfigSource();
         out.println(configSource != null ? "Config: " + configSource : "Config: no agentassert4j.json found; using built-in defaults.");
         // 规则文件命中哪个路径必须与主配置同格披露——「规则是否生效、生效的是哪个文件」
-        // 只能靠反证（无规则任务行的 Note）是排障黑洞；doctor 之外的每次运行就地正证
+        // 只能靠反证（无规则任务行的 Note）才能发现是最难排查的故障形态；doctor 之外的每次运行就地直接可见
         String rulesPath = ConfigLoader.resolveRulesPath();
         if (rulesPath != null) {
             InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
@@ -153,7 +153,7 @@ final class CliSupport {
     }
 
     /**
-     * 画像是否持有基线（认可形态集合非空）——exists 判定的单源。
+     * 画像是否持有基线（认可形态集合非空）——exists 判定的唯一定义处。
      */
     static boolean hasBaseline(InvocationProfile profile) {
         return profile != null && profile.getFingerprints() != null && !profile.getFingerprints().isEmpty();
@@ -257,7 +257,7 @@ final class CliSupport {
     }
 
     /**
-     * 从交互记录现场重建依赖图（只读，不落盘）。
+     * 从交互记录现场重建依赖图（只读，不写任何文件）。
      * 图是派生数据，重建永远反映最新录制状态；全量扫描在 v1 规模（数千条）
      * 毫秒级，轻量列裁剪与增量构建按既定决策延迟。
      */
@@ -277,7 +277,7 @@ final class CliSupport {
     }
 
     /**
-     * 统一调用点解析阶梯——「把 --invocation 值解析成调用点键集合」的单源实现，
+     * 统一调用点解析阶梯——「把 --invocation 值解析成调用点键集合」的唯一定义处实现，
      * target 族（accept/reject/rollback/replay 的目标语义）与 filter 族（establish/
      * status 的缩域语义）共享同一阶梯，仅多键策略不同。
      *
@@ -285,11 +285,10 @@ final class CliSupport {
      * ② 业务标签 → 该标签下全部键（plural 允许多键扇出；singular 多键报错列候选）；
      * ③ 显示短形 → 直返键（不做键→标签往返——裂键下首记录几乎总在最老键上，往返
      * 是有损投影）；④ invocationKey 唯一前缀（多命中报错列候选）；⑤ 零命中 →
-     * E-NO-DATA 响亮报错并列全部合法写法（不静默裸返回）。</p>
+     * E-NO-DATA 明确报错并列全部合法写法（不静默裸返回）。</p>
      *
      * <p>键空间 = 已录键全集（{@link #recordedInvocationFootprints}）——画像皆由记录
-     * 建档且记录只追加，已录键是画像键的实践超集；未建档裂键同样可解析（W11.9a 的
-     * 根因修复），target 族消费方的画像存在性由各自既有守卫承接。</p>
+     * 建档且记录只追加，已录键是画像键的实践超集；未建档裂键同样可解析，target 族消费方的画像存在性由各自既有守卫承接。</p>
      *
      * @param filter 原始 --invocation 值（null/空 = 不缩域，返回 null）
      * @param plural true = filter 族策略（标签扇出全部键）；false = target 族（多键报错）
@@ -412,7 +411,7 @@ final class CliSupport {
     }
 
     /**
-     * 多步零标签链判定（doctor 身份段与出口健康摘要共用的单一口径）：
+     * 多步零标签链判定（doctor 身份段与出口健康摘要共用的单一规则）：
      * 链内没有任何声明标签且步骤数 > 1——步骤可见性与任务规则都依赖标签。
      */
     static boolean isMultiStepUnlabeled(TaskChain chain) {
@@ -485,7 +484,7 @@ final class CliSupport {
     }
 
     /**
-     * 单条记录的调用点键：优先用落库存储值（enrich 写入，录入即定格——存储键与
+     * 单条记录的调用点键：优先用落库存储值（enrich 写入，录入即固定——存储键与
      * 现算键不得分叉），缺失时按解析器现算；无法解析的记录返回 null。
      */
     static String invocationKeyOfRecord(InteractionRecord record) {
@@ -502,7 +501,7 @@ final class CliSupport {
     /**
      * 依据主配置 llm 段构造重放客户端——协议路由装配（显式配置 llm.protocol
      * 覆盖记录方言推导，见 ProtocolRoutingLlmClient），重放类命令共用同一构造
-     * （单一来源），端点/密钥/模型/重试/extraBody 口径不得分叉。未知协议值在
+     * （单一来源），端点/密钥/模型/重试/extraBody 规则不得分叉。未知协议值在
      * 此抛用法错误并列全部合法值——配置错误就近可见，不静默回退。
      */
     static LlmClient createLlmClient(AgentAssert4jConfig config) {
@@ -520,7 +519,7 @@ final class CliSupport {
 
     /**
      * 依据主配置 regression 段构造确定性对比器——重放类命令共用
-     * 同一构造（单一来源），ignorableFields 口径不得分叉。
+     * 同一构造（单一来源），ignorableFields 规则不得分叉。
      */
     static DeterministicComparator createComparator(AgentAssert4jConfig config) {
         ComparatorConfig comparatorConfig = ComparatorConfig.defaults();
@@ -552,7 +551,7 @@ final class CliSupport {
 
     /**
      * 规则配置里出现未知 behavior 名时告警——未知名在判定中被静默视为通过，
-     * 笔误（如 noErr 写成 noErr0）会让维度 4 满分化、CI 照绿，必须在加载时点破。
+     * 笔误（如 noErr 写成 noErr0）会让维度 4 全部满足、CI 照常通过，必须在加载时告警。
      */
     static void warnUnknownBehaviors(InvocationRulesConfig rules, PrintStream out) {
         for (String invocationId : rules.getDeclaredInvocationIds()) {
@@ -586,7 +585,7 @@ final class CliSupport {
 
     /**
      * rules.tasks 段的畸形声明告警清单——畸形约束要么无约束力要么永不满足，
-     * 静默存在会让团队纪律形同虚设或全部误报，必须在加载时点破。
+     * 静默存在会让团队纪律形同虚设或全部误报，必须在加载时告警。
      * 输出与机器通道（doctor/1 的 ruleWarnings）共用同一份清单，两通道同词。
      */
     static List<String> malformedTaskRuleWarnings(InvocationRulesConfig rules) {
@@ -640,7 +639,7 @@ final class CliSupport {
     }
 
     /**
-     * {@link CliFailureException} 的出口转译——错误码与指引在抛出点已钉死。
+     * {@link CliFailureException} 的出口转译——错误码与指引在抛出点已锁定。
      */
     static int fail(boolean jsonOutput, PrintStream out, PrintStream err, CliFailureException e) {
         return fail(jsonOutput, out, err, e.errorCode, describe(e), e.hint, e.nextAction);
@@ -657,8 +656,8 @@ final class CliSupport {
 
     /**
      * 步骤级判定度量 JSON 片段（similarity + dims 五维 + 可选 summary）。task-report
-     * 与 verify-report 两个报告面共用——维度词表与 contentRules 的合成规则只此一份，
-     * 两个报告面对同一判定必须报出完全一致的度量形态。
+     * 与 verify-report 两份报告共用——维度词表与 contentRules 的合成规则只此一份，
+     * 两份报告对同一判定必须报出完全一致的度量形态。
      */
     static String comparisonMetricsFragment(ComparisonResult comparison) {
         StringBuilder sb = new StringBuilder();
@@ -676,7 +675,7 @@ final class CliSupport {
 
     /**
      * 步骤 JSON 的公共外围（verdict/度量/富余/草稿计数/标签）。task-report 与 verify-report
-     * 两个报告面对同一步骤必须报出一致的字段集与字段顺序；各面自带前缀字段与后缀扩展，
+     * 两份报告对同一步骤必须报出一致的字段集与字段顺序；各报告自带前缀字段与后缀扩展，
      * 中段永远走本片段。unapprovedEarlier 仅链末判定路径携带（与 earlierRecords 成对恒
      * 输出），verify 面恒传 null。
      */
@@ -704,7 +703,7 @@ final class CliSupport {
     }
 
     /**
-     * 版本切换注记（versionSwitch + 两侧 subdivision），两报告面共用的收尾片段；
+     * 版本切换注记（versionSwitch + 两侧 subdivision），两份报告共用的收尾片段；
      * 非版本切换返回空串。
      */
     static String stepVersionSwitchFragment(TaskAlignment.StepAlignment step) {

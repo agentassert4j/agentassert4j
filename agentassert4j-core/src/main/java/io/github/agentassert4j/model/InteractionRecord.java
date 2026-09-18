@@ -43,7 +43,7 @@ public class InteractionRecord {
     private String templateText;
     /**
      * 模板骨架（瞬态字段）：动态段（日期/环境/清单）替换为稳定占位符后的模板形态。
-     * 出口声明式提供（null = 不声明）；是骨架哈希的唯一真源，不对应 interactions 列
+     * 出口声明式提供（null = 不声明）；是骨架哈希的唯一权威来源，不对应 interactions 列
      */
     private String templateSkeleton;
     /**
@@ -172,7 +172,7 @@ public class InteractionRecord {
      */
     private String metadata;
     /**
-     * 录制方 SDK 版本（数据法医学）
+     * 录制方 SDK 版本（数据取证依据）
      */
     private String recorderVersion;
 

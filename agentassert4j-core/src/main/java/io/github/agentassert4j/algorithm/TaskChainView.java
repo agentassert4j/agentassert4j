@@ -38,7 +38,7 @@ public final class TaskChainView {
     }
 
     /**
-     * 全库任务链：所有会话的链合并且按链首时间升序（跨会话配对与最新链选择共用本口径）。
+     * 全库任务链：所有会话的链合并且按链首时间升序（跨会话配对与最新链选择共用本规则）。
      */
     public static List<TaskChain> resolveAll(InteractionQueryStore repository) {
         List<TaskChain> all = new ArrayList<>();

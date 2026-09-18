@@ -21,7 +21,7 @@ import java.util.Map;
  *
  * <p>兼容 Azure OpenAI / 通义千问 / DeepSeek 等一切 OpenAI chat 格式端点；
  * HTTP 管道与超时/重试契约见共享基座。请求体手工拼装、响应体统一经 core 的
- * RecursiveJsonParser 解析——转义与解析语法不在此处另立第二真源。</p>
+ * RecursiveJsonParser 解析——转义与解析语法不在此处另立第二套实现。</p>
  *
  * @author axy-yxa
  * @since 2026-08-27
@@ -126,7 +126,7 @@ public class OpenAiCompatibleClient extends AbstractHttpLlmClient {
         // temperature——null 表示不携带该成员（推理模型方言：发送 0.0 会被 400 拒绝）；
         // 非 finite 值同样省略（JSON 无此字面量，发出即非法请求）；
         // 方言注册表命中的模型（o 系/gpt-5 系只接受默认温度）整条裁掉。
-        // 显式配置被注册表覆盖必须告警——静默丢配置是排障黑洞，逃生舱（extraBody）要点名
+        // 显式配置被注册表覆盖必须告警——静默丢配置是最难排查的故障形态，应急开关（extraBody）必须在文档写明
         if (request.getTemperature() != null && Double.isFinite(request.getTemperature()) && !DIALECTS.droppedParamsFor(model).contains("temperature")) {
             sb.append(",\"temperature\":").append(request.getTemperature());
         } else if (request.getTemperature() != null && Double.isFinite(request.getTemperature()) && !dialectWarned && DIALECTS.droppedParamsFor(model).contains("temperature")) {
@@ -264,7 +264,7 @@ public class OpenAiCompatibleClient extends AbstractHttpLlmClient {
                 // 字段是 primitive，拆箱 null 会把整个合法响应误判为解析失败
                 response.setInputTokens(orZero(memberInt(usage, "prompt_tokens")));
                 response.setOutputTokens(orZero(memberInt(usage, "completion_tokens")));
-                // input_tokens 语义钉死为"总处理输入 token"：
+                // input_tokens 语义锁定为"总处理输入 token"：
                 // OpenAI/DeepSeek 的 prompt_tokens 已是总量；Anthropic 的
                 // cache_creation/cache_read 属于总量的一部分，其求和规则由该方言的
                 // 摄取与客户端实现

@@ -13,7 +13,7 @@ import java.util.Map;
  *
  * <p>反序列化即版本守卫的一半：schema 字段不符抛 IllegalArgumentException（调用方
  * 转译为退出码 2）；判定语义版本的守卫在 verify 侧（需要当前引擎版本对照）。
- * 键名与嵌套形态固定，字面输出由测试钉住。</p>
+ * 键名与嵌套形态固定，字面输出由测试锁定。</p>
  *
  * @author axy-yxa
  * @since 2026-08-30

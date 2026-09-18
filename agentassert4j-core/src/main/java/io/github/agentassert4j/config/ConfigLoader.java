@@ -96,7 +96,7 @@ public final class ConfigLoader {
     /**
      * 报告主配置的实际来源——隐式查找链（系统属性 → 工作目录 → 用户主目录 →
      * classpath）静默命中了哪个文件必须可披露，否则错误目录下的旧配置
-     * 静默生效会成为排障黑洞。
+     * 静默生效会成为最难排查的故障形态。
      *
      * @return 来源描述（文件路径或 classpath 标识）；未找到任何配置时 null
      */
@@ -117,7 +117,7 @@ public final class ConfigLoader {
         String json = findAndRead(RULES_CONFIG_FILE, RULES_PATH_PROPERTY, origin);
         if (json == null && lastMainConfigDirectory != null) {
             // 回退：与主配置同目录（rules 的对外承诺）。长驻进程的工作目录由
-            // 宿主决定，CWD 一站在该场景下天然失灵
+            // 宿主决定，CWD 依赖在该场景下天然失灵
             json = loadFromFile(lastMainConfigDirectory + "/" + RULES_CONFIG_FILE);
             if (json != null) {
                 origin.append(lastMainConfigDirectory).append('/').append(RULES_CONFIG_FILE);

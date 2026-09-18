@@ -9,7 +9,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * wire 词形单源的契约钉：采样映射的空缺省语义与 function 信封结构。
+ * wire 词表的唯一定义处的契约测试：采样映射的空缺省语义与 function 信封结构。
  *
  * @author axy-yxa
  * @since 2026-09-18

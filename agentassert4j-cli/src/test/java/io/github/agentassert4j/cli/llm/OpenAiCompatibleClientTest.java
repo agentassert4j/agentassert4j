@@ -269,7 +269,7 @@ class OpenAiCompatibleClientTest {
         LlmResponse response = client.parseResponse(json);
         Map<String, Object> args = response.getToolCalls().get(0).getArguments();
         // 嵌套对象必须解析为 Map——捕获侧（SDK）把 arguments 解析成 Map 填充，
-        // ArgTypeUtil 对两侧统一派生 "object"；旧实现保留字符串会把参数类型维
+        // ArgTypeUtil 对两侧统一派生 "object"；保留字符串会把参数类型维
         // 推成 "string"，与基线失配造成伪回归
         @SuppressWarnings("unchecked") Map<String, Object> filter = (Map<String, Object>) args.get("filter");
         assertEquals("active", filter.get("status"));

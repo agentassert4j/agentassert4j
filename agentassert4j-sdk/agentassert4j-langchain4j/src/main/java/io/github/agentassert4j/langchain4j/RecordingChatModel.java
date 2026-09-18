@@ -28,9 +28,9 @@ import java.util.Set;
  * ChatModel recorded = RecordingChatModel.wrap(real, interactionRecorder);
  * }</pre>
  *
- * <p>拦截点钉在 doChat 单点：chat(ChatRequest) 与带选项的 chat(ChatRequest,
+ * <p>拦截点固定在 doChat 单点：chat(ChatRequest) 与带选项的 chat(ChatRequest,
  * ChatRequestOptions) 等全部入口在 LangChain4j 各版本都经默认模板方法汇聚到
- * this.doChat——单点覆写即覆盖所有路径，且只在编译地板已存在的符号上落笔。
+ * this.doChat——单点覆写即覆盖所有路径，且只在编译最低支持版本已存在的符号上落笔。
  * doChat 内委托 delegate.chat 而非 delegate.doChat：被包模型把工作放在 chat()
  * 的非规范实现也照常工作，且内模型自带的监听器恰好触发一次（本装饰器的
  * listeners() 返回空清单，正是为了避免装饰层模板再触发一遍造成双计）。</p>
@@ -104,7 +104,7 @@ public final class RecordingChatModel implements ChatModel, StreamingChatModel {
 
     @Override
     public List<ChatModelListener> listeners() {
-        // 空清单是双触发防线：录制委托走 delegate.chat，内模型模板触发其自带
+        // 空清单是双触发防护：录制委托走 delegate.chat，内模型模板触发其自带
         // 监听器恰一次；此处若透传，装饰层模板会再触发一遍。LangChain4j 没有
         // 运行时加监听器的入口（build 时烤入内模型），空清单不损失任何功能
         return Collections.emptyList();

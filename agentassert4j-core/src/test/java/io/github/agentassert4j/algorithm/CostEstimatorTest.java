@@ -54,7 +54,7 @@ class CostEstimatorTest {
 
     @Test
     void estimateCallCostUsd_previewBasis_tokens() {
-        // 预估口径固定 1000 输入 / 500 输出：gpt-4o → 2.5e-3 + 5e-3
+        // 预估规则固定 1000 输入 / 500 输出：gpt-4o → 2.5e-3 + 5e-3
         assertEquals(0.0075, CostEstimator.estimateCallCostUsd("gpt-4o", 1000L, 500L), DELTA);
     }
 
@@ -80,7 +80,7 @@ class CostEstimatorTest {
 
         assertTrue(result.contains("Estimated 1 API call"));
         assertTrue(result.contains("gpt-4o"));
-        assertTrue(result.contains("$0.0075"), "预估文案按 1000/500 token 口径计价: " + result);
+        assertTrue(result.contains("$0.0075"), "预估文案按 1000/500 token 规则计价: " + result);
     }
 
     @Test

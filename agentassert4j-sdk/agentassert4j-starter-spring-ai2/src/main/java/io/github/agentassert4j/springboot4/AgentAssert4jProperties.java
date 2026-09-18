@@ -9,9 +9,9 @@ import java.util.List;
 /**
  * AgentAssert4j Spring Boot 配置项（前缀 {@code agentassert4j}）。
  *
- * <p>属性树镜像 agentassert4j.json 的操作面命名（storage.url / llm.*），录制域全旋钮
+ * <p>属性树镜像 agentassert4j.json 的配置命名（storage.url / llm.*），录制域全旋钮
  * 经 recorder 段暴露——同一旋钮跨通道同语义同形。默认值与
- * {@code RecorderConfig.builder()} 的代码默认一致（钳位语义由 recorder 模块单源）。</p>
+ * {@code RecorderConfig.builder()} 的代码默认一致（钳位语义由 recorder 模块统一实现）。</p>
  *
  * @author axy-yxa
  * @since 2026-08-28
@@ -62,7 +62,7 @@ public class AgentAssert4jProperties {
 
     /**
      * 录制域旋钮（与 {@code RecorderConfig.builder()} 一一对应；钳位语义在
-     * recorder 模块单源，这里不重复校验）。
+     * recorder 模块统一实现，这里不重复校验）。
      */
     public static class Recorder {
 
@@ -89,7 +89,7 @@ public class AgentAssert4jProperties {
         private boolean recordUndeclaredChat = true;
         /**
          * 录制器开关：false 时管道不启动、录制整体 no-op（自动装配仍在，
-         * 与总开关的两层防线语义一致）
+         * 与总开关的两层防护语义一致）
          */
         private boolean enabled = true;
 

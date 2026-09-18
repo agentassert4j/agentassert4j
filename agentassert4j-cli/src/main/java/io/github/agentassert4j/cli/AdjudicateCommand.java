@@ -101,7 +101,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
             targets.add(profile);
             return targets;
         }
-        // bare = 裁决全部待裁决候选（与「bare 命令=全项目完整默认能力」同一心智）
+        // bare = 裁决全部待裁决候选（与「bare 命令=全项目完整默认能力」同一语义约定）
         for (InvocationProfile profile : repository.findAllInvocations()) {
             if (profile.getCandidateFingerprint() != null) {
                 targets.add(profile);
@@ -111,7 +111,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
     }
 
     /**
-     * 裁决前渲染候选与基线的逐维差异——裁决者必须在拍板时看到证据本身，
+     * 裁决前渲染候选与基线的逐维差异——裁决者必须在裁决时看到证据本身，
      * 而不是只看到一个「有候选」的标志位（replay 的差异输出是易失的进程输出）。
      */
     private void printCandidateDiff(InvocationProfile target) {

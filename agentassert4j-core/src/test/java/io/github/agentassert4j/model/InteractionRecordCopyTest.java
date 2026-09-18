@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
  * InteractionRecord.copy() 的拷贝完整性契约：全字段值相等 + 可变结构不共享实例。
  *
  * <p>字段清单以反射从模型自身枚举而非手写第二份——模型新增字段时本测试自动
- * 覆盖新字段，copy() 漏拷当场红；手写逐字段断言清单反而是又一份需要养的数据。</p>
+ * 覆盖新字段，copy() 漏拷当场失败；手写逐字段断言清单反而是又一份需要养的数据。</p>
  *
  * @author axy-yxa
  * @since 2026-09-10
