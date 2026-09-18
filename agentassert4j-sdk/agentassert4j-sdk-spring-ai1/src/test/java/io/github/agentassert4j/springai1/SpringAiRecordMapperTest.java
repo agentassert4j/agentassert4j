@@ -377,4 +377,20 @@ class SpringAiRecordMapperTest {
         InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), null, 1, null, null, List.of());
         assertEquals(SpringAiRecordMapper.SDK_VERSION, record.getRecorderVersion());
     }
+
+    @Test
+    @DisplayName("工具结果方言归一：String 返回的一层 JSON 编码解码还原，对象/数组/纯文本原样")
+    void toolResult_dialectNormalized() {
+        // Spring AI 对 String 返回整体做一层 JSON 编码——语义原文被包进引号转义
+        String encoded = RecursiveJsonParser.serialize("{\"orderId\":\"SO-77\",\"refundId\":\"REF-8841\"}");
+        assertEquals("{\"orderId\":\"SO-77\",\"refundId\":\"REF-8841\"}", SpringAiRecordMapper.normalizeToolResult(encoded));
+        // 纯文本 String 返回同样还原语义原文（编码形 "\"ok\"" → "ok"）
+        assertEquals("ok", SpringAiRecordMapper.normalizeToolResult(RecursiveJsonParser.serialize("ok")));
+        // 对象/数组返回（POJO 工具）本就是 JSON，原样保留
+        assertEquals("{\"a\":1}", SpringAiRecordMapper.normalizeToolResult("{\"a\":1}"));
+        // 非JSON 纯文本与空值安全直通
+        assertEquals("订单已发货", SpringAiRecordMapper.normalizeToolResult("订单已发货"));
+        assertNull(SpringAiRecordMapper.normalizeToolResult(null));
+        assertEquals("", SpringAiRecordMapper.normalizeToolResult(""));
+    }
 }

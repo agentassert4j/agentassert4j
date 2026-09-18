@@ -77,13 +77,27 @@ final class SpringAiRecordMapper {
             Map<String, Object> arguments = parseArguments(invocation.arguments);
             call.setArguments(arguments);
             call.setArgTypes(ArgTypeUtil.derive(arguments));
-            call.setResult(invocation.result);
+            call.setResult(normalizeToolResult(invocation.result));
             call.setSuccess(invocation.success);
             calls.add(call);
         }
         record.setToolCalls(calls);
         record.setHasToolCalls(true);
         return record;
+    }
+
+    /**
+     * 工具结果的方言归一：Spring AI 对 String 返回的工具方法整体做一层 JSON 编码
+     * （语义原文再包引号转义，模型与观察层看到的都是该形态）——解码一层还原语义原文，
+     * 值溯源与内容处理才能取到叶子值；对象/数组返回（POJO 工具）本就是 JSON、纯文本
+     * 解析不出字符串字面量，两者原样保留。真源 = 工具方法的语义返回，wire 形态是方言。
+     */
+    static String normalizeToolResult(String result) {
+        if (result == null || result.isEmpty()) {
+            return result;
+        }
+        Object decoded = RecursiveJsonParser.parse(result);
+        return decoded instanceof String ? (String) decoded : result;
     }
 
     private static void mapRequest(Prompt prompt, InteractionRecord record) {
