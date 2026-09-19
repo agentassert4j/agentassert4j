@@ -18,7 +18,7 @@ description 声明使用要求，框架不内嵌第二套同意机制（规划 �
 
 ## 心智模型
 
-**standalone jar 即 MCP server**：`java -jar agentassert4j-standalone.jar mcp --db <path>`
+**standalone jar 即 MCP server**：`java -jar agentassert4j-cli-standalone-1.0.0.jar mcp --db <path>`
 起一个绑定单一数据库的 stdio server。工具面是既有 CLI 命令的薄壳（零新判定能力）+ record
 摄取（非 Java 栈的入场券）。server 无会话状态——状态全在 SQLite，子进程生命周期即客户端
 会话。工具调用在进程内直调命令类（命令实例的包级 out/err 流字段被替换为捕获流，命令产出的
@@ -158,7 +158,7 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
   "mcpServers": {
     "agentassert4j": {
       "command": "java",
-      "args": ["-jar", "/path/to/agentassert4j-standalone.jar", "mcp", "--db", "/path/to/agentassert4j.db"]
+      "args": ["-jar", "/path/to/agentassert4j-cli-standalone-1.0.0.jar", "mcp", "--db", "/path/to/agentassert4j.db"]
     }
   }
 }

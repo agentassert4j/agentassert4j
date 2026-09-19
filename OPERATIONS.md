@@ -340,7 +340,7 @@ accept/reject + re-drive + export）+ record 摄取（非 Java 栈上报交互�
   "mcpServers": {
     "agentassert4j": {
       "command": "java",
-      "args": ["-jar", "/path/to/agentassert4j-standalone.jar", "mcp", "--db", "/path/to/agentassert4j.db"]
+      "args": ["-jar", "/path/to/agentassert4j-cli-standalone-1.0.0.jar", "mcp", "--db", "/path/to/agentassert4j.db"]
     }
   }
 }
