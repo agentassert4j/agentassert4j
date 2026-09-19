@@ -538,7 +538,7 @@ $ agentassert4j verify --pack acceptance-pack.json --report verify-report.md
   - 用户自带 `StorageRepository`/`InteractionRecorder` Bean 时 `@ConditionalOnMissingBean` 让位——自带录制器需自行 start。
   - **启动期失败语义（有意决策）**：存储初始化失败会中断宿主启动——「录制框架静默失效（用户以为在录实际没录）」比启动失败更危险；不接受此语义的环境用 `enabled=false` 显式关闭。
 - `RecordingChatModel`（两代 SDK 各有一个，包 `springai1`/`springai2`）：装饰器，`call()` 计时捕获上下文后透传；`stream()` 在**调用线程**捕获 `RecordingContext` 闭包（聚合回调发生在异步完成信号线程，ThreadLocal 不可达），用 `MessageAggregator` 聚合完整响应后录制，TTFT 取首个 chunk。录制失败只 WARN 不抛——业务调用永远不被录制问题打断。1.x 的粒度说明：默认在 ChatModel 内部执行完整工具回路，装饰器视角一次 call = 完整工具回合（初始请求 + 最终聚合响应）。
-- `RecordingContext`（`AutoCloseable`，两代 SDK 各有一份同构实现，不在 core）：`start(sessionId)` 开启作用域，`withInvocationId/withTemplateId/withTemplateSkeleton/withEndpoint/withMetadata` 链式声明，`close()` 恢复外层（可嵌套）。本质是栈式 ThreadLocal——**仅在声明线程内可见**，Reactor 链中从异步线程发起的调用取不到上下文，流式标注需在发起 stream() 的线程作用域内完成。`withMetadata` 也能携带任务键声明（第 11 章的 `taskKey`）。
+- `RecordingContext`（`AutoCloseable`，单源于 recorder 层、三框架适配线共用，不在 core）：`start(sessionId)` 开启作用域，`withInvocationId/withTemplateId/withTemplateSkeleton/withEndpoint/withMetadata` 链式声明，`close()` 恢复外层（可嵌套）。本质是栈式 ThreadLocal——**仅在声明线程内可见**，Reactor 链中从异步线程发起的调用取不到上下文，流式标注需在发起 stream() 的线程作用域内完成。`withMetadata` 也能携带任务键声明（第 11 章的 `taskKey`）。
 - 两代 SDK 差异：包名各自隔离（`springai1`/`springai2`、`springboot`/`springboot4`，两代坐标同名互斥必分模块）；缓存 token 在 ai1 走反射尽力提取（只探缓存读与思考 token，缓存写不留值）、ai2 走 `Usage` 接口直读（缓存读/写与思考 token 齐全）；Spring AI 2.x 的工具循环移到 ChatClient 的 Advisor 链（ChatModel 之上），装饰器天然逐轮可见。
 - **JDK8 手动路径**（第 8 幕老陈的系统）：不引 starter，手动装配 core + recorder + storage-sqlite 三个 jar，在自己的 LLM 调用出口组装 `InteractionRecord` 后调用 `recorder.intercept(record)`，并自行 `start()/stop()`。core 是全框架唯一零依赖模块，这是 JDK8 客户能接入的原因。
 

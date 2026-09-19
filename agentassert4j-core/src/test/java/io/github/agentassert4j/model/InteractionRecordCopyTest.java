@@ -24,6 +24,48 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 class InteractionRecordCopyTest {
 
     @Test
+    @DisplayName("深嵌套参数树在拷贝处截断为占位值（StackOverflowError 防御），原件完好")
+    void copyTruncatesPathologicallyDeepArgumentTrees() {
+        ToolCall deepCall = new ToolCall();
+        deepCall.setToolName("t");
+        deepCall.setArguments(deepMap(300));
+        InteractionRecord original = new InteractionRecord();
+        List<ToolCall> calls = new ArrayList<>();
+        calls.add(deepCall);
+        original.setToolCalls(calls);
+
+        InteractionRecord copy = original.copy();
+
+        Object copiedCur = copy.getToolCalls().get(0).getArguments();
+        int steps = 0;
+        while (copiedCur instanceof Map) {
+            copiedCur = ((Map<?, ?>) copiedCur).get("k");
+            steps++;
+        }
+        assertEquals(ToolCall.DEPTH_TRUNCATION_MARKER, copiedCur);
+        assertEquals(ToolCall.MAX_TREE_DEPTH, steps);
+
+        assertNotSame(original.getToolCalls().get(0).getArguments(), copy.getToolCalls().get(0).getArguments());
+        Object originalCur = original.getToolCalls().get(0).getArguments();
+        for (int i = 0; i < 300; i++) {
+            originalCur = ((Map<?, ?>) originalCur).get("k");
+        }
+        assertEquals("v", ((Map<?, ?>) originalCur).get("leaf"), "原件不受截断影响");
+    }
+
+    private Map<String, Object> deepMap(int depth) {
+        Map<String, Object> root = new LinkedHashMap<>();
+        Map<String, Object> cur = root;
+        for (int i = 0; i < depth; i++) {
+            Map<String, Object> next = new LinkedHashMap<>();
+            cur.put("k", next);
+            cur = next;
+        }
+        cur.put("leaf", "v");
+        return root;
+    }
+
+    @Test
     @DisplayName("copy 全字段值相等")
     void copyPreservesEveryFieldValue() throws Exception {
         InteractionRecord original = fullyPopulated();

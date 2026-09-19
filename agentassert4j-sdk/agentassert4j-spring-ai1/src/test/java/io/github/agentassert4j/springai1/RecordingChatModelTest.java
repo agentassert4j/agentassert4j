@@ -2,6 +2,7 @@ package io.github.agentassert4j.springai1;
 
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.spi.RecordingInterceptor;
+import io.github.agentassert4j.recorder.RecordingContext;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;

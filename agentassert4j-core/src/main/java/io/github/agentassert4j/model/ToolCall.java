@@ -28,6 +28,18 @@ public class ToolCall {
     private String result;
     private boolean success;
 
+    /**
+     * arguments 值树重建/脱敏的深度上限，与 RecursiveJsonParser 的解析封顶同一量级。
+     * 嵌套深度来自模型输出、不可信：无封顶递归会以 StackOverflowError 中断
+     * 调用线程（catch Exception 接不住 Error），录制旁路对病态输入按契约丢弃而非中断业务。
+     */
+    public static final int MAX_TREE_DEPTH = 128;
+
+    /**
+     * 深度截断后写入副本的占位值——截断事实随记录落库，就地可见。
+     */
+    public static final String DEPTH_TRUNCATION_MARKER = "[truncated]";
+
     public String getToolName() {
         return toolName;
     }
@@ -77,7 +89,8 @@ public class ToolCall {
     }
 
     /**
-     * 深拷贝：arguments 值树逐层重建，上游事后修改嵌套结构不影响副本。
+     * 深拷贝：arguments 值树逐层重建（超过 {@link #MAX_TREE_DEPTH} 的子树截断为
+     * {@link #DEPTH_TRUNCATION_MARKER}），上游事后修改嵌套结构不影响副本。
      */
     public ToolCall copy() {
         ToolCall copy = new ToolCall();
@@ -101,17 +114,24 @@ public class ToolCall {
      * 任意深度重建 Map/List 值树；标量值原样共享（不可变）。
      */
     private static Object deepCopyValue(Object value) {
+        return deepCopyValue(value, 1);
+    }
+
+    private static Object deepCopyValue(Object value, int depth) {
+        if (depth > MAX_TREE_DEPTH) {
+            return DEPTH_TRUNCATION_MARKER;
+        }
         if (value instanceof Map) {
             Map<String, Object> out = new LinkedHashMap<>();
             for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
-                out.put(String.valueOf(entry.getKey()), deepCopyValue(entry.getValue()));
+                out.put(String.valueOf(entry.getKey()), deepCopyValue(entry.getValue(), depth + 1));
             }
             return out;
         }
         if (value instanceof List) {
             List<Object> out = new ArrayList<>();
             for (Object item : (List<?>) value) {
-                out.add(deepCopyValue(item));
+                out.add(deepCopyValue(item, depth + 1));
             }
             return out;
         }

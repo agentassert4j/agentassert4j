@@ -7,7 +7,7 @@ import io.github.agentassert4j.recorder.SanitizeStrategy;
 import io.github.agentassert4j.spi.RecordingInterceptor;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.springai2.RecordingChatModel;
-import io.github.agentassert4j.springai2.RecordingContext;
+import io.github.agentassert4j.recorder.RecordingContext;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -101,7 +101,12 @@ class AgentAssert4jAutoConfigurationTest {
             probe.setSessionId("sentinel-ep-session");
             probe.setTimestamp(System.currentTimeMillis());
             recorder.intercept(probe);
-            assertEquals("http://ep-sentinel:1234", probe.getEndpoint(), "recorder.endpoint 必须经 builder 映射在采集兜底中生效");
+            awaitWritten(recorder, 1);
+            // 补全只写落库副本——调用方原对象保持原样（与 DataSanitizer 同一承诺），从存储侧读兜底结果
+            StorageRepository repository = context.getBean(StorageRepository.class);
+            assertEquals("http://ep-sentinel:1234", repository.findBySessionId("sentinel-ep-session").get(0).getEndpoint(),
+                    "recorder.endpoint 必须经 builder 映射在采集兜底中生效");
+            assertNull(probe.getEndpoint(), "调用方原对象不被改写");
         });
     }
 

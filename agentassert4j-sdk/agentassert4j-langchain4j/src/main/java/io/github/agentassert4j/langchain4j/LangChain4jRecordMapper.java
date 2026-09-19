@@ -13,6 +13,7 @@ import dev.langchain4j.model.output.TokenUsage;
 import io.github.agentassert4j.algorithm.CostEstimator;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.util.*;
+import io.github.agentassert4j.recorder.RecordingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

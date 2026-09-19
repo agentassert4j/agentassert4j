@@ -8,6 +8,7 @@ import io.github.agentassert4j.util.LlmProviderUtil;
 import io.github.agentassert4j.util.OpenAiWireUtil;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import io.github.agentassert4j.util.ToolResultNormalizer;
+import io.github.agentassert4j.recorder.RecordingContext;
 import org.springframework.ai.chat.messages.*;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -81,7 +82,7 @@ final class SpringAiRecordMapper {
             Map<String, Object> arguments = parseArguments(invocation.arguments);
             call.setArguments(arguments);
             call.setArgTypes(ArgTypeUtil.derive(arguments));
-            call.setResult(invocation.result);
+            call.setResult(ToolResultNormalizer.normalize(invocation.result));
             call.setSuccess(invocation.success);
             calls.add(call);
         }

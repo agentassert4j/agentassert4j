@@ -285,6 +285,15 @@ class TaskAlignerTest {
     }
 
     @Test
+    @DisplayName("报告标签解码还原人读形：与 status 侧 displayKey 同形，不出现百分号编码形")
+    void invocationLabel_percentDecoded() {
+        TaskAlignment alignment = TaskAligner.align(chain(labeledRecord("b1", 1000L, "ord[1]", "h1", "答A")), chain(labeledRecord("n1", 5000L, "ord[1]", "h2", "答A")), comparator, null);
+
+        assertEquals(Verdict.PASS, alignment.getVerdict());
+        assertEquals("ord[1]", alignment.getSteps().get(0).getInvocationLabel(), "标签必须是人读形而非编码形");
+    }
+
+    @Test
     @DisplayName("跨版本配对行为变化（工具维）→ CHANGED，注记不掩盖判定")
     void crossVersion_sameLabel_behaviorChanged() {
         InteractionRecord baseline = labeledRecord("b1", 1000L, "audit", "h1", "{\"status\":\"ok\"}");

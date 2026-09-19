@@ -2,6 +2,7 @@ package io.github.agentassert4j.springai2;
 
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.spi.RecordingInterceptor;
+import io.github.agentassert4j.recorder.RecordingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ChatModel;

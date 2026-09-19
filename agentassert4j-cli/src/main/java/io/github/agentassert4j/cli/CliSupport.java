@@ -85,7 +85,7 @@ final class CliSupport {
             out.println("Rules: " + rulesPath + " (" + rules.getDeclaredInvocationIds().size() + " invocation declaration(s), " + rules.getDeclaredTaskKeys().size() + " task declaration(s); declarations bind into baselines when pinned at establish/accept)");
         }
         String url = dbOverride != null ? dbOverride : config.getStorage().getUrl();
-        StorageRepository repository = new SqliteStorageRepository(expandHome(url));
+        StorageRepository repository = new SqliteStorageRepository(ConfigLoader.expandHome(url));
         repository.initialize();
         return repository;
     }
@@ -222,23 +222,6 @@ final class CliSupport {
             return candidate.getTimestamp() > current.getTimestamp();
         }
         return candidate.getRecordId().compareTo(current.getRecordId()) > 0;
-    }
-
-    /**
-     * 展开 "~" 前缀为用户主目录（配置默认值使用 ~/.agentassert4j/ 约定）。
-     */
-    static String expandHome(String path) {
-        if (path == null || !path.startsWith("~")) {
-            return path;
-        }
-        String home = System.getProperty("user.home", "");
-        if (path.length() == 1) {
-            return home;
-        }
-        if (path.charAt(1) == '/' || path.charAt(1) == '\\') {
-            return home + path.substring(1);
-        }
-        return path;
     }
 
     /**

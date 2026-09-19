@@ -106,7 +106,8 @@ public class BaselineService {
                     manager.autoEstablishBaseline(seed, actor, rules, codeRef);
                 } catch (RuntimeException e) {
                     // 单条建档失败（存储抖动等）不中断整批——与录制 enrich 的
-                    // 单条容错同哲学；分桶已剔除不可分组记录，这里只剩存储层故障
+                    // 单条容错同哲学；分桶已剔除不可分组记录，这里只剩存储层故障。
+                    // 本地不计数不重试：故障可见性由存储层 SEVERE 日志与下方落库回验承担
                 }
             }
 

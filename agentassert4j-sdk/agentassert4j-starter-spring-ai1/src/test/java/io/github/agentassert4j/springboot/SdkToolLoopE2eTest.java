@@ -7,7 +7,7 @@ import io.github.agentassert4j.result.TaskAlignment;
 import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.springai1.RecordingChatModel;
-import io.github.agentassert4j.springai1.RecordingContext;
+import io.github.agentassert4j.recorder.RecordingContext;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;

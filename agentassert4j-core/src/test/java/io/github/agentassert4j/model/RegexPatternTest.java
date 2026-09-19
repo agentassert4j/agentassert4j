@@ -42,6 +42,18 @@ class RegexPatternTest {
             assertFalse(p.matches(null));
             assertFalse(new RegexPattern(null, "").matches("text"));
         }
+
+        @Test
+        @DisplayName("setPattern 后按新模式匹配（编译缓存随之失效）")
+        void matches_recompiledAfterPatternChange() {
+            RegexPattern p = new RegexPattern("abc", "首模式");
+
+            assertTrue(p.matches("xabcx"));
+
+            p.setPattern("xyz");
+            assertTrue(p.matches("xxyzx"));
+            assertFalse(p.matches("xabcx"));
+        }
     }
 
     @Nested

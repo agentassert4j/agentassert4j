@@ -1,12 +1,12 @@
 # SDK 与接入面规格（sdk）
 
 > 最近复核：364801f / 2026-09-03 · S6 成文（会话内对照两代 starter 自动装配 / RecordingChatModel /
-> RecordingContext / 工具观察装饰实现逐项对账，辅以导读第 2 章既有叙事）
+> RecordingContext（单源 recorder 层）/ 工具观察装饰实现逐项对账，辅以导读第 2 章既有叙事）
 > 验证三档占比：【测试钉】8 条 ·【命令可证】0 条 ·【人工对账】2 条
 
 ## 职责与边界
 
-**管**：两代 Spring AI 适配（RecordingChatModel 装饰、RecordingContext 声明作用域、工具观察
+**管**：两代 Spring AI 适配（RecordingChatModel 装饰、RecordingContext（recorder 层单源）声明作用域、工具观察
 装饰）、两代 starter 自动装配与条件退出、编译兼容地板、`recorder_version`/`api_protocol`/`provider`
 落库标记。
 
@@ -133,3 +133,5 @@ JDK8 手动接入方的记录构造（OPERATIONS 最小录制契约承载，非�
 | 2026-09-18 | 质量收尾批（残留项处置） | ①wire 词形单源化：采样键×3 mapper/函数信封×3 mapper 的手写字面量收敛为 core OpenAiWireUtil（含 schema 键词常量），新增适配线只消费不再手写；②引用式 schema 补 $defs 映射（此前 $ref 悬空、重放时 provider 拒绝——延迟爆点修复+钉）；③流式录制改 finally（用户完成回调抛错不丢该次记录）+ 代理解包 InvocationTargetException（异常透明性）+ 首分片计时按方法名匹配（真机实证 1.18 走双参富重载致 ttft 丢失）；④深度截断记 WARN（就近可见）；⑤spring-ai1/ai2 历史工具轮补方言归一（三面 wire 统一，指纹不消费 previousTurns 故零基线影响）；⑥e2e 断言按调用点分组（模型多走一轮工具不假红）；⑦流式真机格落地（ttft/聚合/分片透传三断言） |
  ①单点装饰前提（chat 模板汇聚 doChat）经 1.0.0/1.18.0 字节码双向核实；②流式富回调转发链两端成立（1.18 模板包装器覆写全部富回调 × 代理全量转发）；③混架共存共用录制器有计数闭合钉；④F4b 形状防御（text() 抛错反射兜底）有地板子类钉+真机 L-B 覆盖正常路径；⑤逐轮形状的链末建档纪律（基线锚链末记录，先到先得建档下锚帧轮会与判定侧错配）在真机 L-A 实证并写入测试注释 |
 | 2026-09-03 | S6 成文：两代 starter/RecordingChatModel/RecordingContext/观察装饰对账（辅以导读第 2 章既有叙事与测试清单核实） | ①启动失败中断语义（契约 4）为设计决策、装配测试覆盖正常路径——失败路径由 Spring 装配语义天然保证，无独立测试钉（诚实标注人工对账）；②JDK8 手动接入方的记录构造契约由 OPERATIONS 最小录制契约承载，非本域代码——本域只承诺 intercept 入口与 core 零依赖；③流式聚合 TTFT 取首 chunk 的实现事实在导读第 2 章，未单独测试钉（随 RecordingChatModelTest 整体覆盖） |
+| 2026-09-19 | 冻结门全量巡检（doc-tools 三扫描器：零消费/同名双类型/逐字拷贝） | 零消费 0 命中；同名双类型全组均为设计内镜像（三 starter 配对线/三框架适配线/各模块测试桩夹具，包全限定名互异），零新增裁决面；新增单源化候选 1 条登记（记账不修，维护者裁决）：RecordingContext 在 langchain4j/spring-ai1/spring-ai2 三适配模块逐字镜像（78 窗口）——类本体零框架依赖（仅 java.base），可下沉 recorder 层单源，但属公开 API 模块间搬家（三包各持同名类是用户 import 面），列 1.0.x 池，pre-1.0 无外部消费者窗口内实施成本最低；现三份逐字相同零漂移，扫描器按特性批复跑兜底 |
+| 2026-09-19 | 冻结门收敛批（维护者裁决采纳下沉方案） | 台账在册的 RecordingContext 三镜像单源化实施：类迁至 recorder 层（公开只读访问器 + metadata 只读视图），三适配模块删本地副本改 import（18 文件手术），LC4j 域 RecordingContextTest 随迁 recorder；spring-ai2 类头「不跨模块共享」设计注记随副本消亡，单源注记由 recorder 类头承载——「避免为单一工具类引入公共模块耦合」的原始前提在 recorder 本就是适配线公共下层后不再成立；pre-1.0 免费窗口完成，发布后再挪即破坏性变更。拷贝扫描器该组 78 窗口清零 |

@@ -15,7 +15,7 @@ import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
 import io.github.agentassert4j.langchain4j.RecordingChatModel;
-import io.github.agentassert4j.langchain4j.RecordingContext;
+import io.github.agentassert4j.recorder.RecordingContext;
 import io.github.agentassert4j.langchain4j.RecordingStreamingChatModel;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.recorder.InteractionRecorder;

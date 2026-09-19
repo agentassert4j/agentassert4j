@@ -31,7 +31,7 @@
 
 ## 模块地图与分层铁律
 
-Maven reactor 共 13 个构建节点、产出 10 个 jar（聚合 POM 不产出构件）：
+Maven reactor 共 13 个构建节点、产出 11 个 jar（聚合 POM 不产出构件）：
 
 ```
 Layer 4   starter-spring-ai1          starter-spring-ai2     starter-langchain4j
@@ -39,6 +39,7 @@ Layer 4   starter-spring-ai1          starter-spring-ai2     starter-langchain4j
                │ spring-ai1+storage-sqlite      │ spring-ai2+storage-sqlite   │ langchain4j+storage-sqlite
 Layer 3   spring-ai1            spring-ai2            langchain4j（纯程序化零 Spring）
           cli（组合根：core+recorder+storage-sqlite+picocli，默认后端随行）
+          cli-standalone（cli 的 shade 打包运行面，java -jar 单文件可跑，随 GitHub Releases 分发）
                │
 Layer 2   recorder（core + Disruptor + SLF4J API）                （异步旁路管道）
                │

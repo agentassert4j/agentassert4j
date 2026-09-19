@@ -11,6 +11,7 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.spi.RecordingInterceptor;
+import io.github.agentassert4j.recorder.RecordingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

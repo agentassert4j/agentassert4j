@@ -159,8 +159,12 @@ public class BaselineManager {
      * @param actor                 回滚执行者身份（治理事件留痕——rollback 不改画像
      *                              审批链，执行者在事件表可见）
      * @throws IllegalStateException 无归档基线、画像缺席或目标=活动版本时抛出
+     * @throws IllegalArgumentException versionTag 为 null 时抛出
      */
     public synchronized void rollback(String invocationKey, String versionTag, String expectedActiveVersion, String actor) {
+        if (versionTag == null) {
+            throw new IllegalArgumentException("versionTag is required");
+        }
         InvocationProfile profile = repository.findInvocationByKey(invocationKey);
         if (profile == null) {
             throw new IllegalStateException("Invocation profile not found: " + invocationKey);

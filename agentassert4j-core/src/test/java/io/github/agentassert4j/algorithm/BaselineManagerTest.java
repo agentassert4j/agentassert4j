@@ -264,6 +264,12 @@ class BaselineManagerTest {
         }
 
         @Test
+        @DisplayName("versionTag 为 null → 抛出 IllegalArgumentException（公开 API 防御）")
+        void rollback_nullVersionTag_rejected() {
+            assertThrows(IllegalArgumentException.class, () -> manager.rollback("gk-1", null, null, "tester"));
+        }
+
+        @Test
         @DisplayName("回滚时当前基线也归档（保留历史）")
         void rollback_currentBaselineAlsoArchived() {
             InvocationProfile profile = makeProfileWithCandidate("gk-1", "skill-1");

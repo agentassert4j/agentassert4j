@@ -4,18 +4,20 @@ target/
 # IDE
 .idea/
 *.iml
+.zcodeignore
 
 # OS
 Thumbs.db
 .DS_Store
 
-# 内部工作文档（不入公开仓库）：阶段性=一次性会话沉淀，全局性=持续修订的长期文档
+# 内部工作文档
 /docs/
 
-# 真实 LLM 端到端验证套件
+# 端到端验证套件
 /agentassert4j-cli/src/test/java/io/github/agentassert4j/e2e/
 
 # 文档配图工作台
 /doc-tools/
 /.zcode/
+/.claude/
 /channel2/

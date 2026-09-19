@@ -20,19 +20,23 @@
 | 计数账本 | AtomicLong 六件：recorded/filtered/dropped(生产)/dropped(消费)/written/failed | 公开 getter 是诊断契约；闭包公式见契约 1 |
 | seq | 录制进程内单调序号源 | 丢弃造成的空洞合法；(session_id, seq) 是下游确定性排序键 |
 | 派生字段 | 记录自身（模板全文/骨架文本） | enrich 在落库前补 templateHash/skeletonHash 投影与 invocationKey，显式设置优先 |
+| 录制声明 | `RecordingContext`（recorder 层单源，三框架适配线共用） | 线程绑定的会话归属与业务标注声明；适配模块不再各持副本（2026-09-19 下沉裁决） |
 
 ## 状态机与生命周期
 
 录制器生命周期：构造 → `start()`（启动 Disruptor + 定时 flush）→ `intercept()`（业务线程，纳秒级
-入队）→ `stop()`（先 flush 剩余 → 停定时线程 → Disruptor 10 秒优雅关闭，超时强制）。`enabled=false`
-时 `start()` 不启动任何管道，录制器整体退化为 no-op（生产打包形态）。`intercept` 与 `stop` 以实例
-监视器互斥——无锁窗口内关停完成会把事件发布进已停摆的 RingBuffer，记录永久滞留且计数不闭合。
+入队）→ `stop()`（翻转相位截住新发布 → flush 剩余 → 排空 RingBuffer（10 秒有界）→ flush 尾批 →
+强制停机并结算滞留）。`enabled=false` 时 `start()` 不启动任何管道，录制器整体退化为 no-op（生产
+打包形态），intercept 保持静默不计数。关停与生产者的互斥只覆盖发布临界区：stop 在临界区内翻转
+相位（微秒级）后即释放，排空与停机全部锁外——生产者全程不被关停阻塞；「通过临界区复核的发布
+必然先于排空完成」由相位握手保证，记录不会滞留进已停摆的 RingBuffer。
 
 ## 契约
 
-1. **计数闭合**：`written + dropped(生产侧 RingBuffer 满/发布异常 + 消费侧缓冲超限) == recorded`；
-   被采集门过滤的记录从未进入管道，不计入 recorded——总到达 = recorded + filtered。聚合口径
-   `getDroppedCount()` = 生产侧 + 消费侧。【测试钉】`InteractionRecorderTest`（计数闭合断言）
+1. **计数闭合**：`written + dropped(生产侧 RingBuffer 满/发布异常 + 消费侧缓冲超限) + failed(批量写
+   失败) == recorded`；被采集门过滤的记录从未进入管道，不计入 recorded——总到达 = recorded +
+   filtered。聚合口径 `getDroppedCount()` = 生产侧 + 消费侧；failed 独立计数，不与丢弃混计。
+   【测试钉】`InteractionRecorderTest`（计数闭合断言 + 写失败场景闭合断言）
 2. **零侵入**：RingBuffer 满时 `tryNext` 丢弃不阻塞业务线程；批量写失败计 failed 不重试；录制
    侧任何故障不阻塞业务请求。【测试钉】`InteractionRecorderTest`（满缓冲丢弃）
 3. **采集门**：默认全量录制（`recordUndeclaredChat=true`——任务链完整性优先，链条终点的最终回答
@@ -61,8 +65,12 @@
    MCP 摄取面无端点声明位，经该面入库的记录 endpoint 恒空（wire JSON 不携带传输元数据）。
    【测试钉】`SpringAiRecordMapperTest`（响应 id/端点声明）、`InteractionRecorderTest`（兜底与
    per-call 优先）
-9. **stop 排空**：关停先 flush 剩余再停管道，10 秒超时强制；关停瞬间新到达记录按计数口径处理，
-   不阻塞生产者。【测试钉】`InteractionRecorderTest`
+9. **stop 排空**：相位翻转（此后新到达计入 recorded + dropped，生产者不阻塞）→ flush
+   剩余 → 排空 RingBuffer（默认 10 秒有界等待，消费序 ≥ 发布游标为排空判据）→ flush 尾批 →
+   `halt()` 强制停机。排空超时的滞留事件按丢弃结算，闭合公式在 stop 返回后成立——唯一例外是
+   存储调用悬挂超过时限的在途批次（它可能在结算后才补记 written），该一次性不精确以 WARN
+   披露。stop 幂等：进行中或已完成的再次调用立即返回。【测试钉】`InteractionRecorderTest`
+   （关停不阻塞生产者 + 超时结算闭合 + 并发关停闭合 + 幂等）
 10. **采集门过滤告警节律**：首条一次、每满 100 条重申一次（节律判定为纯函数
     `shouldWarnOnFilter`，告警本体经 SLF4J 发射）——静默丢数据比丢数据本身更危险。
     【测试钉】`InteractionRecorderTest`（告警节律）
@@ -162,3 +170,5 @@ JSON 参数）静默退化——对应字段 null/空，退化不中断。显式
 | 2026-09-03 | S5 成文：InteractionRecorder/RecorderConfig/DataSanitizer/BatchWriteHandler 全量对账 + 测试指针核实 | ①filtered 与 dropped 分列是语义要求（过滤=决策、丢弃=故障），诊断时不得合并；②ConsumerDropped 与生产侧 dropped 分属不同线程域，聚合口径以 getDroppedCount() 为准；③record_id UUID 兜底处保留既有 TODO（SDK 接线前是最终设计位） |
 | 2026-09-09 | 三协议全量审查批：chat 摄取收编 assistant tool_calls 发起帧（原历史近似「细节不入轮」废弃——三协议 previousTurns 结构就此一致，重放合成发起帧拿到真值而非空名占位）；发射协议改三级推导（配置显式>记录 apiProtocol 提示>openai-chat 兜底，LlmConfig.protocol 缺省改 null 表达未配置） | 审查发现两点：①chat 摄取对 assistant tool_calls 的忽略使三协议记录结构不对称；②llm.protocol 缺省恒 openai-chat 使未配置协议的 anthropic/responses 库重放打错方言——按「记录基线可自动推导」主张修复 |
 | 2026-09-09 | 三协议批①新增「wire 方言归一」节：McpRecordIngestion 三协议映射矩阵 + finish/usage 归一表对码成文（归一器实现于 AnthropicMessagesWireFormat/OpenAiResponsesWireFormat，摄取与重放客户端共用单源） | ①anthropic input_tokens 是非缓存口径，总量须三项求和——chat 客户端旧 TODO 就此兑现于 anthropic 侧；②TurnContext.toolArguments 此前不随 previous_turns JSON 落库（历史轮无载体故无感），三协议摄取可存 arguments 真值，JsonMapper 读写两侧已补键（JSON 内部加键向后兼容，非 schema 列变更）；③空 messages 列表在旧摄取路径会 IndexOutOfBounds 崩溃（E-ENV 兜底），重构中就近修复为退化落库并有敌对钉 |
+| 2026-09-19 | 冻结门契约对齐批（独立审查发现收敛） | ①契约 1 公式补 failed 项：`written + dropped + failed == recorded`（spec 过时侧修正——实现、BatchWriteHandler javadoc 与 stop 日志三处早已三项目口径），新增写失败场景闭合断言；②DataSanitizer 值树脱敏与 ToolCall 值树拷贝加深度封顶（对齐 RecursiveJsonParser 解析上限量级），超限子树截断为 DEPTH_TRUNCATION_MARKER 随记录落库就地可见——业务线程上的无封顶递归不得以 StackOverflowError 穿透 catch(Exception)；深嵌套钉 ×2（拷贝链 + 脱敏链） |
+| 2026-09-19 | 冻结门 M3 重设计（维护者裁决：关停阻塞生产者不可接受，拒绝以 spec 措辞接受现状） | intercept 的粗粒度监视器互斥改为「发布临界区 + 相位握手」：stop 只在临界区内翻转相位（微秒级）后即释放，flush/排空/停机全部锁外——生产者全程零阻塞；排空判据 = RingBuffer 消费序 ≥ 发布游标（有界等待，替代不可观测的 disruptor.shutdown 等待），超时 halt 后滞留事件按丢弃结算，闭合公式在 stop 返回后成立（存储悬挂的在途批次一次性不精确以 WARN 披露并写入契约 9）；非 RUNNING 相位（关停窗口/停止后/start 前）的到达由静默忽略改为计入 recorded + dropped（intercept_beforeStart_ignored 重钉为 countedDropped，语义变更属本批有意行为）；isStarted 改为 RUNNING 相位查询（关停进行中即 false）；stop 新增包内可见时限重载供测试驱动超时路径。【测试钉】stop_neverBlocksProducers_andClosesCounters（卡死的存储调用 + 短时限 stop：500 次提交全程不阻塞 + 账本精确闭合） |

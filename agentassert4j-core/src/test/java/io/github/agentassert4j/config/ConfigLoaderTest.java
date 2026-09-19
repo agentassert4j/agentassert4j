@@ -28,6 +28,52 @@ class ConfigLoaderTest {
     }
 
     @Nested
+    @DisplayName("directoryOf 主配置目录提取（平台无关分隔符）")
+    class DirectoryOf {
+
+        @Test
+        @DisplayName("反斜杠路径取目录（Windows 形态，回退依赖此形态）")
+        void windowsBackslashPath() {
+            assertEquals("C:\\Users\\x", ConfigLoader.directoryOf(new StringBuilder("C:\\Users\\x\\agentassert4j.json")));
+        }
+
+        @Test
+        @DisplayName("正斜杠路径取目录")
+        void unixForwardSlashPath() {
+            assertEquals("/etc/agentassert", ConfigLoader.directoryOf(new StringBuilder("/etc/agentassert/agentassert4j.json")));
+        }
+
+        @Test
+        @DisplayName("classpath 标识与裸文件名返回 null")
+        void nonFileSystemPaths() {
+            assertNull(ConfigLoader.directoryOf(new StringBuilder("classpath:config/agentassert4j.json")));
+            assertNull(ConfigLoader.directoryOf(new StringBuilder("agentassert4j.json")));
+        }
+    }
+
+    @Nested
+    @DisplayName("expandHome 用户主目录展开（CLI 与 starter storage url 的共用契约）")
+    class ExpandHome {
+
+        @Test
+        @DisplayName("~/ 与 ~\\ 前缀展开为用户主目录")
+        void tildeWithSeparatorExpands() {
+            String home = System.getProperty("user.home");
+            assertEquals(home + "/rest", ConfigLoader.expandHome("~/rest"));
+            assertEquals(home + "\\rest", ConfigLoader.expandHome("~\\rest"));
+        }
+
+        @Test
+        @DisplayName("裸 ~ 展开为主目录；~user 形态与普通路径原样保留；null 直通")
+        void otherFormsPreserved() {
+            assertEquals(System.getProperty("user.home"), ConfigLoader.expandHome("~"));
+            assertEquals("~other/x", ConfigLoader.expandHome("~other/x"));
+            assertEquals("/abs/path", ConfigLoader.expandHome("/abs/path"));
+            assertNull(ConfigLoader.expandHome(null));
+        }
+    }
+
+    @Nested
     @DisplayName("resolveEnvVars 环境变量替换")
     class ResolveEnvVars {
 

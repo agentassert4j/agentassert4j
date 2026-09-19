@@ -43,6 +43,18 @@ class FingerprintExtractorTest {
     }
 
     @Test
+    void dim1_nullArgTypeValue_skippedNotThrown() {
+        // argTypes 值经存储往返可能为 null（asStringMap 保留 null 值），建档现场重提不得中断
+        Map<String, String> argTypes = new HashMap<>();
+        argTypes.put("orderId", "String");
+        argTypes.put("badKey", null);
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(record(Collections.singletonList(tc("queryOrder", argTypes, true)), "{\"result\":\"ok\"}"), null, null);
+
+        assertEquals(Collections.singletonMap("orderid", "string"), fp.getToolParamTypes());
+    }
+
+    @Test
     void dim1_multiTool_extractsAllNames() {
         InteractionRecord r = record(Arrays.asList(tc("toolA", null, true), tc("toolB", null, true)), "{}");
 

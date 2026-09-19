@@ -16,7 +16,7 @@ import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import dev.langchain4j.service.AiServices;
 import io.github.agentassert4j.algorithm.*;
 import io.github.agentassert4j.langchain4j.RecordingChatModel;
-import io.github.agentassert4j.langchain4j.RecordingContext;
+import io.github.agentassert4j.recorder.RecordingContext;
 import io.github.agentassert4j.langchain4j.RecordingStreamingChatModel;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.recorder.InteractionRecorder;

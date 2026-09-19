@@ -1,25 +1,33 @@
-package io.github.agentassert4j.springai2;
+package io.github.agentassert4j.recorder;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
  * 录制上下文 — 业务线程向旁路录制声明会话归属与业务标注。
  *
- * <p>与 springai1 包的同名类各持一份：两代 SDK 模块按版本线自包含，
- * 本类虽无 Spring AI 类型也不跨模块共享，避免为单一工具类引入公共模块耦合。</p>
+ * <p>框架适配层的模型接口不携带会话概念（会话在更高层的编排/记忆组件），
+ * SDK 用线程绑定的临时作用域补齐。三个框架适配线（Spring AI 1.x/2.x、
+ * LangChain4j）共用本类：它不依赖任何框架类型，只在 recorder 层维护这份实现，
+ * 适配模块不再各持副本。</p>
  *
- * <p>Spring AI 的 ChatModel 层不携带会话概念（会话在 ChatClient/ChatMemory 层），
- * SDK 用线程绑定的临时作用域补齐：</p>
  * <pre>{@code
  * try (RecordingContext ctx = RecordingContext.start("session-1")
- *         .withInvocationId("order-refund")) {
- *     chatClient.prompt()...call();
+ *         .withInvocationId("order-refund")
+ *         .withTemplateId("order-skill")
+ *         .withTemplateSkeleton("你是订单助手，今天是{{date}}")
+ *         .withEndpoint("http://llm-gw:8000")
+ *         .withMetadata("channel", "app")) {
+ *     ... 业务调用 ...
  * }
  * }</pre>
  * <p>作用域可嵌套，关闭时恢复外层。未声明时录制管道按既有退化策略处理
- * （sessionId 缺失的记录各自成独立会话）。仅在声明线程内生效——Reactor/异步
- * 线程上的调用取不到上下文，需要标注的流式调用请在订阅前完成声明。</p>
+ * （sessionId 缺失的记录各自成独立会话）。仅在声明线程内生效——异步完成
+ * 线程上的调用取不到上下文，需要标注的流式调用请在发起前完成声明。</p>
+ *
+ * <p>必须以 try-with-resources 或显式 {@code close()} 结束作用域：忘记关闭会把
+ * 本作用域残留到池化线程上，同线程的后续任务将静默携带旧的 sessionId/invocationId。</p>
  *
  * @author axy-yxa
  * @since 2026-08-27
@@ -50,7 +58,10 @@ public final class RecordingContext implements AutoCloseable {
         return context;
     }
 
-    static RecordingContext currentOrNull() {
+    /**
+     * 当前线程的活跃作用域；未声明返回 null。适配层捕获路径经此取声明。
+     */
+    public static RecordingContext currentOrNull() {
         return CURRENT.get();
     }
 
@@ -98,28 +109,34 @@ public final class RecordingContext implements AutoCloseable {
         return this;
     }
 
-    String sessionId() {
+    /**
+     * 会话标识（构造后不可变）。
+     */
+    public String sessionId() {
         return sessionId;
     }
 
-    String invocationId() {
+    public String invocationId() {
         return invocationId;
     }
 
-    String templateId() {
+    public String templateId() {
         return templateId;
     }
 
-    String templateSkeleton() {
+    public String templateSkeleton() {
         return templateSkeleton;
     }
 
-    String endpoint() {
+    public String endpoint() {
         return endpoint;
     }
 
-    Map<String, String> metadata() {
-        return metadata;
+    /**
+     * 已声明元数据的只读视图（键序 = 声明序）。
+     */
+    public Map<String, String> metadata() {
+        return Collections.unmodifiableMap(metadata);
     }
 
     @Override

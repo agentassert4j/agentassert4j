@@ -239,6 +239,22 @@ class ParameterValueTracerTest {
     }
 
     @Test
+    void extractArgValues_nullArgumentValue_skipped() {
+        // JSON null 参数值（{"a":null} 解析即得）无值可溯源，跳过不得中断
+        Map<String, Object> args = new LinkedHashMap<>();
+        args.put("missing", null);
+        args.put("orderId", "ORD-001");
+        ToolCall tc = new ToolCall();
+        tc.setToolName("tool");
+        tc.setArguments(args);
+        InteractionRecord r = record("s1", null, Collections.singletonList(tc), 0L);
+
+        Set<String> values = tracer.extractArgValues(r);
+
+        assertTrue(values.contains("ORD-001"));
+    }
+
+    @Test
     void extractFieldNames_jsonObject() {
         InteractionRecord r = record("s1", "{\"orderId\":\"ORD-001\",\"amount\":100}", null, 0L);
         Set<String> names = tracer.extractFieldNames(r);

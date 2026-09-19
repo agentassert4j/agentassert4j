@@ -1,4 +1,4 @@
-package io.github.agentassert4j.langchain4j;
+package io.github.agentassert4j.recorder;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,7 +29,7 @@ class RecordingContextTest {
     }
 
     @Test
-    @DisplayName("元数据声明：null 键值跳过，合法键值序列化进记录")
+    @DisplayName("元数据声明：null 键值跳过，合法键值进只读视图")
     void metadataDeclaration() {
         try (RecordingContext ctx = RecordingContext.start("s").withMetadata("channel", "app").withMetadata("leak", null).withMetadata(null, "x")) {
             assertEquals(1, ctx.metadata().size());

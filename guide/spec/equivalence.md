@@ -30,7 +30,7 @@
 | 术语 | 本 spec 禁词表（下节，唯一真源） | 全部用户可见输出（主码串/help/instructions/报告模板）× 文档 | doc-tools/scan_banned_terms.py（读本表扫描；私有资产，丢失可按本表重建） | 扫描器在 |
 | 退出码语义 | `CliErrorCode` 枚举 | CLI 各命令 × MCP 各工具同错误同码 | 错误路径测试逐命令钉（error/1 包络批）+ 跨面同码钉 `SurfaceParityTest`（空库/未建档判定/记录未命中三条件 × CLI/MCP） | 钉在（新错误码随批补钉的义务保留） |
 | 缩域语义 | `CliSupport` 选择器解析（目标选择器=精确+唯一前缀；缩域选择器=前缀过滤） | status / report / check / diff / export / verify / replay 各命令 | 选择器语义钉（SelectorSemantics 相关测试）+ 跨面同集钉 `SurfaceParityTest`（缩域族 CLI status ≡ MCP report 同键集；目标族多键标签歧义披露列全候选）+ R7 实测 | 钉在 |
-| 工具结果方言归一 | core `ToolResultNormalizer.normalize`（单源） | spring-ai1 观察装饰结果路径 × spring-ai1/ai2 previousTurns tool 轮次路径 × LangChain4j previousTurns tool 轮次路径 | `ToolResultNormalizerTest`（core 契约钉）+ 三 mapper 测试方言组引用同一实现 | 钉在 |
+| 工具结果方言归一 | core `ToolResultNormalizer.normalize`（单源） | spring-ai1/ai2 观察装饰结果路径 × spring-ai1/ai2 previousTurns tool 轮次路径 × LangChain4j previousTurns tool 轮次路径 | `ToolResultNormalizerTest`（core 契约钉）+ 三 mapper 测试方言组引用同一实现 + 两代 mapper 观察路径等价钉（observedToolResult_dialectNormalized） | 钉在 |
 | OpenAI wire 词表与信封 | core `OpenAiWireUtil`（单源：采样键/function 信封/JSON-Schema 键词） | spring-ai1 × spring-ai2 × LangChain4j 三 mapper 的 samplingParams/toolsDefinition 组装 | `OpenAiWireUtilTest` + 三 mapper 的采样与工具定义断言 | 钉在 |
 | 值溯源值源三态 | `ParameterValueTracer.extractFieldValues`（聚合形状 toolCalls.result > 逐轮形状 previousTurns tool 帧 > 纯文本 modelResponse，择一） | Spring AI 聚合姿势 × Spring AI 逐轮姿势 × LangChain4j 逐轮姿势 | `ParameterValueTracerTest`（perRoundToolTurnResult_highEdgeFromHistoryTurn + userOrAssistantTurnsNotValueSource）+ LangChain4j 真机 e2e 边断言 + Spring AI e2e M1 边断言 | 钉在 |
 
@@ -99,3 +99,4 @@
 | 2026-09-17 | 成文（七轮复盘反向枚举 + 首版钉落地） | 首版九行：六行已有钉/扫描器在位，退出码与缩域两行标「部分」待增强项；禁词表首版六行（approve/approved baselines/promote the candidate/earliest record/agent 透镜/never flips） |
 | 2026-09-18 | LangChain4j 适配批：方言归一与值源三态两行入册 | ①方言归一自 spring-ai1 mapper 内私有实现单源化为 core `ToolResultNormalizer`（同规则双份手写=R11 违例，随批收敛）；②值源三态行把逐轮形状（LC4j 恒逐轮、Spring AI 关内部执行/ChatClient 姿势）纳入值溯源等价面——此前值源只认 toolCalls.result 与 modelResponse，逐轮形状的工具结果住在下一轮 previousTurns 无边可出（真机 L-A 首跑实证缺口，tracer 增第三值源修复） |
 | 2026-09-17 | 1.0.0 收尾批：退出码/缩域两行转钉在 | `SurfaceParityTest` 落地——①退出码等价：空库（E-NO-DATA）/未建档判定（E-GUARD）/记录未命中（E-NO-DATA）三条件 × CLI 与 MCP 同码断言；②缩域等价按两族如实钉：缩域族 CLI `status --invocation` ≡ MCP `report` 同键集（标签扇出两键、他标签不混入），目标族 `replay --invocation` 多键标签响亮拒绝（E-USAGE）且披露的候选键集与缩域族解析一致（同一解析真源在两族上的投影）；两行「部分」标注清除 |
+| 2026-09-19 | 冻结门契约对齐批（独立审查发现收敛） | 方言归一行补格：spring-ai2 观察装饰结果路径此前既漏归一也漏登记（独立审查发现）——ai2 mapper 补 ToolResultNormalizer.normalize 与 ai1 同格，两代 mapper 观察路径等价断言（observedToolResult_dialectNormalized）落钉，该分叉格子自此在册可扫 |

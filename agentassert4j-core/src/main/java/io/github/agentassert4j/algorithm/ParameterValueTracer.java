@@ -239,7 +239,7 @@ public class ParameterValueTracer {
      */
     public Set<String> extractArgValues(InteractionRecord record) {
         if (record == null || record.getToolCalls() == null) return Collections.emptySet();
-        return record.getToolCalls().stream().filter(tc -> tc.getArguments() != null).flatMap(tc -> tc.getArguments().values().stream()).map(Object::toString).filter(v -> v.length() >= 2).collect(Collectors.toCollection(LinkedHashSet::new));
+        return record.getToolCalls().stream().filter(tc -> tc.getArguments() != null).flatMap(tc -> tc.getArguments().values().stream()).filter(v -> v != null).map(Object::toString).filter(v -> v.length() >= 2).collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     /**

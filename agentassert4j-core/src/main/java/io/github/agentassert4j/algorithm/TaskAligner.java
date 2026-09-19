@@ -177,7 +177,7 @@ public final class TaskAligner {
             List<BaselineStep> baseSteps = baselineGroups.get(key);
             List<InteractionRecord> newRecords = newGroups.get(key);
             StepAlignment step = new StepAlignment();
-            step.setInvocationLabel(key.startsWith("L:") ? key.substring(2) : null);
+            step.setInvocationLabel(key.startsWith("L:") ? percentDecode(key.substring(2)) : null);
             if (baseSteps == null) {
                 step.setKind(StepKind.ADDED);
                 step.setInvocationKey(newRecords.get(0).getInvocationKey());

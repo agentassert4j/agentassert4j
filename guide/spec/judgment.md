@@ -52,7 +52,9 @@
    【测试钉】ignorableFields_removedFieldsNotCounted / addedErrorField_ignorableConfig_honored /
    addedNestedErrorField_ignorableConfig_honored
 6. **维度 3/4 = 基线声明、当前答卷**：无声明该维不构成差异；声明后按当前输出文本校验
-   （关键词 contains、禁用 noneMatch、正则全匹配）。【测试钉】dimension3_*/dimension4_* 组
+   （关键词 contains、禁用 noneMatch、正则全匹配）。正则按声明实例编译一次复用；不设匹配
+   超时（墙钟超时会引入平台相关的非确定性），回溯复杂度由声明者自负。
+   【测试钉】dimension3_*/dimension4_* 组
 7. **加权评分仅展示**：权重随声明维动态重分配，判定分支不消费 score。【测试钉】
    dynamicWeight_* / passVerdict_scoreExactly095 / changed_lowScore
 8. **行为校验器**：八个内置 behavior（mustUseChinese/mustUseEnglish/returnsEmptyOnError/
@@ -88,8 +90,9 @@
     verify 同尺复用；判定对象不随 accept 翻转 = A2「同证据复检绿」承诺的机械保证。）
     【测试钉】`BaselineSidesTest`（投影属性）+ `TaskReplayRunnerTest.CiAlign`（CI 消费画像
     指纹的判定行为）+ `VerifyExportTest`（包定格侧回归网）
-12. **returnsEmptyOnError 的空数组子句宽泛**（`contains("[]")` 会把含空数组字面量的正常输出
-    误判为空）——已在源码标注 TODO，改结构化判空需随版本纪律走。【人工对账】既有债务
+12. **returnsEmptyOnError 按结构判空**：空 = 纯空白或 JSON 根为空数组/空对象；文本中出现
+    `[]` 字面量不构成空，解析失败按非空处理（出错应空场景不得误放行）。
+    【测试钉】`BehaviorCheckerTest` 空对象/内嵌空数组/非空数组/文本含 `[]` 四钉
 
 ## 行为矩阵
 
@@ -142,3 +145,4 @@
 | 2026-09-03 | S3 成文：FingerprintExtractor/DeterministicComparator/BehaviorChecker/JudgmentSemantics/BaselineManager 全量对账 + 测试指针核实 | ①ARCHIVED 枚举值从不写入活跃行（导读「基线三态流转」的表述易误读为活跃行三态，governance spec 成文时精确化）；②指纹序列化字节可复现（FingerprintJson 键序固定 + TreeMap/TreeSet 归一），提取器内存 HashMap 不影响；③维度 1 不受 ignorableFields 豁免为现行事实（测试未显式反向钉「维度 1 不豁免」，为可收缩项） |
 | 2026-09-17 | D1 术语清扫（维护者「质量优先」裁决） | 契约 11 两处单数旧词：「CI 对照 = 画像活跃指纹」→「画像认可形态集合」、「承诺 = 批准指纹」→「批准形态集合」（与同契约既有的集合措辞及 BaselineSides.fromProfiles 的形态集合投影对齐）；台账历史行保留原词 |
 | 2026-09-17 | 1.0.0 收尾批：S3 可收缩项补钉 | 台账在册的「维度 1 不受 ignorableFields 豁免为现行事实、测试未显式反向钉」补钉：DeterministicComparatorTest.ignorableFields_neverExemptToolDimension——把参数键名配成 ignorable 不能掩盖参数类型差异（CHANGED + paramTypeMatch=false + 结构维不受影响）；ignorableFields 的归一化边界自此只此一份语义 |
+| 2026-09-19 | 冻结门契约对齐批（独立审查发现收敛） | ①契约 12 改写为结构判空现状（原「已在源码标注 TODO」表述因 09-17 修复而过时）；②契约 6 补正则语义：声明实例惰性编译一次复用（setPattern 失效有钉）、不设匹配超时（墙钟超时引入平台相关非确定性）、回溯复杂度声明者自负；③维度 1 argTypes null 值跳过（存储往返病态行不中断建档，dim1_nullArgTypeValue_skippedNotThrown）；④BaselineManager.rollback 对 null versionTag 抛 IllegalArgumentException（公开 API 防御，rollback_nullVersionTag_rejected） |

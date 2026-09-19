@@ -8,6 +8,7 @@ import io.github.agentassert4j.util.LlmProviderUtil;
 import io.github.agentassert4j.util.OpenAiWireUtil;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import io.github.agentassert4j.util.ToolResultNormalizer;
+import io.github.agentassert4j.recorder.RecordingContext;
 import org.springframework.ai.chat.messages.*;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;

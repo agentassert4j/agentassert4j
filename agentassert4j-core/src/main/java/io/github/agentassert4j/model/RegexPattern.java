@@ -14,6 +14,11 @@ public class RegexPattern {
 
     private String pattern;
     private String description;
+    /**
+     * 编译缓存：Pattern.compile 代价随模式复杂度增长，重放逐记录逐条匹配按
+     * 声明实例只编译一次。volatile 容忍并发首编译的良性竞态（重复编译结果相同）。
+     */
+    private volatile Pattern compiled;
 
     public RegexPattern(String pattern, String description) {
         this.pattern = pattern;
@@ -29,7 +34,12 @@ public class RegexPattern {
     public boolean matches(String text) {
         if (text == null || pattern == null) return false;
         try {
-            return Pattern.compile(pattern).matcher(text).find();
+            Pattern cached = compiled;
+            if (cached == null) {
+                cached = Pattern.compile(pattern);
+                compiled = cached;
+            }
+            return cached.matcher(text).find();
         } catch (PatternSyntaxException e) {
             return false;
         }
@@ -41,6 +51,7 @@ public class RegexPattern {
 
     public void setPattern(String pattern) {
         this.pattern = pattern;
+        this.compiled = null;
     }
 
     public String getDescription() {

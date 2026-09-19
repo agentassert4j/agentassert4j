@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -120,11 +121,61 @@ class InteractionRecorderTest {
     }
 
     @Test
-    void intercept_beforeStart_ignored() {
+    void intercept_beforeStart_countedDropped() {
+        // 非 RUNNING 相位的到达计入 recorded 与 dropped（可见丢弃）：调用方在 start 前
+        // 提交是使用错误，可见的丢弃计数让它当场暴露，而非静默蒸发；账本闭合不破
         InteractionRecorder recorder = new InteractionRecorder(repo, RecorderConfig.defaults());
         recorder.intercept(createRecord("r1"));
 
-        assertEquals(0, recorder.getRecordedCount());
+        assertEquals(1, recorder.getRecordedCount());
+        assertEquals(1, recorder.getDroppedCount());
+        assertEquals(0, recorder.getWrittenCount());
+    }
+
+    @Test
+    void restart_afterStop_recordsAgain() throws Exception {
+        // 相位机重启路径：STOPPED → start() 重建管道，录制恢复；计数跨生命周期累计
+        RecorderConfig config = RecorderConfig.builder().batchSize(100).flushIntervalMs(100).ringBufferSize(1024).build();
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+        recorder.intercept(createRecord("r1"));
+        recorder.stop();
+        assertEquals(1, repo.getStore().size());
+
+        recorder.start();
+        assertTrue(recorder.isStarted(), "重启后相位回到 RUNNING");
+        recorder.intercept(createRecord("r2"));
+        recorder.stop();
+        assertEquals(2, repo.getStore().size(), "重启后的记录照常落库");
+        assertEquals(2, recorder.getRecordedCount(), "计数器实例级持有，跨生命周期累计");
+    }
+
+    @Test
+    void intercept_doesNotMutateCallerRecord() throws Exception {
+        // 四个补全位（默认声明/recordId/sessionId/endpoint）只写落库副本——调用方持有
+        // 的原对象保持原样，与 DataSanitizer「不改原记录」同一承诺
+        RecorderConfig config = RecorderConfig.builder().defaultInvocationId("default-skill").build();
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        InteractionRecord mine = createRecord("mine");
+        mine.setInvocationId(null);
+        mine.setRecordId(null);
+        mine.setSessionId(null);
+        mine.setEndpoint(null);
+        recorder.intercept(mine);
+        recorder.stop(); // stop 排空语义保证确定性：返回时已发布记录全部落库
+
+        assertNull(mine.getInvocationId(), "原对象的声明位不被改写");
+        assertNull(mine.getRecordId(), "原对象的 recordId 不被改写");
+        assertNull(mine.getSessionId(), "原对象的 sessionId 不被改写");
+        assertNull(mine.getEndpoint(), "原对象的 endpoint 不被改写");
+
+        assertEquals(1, repo.getStore().size(), "副本照常落库");
+        InteractionRecord stored = repo.getStore().get(0);
+        assertEquals("default-skill", stored.getInvocationId(), "默认声明落在副本的声明位");
+        assertNotNull(stored.getRecordId(), "副本 recordId 兜底 UUID");
+        assertEquals(stored.getRecordId(), stored.getSessionId(), "副本 sessionId 退化独立会话");
     }
 
     @Test
@@ -498,8 +549,8 @@ class InteractionRecorderTest {
 
     @Test
     void stop_concurrentIntercept_countsStayClosed() throws Exception {
-        // intercept 与 stop 互斥：关停窗口内的并发发布既不得滞留为幽灵事件，
-        // 也不得破坏 written + dropped == recorded 的计数闭合
+        // 关停握手：并发发布既不得滞留为幽灵事件，也不得破坏
+        // written + dropped == recorded 的计数闭合（stop 全程不阻塞生产者）
         InMemoryStorageRepository repo = new InMemoryStorageRepository();
         RecorderConfig config = RecorderConfig.builder().batchSize(100).flushIntervalMs(1000).ringBufferSize(4096).build();
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
@@ -524,8 +575,79 @@ class InteractionRecorderTest {
     }
 
     @Test
+    void writeFailure_closureIncludesFailedCount() {
+        // 计数闭合三项目公式：批量写失败单独计 failed，不与丢弃混计
+        InMemoryStorageRepository repo = new InMemoryStorageRepository();
+        repo.setThrowOnSave(true);
+        RecorderConfig config = RecorderConfig.builder().batchSize(100).ringBufferSize(1024).build();
+        InteractionRecorder recorder = new InteractionRecorder(repo, config);
+        recorder.start();
+
+        recorder.intercept(createRecord("fail-1"));
+        recorder.intercept(createRecord("fail-2"));
+        recorder.stop();
+
+        assertEquals(2, recorder.getRecordedCount());
+        assertEquals(0, recorder.getWrittenCount(), "写全部失败，written 必须为 0");
+        assertTrue(recorder.getFailedCount() >= 1, "批量写失败必须计入 failed");
+        assertEquals(recorder.getRecordedCount(), recorder.getWrittenCount() + recorder.getDroppedCount() + recorder.getFailedCount(),
+                "written + dropped + failed 必须闭合到 recorded");
+    }
+
+    @Test
+    void stop_neverBlocksProducers_andClosesCounters() throws Exception {
+        // 契约：关停全程不阻塞生产者；关停窗口内到达按丢弃计数；排空超时的滞留事件
+        // 以丢弃结算——written + dropped + failed 在 stop 返回后闭合到 recorded。
+        // 本测试的存储调用永不返回（无在途批次补记 written），闭合断言因此精确成立
+        CountDownLatch releaseStorage = new CountDownLatch(1);
+        CountDownLatch storageEntered = new CountDownLatch(1);
+        InMemoryStorageRepository blocking = new InMemoryStorageRepository() {
+            @Override
+            public void saveInteractions(List<InteractionRecord> records) {
+                storageEntered.countDown();
+                try {
+                    releaseStorage.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                super.saveInteractions(records);
+            }
+        };
+        RecorderConfig config = RecorderConfig.builder().batchSize(100).ringBufferSize(4096).build();
+        InteractionRecorder recorder = new InteractionRecorder(blocking, config);
+        recorder.start();
+
+        // 首条记录让消费线程停在存储调用里等待：它尚未写完，消费序不推进（gating 落后 cursor）
+        recorder.intercept(createRecord("wedge"));
+        assertTrue(storageEntered.await(5, TimeUnit.SECONDS), "消费线程必须先卡进存储调用");
+
+        CountDownLatch stopEntered = new CountDownLatch(1);
+        Thread stopper = new Thread(() -> {
+            stopEntered.countDown();
+            recorder.stop(300, TimeUnit.MILLISECONDS);
+        });
+        stopper.start();
+        stopEntered.await();
+        Thread.sleep(100); // stop 已进入排空等待窗口（时限 300ms）
+
+        long begin = System.nanoTime();
+        for (int i = 0; i < 500; i++) {
+            recorder.intercept(createRecord("nb-" + i));
+        }
+        long elapsedMs = (System.nanoTime() - begin) / 1_000_000L;
+        assertTrue(elapsedMs < 2000, "关停过程中生产者不得被阻塞：500 次提交耗时 " + elapsedMs + "ms");
+
+        stopper.join(5000);
+        assertFalse(stopper.isAlive(), "stop 必须在时限内有界返回");
+        assertEquals(recorder.getRecordedCount(), recorder.getWrittenCount() + recorder.getDroppedCount() + recorder.getFailedCount(),
+                "超时结算后账本必须闭合：滞留事件按丢弃结算");
+        assertTrue(recorder.getDroppedCount() >= 500, "关停窗口到达必须按丢弃计数而非静默蒸发");
+    }
+
+    @Test
     void captureFillsEndpointFromRecorderDefault_perCallWins() {
-        // endpoint 部署身份：录制器级默认在采集管道兜底填列，per-call 声明优先
+        // endpoint 部署身份：录制器级默认在采集管道兜底填列，per-call 声明优先。
+        // 补全只写落库副本（原对象不改写承诺）——断言从存储侧读，调用方对象同时验证未被改写
         RecorderConfig config = RecorderConfig.builder().endpoint("http://ep-default:8000").build();
         InteractionRecorder recorder = new InteractionRecorder(repo, config);
         recorder.start();
@@ -535,7 +657,6 @@ class InteractionRecorderTest {
         defaulted.setSessionId("s-ep");
         defaulted.setTimestamp(System.currentTimeMillis());
         recorder.intercept(defaulted);
-        assertEquals("http://ep-default:8000", defaulted.getEndpoint(), "未声明记录由录制器级默认兜底");
 
         InteractionRecord declared = new InteractionRecord();
         declared.setRecordId("ep-2");
@@ -543,8 +664,17 @@ class InteractionRecorderTest {
         declared.setTimestamp(System.currentTimeMillis());
         declared.setEndpoint("http://per-call:9999");
         recorder.intercept(declared);
-        assertEquals("http://per-call:9999", declared.getEndpoint(), "per-call 声明优先于录制器级默认");
 
         recorder.stop();
+
+        assertEquals("http://ep-default:8000", storedByRecordId("ep-1").getEndpoint(), "未声明记录由录制器级默认兜底（副本侧）");
+        assertEquals("http://per-call:9999", storedByRecordId("ep-2").getEndpoint(), "per-call 声明优先于录制器级默认（副本侧）");
+        assertNull(defaulted.getEndpoint(), "调用方原对象不被改写");
+        assertEquals("http://per-call:9999", declared.getEndpoint(), "显式声明原样保留（本就不为空）");
+    }
+
+    private InteractionRecord storedByRecordId(String recordId) {
+        return repo.getStore().stream().filter(r -> recordId.equals(r.getRecordId())).findFirst()
+                .orElseThrow(() -> new AssertionError("record not stored: " + recordId));
     }
 }

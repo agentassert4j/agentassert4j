@@ -5,6 +5,7 @@ import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.util.HashUtil;
 import io.github.agentassert4j.util.RecursiveJsonParser;
+import io.github.agentassert4j.recorder.RecordingContext;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -396,5 +397,17 @@ class SpringAiRecordMapperTest {
     void recorderVersionStamped() {
         InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), null, 1, null, null, List.of());
         assertEquals(SpringAiRecordMapper.SDK_VERSION, record.getRecorderVersion());
+    }
+
+    @Test
+    @DisplayName("观察缓冲承载完整编排：工具结果经方言归一（与 ai1 观察路径同格断言）")
+    void observedToolResult_dialectNormalized() {
+        String encoded = RecursiveJsonParser.serialize("{\"orderId\":\"SO-77\"}");
+        ObservedToolInvocation invocation = new ObservedToolInvocation("query_order", "{\"orderId\":\"SO-77\"}", encoded, true);
+
+        InteractionRecord record = SpringAiRecordMapper.toRecord(new Prompt(List.of(user("hi"))), null, 1, null, null, List.of(invocation));
+
+        assertTrue(record.isHasToolCalls());
+        assertEquals("{\"orderId\":\"SO-77\"}", record.getToolCalls().get(0).getResult(), "String 返回的一层 JSON 编码必须解码还原");
     }
 }

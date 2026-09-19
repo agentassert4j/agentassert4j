@@ -22,7 +22,7 @@ public class InteractionRecord {
     private long timestamp;
 
     /**
-     * 录制进程内单调序号（Disruptor 序号透传），与 timestamp 组成确定性排序键
+     * 录制进程内单调序号（录制器独立序源分配，空洞合法），与 timestamp 组成确定性排序键
      */
     private long seq;
 

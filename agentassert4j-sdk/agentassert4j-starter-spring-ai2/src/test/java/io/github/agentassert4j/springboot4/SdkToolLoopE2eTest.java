@@ -5,7 +5,7 @@ import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.recorder.InteractionRecorder;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.springai2.RecordingChatModel;
-import io.github.agentassert4j.springai2.RecordingContext;
+import io.github.agentassert4j.recorder.RecordingContext;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;

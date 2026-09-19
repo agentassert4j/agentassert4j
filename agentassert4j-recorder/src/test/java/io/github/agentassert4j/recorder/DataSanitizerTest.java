@@ -434,4 +434,35 @@ class DataSanitizerTest {
         assertEquals("***", sanitizedCfg.get("password"), "嵌套层级的敏感键必须脱敏");
         assertEquals("db.local", sanitizedCfg.get("host"));
     }
+
+    @Test
+    void sanitize_pathologicallyDeepArguments_truncatedNotCrashed() {
+        // 脱敏递归运行在业务线程：病态深嵌套必须截断，不得以 StackOverflowError 中断调用方
+        DataSanitizer sanitizer = new DataSanitizer(configWithFields(SanitizeStrategy.MASK, "password"));
+        InteractionRecord record = createTestRecord();
+        record.getToolCalls().get(0).setArguments(deepMap(300));
+
+        InteractionRecord result = sanitizer.sanitize(record);
+
+        Object cur = result.getToolCalls().get(0).getArguments();
+        int steps = 0;
+        while (cur instanceof Map) {
+            cur = ((Map<?, ?>) cur).get("k");
+            steps++;
+        }
+        assertEquals(ToolCall.DEPTH_TRUNCATION_MARKER, cur, "超限子树截断为占位值，占位值随记录落库就地可见");
+        assertEquals(ToolCall.MAX_TREE_DEPTH, steps);
+    }
+
+    private Map<String, Object> deepMap(int depth) {
+        Map<String, Object> root = new LinkedHashMap<>();
+        Map<String, Object> cur = root;
+        for (int i = 0; i < depth; i++) {
+            Map<String, Object> next = new LinkedHashMap<>();
+            cur.put("k", next);
+            cur = next;
+        }
+        cur.put("leaf", "v");
+        return root;
+    }
 }

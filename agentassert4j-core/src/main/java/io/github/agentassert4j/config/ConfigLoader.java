@@ -82,15 +82,34 @@ public final class ConfigLoader {
      */
     private static String lastMainConfigDirectory;
 
-    private static String directoryOf(StringBuilder origin) {
+    static String directoryOf(StringBuilder origin) {
         String path = origin.toString();
-        if (path == null || path.isEmpty() || path.startsWith("classpath:") || !path.contains("/")) {
+        if (path == null || path.isEmpty() || path.startsWith("classpath:")) {
             return null;
         }
-        if (path.lastIndexOf('/') > 0) {
-            return path.substring(0, path.lastIndexOf('/'));
+        // 目录判定平台无关：Windows 下 Paths.get 产出反斜杠路径，只认 '/'
+        // 会让主配置同目录回退在该平台永久失灵
+        int cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        return cut > 0 ? path.substring(0, cut) : null;
+    }
+
+    /**
+     * 展开 "~" 前缀为用户主目录（配置默认值使用 ~/.agentassert4j/ 约定）。
+     * ~user 形态（其他用户主目录）不支持、原样保留。CLI 与各 starter
+     * 的 storage url 共用本方法，仓库内只维护这一份实现。
+     */
+    public static String expandHome(String path) {
+        if (path == null || !path.startsWith("~")) {
+            return path;
         }
-        return null;
+        String home = System.getProperty("user.home", "");
+        if (path.length() == 1) {
+            return home;
+        }
+        if (path.charAt(1) == '/' || path.charAt(1) == '\\') {
+            return home + path.substring(1);
+        }
+        return path;
     }
 
     /**

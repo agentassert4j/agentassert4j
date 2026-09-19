@@ -115,9 +115,17 @@ public class DataSanitizer {
     /**
      * 递归脱敏任意值树：Map 按键名匹配（任意深度，DROP 整键删除/MASK 换掩码），
      * List 逐元素下钻，含 JSON 的字符串走 sanitizeJsonString——与 result 路径
-     * 的防御深度保持一致。
+     * 的防御深度保持一致。深度超过 {@link ToolCall#MAX_TREE_DEPTH} 的子树截断为
+     * 占位值：脱敏递归运行在业务线程，病态深嵌套不得以 StackOverflowError 中断业务调用。
      */
     private Object sanitizeValueTree(Object value) {
+        return sanitizeValueTree(value, 1);
+    }
+
+    private Object sanitizeValueTree(Object value, int depth) {
+        if (depth > ToolCall.MAX_TREE_DEPTH) {
+            return ToolCall.DEPTH_TRUNCATION_MARKER;
+        }
         if (value instanceof Map) {
             Map<String, Object> out = new LinkedHashMap<>();
             for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
@@ -127,7 +135,7 @@ public class DataSanitizer {
                         out.put(key, applyStrategy(String.valueOf(entry.getValue())));
                     }
                 } else {
-                    out.put(key, sanitizeValueTree(entry.getValue()));
+                    out.put(key, sanitizeValueTree(entry.getValue(), depth + 1));
                 }
             }
             return out;
@@ -135,7 +143,7 @@ public class DataSanitizer {
         if (value instanceof List) {
             List<Object> out = new ArrayList<>();
             for (Object item : (List<?>) value) {
-                out.add(sanitizeValueTree(item));
+                out.add(sanitizeValueTree(item, depth + 1));
             }
             return out;
         }

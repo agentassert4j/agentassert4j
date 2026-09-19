@@ -76,7 +76,12 @@ public final class FingerprintExtractor {
         Map<String, String> paramTypes = new HashMap<>();
         for (ToolCall tc : record.getToolCalls()) {
             if (tc.getArgTypes() != null) {
-                tc.getArgTypes().forEach((k, v) -> paramTypes.put(k.toLowerCase(Locale.ROOT), v.toLowerCase(Locale.ROOT)));
+                // 值经存储往返可能为 null（asStringMap 保留 null 值），跳过、不炸建档路径
+                tc.getArgTypes().forEach((k, v) -> {
+                    if (v != null) {
+                        paramTypes.put(k.toLowerCase(Locale.ROOT), v.toLowerCase(Locale.ROOT));
+                    }
+                });
             }
         }
         fp.setToolParamTypes(paramTypes);

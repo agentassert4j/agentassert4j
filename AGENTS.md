@@ -69,6 +69,7 @@ agentassert4j/
 ├── agentassert4j-core/                        ← 零依赖心脏（java.base ONLY）
 ├── agentassert4j-recorder/                    ← Disruptor 异步录制
 ├── agentassert4j-cli/                         ← Picocli 命令行工具（baseline/status/replay/approve/reject）
+├── agentassert4j-cli-standalone/              ← cli 的 shade 打包（java -jar 单文件运行面，随 GitHub Releases 分发，不入 Central）
 │
 │  ── 存储插件（聚合在 agentassert4j-storage/ 下）──
 ├── agentassert4j-storage/                     ← 聚合 POM (packaging=pom)
@@ -105,6 +106,7 @@ Layer 1: agentassert4j-core          ← 零外部依赖，纯 java.base
 Layer 2: agentassert4j-recorder      ← core + Disruptor + SLF4J API
            │
 Layer 3: agentassert4j-cli           ← core + recorder + Picocli + storage-sqlite（组合根，默认后端随行）
+         agentassert4j-cli-standalone ← agentassert4j-cli 的 shade 打包形态（同一组合根的运行面构件）
          agentassert4j-spring-ai1 ← core + recorder + Spring AI 1.x
          agentassert4j-spring-ai2 ← core + recorder + Spring AI 2.x（1.x/2.x 基线互斥，各自独立模块）
          agentassert4j-langchain4j ← core + recorder + LangChain4j 1.x（LangChain4j 为 provided，用户自带）
@@ -350,7 +352,7 @@ wait on the recording pipeline.
 
 ### 12.1 硬门槛（提交/PR 前必须满足）
 
-1. **`mvn -B test` 全绿**——在仓库根执行，9 个 reactor 模块 BUILD SUCCESS。红色测试的代码不允许提交。
+1. **`mvn -B test` 全绿**——在仓库根执行，14 个 reactor 构建节点 BUILD SUCCESS。红色测试的代码不允许提交。
 2. **core 零依赖自检**（R1）：
    ```bash
    grep -rn "^import \(com\|org\)\." agentassert4j-core/src/main/java/
