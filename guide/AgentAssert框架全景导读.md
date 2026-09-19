@@ -648,7 +648,7 @@ recorded（到达即计数） = written（批量写成功）
 
 **生命周期与并发契约**：库的一生 = `initialize`（建表/迁移）→ 读写（全程单连接串行）→ `close`。关停顺序由持有方保证（starter 的 destroy 链、CLI 的 finally）。事务只出现在 `saveInteractions`；单条写走 autocommit。
 
-**测试怎么钉住它**：storage 全套。代表性契约：38 列与占位符逐一核对、特殊字符与敌对内容（NUL/控制符/深嵌套）写读往返逐字保真、并发 flush 全量落库、失败注入后 autocommit 恢复且无半批提交、迁移三段（高版本拒开/同版验表/低版本盖戳）、归档 tiebreaker。
+**测试怎么钉住它**：storage 全套。代表性契约：DDL 与 INSERT 两侧 38 列字面逐列对齐、特殊字符与敌对内容（NUL/控制符/深嵌套）写读往返逐字保真、并发 flush 全量落库、失败注入后 autocommit 恢复且无半批提交、迁移三段（高版本拒开/同版验表/低版本盖戳）、归档 tiebreaker。
 
 ---
 

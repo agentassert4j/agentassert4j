@@ -82,10 +82,10 @@ close(): 关连接置 null；与写路径共用实例监视器——flush 进行
     升序（同刻按写入序决胜）；verb 未知线上值按 null 退化不中断读取（宁缺勿错注记）。
     SPI 写入点唯一 = BaselineManager 六个治理写（幂等早退与前置失败不落事件）。
     【测试钉】governanceEvents_roundTripHostileContent_orderedAscending
-12. **SPI 六域面**：写（2 方法）/ 查（6 方法）/ 调用点（3）/ 模板原文（2）/ 归档（3）/ 治理事件（2），
-    `StorageRepository` 聚合门面加 type/initialize/close。查询域现有 6 方法超出「每接口 ≤5」
-    的接口隔离目标——既有阶段债，随命令面瘦身批删除 `findInvocationKeysByTemplateHash` 后
-    回到 5。【人工对账】债务跟踪
+12. **SPI 六域面**：写（2 方法）/ 查（5 方法）/ 调用点（3）/ 模板原文（2）/ 归档（3）/ 治理事件（2），
+    `StorageRepository` 聚合门面加 type/initialize/close。查询域符合「每接口 ≤5」的接口隔离
+    目标（`findInvocationKeysByTemplateHash` 已随 SPI 死面修剪批删除）。【人工对账】方法数与
+    SPI 接口逐一对账
 13. **零迁移代码**：预发布阶段 schema 变更 = 删库重建，不存在旧版迁移路径；发布后演进只允许
     「新增可空列 + 从 raw 回填」。【人工对账】版本纪律
 
@@ -133,3 +133,4 @@ close(): 关连接置 null；与写路径共用实例监视器——flush 进行
 | 2026-09-17 | TODO 终裁批 | 三 raw 列契约张力行维持原判；SDK mapper 的 raw-null TODO×2 转正为契约注释（N3 前提永真改判）——raw 回填覆盖面（CLI 重驱+MCP 摄取）为确定契约，SDK 面未来概念列回填来源仍属届时设计 |
 | 2026-09-17 | 1.0.0 收尾批：asStringMap 单点化 | 台账在册的双份小工具收编：`RecursiveJsonParser.asStringMap` 升公共静态（JSON 对象→Map&lt;String,String&gt; 强转，值归一/null 保留/非 Map 返 null），FingerprintJson 与 JsonMapper 两处私有拷贝删除、改道调用；新公共助手直钉两条（强转语义/非 Map 输入）；拷贝扫描器后续巡检该对不再报 |
 | 2026-09-17 | 延迟池终裁（维护者裁决）：raw 回填 SDK 面销账 | 前提经字节码复核钉死为**Spring AI 框架既有限制**：ChatModel 接口 1.0.0 与 2.0.0 两代签名均为 `call(Prompt)→ChatResponse`，只交付结构化对象，线上报文在 provider HTTP 客户端内部、本层不可达——非本框架待办，不挂账；既有限制在 OPERATIONS（录制来源原文覆盖）与 recording.md 契约 8 标注。若未来真出现「需从原文回填的新概念列」，SDK 面届时走 provider HTTP 层拦截的新适配模块，与本契约行无关 |
+| 2026-09-19 | 冻结门公开文档对码审查 | ①契约 12 失真修正：查询域 6 方法→5 方法（`findInvocationKeysByTemplateHash` 实际已随 09-11 SPI 死面修剪批删除，≤5 隔离目标达成，正文仍挂「既有阶段债」属文本滞后）；②导读 651 行「38 列与占位符逐一核对」措辞修正为「DDL 与 INSERT 两侧 38 列字面逐列对齐」（S2 ① 裁定的过强措辞在导读对账批漏改，无独立列数断言测试，真实机制是两侧字面同源）；③同批对码审查通过面：5 表/interactions 38 列/invocations 16 列/命令面 14 命令/MCP 17 工具/8 内置 behavior/退出码 0-1-2/12 个 recorder 配置键/模块矩阵 8 行——全部与代码一致 |
