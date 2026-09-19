@@ -23,11 +23,11 @@ English: **README.md** (this file) ｜ 中文文档：[README.zh.md](README.zh.m
 
 ---
 
-## Four questions from real workflows
+## Five questions from real workflows
 
 Your team ships a customer-service bot and iterates on system prompts daily; one user request makes the
 model run a look-up-order → check-logistics → refund chain, and comparing two such chains by eye, line
-by line, is the most painful ritual in agent development. Four real moments, one engine:
+by line, is the most painful ritual in agent development. Five real moments, one engine:
 
 1. **"The prompt edit is done — who tells me nothing else broke before I ship?"**
    `replay` re-aligns the whole project after one real re-run and names every behavioral diff; `replay --ci`
@@ -35,7 +35,7 @@ by line, is the most painful ritual in agent development. Four real moments, one
 2. **"The model stopped picking the new tool, or fills its params wrong — can merge review catch that?"**
    Tool descriptions are prompts too. The tool dimension (call set, parameter types) is fingerprinted and
    compared like everything else — a reworded tool description that flips selection shows up as a named
-   diff. → [Fingerprint dimensions](#four-fingerprint-dimensions-what-the-verdict-reads)
+   diff; the same dimension gates tool-server upgrades. → [Fingerprint dimensions](#four-fingerprint-dimensions-what-the-verdict-reads)
 3. **"The customer runs an intranet with a different model — how do I prove the behavior is still there?"**
    Export the acceptance pack, really execute on their side, `verify` one command: structural verdicts
    stay valid across models, wording diffs are marked as expected. → [Delivery acceptance](#delivery-acceptance-the-second-workflow)
@@ -43,6 +43,11 @@ by line, is the most painful ritual in agent development. Four real moments, one
    The same engine is an MCP stdio server (17 tools): record, check, adjudicate-with-approval, audit —
    deterministic verdicts are a natural fit for self-correction loops. → [OPERATIONS §MCP](OPERATIONS.md),
    [给 AI 装上行为回归回路](guide/给AI装上行为回归回路.md)
+5. **"We're switching models — or turning deep thinking off for speed. What exactly changes in the agent's behavior?"**
+   Hot-swap `llm.model` and re-drive the recorded prompts against the new model: structural fingerprints name
+   the behavior impact per invocation, and the report carries token/cost/latency deltas — reasoning tokens
+   included, so the price of the thinking toggle is measurable, not anecdotal. The same recipe doubles as a
+   model bake-off and fine-tune / distill acceptance. → [OPERATIONS §6.3](OPERATIONS.md)
 
 ## Five minutes in (pick your role)
 
@@ -62,9 +67,9 @@ Every capability on one map — seven shapes of work, each with its shortest pat
 | Workflow | The question you wake up with | Shortest path |
 |---|---|---|
 | **Prompt iteration** | "The edit is done — did anything else break?" | `baseline` → edit + really run once → `replay` → `accept` / `reject`; `replay --ci` gates the pipeline → [shape-set workflow](#iterating-until-its-good-the-shape-set-workflow) |
-| **Agent development (loops)** | "My planner and tool steps run a different number of times each run — what do I even compare?" | Every loop iteration records as its own interaction, no annotations needed. Judgment reads each invocation's chain-final execution; mid-chain drafts stay visible as notes (`earlierRecords`); a count change alone never flips a run red — pin counts with task rules when you actually care. `graph show` answers "where did this value come from" with evidence → [core loop](#the-core-loop), [OPERATIONS task rules](OPERATIONS.md) |
+| **Agent development (loops)** | "My planner and tool steps run a different number of times each run — what do I even compare?" | Every loop iteration records as its own interaction, no annotations needed. Judgment reads each invocation's chain-final execution; mid-chain drafts stay visible as notes (`earlierRecords`); a count change alone never flips a run red — pin counts with task rules when you actually care. `graph show` answers "where did this value come from" with evidence; multi-agent pipelines read as cross-agent data lineage — one label per sub-agent, and the graph names the agent that regressed → [core loop](#the-core-loop), [OPERATIONS task rules](OPERATIONS.md) |
 | **AI app development (few or single calls)** | "It's one LLM call — is this still for me?" | Yes: zero-declaration grouping by template hash, `status` → `replay`, nothing to declare → [identity](#identity-declared-and-zero-declaration) |
-| **Model switch / stability check** | "Same prompts, new model — is the behavior still there?" | Record the same task on the new model and `replay`: the fingerprint is model-agnostic, so structure verdicts hold and the report carries the token/cost delta → [fingerprint dimensions](#four-fingerprint-dimensions-what-the-verdict-reads) |
+| **Model switch / stability check** | "Same prompts, new model — is the behavior still there?" | Record the same task on the new model and `replay`: the fingerprint is model-agnostic, so structure verdicts hold and the report carries the token/cost delta; thinking on/off lands the same way → [fingerprint dimensions](#four-fingerprint-dimensions-what-the-verdict-reads), [OPERATIONS §6.3](OPERATIONS.md) |
 | **Intranet delivery acceptance** | "The customer's environment runs a different model — prove it still behaves." | `baseline export` on your side, really execute on theirs, `verify --pack`: structural verdicts stay valid across models → [delivery acceptance](#delivery-acceptance-the-second-workflow) |
 | **AI-driven self-correction** | "Let the AI edit prompts, verify, and iterate itself." | `agentassert4j mcp` stdio server (17 tools): `record` → `check` / `diff` → governance with `approver` → `audit`; `graph` lets the agent inspect value flow itself → [OPERATIONS MCP](OPERATIONS.md) |
 | **Team forensics** | "Behavior broke — which change did it, and who approved what?" | Baselines carry `--ref` code anchors; `audit` is the single timeline of every governance write → [code anchors](#code-anchors-in-team-workflows) |
