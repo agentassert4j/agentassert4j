@@ -79,27 +79,23 @@ public class RollbackCommand implements Callable<Integer> {
             new BaselineManager(repository).rollback(invocationKey, version, expectedVersion, actor);
             InvocationProfile reloaded = repository.findInvocationByKey(invocationKey);
             if (jsonOutput) {
-                out.println("{\"schema\":\"" + ReportSchemas.ROLLBACK + "\",\"invocationKey\":\"" + RecursiveJsonParser.escape(invocationKey) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(version) + "\",\"status\":\"" + reloaded.getBaselineStatus() + "\",\"approvedBy\":\"" + RecursiveJsonParser.escape(reloaded.getApprovedBy() != null ? reloaded.getApprovedBy() : "") + "\"" + (discardedCandidate ? ",\"candidateDiscarded\":true" : "") + ",\"codeRef\":\"" + RecursiveJsonParser.escape(reloaded.getCodeRef() != null ? reloaded.getCodeRef() : "") + "\",\"ok\":true}");
+                out.println("{\"schema\":\"" + ReportSchemas.ROLLBACK + "\",\"invocationKey\":\"" + RecursiveJsonParser.escape(invocationKey) + "\",\"versionTag\":\"" + RecursiveJsonParser.escape(version) + "\",\"status\":\"" + reloaded.getBaselineStatus() + "\",\"approvedBy\":\"" + RecursiveJsonParser.escape(reloaded.getApprovedBy() != null ? reloaded.getApprovedBy() : "") + "\",\"executor\":\"" + RecursiveJsonParser.escape(actor) + "\"" + (discardedCandidate ? ",\"candidateDiscarded\":true" : "") + ",\"codeRef\":\"" + RecursiveJsonParser.escape(reloaded.getCodeRef() != null ? reloaded.getCodeRef() : "") + "\",\"ok\":true}");
             } else {
                 // 审批事实按在场渲染：approvedBy=null 是合法形态（未经审批链写入审批记录），
-                // 人读输出不得出现 "null" 字样
-                StringBuilder facts = new StringBuilder();
+                // 人读输出不得出现 "null" 字样。approvedBy 是恢复版的原审批人，
+                // 本次操作者由 executor 行披露（与 audit.actor 同源）——操作者
+                // 在回执里期待看到自己，两个身份并列才不误读
+                StringBuilder facts = new StringBuilder("rolled back by ").append(actor);
                 if (reloaded.getApprovedBy() != null) {
-                    facts.append("approver ").append(reloaded.getApprovedBy());
+                    facts.append(", approver ").append(reloaded.getApprovedBy());
                 }
                 if (reloaded.getCodeRef() != null) {
-                    if (facts.length() > 0) {
-                        facts.append(", ");
-                    }
-                    facts.append("ref ").append(reloaded.getCodeRef());
+                    facts.append(", ref ").append(reloaded.getCodeRef());
                 }
                 if (discardedCandidate) {
-                    if (facts.length() > 0) {
-                        facts.append(", ");
-                    }
-                    facts.append("in-flight candidate discarded");
+                    facts.append(", in-flight candidate discarded");
                 }
-                out.println("  " + invocationKey + " → " + version + (facts.length() > 0 ? " (" + facts + ")" : ""));
+                out.println("  " + invocationKey + " → " + version + " (" + facts + ")");
             }
             return 0;
         } catch (CliFailureException e) {

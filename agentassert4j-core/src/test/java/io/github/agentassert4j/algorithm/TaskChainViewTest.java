@@ -33,6 +33,26 @@ class TaskChainViewTest {
     }
 
     @Test
+    @DisplayName("重驱观测记录不进任何任务链（检测仪器的观测不是业务执行）")
+    void redriveObservations_neverJoinChains() {
+        InteractionRecord business = record("r1", 1000L, "查订单");
+        InteractionRecord observation = record("obs-1", 2000L, "查订单");
+        observation.setMetadata("{\"redriveOf\":\"r1\",\"redriveTemplateHash\":\"ab12\"}");
+        InteractionRecord nextBusiness = record("r2", 3000L, "申请退款");
+
+        List<TaskChain> chains = TaskChainView.resolveSession("s1", Arrays.asList(business, observation, nextBusiness));
+
+        assertEquals(2, chains.size(), "观测记录不构成也不并入任务链");
+        assertEquals(1, chains.get(0).getRecords().size(), "链内只剩业务记录: " + chains.get(0).getRecords());
+        assertEquals(1, chains.get(1).getRecords().size());
+        for (TaskChain chain : chains) {
+            for (InteractionRecord shown : chain.getRecords()) {
+                assertFalse(shown.getRecordId().startsWith("obs-"), "观测记录不得出现在链视图: " + shown.getRecordId());
+            }
+        }
+    }
+
+    @Test
     @DisplayName("请求→tool 轮（空输入）→回答同归一链")
     void golden_requestCarriesToolRounds() {
         List<TaskChain> chains = TaskChainView.resolveSession("s1", Arrays.asList(record("r1", 1000L, "查订单 ORD-001"), record("r2", 2000L, null), record("r3", 3000L, null)));
@@ -139,8 +159,8 @@ class TaskChainViewTest {
 
         @Override
         public InteractionRecord findByRecordId(String recordId) {
-        return null; // 测试桩不承载按 id 精确查询
-    }
+            return null; // 测试桩不承载按 id 精确查询
+        }
 
         public List<InteractionRecord> findBySessionId(String sessionId) {
             List<InteractionRecord> result = new ArrayList<>();

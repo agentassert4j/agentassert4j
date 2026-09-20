@@ -39,6 +39,13 @@ public class RegressionTestResult {
      */
     private String replayOutput;
 
+    /**
+     * 重放产出的当前交互记录（单点组装：请求侧控制变量 + 响应侧遥测）。
+     * null = 本次未完成对照（超时/调用失败/链式分歧）。调用方可为其加盖
+     * 观测标记后落库——本字段是重驱观测记录的唯一组装来源。
+     */
+    private InteractionRecord servedRecord;
+
     public RegressionTestResult() {
         this.status = TestResultStatus.SUCCESS;
     }
@@ -171,5 +178,13 @@ public class RegressionTestResult {
 
     public void setReplayOutput(String replayOutput) {
         this.replayOutput = replayOutput;
+    }
+
+    public InteractionRecord getServedRecord() {
+        return servedRecord;
+    }
+
+    public void setServedRecord(InteractionRecord servedRecord) {
+        this.servedRecord = servedRecord;
     }
 }

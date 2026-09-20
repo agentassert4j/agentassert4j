@@ -9,17 +9,10 @@ import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.model.RegexPattern;
 import io.github.agentassert4j.spi.StorageRepository;
+import io.github.agentassert4j.util.RedriveMarkerUtil;
 
 import java.io.PrintStream;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 
 /**
  * 基线建立服务 — baseline 命令与 replay 前置步骤共用的落基线逻辑。
@@ -86,9 +79,10 @@ public class BaselineService {
                 continue;
             }
 
-            // 播种记录 = 桶内规范序最后一条（全局最新执行）：播种与披露共用同一变量，
-            // 报告披露的永远是实际入基线的那条
-            InteractionRecord seed = records.get(records.size() - 1);
+            // 播种记录 = 桶内排除重驱观测后的规范序最后一条（全局最新业务执行）：
+            // 观测是检测仪器的真调不是业务执行，以它播种会把重驱那一次的行为
+            // 锚定为基线。播种与披露共用同一变量，报告披露的永远是实际入基线的那条
+            InteractionRecord seed = latestBusinessRecord(records);
 
             if (force) {
                 if (hadBaseline) {
@@ -255,6 +249,20 @@ public class BaselineService {
         List<String> list = new ArrayList<>(values != null ? values : Collections.<String>emptySet());
         Collections.sort(list);
         return list;
+    }
+
+    /**
+     * 桶内规范序最后一条业务记录：重驱观测记录（metadata 携带 redriveOf）跳过——
+     * 观测时间戳恒为桶内最新，不跳过会把「重驱那一次」播种为基线。桶内全部是
+     * 观测时退回末位（有观测胜过无种子，建档不因此中断）。
+     */
+    private static InteractionRecord latestBusinessRecord(List<InteractionRecord> records) {
+        for (int i = records.size() - 1; i >= 0; i--) {
+            if (!RedriveMarkerUtil.isRedriveObservation(records.get(i))) {
+                return records.get(i);
+            }
+        }
+        return records.get(records.size() - 1);
     }
 
     /**

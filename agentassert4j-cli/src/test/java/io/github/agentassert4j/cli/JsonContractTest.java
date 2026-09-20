@@ -511,13 +511,14 @@ class JsonContractTest {
 
             assertEquals(0, execute("rollback", "--db", dbPath, "--invocation", "queryOrder", "--version", "v1"));
             String restored = stdout();
-            assertTrue(restored.contains(" → v1 (ref abc1234)"), restored);
+            assertTrue(restored.contains(" → v1 (rolled back by "), "操作者必须在回执可见（executor 与 audit.actor 同源）: " + restored);
+            assertTrue(restored.contains(", ref abc1234)"), restored);
             assertFalse(restored.contains("approver"), "null 审批人整段省略而非渲染 null: " + restored);
             assertFalse(restored.contains("null"), restored);
 
             assertEquals(0, execute("rollback", "--db", dbPath, "--invocation", "queryOrder", "--version", "v2"));
             String both = stdout();
-            assertTrue(both.contains("(approver ") && both.contains(", ref def5678)"), both);
+            assertTrue(both.contains("approver ") && both.contains(", ref def5678)"), both);
         }
     }
 
@@ -834,6 +835,139 @@ class JsonContractTest {
             record.setToolCalls(new ArrayList<>());
             record.setHasToolCalls(false);
             repository.saveInteractionIfAbsent(record);
+        }
+    }
+
+    @Nested
+    @DisplayName("记录寻址族与候选差异机器面")
+    class RecordAddressingAndCandidateDiff {
+
+        private void seedSessionRecords() {
+            InteractionRecord first = new InteractionRecord();
+            first.setRecordId("rec-a");
+            first.setSessionId("session-multi");
+            first.setTimestamp(1000L);
+            first.setSeq(1L);
+            first.setInvocationId("queryOrder");
+            first.setInvocationKey("invocation:queryOrder:hash-old");
+            first.setTemplateHash("hash-old");
+            first.setUserInput("查订单");
+            first.setTurnIndex(0);
+            first.setModelResponse("{}");
+            first.setToolCalls(new ArrayList<>());
+            repository.saveInteractionIfAbsent(first);
+            InteractionRecord second = new InteractionRecord();
+            second.setRecordId("rec-b");
+            second.setSessionId("session-multi");
+            second.setTimestamp(2000L);
+            second.setSeq(2L);
+            second.setInvocationId("queryOrder");
+            second.setInvocationKey("invocation:queryOrder:hash-old");
+            second.setTemplateHash("hash-old");
+            second.setUserInput("再查一次");
+            second.setTurnIndex(1);
+            second.setModelResponse("{}");
+            second.setToolCalls(new ArrayList<>());
+            repository.saveInteractionIfAbsent(second);
+        }
+
+        @Test
+        @DisplayName("record show --session --latest/--index：会话规范序定位，单条会话免定位")
+        void sessionAddressing_latestAndIndex() throws Exception {
+            seedSessionRecords();
+
+            assertEquals(0, execute("record", "show", "--db", dbPath, "--session", "session-multi", "--latest", "--json"));
+            assertTrue(singleLineReport().contains("\"recordId\":\"rec-b\""), "最新记录按规范序取末位: " + singleLineReport());
+
+            assertEquals(0, execute("record", "show", "--db", dbPath, "--session", "session-multi", "--index", "1", "--json"));
+            assertTrue(singleLineReport().contains("\"recordId\":\"rec-a\""), "index 是 1 起始的规范序位置: " + singleLineReport());
+        }
+
+        @Test
+        @DisplayName("record show --session 多条未定位：E-USAGE 带限量记录清单")
+        void sessionAddressing_ambiguousWithoutPosition() throws Exception {
+            seedSessionRecords();
+
+            int exit = execute("record", "show", "--db", dbPath, "--session", "session-multi", "--json");
+
+            assertEquals(2, exit);
+            String envelope = singleLineReport();
+            assertErrorEnvelope(envelope, "E-USAGE");
+            assertTrue(envelope.contains("holds 2 records"), "必须点名记录数: " + envelope);
+            assertTrue(envelope.contains("rec-a") && envelope.contains("rec-b"), "清单必须列记录 id 供挑选: " + envelope);
+        }
+
+        @Test
+        @DisplayName("record show 寻址互斥与越界：多形态并用拒、index 越界 E-NO-DATA")
+        void addressingGuards() throws Exception {
+            seedSessionRecords();
+
+            assertEquals(2, execute("record", "show", "--db", dbPath, "--record-id", "rec-a", "--session", "session-multi", "--json"));
+            assertErrorEnvelope(singleLineReport(), "E-USAGE");
+
+            assertEquals(2, execute("record", "show", "--db", dbPath, "--session", "session-multi", "--index", "9", "--json"));
+            String envelope = singleLineReport();
+            assertErrorEnvelope(envelope, "E-NO-DATA");
+            assertTrue(envelope.contains("--index must be 1..2"), "越界必须给出合法范围: " + envelope);
+        }
+
+        @Test
+        @DisplayName("record show --invocation --latest：统一选择器解析后取该键最新记录")
+        void invocationAddressing_latest() throws Exception {
+            seedSessionRecords();
+
+            int exit = execute("record", "show", "--db", dbPath, "--invocation", "queryOrder", "--latest", "--json");
+
+            assertEquals(0, exit);
+            assertTrue(singleLineReport().contains("\"recordId\":\"rec-b\""), "调用点最新记录=该键规范序末位: " + singleLineReport());
+        }
+
+        @Test
+        @DisplayName("record show 人读：重驱观测记录带标记行")
+        void recordShow_marksObservation() throws Exception {
+            InteractionRecord record = seedOneRecord();
+            record.setRecordId("rec-obs");
+            record.setMetadata("{\"redriveOf\":\"rec-1\",\"redriveTemplateHash\":\"hash-old\"}");
+            repository.saveInteractionIfAbsent(record);
+
+            int exit = execute("record", "show", "--db", dbPath, "--record-id", "rec-obs");
+
+            assertEquals(0, exit);
+            assertTrue(stdout().contains("Re-drive observation"), "观测记录必须就地标注: " + stdout());
+        }
+
+        @Test
+        @DisplayName("status --diff --json：候选差异逐维结构化（candidate-diff/1）")
+        void candidateDiff_dimensionsStructured() throws Exception {
+            InteractionRecord record = seedOneRecord();
+            execute("baseline", "--db", dbPath);
+            seedCandidate("invocation:queryOrder:hash-old", record);
+
+            int exit = execute("status", "--db", dbPath, "--diff", "--json", "--invocation", "queryOrder");
+
+            assertEquals(0, exit);
+            String report = singleLineReport();
+            assertTrue(report.startsWith("{\"schema\":\"agentassert4j.candidate-diff/1\""), report);
+            assertTrue(report.contains("\"invocationKey\":\"invocation:queryOrder:hash-old\""), report);
+            assertTrue(report.contains("\"dimension\":\"outputFields\""), "追加输出字段必须成条: " + report);
+            assertTrue(report.contains("\"added\":[\"pendingChange\"]"), "字段差集逐项列出: " + report);
+            assertTrue(report.contains("\"summary\":{\"scoped\":1,\"withCandidate\":1,\"identical\":0}"), report);
+            RecursiveJsonParser.parse(report);
+        }
+
+        @Test
+        @DisplayName("rollback --json：executor 字段披露本次操作者（与 audit.actor 同源）")
+        void rollbackJson_disclosesExecutor() throws Exception {
+            seedOneRecord();
+            execute("baseline", "--db", dbPath, "--ref", "abc1234");
+            execute("baseline", "--db", dbPath, "--force", "--ref", "def5678");
+
+            int exit = execute("rollback", "--db", dbPath, "--invocation", "queryOrder", "--version", "v1", "--json", "--approver", "zhang");
+
+            assertEquals(0, exit);
+            String report = singleLineReport();
+            assertTrue(report.contains("\"executor\":\"zhang\""), "回执必须并列披露操作者: " + report);
+            assertTrue(report.contains("\"approvedBy\":"), "恢复版原审批人仍在场: " + report);
         }
     }
 }

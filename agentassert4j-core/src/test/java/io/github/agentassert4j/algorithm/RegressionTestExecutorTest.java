@@ -71,9 +71,9 @@ class RegressionTestExecutorTest {
 
         // wire 方言随重放产物传递：按基线方言发射产生的新记录标注同一方言，
         // 后续再重放不回退错方言
-        InteractionRecord current = executor.buildCurrentRecord(baseline, new LlmResponse(), "p", null);
+        InteractionRecord current = executor.buildCurrentRecord(baseline, new LlmResponse(), "p", null, TestExecutionConfig.defaults());
         assertEquals("anthropic-messages", current.getApiProtocol());
-        assertNull(executor.buildCurrentRecord(makeBaseline("hash", "input"), new LlmResponse(), "p", null).getApiProtocol());
+        assertNull(executor.buildCurrentRecord(makeBaseline("hash", "input"), new LlmResponse(), "p", null, TestExecutionConfig.defaults()).getApiProtocol());
     }
 
     @Test
@@ -169,7 +169,7 @@ class RegressionTestExecutorTest {
         tc.setArguments(Collections.singletonMap("orderId", "ORD-001"));
         response.setToolCalls(Collections.singletonList(tc));
 
-        InteractionRecord current = executor.buildCurrentRecord(baseline, response, "new prompt", null);
+        InteractionRecord current = executor.buildCurrentRecord(baseline, response, "new prompt", null, TestExecutionConfig.defaults());
 
         assertNotNull(current.getRecordId());
         assertNotNull(current.getTemplateHash());
@@ -194,7 +194,7 @@ class RegressionTestExecutorTest {
         response.setContent("just text");
         response.setToolCalls(Collections.emptyList());
 
-        InteractionRecord current = executor.buildCurrentRecord(baseline, response, "prompt", null);
+        InteractionRecord current = executor.buildCurrentRecord(baseline, response, "prompt", null, TestExecutionConfig.defaults());
 
         assertFalse(current.isHasToolCalls());
         assertTrue(current.getToolCalls().isEmpty());

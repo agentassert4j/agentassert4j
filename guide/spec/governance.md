@@ -52,7 +52,7 @@ stateDiagram-v2
 | 判定 CHANGED 落候选（D1） | 画像存在；候选指纹 ≠ 画像现役指纹（一致即无裁决对象，不登记不翻转） | recordCandidate（首个 CHANGED 配对的新记录 + 现场重提指纹） | CANDIDATE（不一致时）/ 不变（一致时） |
 | accept | CANDIDATE，否则抛 IllegalStateException | 候选 ∈ 集合 → 幂等收尾（清候选，集合/版本/归档不动）；∉ 集合 → ①归档旧集合（整集快照）②身份前移（顺序钉死）③候选尾部追加 ④tag 跳过归档占用 ⑤盖章 ⑥落 ACCEPT 事件 | BASELINE |
 | reject | CANDIDATE，否则抛（与 accept 对称） | 丢弃候选，保留旧基线（回退模板是 git 的职责）；落 REJECT 事件（actor=否决者）——候选消失后事件是「曾发生过 reject」的唯一痕迹 | BASELINE |
-| rollback(key, tag) | 归档行存在，否则抛；tag = 当前活动版本同样抛（空回滚唯一副作用是清候选，丢弃候选有专门动词 reject，拒绝即消除歧义路径） | 当前基线先归档 → 按快照恢复指纹/模板哈希/语义版本/审批/tag；在途候选随之清空（回执披露 candidateDiscarded，治理动词无静默副作用）；落 ROLLBACK 事件（actor=执行者，versionTag=目标版本）——恢复按原始审批人重激活，执行者只在事件表可见 | BASELINE |
+| rollback(key, tag) | 归档行存在，否则抛；tag = 当前活动版本同样抛（空回滚唯一副作用是清候选，丢弃候选有专门动词 reject，拒绝即消除歧义路径） | 当前基线先归档 → 按快照恢复指纹/模板哈希/语义版本/审批/tag；在途候选随之清空（回执披露 candidateDiscarded，治理动词无静默副作用）；落 ROLLBACK 事件（actor=执行者，versionTag=目标版本）——恢复按原始审批人重激活；回执并列披露 executor（=本次操作者，与事件 actor 同值同源）与 approvedBy（=恢复版原审批人），两个身份谁是谁在回执就地可判读 | BASELINE |
 | --force 重建 | 画像存在 | 旧基线先归档 → 桶内规范序首条记录重提指纹 → tag 顺延 | BASELINE |
 | 漂移收编（显式 advanceTemplateIdentity） | 最新可分组记录哈希 ≠ 画像哈希 | 仅前移 templateHash（指纹/候选/tag/审批不动） | 不变 |
 
@@ -198,3 +198,4 @@ agent 权限配置为完全访问时，授权决策已经在 harness 层完成�
 | 2026-09-03 | 统一重放引擎落地后复核（同日）：漂移处置状态机接线完成 | 契约 9/10 升【测试钉】（DriftStateMachine 七场景 + 单一写入口断言）；「对齐层陈述最近两次真实执行之间的差异」语义经端到端钉确认——accept 清候选转正基线，事实差异在新真实链入账前如实存续（ReplayFlowTest.diff_candidate_accept_settles），与 S4 成文时的收敛表述细化一致 |
 | 2026-09-03 | S4 成文：BaselineManager/BaselineService/DriftDetector/AdjudicateCommand/StatusCommand 全量对账 | ①漂移处置状态机与 `--ci` 写纪律为已批准设计、引擎接线未落地（契约 9/10 人工对账，随统一引擎批升级）；②「Rule B 建档即收编」与「种子=桶内最早记录」经核不冲突——裂键新桶内记录全文哈希同值，最早记录即最新模板；③status 已有候选差异预览与未建档视图（Rule C 承接面现成），漂移列为统一引擎批增量 |
 | 2026-09-20 | 通道2 round8：自动建档署名 auto: 前缀 | 裸 replay 自动建档此前署 OS 用户名（currentActor），AI 进程触发的治理写会伪装成人写、审计「approver=唯一对账凭据」失真——自动路径改 CliSupport.autoActor()（auto:+user.name），显式写入（baseline/accept/reject/rollback 的 --approver）语义不变；「谁批准」与「被自动收集」在审计时间线一眼可分。【测试钉】TaskReplayRunnerTest.autoEstablish_actorCarriesAutoPrefix（freshAgent 键只可能被自动建档，事件必须 auto: 前缀） |
+| 2026-09-20 | round9 池 3（a+b'）：rollback 回执 executor 披露 | 双宿主实测的误读形态：操作者执行 rollback 后回执只见 approvedBy（=恢复版原审批人），期待看到自己却看不到，误把原审批人当操作者。裁决=a 文档句+b' 回执并列增 executor 字段（改名 b 否决——approvedBy 是全局词表：status approver 列/画像审批链/回执同词同义，改名制造语义网分裂）。实施：rollback/1 增 executor（与 audit.actor 同值同源——RollbackCommand 单点 actor 变量）；人读行 "rolled back by X, approver Y"（在场渲染不变）；MCP rollback 描述补披露句。【测试钉】JsonContractTest.rollbackJson_disclosesExecutor + rollbackHuman 钉更新 |

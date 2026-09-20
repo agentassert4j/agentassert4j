@@ -95,7 +95,7 @@ public class RegressionTestExecutor {
         // 3-5. LLM 调用成功后的处理（构建当前记录/提取指纹/对比与候选落库/结果封装）。
         //    任何处理失败转为 ERROR 结果，不向批量调用方逃逸——批量回归不允许单条记录中断整体
         try {
-            InteractionRecord current = buildCurrentRecord(baseline, response, newSystemPrompt, userInput);
+            InteractionRecord current = buildCurrentRecord(baseline, response, newSystemPrompt, userInput, config);
 
             DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline, rules, baseline.getInvocationId());
             DeterministicFingerprint currentFp = FingerprintExtractor.extract(current, rules, current.getInvocationId());
@@ -129,6 +129,7 @@ public class RegressionTestExecutor {
             // 候选原文只在重放现场存活（recordCandidate 只持久化指纹），
             // 报告侧的文本差异证据依赖此处透传
             result.setReplayOutput(response.getContent());
+            result.setServedRecord(current);
             return result;
         } catch (RuntimeException e) {
             LOG.log(Level.SEVERE, "Post-processing failed for " + baseline.getRecordId(), e);
@@ -223,11 +224,13 @@ public class RegressionTestExecutor {
     /**
      * 从 LLM 响应构建当前交互记录（不持久化，仅用于指纹提取和对比）。
      */
-    InteractionRecord buildCurrentRecord(InteractionRecord baseline, LlmResponse response, String newPrompt, String userInput) {
+    InteractionRecord buildCurrentRecord(InteractionRecord baseline, LlmResponse response, String newPrompt, String userInput, TestExecutionConfig config) {
         InteractionRecord current = new InteractionRecord();
         current.setRecordId(UUID.randomUUID().toString());
         current.setTimestamp(System.currentTimeMillis());
         current.setInvocationId(baseline.getInvocationId());
+        current.setInvocationKey(baseline.getInvocationKey());
+        current.setTemplateId(baseline.getTemplateId());
         current.setTemplateHash(HashUtil.sha256(newPrompt));
         current.setUserInput(userInput != null ? userInput : baseline.getUserInput());
         current.setTurnIndex(baseline.getTurnIndex());
@@ -256,9 +259,17 @@ public class RegressionTestExecutor {
         current.setReasoningTokens(response.getReasoningTokens());
         current.setLatencyMs(response.getLatencyMs());
 
-        // wire wire 方言沿用基线：本记录按基线方言的文法发射产生，重放路由
+        // wire 方言沿用基线：本记录按基线方言的文法发射产生，重放路由
         // （applyReplayControls 消费 apiProtocol）据此在同协议再重放时保持方言一致
         current.setApiProtocol(baseline.getApiProtocol());
+
+        // 请求侧控制变量与发射面随行：重放复用的轮次/工具定义原样携带（观测记录
+        // 的取证完整性——它就是那次真实重放的全部已知），请求模型与端点取本次
+        // 实际发射值（配置覆盖时与基线不同，模型切换场景的身份证据）
+        current.setPreviousTurns(baseline.getPreviousTurns());
+        current.setToolsDefinition(baseline.getToolsDefinition());
+        current.setModel(config.getModel() != null ? config.getModel() : baseline.getModel());
+        current.setEndpoint(config.getEndpoint());
 
         // 多模态复用
         current.setMultimodalInput(baseline.isMultimodalInput());
@@ -354,6 +365,8 @@ public class RegressionTestExecutor {
             current.setRecordId(UUID.randomUUID().toString());
             current.setTimestamp(System.currentTimeMillis());
             current.setInvocationId(baseline.getInvocationId());
+            current.setInvocationKey(baseline.getInvocationKey());
+            current.setTemplateId(baseline.getTemplateId());
             current.setTemplateHash(HashUtil.sha256(newSystemPrompt));
             current.setUserInput(effectiveInput != null ? effectiveInput : baseline.getUserInput());
             current.setTurnIndex(baseline.getTurnIndex());
@@ -371,8 +384,25 @@ public class RegressionTestExecutor {
             current.setToolCalls(matched);
             current.setHasToolCalls(true);
             current.setModelResponse(response.getContent());
-            current.setInputTokens(response.getInputTokens());
-            current.setOutputTokens(response.getOutputTokens());
+            // 用量取全链合计（观测记录归档的是整次链式重驱的消耗，末轮单发值会低报）
+            current.setInputTokens((int) usage.input);
+            current.setOutputTokens((int) usage.output);
+            current.setServedModel(response.getServedModel());
+            current.setFinishReason(response.getFinishReason());
+            // usageRaw 是末轮单发的原始 usage JSON（全链合计无原始形态，合计值在 token 字段）
+            current.setUsageRaw(response.getUsageRaw());
+            current.setCacheReadTokens(usage.cacheRead);
+            current.setCacheWriteTokens(usage.cacheWrite);
+            current.setReasoningTokens(usage.reasoning);
+            current.setLatencyMs(response.getLatencyMs());
+            current.setApiProtocol(baseline.getApiProtocol());
+            // 请求侧控制变量与发射面随行（与单发重放同一套观测记录组装语义）
+            current.setPreviousTurns(baseline.getPreviousTurns());
+            current.setToolsDefinition(baseline.getToolsDefinition());
+            current.setMultimodalInput(baseline.isMultimodalInput());
+            current.setMultimodalContent(baseline.getMultimodalContent());
+            current.setModel(config.getModel() != null ? config.getModel() : baseline.getModel());
+            current.setEndpoint(config.getEndpoint());
 
             DeterministicFingerprint baselineFp = FingerprintExtractor.extract(baseline, rules, baseline.getInvocationId());
             DeterministicFingerprint currentFp = FingerprintExtractor.extract(current, rules, current.getInvocationId());
@@ -397,6 +427,7 @@ public class RegressionTestExecutor {
             result.setCacheWriteTokens(usage.cacheWrite);
             result.setReasoningTokens(usage.reasoning);
             result.setReplayOutput(response.getContent());
+            result.setServedRecord(current);
             return result;
         } catch (LlmTimeoutException e) {
             return RegressionTestResult.timeout(baseline.getRecordId());

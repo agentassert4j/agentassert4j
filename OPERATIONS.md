@@ -298,6 +298,10 @@ agentassert4j replay --ci --json
 
 - **预算池**（`--re-drive` 下生效）：`--max-total-calls/--max-total-tokens` 对本次运行全部真重驱
   合计封顶；耗尽后剩余点标 skipped，整体 exit 2（证据不完整不允许冒充绿）。
+- **重驱观测归档**：完成对照的真调 served 交互会按被重驱记录的原键落库为观测记录
+  （metadata 携带 `redriveOf` 指向被重驱记录），重驱报告的步级行回带观测记录 id——事后
+  `record show` 即可取证 served 原文，不必重花钱再驱。观测记录不进任务链判定与漂移检测
+  （检测仪器的观测不是业务执行），后续 `replay --ci` 不受重驱影响。
 - **干跑**：`replay --dry-run` 输出漂移集、对齐计划与重驱成本预估——零调用、零落库、零建档、
   零处置；重驱前先 `--dry-run` 看报价是推荐惯例。
 - **CI 凭据**：门禁本体（`replay --ci`）零 Key——CI 里 `agentassert4j.json` 只需
@@ -400,7 +404,10 @@ agentassert4j audit --json       # agentassert4j.audit/1 机器报告（writes �
 
 <img src="assets/cli-audit.png" alt="audit：治理事件全量时间线——establish/collect/accept/rollback 逐笔可核对，主体与代码锚在列（演示库真实输出）" width="560"/>
 
-reject 与 rollback 不在画像上留状态痕迹，事件时间线是其唯一审计载体；MCP 工具清单的
+reject 与 rollback 不在画像上留状态痕迹，事件时间线是其唯一审计载体。rollback 回执并列披露
+两个身份：`executor` 是本次执行回滚的操作者（与事件表 actor 同源），`approvedBy` 是恢复版本
+的原始审批人——回滚恢复的是历史基线，审批事实随之回退，操作者不要把 approvedBy 误读成自己
+的操作记录。MCP 工具清单的
 description 声明各变异动词的使用要求（如 accept 应在人类指示后调用），授权确认由
 harness 权限系统执行。`--ref` 与 approver 是申报制自由串、不做校验——多人/多 agent 共库
 协作时给 ref 带写入方与用途前缀（如 `zcode-r5-accept`、`release-gate-v3`），时间线的归属
@@ -612,7 +619,7 @@ try {
 |------|--------|------|
 | 存储 schema（`PRAGMA user_version`） | 1 | 预发布固定不演进，schema 变更=删库重建；发布后只增不改 |
 | 判定语义 | `det-v1` | 改变「同样差异得出什么判定」的变更必须递增；发布前恒定 |
-| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`graph/1`（`nodes` 全键清单 + `scanned` 扫描统计；HIGH 边含 `evidence`：命中值 + 源/目标记录 id）、`rules/1`、`doctor/1`、`audit/1`（每命令 `--json` 各对应其一；replay 的 mode 分段见 §4）、`error/1`（`--json` 失败包络：errorCode 四族 + hints + nextAction） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
+| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`candidate-diff/1`（`status --diff --json`：逐调用点的候选 vs 锚定形态结构化差异，供 AI 消费者给出裁决建议）、`graph/1`（`nodes` 全键清单 + `scanned` 扫描统计；HIGH 边含 `evidence`：命中值 + 源/目标记录 id）、`rules/1`、`doctor/1`、`audit/1`（每命令 `--json` 各对应其一；replay 的 mode 分段见 §4）、`error/1`（`--json` 失败包络：errorCode 四族 + hints + nextAction） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
 | Maven 版本 | `1.0.0-SNAPSHOT` | 发布时转正式版 |
 | CLI 可执行形态 | `agentassert4j-cli-standalone` | cli 模块的全依赖 shaded 产物（含 slf4j-nop 与 Main-Class），`java -jar` 直接运行 |
 

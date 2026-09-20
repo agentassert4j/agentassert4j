@@ -286,15 +286,18 @@ class McpServerTest {
         }
 
         @Test
-        @DisplayName("变更动词 description 声明治理写；establish/accept 另声明 agent 身份申报")
+        @DisplayName("变更动词 description 声明治理写；establish/accept 另声明 agent 身份申报；rollback 声明回执双身份披露")
         void mutationTools_declareGovernanceWrite() {
             for (McpTool tool : McpTools.tools(dbPath)) {
-                boolean mutation = tool.name.equals("establish") || tool.name.equals("accept") || tool.name.equals("reject");
+                boolean mutation = tool.name.equals("establish") || tool.name.equals("accept") || tool.name.equals("reject") || tool.name.equals("rollback");
                 if (mutation) {
                     assertTrue(tool.description.contains("Governance write"), tool.name);
                 }
                 if (tool.name.equals("establish") || tool.name.equals("accept")) {
                     assertTrue(tool.description.contains("agent:<name>"), tool.name);
+                }
+                if (tool.name.equals("rollback")) {
+                    assertTrue(tool.description.contains("this run's executor"), "回执双身份披露句必须在场: " + tool.description);
                 }
             }
         }

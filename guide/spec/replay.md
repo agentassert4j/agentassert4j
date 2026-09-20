@@ -81,9 +81,17 @@ member-check 无论 ci 与否走链采样）→ 漂移处置 → 退出码复合
     裂键，含挂起点补证）。预算池合计封顶、原文缺席跳过可见、全败出 2；dry-run 出成本报价（`re-drive-dry-run`
     机器行与真跑目标同源：目标记录清单 + 历史 token 折算的费用预估）。`--invocation`
     命名目标时目标集限定为该键（共享会话的链会因无请求文本的中间态记录混入多个
-    调用点，不得连带重驱）；每键取域内最新记录。
+    调用点，不得连带重驱）；每键取域内最新记录。**重驱观测归档**：完成对照的真调 served
+    交互按被重驱记录原键落库为观测记录（executor 单点组装上抛，盖章
+    metadata `redriveOf`（被重驱记录 id）+ `redriveTemplateHash`（所用归档模板哈希）；
+    零 schema 列变更）；任务链派生与漂移检测「最新身份」默认排除观测记录（检测仪器的
+    观测不是业务执行，混入会顶替链末判定与漂移锚定）；重驱报告步级行回带观测记录 id
+    （人读 `(observation record X)`、机器面 observationRecordId 字段）；归档写失败降级
+    不拖累报告；graph 勘测面不排除（仪表消费全量记录）。超时/调用失败/链式分歧不归档
+    （无完成对照的观测不成形）。
     【测试钉】`TaskReplayRunnerTest.ReDrive`（PASS/CHANGED 落候选/预算/全败/原文缺席/
-    fullChain/缩域即域/bare 零漂移零目标/dry-run 九场景）
+    fullChain/缩域即域/bare 零漂移零目标/dry-run 九场景 + 观测归档钉：标记指向/链视图排除/
+    步级行回带）
 13. **成员判定（--member-check）**：每任务最新链对同任务最近 N 条历史链逐一核成员资格，
     样本窗上限 5（常量钉死，防「匹配任何历史」稀释判定）；任一样本行为全匹配（步级全
     MATCHED+PASS）即合法成员，报告 matchedSessions（全部命中会话，升序）；全不匹配取信号分最高者
@@ -236,3 +244,4 @@ member-check 无论 ci 与否走链采样）→ 漂移处置 → 退出码复合
 | 2026-09-17 | 1.0.0 收尾批：stepEnvelope 单源收编 | 台账在册的「步骤外围 JSON 渲染双份」收编：CliSupport 增 stepEnvelopeFragment（verdict/度量/富余/草稿计数/标签）与 stepVersionSwitchFragment（版本切换注记），TaskReplayRunner.alignedStepJson 与 VerifyRunner.taskJson 两侧改道——两报告面对同一步骤的字段集与顺序自此单源；输出字节级零变化由两报告面既有契约钉（VerifyExportTest 等）证明 |
 | 2026-09-17 | 延迟池终裁（维护者裁决「明确不做」，防翻账） | disposition 双口径（candidatePoints=漂移处置登记 vs candidatesRegistered=行为候选对账）维持现状为终态：两者数的是真实不同的两个域，统一命名反而抹掉语义区分（Round 5 修复后三面已可对账、文档已言明口径）；除非出现明确 issue，不再复议改名 |
 | 2026-09-19 | 冻结门契约对齐批（独立审查发现收敛） | ①TaskAligner 对齐报告 invocationLabel 改为解码还原人读形（与 status 侧 displayKey 同形；含特殊字符标签此前两处形态不一），钉 invocationLabel_percentDecoded——task-report 标签值形态变更属发布前免费窗口；②ParameterValueTracer.extractArgValues 对 JSON null 参数值跳过（{"a":null} 解析即得，extractArgValues_nullArgumentValue_skipped） |
+| 2026-09-20 | round9 池 7②：重驱观测归档 | 真调证据此前只在重驱报告的易失输出里——进程结束 served 原文即蒸发，取证要回读只能重花钱再驱。实施：executor buildCurrentRecord/链式末轮两组装点补齐身份字段（原键/轮次/工具定义/请求模型/端点）并经 servedRecord 上抛（单点组装）；CLI 盖章 redriveOf/redriveTemplateHash 后 saveInteractionIfAbsent；TaskChainView.resolveSession 与 DriftDetector.latestIdentityRecord 凭 RedriveMarkerUtil 结构化判据排除观测（core 单源，损坏 metadata 安全退化按业务记录）；record show 人读带 Re-drive observation 标记行。审查期修正：chained 路径用量取全链合计而非末轮单发（低报修复）。【测试钉】TaskReplayRunnerTest.reDrive_archivesObservation + TaskChainViewTest.redriveObservations_neverJoinChains + DriftDetectorTest.redriveObservation_skippedAsIdentityAnchor + RedriveMarkerUtilTest 四钉 |

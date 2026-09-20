@@ -637,12 +637,15 @@ class CommandSmokeTest {
     }
 
     @Test
-    @DisplayName("status --diff 在 --json 下被响亮拒绝而非静默忽略")
-    void statusDiffUnderJson_rejectedLoudly() {
+    @DisplayName("status --diff --json 产出 candidate-diff/1 机器报告（空候选也是合法快照）")
+    void statusDiffUnderJson_emitsCandidateDiffSchema() {
         ByteArrayOutputStream out = redirectStdout();
         int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath, "--diff", "--json");
 
-        assertEquals(2, exit);
-        assertTrue(out.toString().contains("--diff renders the human inspection view"), "组合拒绝必须指明 --diff 属人类通道: " + out);
+        assertEquals(0, exit, "只读巡检视图恒绿灯: " + out);
+        String report = out.toString();
+        assertTrue(report.startsWith("{\"schema\":\"agentassert4j.candidate-diff/1\""), "机器面 schema 必须是 candidate-diff/1: " + report);
+        assertTrue(report.contains("\"invocations\":[]"), "无候选调用点时空数组仍为合法快照: " + report);
+        assertTrue(report.contains("\"note\":\"Anchor = the first approved shape"), "锚定语义注记必须在场: " + report);
     }
 }

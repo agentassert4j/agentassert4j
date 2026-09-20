@@ -14,6 +14,7 @@ final class ReportSchemas {
     static final String RECORD = "agentassert4j.record/1";
     static final String RECORD_VIEW = "agentassert4j.record-view/1";
     static final String STATUS = "agentassert4j.status/1";
+    static final String CANDIDATE_DIFF = "agentassert4j.candidate-diff/1";
     static final String BASELINE_REPORT = "agentassert4j.baseline-report/1";
     static final String ADJUDICATION = "agentassert4j.adjudication/1";
     static final String ROLLBACK = "agentassert4j.rollback/1";

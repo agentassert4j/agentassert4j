@@ -21,13 +21,13 @@ schema、退出码契约、help 终态。
 
 | 命令 | bare 语义 | 主要参数 |
 |---|---|---|
-| `status` | 全部画像巡检 | `--diff`（候选差异+模板原文渲染）、`--invocation` 缩域（两通道一致生效；缺省=全量快照；uncovered/unestablished 恒以全库为准仅过滤显示）、`--json`、`--db` |
+| `status` | 全部画像巡检 | `--diff`（候选差异+模板原文渲染；`--diff --json` 出 `candidate-diff/1` 机器报告）、`--invocation` 缩域（两通道一致生效；缺省=全量快照；uncovered/unestablished 恒以全库为准仅过滤显示）、`--json`、`--db` |
 | `baseline` | 全部调用点建档（幂等） | `--force`（判定语义重建恢复路径）、`--invocation` 缩域、`--ref`（代码锚，申报制）、`--json` |
 | `replay` | 全项目漂移检测+逐任务对齐（零 LLM 调用） | `--task`/`--invocation` 复合缩域、`--ci`、`--re-drive`、`--member-check`（成员判定：最新链对最近 N 条历史链，matched k of N 量化稳定性）、`--member-window <N\|all>`（样本窗解析阶梯：本次显式 > regression.memberSampleWindow 配置 > 内置 5；all=全历史考古仅限单次调用，配置默认只收有限整数）、`--full-chain`、`--max-total-calls`/`--max-total-tokens`、`--dry-run`、`--json` |
 | `accept` / `reject` | 裁决全部待裁决候选 | `--invocation` 缩域、`--approver`（治理事件留痕）、`--json`；accept 另有 `--ref`（代码锚，申报制） |
-| `rollback` | 无缺省（--version 是操作宾语；目标须为归档版本，=活动版本即拒指路 reject） | `--invocation`、`--version`、`--approver`（治理事件留痕） |
+| `rollback` | 无缺省（--version 是操作宾语；目标须为归档版本，=活动版本即拒指路 reject） | `--invocation`、`--version`、`--approver`（治理事件留痕；回执 executor=本次操作者、approvedBy=恢复版原审批人） |
 | `verify` | 无缺省（--pack 是操作宾语） | `--pack`、`--task` 前缀、`--dry-run`、`--report`、`--json` |
-| `record show` | 按 recordId 回显一条交互的 raw wire 双列与关键元数据 | `--record-id`（必填）、`--db`、`--json` |
+| `record show` | 按寻址族回显一条交互的 raw wire 双列与关键元数据 | `--record-id` 精确直达；`--session <id> [--index N\|--latest]`（会话规范序 1 起始定位）；`--invocation <sel> --latest`（统一选择器解析后取该键最新记录）；恰一条记录的域可免定位、多条未定位 E-USAGE（--session 形态附限量记录清单，--invocation 形态指引 --latest）；`--db`、`--json` |
 | `rules` | 列内置行为目录与规则文件加载结果 | — |
 | `audit` | 按治理事件时间线列出全部治理写（动词/主体/时间/代码锚，含 reject 与 rollback）——AI（`agent:*`）与人写同一条时间线，供对账 | `--json` |
 | `mcp` | 起 stdio MCP server（工具面=CLI 动词薄壳+record 摄取，契约见 mcp.md） | `--db`、`--diag`（逐消息诊断日志） |
@@ -76,7 +76,11 @@ schema、退出码契约、help 终态。
 6. **报告 schema**：status=agentassert4j.status/1（画像含 templateDrift 三态；versionTag 为调用点键内版本计数——label-split 产生的新键各自从 v1 起计，跨键同号无血缘含义；行携带
    approvedBy/approvedAt 审批溯源——空串/null 字面量=未经审批链盖章；人读巡检表带 approver
    列，archived 列给活动 tag 打 * 标记、机器通道不标记[同行 versionTag 即活动版]；`health` 对象=
-   出口健康三计数）；replay=agentassert4j.task-report/1（mode: drift-detection / task-align /
+   出口健康三计数）；候选差异=agentassert4j.candidate-diff/1（`status --diff --json` /
+   MCP report diff=true+json=true：逐调用点携带锚定（认可集合首形态）→候选的结构化差异，
+   dimensions[] 每条 dimension（封闭词表 wireName）/baseline/candidate（紧凑视图串）/
+   added/removed/changed（逐项差集，空集常驻）；summary{scoped,withCandidate,identical}；
+   无候选调用点不进 invocations 数组、空数组=合法快照；恒 exit 0）；replay=agentassert4j.task-report/1（mode: drift-detection / task-align /
    task-dry-run / drift-disposition / task-re-drive / member-check / exit-health / re-drive-dry-run /
    ci-align——--ci 基线对照的报告形态（判定基准=链末判定：每调用点只判组末执行，见 replay
    契约 19）：步骤携带 baselineVersion（画像活跃版本）、成本只出 current 侧、baselineTime=
@@ -103,7 +107,7 @@ schema、退出码契约、help 终态。
    localSteps=judged 调用点数（与包侧步骤同尺）、verify 人读逐任务判定行
    （`Per-task verdicts:` 每任务一行：任务键+结论+similarity+missing/added 计数+
    首个差异摘要；coverage-gap 任务行 `no local chain`——快速分诊粒度，完整维度
-   明细留 --json/--report）；record show=agentassert4j.record-view/1（按 recordId 回显 raw 双列与关键元数据，未命中 E-NO-DATA）；audit=agentassert4j.audit/1（全量
+   明细留 --json/--report）；record show=agentassert4j.record-view/1（按寻址族回显 raw 双列与关键元数据，未命中 E-NO-DATA；观测记录原样回显、人读带 Re-drive observation 标记行）；audit=agentassert4j.audit/1（全量
    治理时间线：AI 与人类的治理写同账本同清单，单一时间线按时间排序：verb（六动词）、
    invocationKey、versionTag、actor、happenedAt
    恒在，codeRef 缺省省略；读动词恒 exit 0，空清单 writes=[]）；record 摄取（MCP record 工具）=
@@ -233,3 +237,5 @@ re-drive/missing/added。句式 sentence case；全角标点与「」不出现�
 | 2026-09-20 | 通道2 round8 图仪表修复批：graph 出边三前提可发现化 | 双宿主黑盒实测恒空图（nodeCount:0）的复合根因修复：①值提取深度 3→4（openai-chat 信封 message.content 与 tool_calls 参数住在 choices[0].message 第 4 层，原上限对该形态失明——单测此前只钉扁平 JSON 形状）；②节点集改全域调用点键（InMemoryDependencyGraph.addNode 登记 + getAllNodes 并集，单记录会话也入集）——「数据在、无边」与「没数据」可区分；③rebuildGraph 返回 GraphBuildStats（会话/记录/调用点键/跨键记录对数），graph/1 增 scanned 字段、空态 note 重写为出边三前提（两记录异调用点身份，值经工具结果——随调用录制或在更早记录请求历史，更晚工具参数与该值精确相等）——原「multi-turn interactions within one sessionId」必要而远不充分，同键会话默认零跨键对是空图最常见根因；④MCP graph 工具描述同步三前提与节点全集语义。【测试钉】ParameterValueTracerTest 四新钉（信封深度/无边节点登记/统计计数/同键零跨键对）+ GraphShowCommandTest 空图钉翻转（Nodes (1)+扫描统计行）+ McpServerTest 描述钉 |
 | 2026-09-20 | 通道2 round9 复验轮立修批（黑盒双宿主发现，合并诊断 channel2/round9/merged-diagnosis-r9.md） | ①选择器阶梯空库零命中改道录制指引（原 selector-miss 文案 + nextAction 指查看类命令在空库形成自循环；RECORD_FIRST_HINT 与 replay 空库分支单源）；②JUL 根格式器钉英文（installEnglishJulFormatter：ISO 时间戳 + Level.getName，消除 JVM 本地化的「严重:/上午」）；③doctor 样本封顶收尾「… and N more」+ plural 辅音+y 变 ies（familys 拼写错根因）+ multiStep 建议行写明检测语义（同会话同请求多次执行且无标签）+ skeleton 建议行注明 MCP record 无此参数改声明 invocation 标签；④re-drive 零目标就地解释（diagnostic 走 stderr，dry-run 与真跑同文案）；⑤预算截断包络 nextAction 补 agentassert4j replay；⑥graph/1 增 nodes 全键数组（机器面只有计数不可寻址）；⑦HTTP 错误空响应体补 (no response body) 占位；⑧replay/verify 的配置加载移入 try（坏配置在人读面穿透 picocli 打全栈）；⑨--json 措辞 single-line→逐行文档流（README×2/顶层 help/replay help 同步；多报告命令本就是 NDJSON）；⑩rollback 缺参只点名缺失项；⑪选择器多命中/缺参五处 nextAction 空串补 agentassert4j status；⑫Config 未命中行附 -D 指引。【测试钉】CommandSmokeTest 四新钉（空库选择器/plural/缺参点名/JUL 英文格式器）+ GraphShowCommandTest nodes 数组钉 + TaskReplayRunnerTest 零目标解释钉翻转 |
 | 2026-09-20 | 通道2 round9 二批（1.0.x 池裁决 1/2/4/5 实施 + 官方凭据指南 + 共库纪律） | ①re-drive 发射面披露：TestExecutionConfig 增 endpoint/wireProtocol（llm 配置的执行侧投影，ReplayCommand 接线），task-re-drive 文档增 emitter{model,endpoint,protocol}（未配置协议记 auto）+ 人读诊断行——404 排障不回读配置（round9 O7 主干）；②验收包步骤自描述：BaselineStep 增 baselineVersion（导出时画像活跃版本标签，PackCodec 写读两侧，旧包读侧缺省 null）——「指纹集合从哪个已批准版本来」就地可判读（round8 F9）；③verify CHANGED>0 时补三方关系提示（人读 Note + markdown + stdout 行：CHANGED 比的是包认可形状 vs 本机最新链，本机基线越过包也会红——round8 C-S24 翻车教训）；④OPERATIONS 新 §1.2 跨平台注意/§2.4 密钥与凭据官方姿势（${ENV} 引用形态、注册零密钥、宿主 mcp get 回显风险表）/§4 CI 凭据与验收段/§4 member-check 取样与配对精确语义/§6.1 共库裁决纪律；⑤MCP accept 工具描述补共享库警示句。【测试钉】TaskReplayRunnerTest.emitterDisclosed + VerifyExportTest baselineVersion 钉 |
+| 2026-09-20 | round9 池裁决实施批（#3/#6/#7，裁决记录 channel2/round9/merged-diagnosis-r9.md §六） | ①rollback 回执增 executor（=本次操作者，与 audit.actor 同值同源；JSON 字段+人读 "rolled back by X"），approvedBy 语义=恢复版原审批人在回执就地可判读（池 3 a+b'）；②candidate-diff/1 新 schema（池 6）：差异语义单源化为 core FingerprintDiffer→FingerprintDiff 结构化模型，FingerprintDiffRenderer 改薄投影（人读行格式不变），`status --diff --json` 由 E_USAGE 拒绝翻转为机器报告（D8 钉同步翻转），MCP report 增 json 参数（diff=true+json=true 走机器面）；③record show 寻址族（池 7①）：--session [--index N|--latest] / --invocation <sel> --latest / --record-id 三形态互斥，恰一条记录的域免定位、多条未定位 E-USAGE 带限量清单（8 条封顶+计数收尾），MCP record-show 同步四参数（CliMcpParityTest 守卫：CLI 选项必须被 MCP 入参覆盖）；④重驱观测归档（池 7②）：served 交互按被重驱记录原键落库（executor 单点组装 servedRecord 上抛，CLI 盖章 redriveOf/redriveTemplateHash 标记），任务链派生与 latestIdentityRecord 默认排除观测（RedriveMarkerUtil 结构化判据单源），步级行回带 observation recordId，写失败降级不拖累报告；graph 巡检面不排除（勘测仪表）。【测试钉】FingerprintDifferTest 六钉 + RedriveMarkerUtilTest 四钉 + TaskChainViewTest 观测排除钉 + DriftDetectorTest 观测锚回退钉 + JsonContractTest 寻址族五钉/candidate-diff 结构钉/executor 钉 + TaskReplayRunnerTest 观测归档钉 + CommandSmokeTest --diff --json 钉翻转 |
+| 2026-09-20 | 池裁决批异源独立审查处置（无记忆子代理全量审查，1 MEDIUM + 7 LOW） | **MEDIUM-1 建档播种排除观测**：BaselineService 种子选取原取桶内末位，重驱观测时间戳恒最新——「漂移/裂键→重驱→再 establish/--force」序列下基线种子被观测顶替（重驱那一次的行为转正为基线）；修=latestBusinessRecord 倒序取首个非观测记录（桶全观测退回末位，建档不中断），BaselineServiceTest.seedSkipsRedriveObservation 生产路径钉 + equivalence 种子行同步。LOW 处置：①渲染器 default 由静默 null 改抛 IllegalStateException（词表扩维就近失败）；②rollback 人读 facts 死条件清理（executor 恒在场，length 判断恒真）；③chained 观测 usageRaw 补口径注释（末轮单发原始，合计在 token 字段）；④观测幂等钉补齐（两次重驱=两条独立观测、链视图持续排除——裁决记录 §六-③ 承诺兑现）；⑤DisclosureParityTest 增 rollback executor 第五抽查 + McpServerTest rollback 描述句钉；⑥record show 行清单措辞限定 session 形态；⑦新增注释「收编」改「并入基线」+ 既有 "wire wire" typo 顺手修。审查同时确认：观测污染路径除播种点外全部排除（链派生/漂移锚/治理前移/重驱取点，无自驱循环）、寻址族无静默路径、metadata 敌意构造安全、JSON 转义完整、14 节点绿 + R1 零输出。【测试钉】seedSkipsRedriveObservation + rollbackExecutor_cliAndMcpCarrySameValue + rollback 描述钉 + 幂等断言扩充 |

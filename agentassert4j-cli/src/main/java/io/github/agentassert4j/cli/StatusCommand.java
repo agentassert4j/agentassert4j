@@ -1,10 +1,13 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.DriftDetector;
+import io.github.agentassert4j.algorithm.FingerprintDiffer;
 import io.github.agentassert4j.model.ArchivedTemplateVersion;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.result.DriftReport;
+import io.github.agentassert4j.result.FingerprintDiff;
+import io.github.agentassert4j.result.FingerprintDimensionChange;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import picocli.CommandLine.Command;
@@ -34,7 +37,7 @@ public class StatusCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--diff"}, description = "Render per-dimension candidate vs baseline diffs for invocations holding candidate fingerprints (human channel; rejected under --json)")
+    @Option(names = {"--diff"}, description = "Render per-dimension candidate vs baseline diffs for invocations holding candidate fingerprints (human channel; with --json emits the candidate-diff/1 report)")
     boolean diff;
 
     @Option(names = {"--invocation"}, description = "Narrow the view to one invocation (both channels): business label (fans out to all its template-version buckets), invocationKey prefix, or the status display form")
@@ -45,10 +48,6 @@ public class StatusCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        if (jsonOutput && diff) {
-            // 候选差异渲染只有人类巡检形态，--json 下静默忽略旗标会误导机器消费方
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--diff renders the human inspection view; it has no JSON form.", "Drop --json to see the per-dimension candidate diffs, or drop --diff for the status/1 JSON report.", "agentassert4j status");
-        }
         StorageRepository repository = null;
         try {
             // --json 模式 stdout 只产出报告本体：人类巡检表不输出（配置披露恒走 err）
@@ -74,6 +73,10 @@ public class StatusCommand implements Callable<Integer> {
             }
 
             if (jsonOutput) {
+                if (diff) {
+                    out.println(candidateDiffJson(profiles, labelsByInvocationKey));
+                    return 0;
+                }
                 StringBuilder invocations = new StringBuilder();
                 for (InvocationProfile profile : profiles) {
                     if (invocations.length() > 0) invocations.append(",");
@@ -198,6 +201,53 @@ public class StatusCommand implements Callable<Integer> {
         for (String line : FingerprintDiffRenderer.render(CliSupport.anchorShape(profile), profile.getCandidateFingerprint())) {
             out.println("        " + line);
         }
+    }
+
+    /**
+     * candidate-diff/1 机器报告 — 裁决证据的机器面闭环：AI 消费者不解析人读巡检
+     * 行也能拿到逐维差异，据此给出 accept/reject 建议。与人读 --diff 共用
+     * {@link io.github.agentassert4j.algorithm.FingerprintDiffer} 的同一份结构化
+     * 差异（锚定 = 认可形态集合首个形态），维度条目字段集恒定（added/removed/changed
+     * 空集常驻），消费端无需按维度写条件分支。
+     */
+    private static String candidateDiffJson(List<InvocationProfile> profiles, Map<String, String> labelsByInvocationKey) {
+        StringBuilder invocations = new StringBuilder();
+        int withCandidate = 0;
+        int identical = 0;
+        for (InvocationProfile profile : profiles) {
+            if (profile.getCandidateFingerprint() == null) {
+                continue;
+            }
+            withCandidate++;
+            if (invocations.length() > 0) {
+                invocations.append(",");
+            }
+            FingerprintDiff diff = FingerprintDiffer.diff(CliSupport.anchorShape(profile), profile.getCandidateFingerprint());
+            if (diff.isIdentical()) {
+                identical++;
+            }
+            invocations.append("{\"invocationKey\":\"").append(RecursiveJsonParser.escape(profile.getInvocationKey())).append("\",\"label\":\"").append(RecursiveJsonParser.escape(labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), ""))).append("\",\"versionTag\":\"").append(RecursiveJsonParser.escape(profile.getVersionTag() != null ? profile.getVersionTag() : "")).append("\",\"identical\":").append(diff.isIdentical()).append(",\"dimensions\":[");
+            StringBuilder dimensions = new StringBuilder();
+            for (FingerprintDimensionChange change : diff.getChanges()) {
+                if (dimensions.length() > 0) {
+                    dimensions.append(",");
+                }
+                dimensions.append("{\"dimension\":\"").append(change.getDimension().wireName()).append("\",\"baseline\":\"").append(RecursiveJsonParser.escape(change.getBaselineView())).append("\",\"candidate\":\"").append(RecursiveJsonParser.escape(change.getCandidateView())).append("\",\"added\":").append(stringArray(change.getAdded())).append(",\"removed\":").append(stringArray(change.getRemoved())).append(",\"changed\":").append(stringArray(change.getChanged())).append("}");
+            }
+            invocations.append(dimensions).append("]}");
+        }
+        return "{\"schema\":\"" + ReportSchemas.CANDIDATE_DIFF + "\",\"invocations\":[" + invocations + "],\"summary\":{\"scoped\":" + profiles.size() + ",\"withCandidate\":" + withCandidate + ",\"identical\":" + identical + "},\"note\":\"Anchor = the first approved shape; verdicts compare against the whole approved set.\"}";
+    }
+
+    private static String stringArray(List<String> values) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            sb.append('"').append(RecursiveJsonParser.escape(values.get(i))).append('"');
+        }
+        return sb.append(']').toString();
     }
 
     /**

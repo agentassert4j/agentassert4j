@@ -22,9 +22,10 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 披露等价断言 — seed record / approvedBy / 扇出披露 / member 窗口四能力在
- * CLI 人读、CLI JSON、MCP 三格抽查同形（登记表唯一权威来源：guide/spec/equivalence.md
- * 披露字段行；member 窗口的 MCP 格由 McpServerTest 窗口透传断言覆盖）。
+ * 披露等价断言 — seed record / approvedBy / 扇出披露 / member 窗口 / rollback
+ * executor 五能力在 CLI 人读、CLI JSON、MCP 三格抽查同形（登记表唯一权威来源：
+ * guide/spec/equivalence.md 披露字段行；member 窗口的 MCP 格由 McpServerTest
+ * 窗口透传断言覆盖）。
  *
  * @author axy-yxa
  * @since 2026-09-17
@@ -128,6 +129,34 @@ class DisclosureParityTest {
         for (String shortForm : shortForms(cliText)) {
             assertTrue(mcpText.contains(shortForm), "MCP 披露同一键短形 " + shortForm + ": " + mcpText);
         }
+    }
+
+    @Test
+    @DisplayName("rollback executor：MCP 回执与 CLI --json 携带同一操作者")
+    void rollbackExecutor_cliAndMcpCarrySameValue() {
+        String mcpDb = tempDir.resolve("parity-rb-mcp.db").toString();
+        SqliteStorageRepository mcpRepo = new SqliteStorageRepository(mcpDb);
+        mcpRepo.initialize();
+        try {
+            saveAgentRecord(mcpRepo, "rec-rb", "rbAgent", "hash-r", "session-1", 1000L);
+        } finally {
+            mcpRepo.close();
+        }
+        saveAgentRecord(repository, "rec-rb", "rbAgent", "hash-r", "session-1", 1000L);
+
+        McpDispatcher dispatcher = new McpDispatcher(McpTools.tools(mcpDb), null);
+        dispatcher.handle(rpc("initialize", "1"));
+        assertFalse(Boolean.TRUE.equals(callTool(dispatcher, "establish", "{\"approver\":\"agent:parity\"}").get("isError")));
+        assertFalse(Boolean.TRUE.equals(callTool(dispatcher, "establish", "{\"approver\":\"agent:parity\",\"force\":true}").get("isError")));
+        Map<String, Object> rollback = callTool(dispatcher, "rollback", "{\"invocation\":\"rbAgent\",\"version\":\"v1\",\"approver\":\"agent:parity\"}");
+        assertFalse(Boolean.TRUE.equals(rollback.get("isError")), "MCP rollback 必须成功: " + rollback);
+        assertTrue(contentText(rollback).contains("\"executor\":\"agent:parity\""), "MCP 回执披露操作者: " + contentText(rollback));
+
+        new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath, "--approver", "agent:parity");
+        new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath, "--force", "--approver", "agent:parity");
+        ByteArrayOutputStream out = redirectStdout();
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("rollback", "--db", dbPath, "--invocation", "rbAgent", "--version", "v1", "--approver", "agent:parity", "--json"));
+        assertTrue(out.toString().contains("\"executor\":\"agent:parity\""), "CLI JSON 披露同一操作者: " + out);
     }
 
     @Test

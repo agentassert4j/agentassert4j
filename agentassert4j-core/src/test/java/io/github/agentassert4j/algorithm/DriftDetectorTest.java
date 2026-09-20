@@ -9,8 +9,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -198,6 +198,22 @@ class DriftDetectorTest {
     @Nested
     @DisplayName("退化行为")
     class PropagationAndDegradation {
+
+        @Test
+        @DisplayName("重驱观测记录不作身份凭据：最新身份回退到次新业务记录")
+        void redriveObservation_skippedAsIdentityAnchor() {
+            String key = "invocation:order-flow:skl-1";
+            repo.saveInvocationProfile(profile(key, "order-flow", "h1"));
+            repo.saveInteractionIfAbsent(skeletonRecord("r-business", "order-flow", "skl-1", "h1", 1000L));
+            // 观测记录时间最新，但其模板哈希是重驱所用的归档模板（h-archived）
+            InteractionRecord observation = skeletonRecord("r-obs", "order-flow", "skl-1", "h-archived", 2000L);
+            observation.setMetadata("{\"redriveOf\":\"r-business\",\"redriveTemplateHash\":\"h-archived\"}");
+            repo.saveInteractionIfAbsent(observation);
+
+            DriftReport report = DriftDetector.detect(repo);
+
+            assertFalse(report.hasDrift(), "观测记录的归档模板哈希不得顶替业务身份制造假漂移");
+        }
 
         @Test
         @DisplayName("单条损坏记录倒序回退到次新可分组记录")

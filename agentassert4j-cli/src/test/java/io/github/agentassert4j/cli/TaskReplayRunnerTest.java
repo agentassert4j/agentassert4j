@@ -8,6 +8,8 @@ import io.github.agentassert4j.spi.LlmApiException;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.LlmTimeoutException;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
+import io.github.agentassert4j.util.RecursiveJsonParser;
+import io.github.agentassert4j.util.RedriveMarkerUtil;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -432,7 +434,7 @@ class TaskReplayRunnerTest {
 
             String out = output.toString();
             assertTrue(out.contains("split key awaits explicit establish"), "处置行讲明裂键等显式建档: " + out);
-            assertFalse(out.contains("new profile established"), "D6 后不得再谎称建档: " + out);
+            assertFalse(out.contains("new profile established"), "裂键不得谎称已建档: " + out);
 
             TaskReplayRunner jsonRunner = newRunner(true);
             output.reset();
@@ -923,6 +925,63 @@ class TaskReplayRunnerTest {
             assertEquals(1, stubClient.calls, "仅漂移点重驱，恰一次调用");
             assertTrue(output.toString().contains("Re-drive:"));
             assertTrue(output.toString().contains("re-drive PASS"));
+        }
+
+        @Test
+        @DisplayName("重驱观测归档：served 交互按原键落库带 redriveOf 标记，且被链视图排除")
+        void reDrive_archivesObservation() {
+            seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
+            // 机器面先行（新鲜漂移在册）：重驱 PASS 后漂移身份已并入基线，第二次运行不再有目标
+            ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+            TaskReplayRunner jsonRunner = new TaskReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
+            assertEquals(0, jsonRunner.run(null, null, false, false, false, null, false, true, false, null, null));
+            assertTrue(jsonOut.toString().contains("\"observationRecordId\":\""), "机器面步级对象必须回带观测记录 id: " + jsonOut);
+
+            List<InteractionRecord> bucket = repository.findByInvocationKey("invocation:order:skl-1");
+            List<InteractionRecord> observations = new ArrayList<>();
+            for (InteractionRecord record : bucket) {
+                if (RedriveMarkerUtil.isRedriveObservation(record)) {
+                    observations.add(record);
+                }
+            }
+            assertEquals(1, observations.size(), "一次真调恰归档一条观测（桶内共 " + bucket.size() + " 条）");
+            InteractionRecord observation = observations.get(0);
+            assertEquals("b-1", observationMetadataValue(observation, "redriveOf"), "标记指向被重驱记录: " + observation.getMetadata());
+            assertEquals("hash-new", observationMetadataValue(observation, "redriveTemplateHash"), "标记携带所用归档模板哈希: " + observation.getMetadata());
+            for (TaskChain chain : TaskChainView.resolveAll(repository)) {
+                for (InteractionRecord shown : chain.getRecords()) {
+                    assertFalse(RedriveMarkerUtil.isRedriveObservation(shown), "观测记录不得进入任务链视图");
+                }
+            }
+
+            // 人读步级行：补种一个新漂移再跑（上一轮 PASS 已把旧漂移并入基线）
+            saveSkeletonRecord("b-2", "session-b2", 3000L, "查订单", "order", "skl-1", "hash-new2", "{\"result\":\"ok\"}");
+            saveTemplateText("hash-new2", "更新的模板全文");
+            assertEquals(0, runner.run(null, null, false, false, false, null, false, true, false, null, null));
+            assertTrue(output.toString().contains("(observation record "), "步级行必须回带观测记录 id: " + output);
+
+            // 幂等口径：每次真调各自归档一条观测（append-only，互不覆盖），链视图持续排除
+            int observationCount = 0;
+            for (InteractionRecord record : repository.findByInvocationKey("invocation:order:skl-1")) {
+                if (RedriveMarkerUtil.isRedriveObservation(record)) {
+                    observationCount++;
+                }
+            }
+            assertEquals(2, observationCount, "两次重驱=两条独立观测");
+            for (TaskChain chain : TaskChainView.resolveAll(repository)) {
+                for (InteractionRecord shown : chain.getRecords()) {
+                    assertFalse(RedriveMarkerUtil.isRedriveObservation(shown), "观测记录不得进入任务链视图");
+                }
+            }
+        }
+
+        private String observationMetadataValue(InteractionRecord observation, String key) {
+            Object parsed = RecursiveJsonParser.parse(observation.getMetadata());
+            if (parsed instanceof Map) {
+                Object value = ((Map<?, ?>) parsed).get(key);
+                return value != null ? String.valueOf(value) : null;
+            }
+            return null;
         }
 
         @Test

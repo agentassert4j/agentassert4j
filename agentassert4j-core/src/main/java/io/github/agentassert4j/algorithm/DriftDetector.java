@@ -4,6 +4,7 @@ import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.result.DriftReport;
 import io.github.agentassert4j.spi.StorageRepository;
+import io.github.agentassert4j.util.RedriveMarkerUtil;
 
 import java.util.*;
 
@@ -120,6 +121,7 @@ public final class DriftDetector {
     /**
      * 键桶内最新可分组记录：按规范序（时间、序号、记录 ID）倒序扫描，返回首个现算键
      * 与存储键一致的记录。单条损坏或键不一致即跳过回退；全部不可用返回 null。
+     * 重驱观测记录跳过——其模板哈希是重驱所用的归档模板，不是业务执行的身份。
      * 返回记录的模板哈希可为 null（零模板点），由调用方决定保守语义。
      * 检测、治理身份前移与重驱取点共用本规则（存储键×现算键双一致才可作身份凭据）。
      */
@@ -128,6 +130,9 @@ public final class DriftDetector {
         ordered.sort(canonicalOrder());
         for (int i = ordered.size() - 1; i >= 0; i--) {
             InteractionRecord record = ordered.get(i);
+            if (RedriveMarkerUtil.isRedriveObservation(record)) {
+                continue;
+            }
             String resolvedKey;
             try {
                 resolvedKey = InvocationResolver.resolve(record).getInvocationKey();

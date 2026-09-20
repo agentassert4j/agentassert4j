@@ -144,6 +144,26 @@ class BaselineServiceTest {
     }
 
     @Test
+    @DisplayName("重驱观测记录不参与播种：时间最新的观测不得顶替业务执行成为基线种子")
+    void seedSkipsRedriveObservation() {
+        InteractionRecord business = makeRecord("rec-biz", "skill-1", 1000L, "{\"biz\":true}");
+        repository.saveInteractionIfAbsent(business);
+        // 观测记录时间戳最新（重驱发生在业务执行之后），携带 redriveOf 标记
+        InteractionRecord observation = makeRecord("rec-obs", "skill-1", 3000L, "{\"obs\":true}");
+        observation.setMetadata("{\"redriveOf\":\"rec-biz\",\"redriveTemplateHash\":\"hash-old\"}");
+        repository.saveInteractionIfAbsent(observation);
+        PrintStream out = new PrintStream(output, true);
+
+        new BaselineService(repository).establishMissing(out, "tester", null, false, null, null, null, null);
+
+        InvocationProfile profile = repository.findInvocationByKey(invocationKeyOf("skill-1"));
+        assertNotNull(profile, "基线已建立");
+        assertEquals(FingerprintExtractor.extract(business, null, null), profile.getFingerprints().get(0), "种子必须来自业务记录——观测是检测仪器的真调，以它播种会把重驱那一次锚定为基线");
+        assertNotEquals(FingerprintExtractor.extract(observation, null, null), profile.getFingerprints().get(0), "观测记录不得成为种子");
+        assertFalse(output.toString().contains("seed record rec-obs"), "披露行不得指向观测记录: " + output);
+    }
+
+    @Test
     @DisplayName("种子记录在建档与 force 重建行上就地披露：用户能当场看到批准的是哪条记录")
     void seedRecordId_disclosedOnCreateAndForce() {
         repository.saveInteractionIfAbsent(makeRecord("rec-1", "skill-1", 1000L, "{\"ok\":true}"));
@@ -221,8 +241,7 @@ class BaselineServiceTest {
 
         // 定向 --invocation：逐键显式意图，照建
         output.reset();
-        Set<String> targeted = Collections.singleton(
-                InvocationResolver.resolve(repository.findByInvocationId("splitAgent").get(1)).getInvocationKey());
+        Set<String> targeted = Collections.singleton(InvocationResolver.resolve(repository.findByInvocationId("splitAgent").get(1)).getInvocationKey());
         int targetedEstablished = new BaselineService(repository).establishMissing(out, "tester", null, false, targeted, null, null, null);
         assertEquals(1, targetedEstablished, "定向显式建档不受豁免影响");
         assertNotNull(repository.findInvocationByKey(targeted.iterator().next()));

@@ -9,6 +9,7 @@ import io.github.agentassert4j.result.TaskAlignment.StepKind;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.RecursiveJsonParser;
+import io.github.agentassert4j.util.RedriveMarkerUtil;
 import io.github.agentassert4j.util.TextDiffUtils;
 
 import java.io.ByteArrayOutputStream;
@@ -429,18 +430,23 @@ public class TaskReplayRunner {
             }
             ComparisonResult comparison = result.getComparison();
             String served = servedNote(result, record);
+            // 真调观测落库：served 交互以被重驱记录的原键归档为观测记录（同键新执行），
+            // metadata 携带 redriveOf 与所用归档模板哈希；链视图与漂移检测凭标记排除。
+            // 写失败只降级（步级行不回带记录 id），重驱报告本体不受影响
+            String observationId = archiveObservation(record, templateHash, result);
+            String observationNote = observationId != null ? " (observation record " + observationId + ")" : "";
             if (comparison != null && comparison.getVerdict() == Verdict.CHANGED) {
                 rd.changed++;
-                info(stepLine(index, key, "re-drive CHANGED " + comparison.getSummary()) + served);
+                info(stepLine(index, key, "re-drive CHANGED " + comparison.getSummary()) + served + observationNote);
             } else if (comparison != null) {
                 rd.pass++;
-                info(stepLine(index, key, "re-drive PASS") + served);
+                info(stepLine(index, key, "re-drive PASS") + served + observationNote);
             } else {
                 rd.failed++;
                 info(stepLine(index, key, result.getStatus() + " " + (result.getErrorMessage() != null ? result.getErrorMessage() : "")));
             }
             if (stepJsons != null) {
-                stepJsons.add(reDriveStepJson(record, key, result));
+                stepJsons.add(reDriveStepJson(record, key, result, observationId));
             }
         }
         info("Re-drive summary: PASS " + rd.pass + " | CHANGED " + rd.changed + " | failed " + rd.failed + " | skipped " + rd.skipped + " (" + CliSupport.plural(rd.callsUsed, "real re-drive call") + (rd.tokensUsed > 0 ? ", " + CliSupport.plural(rd.tokensUsed, "token") : "") + ")");
@@ -465,13 +471,59 @@ public class TaskReplayRunner {
         return servedModelNote(result.getServedModel(), baseline.getServedModel(), "recorded");
     }
 
-    private static String reDriveStepJson(InteractionRecord record, String key, RegressionTestResult result) {
+    /**
+     * 重驱观测归档：served 记录盖章观测标记后落库，返回观测记录 id（未完成对照、
+     * 或落库失败返回 null——报告步级行如实不回带）。观测记录继承被重驱记录的
+     * 原键与会话（同键新执行），metadata 在原条目之上并入 redriveOf 与
+     * redriveTemplateHash（标记键优先，损坏的原 metadata 不并入）。
+     */
+    private String archiveObservation(InteractionRecord target, String templateHash, RegressionTestResult result) {
+        InteractionRecord observation = result.getServedRecord();
+        if (observation == null) {
+            return null;
+        }
+        observation.setMetadata(observationMetadata(target, templateHash));
+        try {
+            repository.saveInteractionIfAbsent(observation);
+            return observation.getRecordId();
+        } catch (RuntimeException e) {
+            diagnostic("Observation archival failed for " + target.getRecordId() + ": " + CliSupport.describe(e));
+            return null;
+        }
+    }
+
+    private static String observationMetadata(InteractionRecord target, String templateHash) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put(RedriveMarkerUtil.REDRIVE_OF, target.getRecordId());
+        if (templateHash != null && !templateHash.isEmpty()) {
+            metadata.put(RedriveMarkerUtil.REDRIVE_TEMPLATE_HASH, templateHash);
+        }
+        String base = target.getMetadata();
+        if (base != null && !base.isEmpty()) {
+            try {
+                Object parsed = RecursiveJsonParser.parse(base);
+                if (parsed instanceof Map) {
+                    for (Map.Entry<?, ?> entry : ((Map<?, ?>) parsed).entrySet()) {
+                        metadata.putIfAbsent(String.valueOf(entry.getKey()), entry.getValue());
+                    }
+                }
+            } catch (RuntimeException ignored) {
+                // 损坏的原 metadata 不并入：观测标记必须完整落位，排除判据不能被拖垮
+            }
+        }
+        return RecursiveJsonParser.serialize(metadata);
+    }
+
+    private static String reDriveStepJson(InteractionRecord record, String key, RegressionTestResult result, String observationId) {
         StringBuilder sb = new StringBuilder("{\"recordId\":\"" + RecursiveJsonParser.escape(record.getRecordId()) + "\"");
         sb.append(",\"invocationKey\":\"").append(RecursiveJsonParser.escape(key != null ? key : "")).append('"');
         if (record.getApiProtocol() != null) {
             sb.append(",\"protocol\":\"").append(RecursiveJsonParser.escape(record.getApiProtocol())).append('"');
         }
         sb.append(",\"action\":\"re-driven\"");
+        if (observationId != null) {
+            sb.append(",\"observationRecordId\":\"").append(RecursiveJsonParser.escape(observationId)).append('"');
+        }
         ComparisonResult comparison = result.getComparison();
         if (comparison != null) {
             sb.append(",\"verdict\":\"").append(comparison.getVerdict()).append('"');

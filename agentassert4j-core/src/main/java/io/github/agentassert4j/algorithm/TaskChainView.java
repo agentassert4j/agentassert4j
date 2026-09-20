@@ -1,10 +1,11 @@
 package io.github.agentassert4j.algorithm;
 
 import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.model.TaskChain;
+import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.spi.InteractionQueryStore;
 import io.github.agentassert4j.util.RecursiveJsonParser;
+import io.github.agentassert4j.util.RedriveMarkerUtil;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -59,6 +60,11 @@ public final class TaskChainView {
         List<TaskChain> chains = new ArrayList<>();
         TaskChain current = null;
         for (InteractionRecord record : ordered) {
+            // 重驱观测记录不构成业务任务链：受控重驱是检测仪器的真调，不是业务
+            // 执行——混入链视图会顶替链末判定与跨会话配对的「最新执行」
+            if (RedriveMarkerUtil.isRedriveObservation(record)) {
+                continue;
+            }
             String declared = declaredTaskKey(record);
             String text = declared != null ? declared : blankToNull(record.getUserInput());
             if (text == null) {
