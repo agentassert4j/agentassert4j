@@ -53,6 +53,9 @@ public final class PackCodec {
                 s.put("recordId", step.getRecordId());
                 // 形态集合数组载荷：首元素 = establish 种子锚，其余为 accept 追加的认可形态
                 s.put("fingerprint", FingerprintJson.shapesToMapList(step.getFingerprints()));
+                if (step.getBaselineVersion() != null) {
+                    s.put("baselineVersion", step.getBaselineVersion());
+                }
                 if (step.getSampleInput() != null) {
                     s.put("sampleInput", step.getSampleInput());
                 }
@@ -120,6 +123,7 @@ public final class PackCodec {
                         step.setInvocationKey(asString(sm.get("invocationKey")));
                         step.setRecordId(asString(sm.get("recordId")));
                         step.setFingerprints(FingerprintJson.shapesFromMapList(sm.get("fingerprint")));
+                        step.setBaselineVersion(asString(sm.get("baselineVersion")));
                         step.setSampleInput(asString(sm.get("sampleInput")));
                         step.setSampleOutput(asString(sm.get("sampleOutput")));
                         task.getSteps().add(step);

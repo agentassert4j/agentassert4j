@@ -37,6 +37,11 @@ public class BaselineStep {
      * 不进任何 wire 形态）——CI 对照报告显示「vs baseline v3」的数据源
      */
     private String versionTag;
+    /**
+     * 导出时该调用点画像的活跃版本标签（随包出境，验收侧自描述用：
+     * 指纹集合来自哪个已批准版本，与 recordId 的证据锚共同回答「集合从哪来」）
+     */
+    private String baselineVersion;
 
     public String getInvocationKey() {
         return invocationKey;
@@ -92,5 +97,13 @@ public class BaselineStep {
 
     public void setVersionTag(String versionTag) {
         this.versionTag = versionTag;
+    }
+
+    public String getBaselineVersion() {
+        return baselineVersion;
+    }
+
+    public void setBaselineVersion(String baselineVersion) {
+        this.baselineVersion = baselineVersion;
     }
 }

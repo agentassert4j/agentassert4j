@@ -444,10 +444,18 @@ public class TaskReplayRunner {
             }
         }
         info("Re-drive summary: PASS " + rd.pass + " | CHANGED " + rd.changed + " | failed " + rd.failed + " | skipped " + rd.skipped + " (" + CliSupport.plural(rd.callsUsed, "real re-drive call") + (rd.tokensUsed > 0 ? ", " + CliSupport.plural(rd.tokensUsed, "token") : "") + ")");
+        // 发射面披露：步骤行的 protocol 是记录侧方言，调用实际打到哪里（端点/协议/模型）
+        // 必须就地可见——404 排障时用户不该回读配置文件
+        diagnostic("Re-drive emitter: model " + llmClient.name() + (executionConfig.getEndpoint() != null ? " via " + executionConfig.getEndpoint() : "") + " (protocol: " + (executionConfig.getWireProtocol() != null ? executionConfig.getWireProtocol() : "auto — record protocol hint, openai-chat fallback") + ")");
         if (jsonMode) {
             StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.TASK_RE_DRIVE.wireName() + "\"");
             sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
             sb.append(",\"summary\":{\"total\":").append(rd.pass + rd.changed + rd.failed).append(",\"pass\":").append(rd.pass).append(",\"changed\":").append(rd.changed).append(",\"failed\":").append(rd.failed).append(",\"skipped\":").append(rd.skipped).append(",\"callsUsed\":").append(rd.callsUsed).append("}");
+            sb.append(",\"emitter\":{\"model\":\"" + RecursiveJsonParser.escape(llmClient.name()) + "\"");
+            if (executionConfig.getEndpoint() != null) {
+                sb.append(",\"endpoint\":\"" + RecursiveJsonParser.escape(executionConfig.getEndpoint()) + "\"");
+            }
+            sb.append(",\"protocol\":\"" + RecursiveJsonParser.escape(executionConfig.getWireProtocol() != null ? executionConfig.getWireProtocol() : "auto") + "\"}");
             sb.append(",\"steps\":[").append(String.join(",", stepJsons)).append("]}");
             out.println(sb.toString());
         }

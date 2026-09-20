@@ -41,6 +41,22 @@
 alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 ```
 
+
+### 1.2 跨平台运行注意
+
+- **路径**：CLI 参数里的路径一律接受正斜杠（Windows 下 `D:/path/to.db` 与反斜杠等价，
+  正斜杠在 shell 引号里无需转义，示例统一用正斜杠）。
+- **Windows**：
+  - 管道/重定向消费 CLI 输出（子进程读取、`>` 落盘后按 UTF-8 解析）时，启动命令加
+    `-Dfile.encoding=UTF-8`——JVM 默认按平台字符集（中文 Windows 为 GBK）写特殊字形，
+    UTF-8 消费者会解码失败；交互式终端显示侧可配 `chcp 65001`。框架自身输出串恒为
+    UTF-8 源码串，无字面 GBK 内容。
+  - Git Bash / PowerShell / CMD 均可运行；`-D` 系统属性与 `--db` 等参数的引号规则遵循
+    各 shell 惯例（PowerShell 对含空格路径用引号包裹即可）。
+- **macOS / Linux**：无额外注意事项；`java -jar` 标准用法，JRE 8+。
+- **时区与 locale**：判定与报告不含本地化内容；JVM 日志（JUL）级别词与时间戳由框架
+  统一为英文/ISO 格式，不随系统语言变化。
+
 ## 2. 配置参考
 
 ### 2.1 主配置 `agentassert4j.json`
@@ -175,6 +191,59 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 > 钉定声明；建档后改规则文件不会静默重判历史（存在差异时 establish 会给规则漂移告警并指路
 > check→accept 无副作用刷新或 `--force` 重播种）。
 
+
+### 2.4 密钥与凭据配置（官方姿势）
+
+LLM API Key **只被一个功能消费**：`replay --re-drive`（受控重驱的真调用）。录制、判定、
+建档、验收（verify）全链路零 Key——不配密钥的安装是完整可用的，只差重驱。
+
+**推荐形态：配置文件写 `${ENV}` 引用，密钥活在进程环境里**——
+
+```json
+{
+  "llm": {
+    "apiKey": "${MY_LLM_API_KEY}",
+    "endpoint": "https://api.deepseek.com",
+    "model": "deepseek-chat"
+  }
+}
+```
+
+- ConfigLoader 在加载时展开 `${环境变量名}`（热读：长驻进程改配置文件即生效，无需重启）；
+  变量缺席时该键解析为空，重驱前置检查会给出「no API key configured」警告（dry-run 即可
+  提前看到，不花钱）。
+- 这个 `agentassert4j.json` 因此**可以安全入库**（含端点与模型，不含密钥）；密钥由
+  启动 CLI / MCP server 的那个进程的环境提供（终端 `export`、CI secret、harness 注入）。
+
+**为什么不用「字面量密钥」**：
+
+| 位置 | 风险 |
+|------|------|
+| `agentassert4j.json` 写字面量 | 文件一旦入库/截图/共享即泄漏 |
+| MCP 注册带 `-e KEY=<字面量>` | 多数宿主的 `mcp get`/配置界面会**原样回显注册项**（含 env 值），密钥进会话记录——Claude Code 已实测如此 |
+| CI 明文变量 | 泄漏面同上，且进构建日志 |
+
+**MCP 注册的官方姿势**（密钥经父进程环境 → `${ENV}` 展开，注册项零密钥）：
+
+```json
+{
+  "mcpServers": {
+    "agentassert4j": {
+      "command": "java",
+      "args": ["-Dagentassert4j.config.path=/path/to/agentassert4j.json",
+               "-jar", "/path/to/agentassert4j-cli-standalone-1.0.0.jar",
+               "mcp", "--db", "/path/to/agentassert4j.db"]
+    }
+  }
+}
+```
+
+启动宿主前 `export MY_LLM_API_KEY=...`（或让宿主从系统级环境继承）即可；注册里不出现
+密钥，`mcp get` 类回显也就无密可露。纯 record/check/verify 用途的 server 甚至无需密钥。
+
+**CLI 侧同理**：终端 `export` 后直接跑（配置文件仍走 `${ENV}` 引用）；一次性注入的等价
+形态是 `MY_LLM_API_KEY=... agentassert4j replay --re-drive`。
+
 ## 3. 库文件运维
 
 - **单文件即全部状态**：备份 = 复制文件（建议停写窗口或接受只追加语义下的时间点快照）。
@@ -231,6 +300,12 @@ agentassert4j replay --ci --json
   合计封顶；耗尽后剩余点标 skipped，整体 exit 2（证据不完整不允许冒充绿）。
 - **干跑**：`replay --dry-run` 输出漂移集、对齐计划与重驱成本预估——零调用、零落库、零建档、
   零处置；重驱前先 `--dry-run` 看报价是推荐惯例。
+- **CI 凭据**：门禁本体（`replay --ci`）零 Key——CI 里 `agentassert4j.json` 只需
+  `storage.url` 一项；如需在流水线做受控重驱复核，密钥走 CI secret 注入环境变量、
+  配置文件保持 `${ENV}` 引用（见 §2.4），并配 `--max-total-calls` 预算封顶。
+- **验收段（可选第二阶段）**：交付侧 `baseline export` 出包（工件随流水线存档）→
+  验收侧真实执行后 `verify --pack` 以退出码 gating——结构判据跨模型有效，
+  `crossModel:true` 时措辞差异按预期标注（完整配方见 §6）。
 
 <img src="assets/cli-dry-run.png" alt="replay --task --dry-run：漂移集与对齐计划预演，未调用 LLM、未建档、未处置" width="720"/>
 
@@ -243,6 +318,11 @@ agentassert4j replay --ci --json
   恒定：`matchedSessions` 列全部命中会话（未命中为空数组），`closestSession`/`closestScore`
   常驻（命中为 null、零配对时 closestScore 为 null）——消费端无需按结论写条件分支。不带
   `--member-check` 时 `--member-window` 单独出现按用法错误拒绝（exit 2）。
+  **取样与配对语义**：窗口取「该任务最新链之前」的最近 N 条历史链（按时间序，`all`=全部
+  先于最新链的历史）；每条样本链与最新链做**逐步配对**（与 bare replay 同一配对器、
+  同一五维判定）——命中（matched）=该次配对全维一致；报告步骤行列出的是配对双方，
+  样本链的中段记录出现在步骤行属正常（它在链内有自己的执行位）。链内多次执行不折叠：
+  配对按链对链进行，步骤行是配对的证据视图。
 
 ## 5. 生产打包形态
 
@@ -325,6 +405,12 @@ description 声明各变异动词的使用要求（如 accept 应在人类指示
 harness 权限系统执行。`--ref` 与 approver 是申报制自由串、不做校验——多人/多 agent 共库
 协作时给 ref 带写入方与用途前缀（如 `zcode-r5-accept`、`release-gate-v3`），时间线的归属
 一眼可读（actor 区分身份，ref 区分事由）。
+
+**共库多代理纪律：裁决永远缩域**。bare `accept`/bare `baseline --force` 作用于全库在途
+候选/画像——共享一个库文件的多代理（或多窗口）场景下，这会吞掉**其他代理**的在途候选。
+纪律：`accept --invocation <键或标签>` 显式缩域（MCP 的 accept 同理——`invocation` 参数
+缺省=全部在途候选）；裁决前先 `status --diff`（或 MCP `report` 带 `diff:true`）看清候选
+属于谁（`approvedBy`/候选指纹的来源会话在列）。单代理独库场景 bare 形态无此风险。
 
 ## 6.2 MCP 接入（AI 自主验证回路）
 

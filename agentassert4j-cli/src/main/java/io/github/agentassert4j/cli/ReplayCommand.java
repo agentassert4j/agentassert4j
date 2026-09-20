@@ -124,7 +124,7 @@ public class ReplayCommand implements Callable<Integer> {
             if (reDrive && TextUtil.isBlank(config.getLlm().getApiKey())) {
                 (jsonOutput ? err : out).println("Warning: no API key configured (llm.apiKey in agentassert4j.json or its ${ENV} reference); re-drive calls will fail.");
             }
-            TestExecutionConfig executionConfig = new TestExecutionConfig().timeoutMs(config.getLlm().getTimeoutMs()).temperature(config.getLlm().getTemperature()).maxTokens(config.getLlm().getMaxTokens());
+            TestExecutionConfig executionConfig = new TestExecutionConfig().timeoutMs(config.getLlm().getTimeoutMs()).temperature(config.getLlm().getTemperature()).maxTokens(config.getLlm().getMaxTokens()).endpoint(config.getLlm().getEndpoint()).wireProtocol(config.getLlm().getProtocol());
             InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
             CliSupport.warnUnknownBehaviors(rules, jsonOutput ? err : out);
             CliSupport.warnMalformedTaskRules(rules, jsonOutput ? err : out);

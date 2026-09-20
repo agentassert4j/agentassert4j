@@ -151,6 +151,7 @@ class VerifyExportTest {
         String json = exportPack(tempDir.resolve("verify.db").toString(), false);
 
         assertTrue(json.contains("\"schema\":\"agentassert4j.acceptance-pack/1\""), json);
+        assertTrue(json.contains("\"baselineVersion\":\"v"), "包步骤必须自描述来源画像版本（F9：集合从哪来就地可判读）: " + json);
         assertTrue(json.contains("\"judgmentSemantics\":\"det-v1\""), json);
         assertTrue(json.contains("\"taskKey\":\"查订单\""), json);
         assertTrue(json.contains("\"invocationKey\":\"invocation:verdict:h-verdict\""), json);

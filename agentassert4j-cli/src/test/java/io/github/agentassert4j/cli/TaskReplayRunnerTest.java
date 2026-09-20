@@ -899,6 +899,22 @@ class TaskReplayRunnerTest {
         }
 
         @Test
+        @DisplayName("重驱报告披露发射面（model/endpoint/protocol）——404 排障不回读配置")
+        void reDrive_emitterDisclosed() {
+            seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
+            ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+            TaskReplayRunner jsonRunner = new TaskReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults().endpoint("https://api.example.com").wireProtocol("openai-responses"), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
+
+            jsonRunner.run(null, null, false, false, false, null, false, true, false, null, null);
+
+            String report = jsonOut.toString();
+            assertTrue(report.contains("\"emitter\":{\"model\":"), "task-re-drive 文档必须携带 emitter: " + report);
+            assertTrue(report.contains("\"endpoint\":\"https://api.example.com\""), "端点必须披露: " + report);
+            assertTrue(report.contains("\"protocol\":\"openai-responses\""), "显式协议必须披露: " + report);
+            assertTrue(report.contains("Re-drive emitter: model"), "人读诊断行必须披露发射面: " + report);
+        }
+
+        @Test
         @DisplayName("重驱 PASS → 对齐并入基线 + 重驱通过，退出码 0，恰一次调用")
         void reDrive_pass() {
             seedArchivedSkeletonDrift("{\"result\":\"ok\"}");

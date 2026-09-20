@@ -205,6 +205,10 @@ public class VerifyRunner {
             hints.add("Out-of-scope local chains usually come from recordings made after the pack export (new tasks not baselined or not in the pack). Run `agentassert4j baseline` to establish them and re-export the pack, or confirm they are out of delivery scope.");
         }
         info("Verification summary: PASS " + pass + " | CHANGED " + changed + " | missing " + missing + " | added " + added + " | coverage gaps " + uncovered.size() + " | out-of-scope chains " + unmatchedLocal.size());
+        if (changed > 0) {
+            // 三方关系提示：包 ≠ 本机基线 ≠ 本机最新链——CHANGED 只说明后两者之一与包分歧
+            info("Note: CHANGED here compares the pack's approved shapes with this machine's LATEST recorded chain; if the local baseline has moved past the pack, re-export it on the dev side and re-verify.");
+        }
         for (String hint : hints) {
             info("Note: " + hint);
         }
@@ -382,6 +386,9 @@ public class VerifyRunner {
         sb.append("| Local servedModel | ").append(localServedModels.isEmpty() ? "(not recorded)" : String.join(",", localServedModels)).append(" |\n");
         sb.append("| Cross-model | ").append(crossModel ? "yes (structural verdicts valid; text differences are expected wording variation)" : "no").append(" |\n\n");
         sb.append("**Verdict summary**: PASS ").append(pass).append(" | CHANGED ").append(changed).append(" | missing ").append(missing).append(" | added ").append(added).append('\n');
+        if (changed > 0) {
+            sb.append("> Note: CHANGED compares the pack's approved shapes with this machine's latest recorded chain; a local baseline newer than the pack also reads CHANGED here — re-export on the dev side and re-verify.\n");
+        }
         if (!uncovered.isEmpty()) {
             sb.append("\n> **Coverage gaps** (pack tasks not executed locally; evidence incomplete): ").append(String.join("; ", uncovered)).append('\n');
         }

@@ -114,6 +114,7 @@ public class BaselineExportCommand implements Callable<Integer> {
                     step.setInvocationKey(key);
                     step.setRecordId(anchor.getRecordId());
                     step.setFingerprints(profile.getFingerprints());
+                    step.setBaselineVersion(profile.getVersionTag());
                     // 出厂偏离检测：链末行为与承诺的结构维不一致（或在途候选未裁决）
                     // → 计数入包并警告，任务照常入包（承诺仍良定义）。比较规则=结构维
                     //（维度 1/2 + hasError）的集合成员判定：判定器的维度 3/4 是基线声明 ×

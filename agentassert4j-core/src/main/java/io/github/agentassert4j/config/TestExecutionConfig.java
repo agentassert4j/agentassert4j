@@ -35,6 +35,12 @@ public class TestExecutionConfig {
     private Integer maxTokens;
     private boolean dryRun = false;
     private String model;
+    /**
+     * 发射端点与显式配置的 wire 协议（llm.endpoint / llm.protocol 的执行侧投影，
+     * 仅诊断披露用——路由真源在 ProtocolRoutingLlmClient）
+     */
+    private String endpoint;
+    private String wireProtocol;
 
     public TestExecutionConfig() {
     }
@@ -128,5 +134,23 @@ public class TestExecutionConfig {
 
     public void setModel(String model) {
         this.model = model;
+    }
+
+    public TestExecutionConfig endpoint(String endpoint) {
+        this.endpoint = endpoint;
+        return this;
+    }
+
+    public String getEndpoint() {
+        return endpoint;
+    }
+
+    public TestExecutionConfig wireProtocol(String wireProtocol) {
+        this.wireProtocol = wireProtocol;
+        return this;
+    }
+
+    public String getWireProtocol() {
+        return wireProtocol;
     }
 }
