@@ -703,9 +703,9 @@ class VerifyExportTest {
             assertEquals(0, exit, "范围外不影响退出码: " + output);
             assertTrue(output.toString().contains("out-of-scope chains 25"), "stdout 汇总计数必须完整: " + output);
             String markdown = new String(Files.readAllBytes(reportPath), StandardCharsets.UTF_8);
-            assertTrue(markdown.contains("; ... and 5 more"), "超出上限必须计数收尾: " + markdown);
-            assertTrue(markdown.contains("W20"), "上限内的明细必须在场: " + markdown);
-            assertFalse(markdown.contains("W21"), "上限外的明细不得出现: " + markdown);
+            assertTrue(markdown.contains("; ... and 15 more"), "超出上限必须计数收尾: " + markdown);
+            assertTrue(markdown.contains("W10"), "上限内的明细必须在场: " + markdown);
+            assertFalse(markdown.contains("W11"), "上限外的明细不得出现: " + markdown);
         } finally {
             customerDb.close();
         }

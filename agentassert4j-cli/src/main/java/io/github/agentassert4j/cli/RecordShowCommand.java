@@ -29,7 +29,9 @@ public class RecordShowCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--record-id"}, required = true, description = "Record id to show (the record tool echoes it when saving)")
+    // 必填项校验放 call() 而非 picocli required=true：picocli 原生缺参报错没有
+    // error/1 包络，机器消费方无法按 hints/nextAction 自助续行
+    @Option(names = {"--record-id"}, description = "Record id to show (required; the record tool echoes it when saving)")
     String recordId;
 
     @Option(names = {"--json"}, description = "Print a single-line JSON report to stdout (agentassert4j.record-view/1)")
@@ -37,9 +39,12 @@ public class RecordShowCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        if (recordId == null || recordId.trim().isEmpty()) {
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "record show requires --record-id.", "Pass the id echoed by the record tool (or the record ingestion MCP tool) when the interaction was saved.", "agentassert4j record show");
+        }
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
+            repository = CliSupport.openRepository(db, err);
             InteractionRecord record = repository.findByRecordId(recordId);
             if (record == null) {
                 return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, "No recorded interaction with recordId: " + recordId, "recordIds are echoed by the record tool when saving; run `agentassert4j status` to see what exists.", "agentassert4j status");

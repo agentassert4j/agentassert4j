@@ -77,7 +77,7 @@ final class McpTools {
             command.jsonOutput = true;
             return command;
         })));
-        tools.add(McpTool.of("graph", "Runtime value-flow provenance: rebuilds the graph from recorded interactions and shows who feeds whom " + "(an edge forms when a tool-call argument value traces back to an earlier response in the same session; HIGH edges carry the matched value and record pair, LOW edges are adjacent vocabulary hints) with cycle detection. Development-time survey; verdicts never consume the graph.", "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}", CliCommands("graph show"), args -> runCommand(capture -> {
+        tools.add(McpTool.of("graph", "Runtime value-flow provenance: rebuilds the graph from recorded interactions and shows who feeds whom " + "(an edge needs: two records with different invocation identities in one session, an upstream value carried by a tool result — recorded alongside its call or in an earlier record's request history — and a later tool call whose argument equals that value exactly; HIGH edges carry the matched value and record pair, LOW edges are adjacent vocabulary hints) with cycle detection. Nodes cover every recorded invocation key, so an empty edge set with non-empty nodes means data is present but no value flow matched. Development-time survey; verdicts never consume the graph.", "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}", CliCommands("graph show"), args -> runCommand(capture -> {
             GraphShowCommand command = new GraphShowCommand();
             command.out = capture.out;
             command.err = capture.err;

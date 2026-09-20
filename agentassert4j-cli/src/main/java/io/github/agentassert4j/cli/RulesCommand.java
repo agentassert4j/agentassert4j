@@ -64,7 +64,7 @@ public class RulesCommand implements Callable<Integer> {
         out.println("    }");
         out.println("  }");
         out.println("}");
-        out.println("Task rules: requiredSteps = invocations the chain must include; requiredOrder = ordered sub-sequence that must appear in this order; steps = per-invocation occurrence range (min/max). Violations fold into CHANGED.");
+        out.println("Task rules: requiredSteps = invocations the chain must include; requiredOrder = ordered sub-sequence that must appear in this order; steps = per-invocation occurrence range (min/max). Violations are itemized in the task report and fail the run (exit 1); per-step verdicts stay unchanged.");
         return 0;
     }
 }

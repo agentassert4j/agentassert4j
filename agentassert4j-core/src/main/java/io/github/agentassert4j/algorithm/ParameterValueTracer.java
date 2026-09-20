@@ -27,7 +27,12 @@ import java.util.stream.Collectors;
  */
 public class ParameterValueTracer {
 
-    private static final int MAX_EXTRACT_DEPTH = 3;
+    /**
+     * 叶子值提取深度上限：真实 wire 响应是带信封的 JSON（openai-chat 的正文与
+     * tool_calls 参数住在 choices[0].message 下、深度 4），上限必须覆盖信封内的
+     * 业务载荷层，否则值源对最常见的响应形态失明
+     */
+    private static final int MAX_EXTRACT_DEPTH = 4;
     private static final int MAX_EXTRACTED_VALUES = 500;
     private static final int MIN_PREFIX_LENGTH = 3;
 
@@ -49,15 +54,28 @@ public class ParameterValueTracer {
      * 按 sessionId 分组，每个 session 内按 timestamp 排序后追踪依赖。
      *
      * @param repository 存储仓库
+     * @return 扫描统计（会话数/记录数/调用点键数/跨键记录对数），供空图诊断
      */
-    public void rebuildGraph(StorageRepository repository) {
+    public GraphBuildStats rebuildGraph(StorageRepository repository) {
         List<String> sessionIds = repository.findAllSessionIds();
+        int totalRecords = 0;
+        Set<String> keys = new LinkedHashSet<>();
+        int candidatePairs = 0;
         for (String sessionId : sessionIds) {
             List<InteractionRecord> chain = repository.findBySessionId(sessionId).stream()
                     // timestamp 平局时按 recordId 决胜——同毫秒交互的边方向必须可复现
                     .sorted(Comparator.comparingLong(InteractionRecord::getTimestamp).thenComparing(r -> r.getRecordId() != null ? r.getRecordId() : "")).collect(Collectors.toList());
-            traceDependency(chain);
+            totalRecords += chain.size();
+            List<String> chainKeys = invocationKeysOf(chain);
+            for (String key : chainKeys) {
+                if (key != null) {
+                    keys.add(key);
+                }
+            }
+            candidatePairs += crossKeyPairCount(chainKeys);
+            traceDependency(chain, chainKeys);
         }
+        return new GraphBuildStats(sessionIds.size(), totalRecords, keys.size(), candidatePairs);
     }
 
     /**
@@ -67,7 +85,17 @@ public class ParameterValueTracer {
      * 键为 null 或同键的对不建边：同键多执行不自环（自环既污染溯源图又误触环检测）。
      */
     public void traceDependency(List<InteractionRecord> chain) {
-        if (chain == null || chain.size() < 2) return;
+        traceDependency(chain, chain == null ? null : invocationKeysOf(chain));
+    }
+
+    private void traceDependency(List<InteractionRecord> chain, List<String> invocationKeys) {
+        if (chain == null) return;
+
+        // 节点全集登记先于链长判定：单记录会话同样贡献节点（「数据在、无边」可见）
+        for (String key : invocationKeys) {
+            graph.addNode(key);
+        }
+        if (chain.size() < 2) return;
 
         int n = chain.size();
         // 逐记录提取缓存：值集/名集每记录提取一次，供全部对扫描复用
@@ -75,13 +103,11 @@ public class ParameterValueTracer {
         List<Set<String>> nameCache = new ArrayList<>(n);
         List<Set<String>> argValueCache = new ArrayList<>(n);
         List<Set<String>> argNameCache = new ArrayList<>(n);
-        List<String> invocationKeys = new ArrayList<>(n);
         for (int k = 0; k < n; k++) {
             valueCache.add(null);
             nameCache.add(null);
             argValueCache.add(null);
             argNameCache.add(null);
-            invocationKeys.add(invocationKeyOf(chain.get(k)));
         }
 
         for (int i = 1; i < n; i++) {
@@ -152,7 +178,7 @@ public class ParameterValueTracer {
     }
 
     /**
-     * 从前序交互提取所有叶子节点的字符串值（RecursiveJsonParser 解析，深度限制 3 层）。
+     * 从前序交互提取所有叶子节点的字符串值（RecursiveJsonParser 解析，深度上限见 MAX_EXTRACT_DEPTH）。
      *
      * <p>值源按记录形状择一：任一工具调用带录制结果（ToolCall.result）时取全部工具
      * 返回——工具返回才是下游参数的真实上游；否则看历史轮次里的 tool 角色结果帧——
@@ -325,5 +351,35 @@ public class ParameterValueTracer {
         } catch (RuntimeException e) {
             return null;
         }
+    }
+
+    /**
+     * 链内逐记录解析调用点键（与边判定同一解析规则，结果复用不做二次计算）。
+     */
+    private List<String> invocationKeysOf(List<InteractionRecord> chain) {
+        List<String> keys = new ArrayList<>(chain.size());
+        for (InteractionRecord record : chain) {
+            keys.add(invocationKeyOf(record));
+        }
+        return keys;
+    }
+
+    /**
+     * 会话内跨调用点键的有序记录对数（i 晚于 j 且两键互异且均非 null）：
+     * 值流边只可能落在这类对上，计数为 0 即「全部记录共享同一调用点身份」。
+     */
+    private static int crossKeyPairCount(List<String> keys) {
+        int pairs = 0;
+        for (int i = 0; i < keys.size(); i++) {
+            String later = keys.get(i);
+            if (later == null) continue;
+            for (int j = 0; j < i; j++) {
+                String earlier = keys.get(j);
+                if (earlier != null && !earlier.equals(later)) {
+                    pairs++;
+                }
+            }
+        }
+        return pairs;
     }
 }

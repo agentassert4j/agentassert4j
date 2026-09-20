@@ -34,10 +34,10 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--task"}, description = "Narrow the scope: select task chains by request-text prefix (combinable with --invocation)")
+    @Option(names = {"--task"}, description = "Task selector: matches exactly one task chain by request-text prefix (a prefix hitting several tasks errors with the candidate list; see --dry-run for the pairing plan)")
     String task;
 
-    @Option(names = {"--invocation"}, description = "Narrow the scope: target invocation by business invocationId, invocationKey, unique prefix, or the status display form (combinable with --task)")
+    @Option(names = {"--invocation"}, description = "Invocation selector: a business invocationId selects all its template-version buckets; an invocationKey prefix or the status display form must resolve to exactly one key (multiple matches error with the candidate list)")
     String invocation;
 
     @Option(names = {"--ci"}, description = "CI mode: judges the latest execution of each invocation in each task's latest chain against its approved shape set (earlier same-session records stay visible as notes, not gated); no auto-establish (refuses to judge when the chain-final invocations hold unestablished keys, exit 2); drift identity PASS is not collected (exit 0 with a warning); CHANGED findings still land candidates awaiting adjudication — no other governance writes")
@@ -110,7 +110,7 @@ public class ReplayCommand implements Callable<Integer> {
         }
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
+            repository = CliSupport.openRepository(db, err);
 
             String resolvedInvocation = null;
             if (invocation != null) {

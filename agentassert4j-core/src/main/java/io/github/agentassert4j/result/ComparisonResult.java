@@ -1,5 +1,6 @@
 package io.github.agentassert4j.result;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -23,6 +24,14 @@ public class ComparisonResult {
     private boolean keywordMatch;
     private boolean regexMatch;
     private boolean behaviorMatch;
+    /**
+     * 维度 3/4 失配明细：修复者据此定位「哪个关键词、哪个行为」，
+     * 无需回读规则声明自行对照。null = 该维无失配或未声明；列表按字典序排序保证可复现
+     */
+    private List<String> missingRequiredKeywords;
+    private List<String> presentForbiddenKeywords;
+    private List<String> failedRegexPatterns;
+    private List<String> failedBehaviors;
 
     private double score;
     private Verdict verdict;
@@ -98,6 +107,38 @@ public class ComparisonResult {
 
     public void setBehaviorMatch(boolean behaviorMatch) {
         this.behaviorMatch = behaviorMatch;
+    }
+
+    public List<String> getMissingRequiredKeywords() {
+        return missingRequiredKeywords;
+    }
+
+    public void setMissingRequiredKeywords(List<String> missingRequiredKeywords) {
+        this.missingRequiredKeywords = missingRequiredKeywords;
+    }
+
+    public List<String> getPresentForbiddenKeywords() {
+        return presentForbiddenKeywords;
+    }
+
+    public void setPresentForbiddenKeywords(List<String> presentForbiddenKeywords) {
+        this.presentForbiddenKeywords = presentForbiddenKeywords;
+    }
+
+    public List<String> getFailedRegexPatterns() {
+        return failedRegexPatterns;
+    }
+
+    public void setFailedRegexPatterns(List<String> failedRegexPatterns) {
+        this.failedRegexPatterns = failedRegexPatterns;
+    }
+
+    public List<String> getFailedBehaviors() {
+        return failedBehaviors;
+    }
+
+    public void setFailedBehaviors(List<String> failedBehaviors) {
+        this.failedBehaviors = failedBehaviors;
     }
 
     public double getScore() {

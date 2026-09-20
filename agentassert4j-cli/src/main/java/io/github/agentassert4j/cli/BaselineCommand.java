@@ -56,7 +56,7 @@ public class BaselineCommand implements Callable<Integer> {
         try {
             // --json 模式 stdout 只产出报告本体：配置披露与告警改走 stderr，建档过程行丢弃
             PrintStream notice = jsonOutput ? err : out;
-            repository = CliSupport.openRepository(db, notice);
+            repository = CliSupport.openRepository(db, err);
             String actor = approver != null && !approver.trim().isEmpty() ? approver.trim() : CliSupport.currentActor();
             List<String> resolvedKeys = CliSupport.resolveInvocationKeys(repository, invocation, true, notice);
             discloseFanOut(repository, resolvedKeys, notice);
@@ -84,7 +84,7 @@ public class BaselineCommand implements Callable<Integer> {
             }
             return 0;
         } catch (VersionMismatchException e) {
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run report to see the active versions, then retry with --expected-version <tag>, or drop the guard.", "report");
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run `agentassert4j status` to see the active versions, then retry with --expected-version <tag>, or drop the guard.", "agentassert4j status");
         } catch (CliFailureException e) {
             return CliSupport.fail(jsonOutput, out, err, e);
         } catch (RuntimeException e) {

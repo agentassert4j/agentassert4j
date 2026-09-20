@@ -62,8 +62,8 @@ public class BaselineExportCommand implements Callable<Integer> {
     public Integer call() {
         StorageRepository repository = null;
         try {
-            // --json 模式 stdout 只产出报告本体：配置披露改走 stderr
-            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
+            // --json 模式 stdout 只产出报告本体（配置披露恒走 err）
+            repository = CliSupport.openRepository(db, err);
 
             List<TaskChain> chains = latestChainPerTaskKey(TaskChainView.resolveAll(repository));
             if (task != null) {

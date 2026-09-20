@@ -38,7 +38,8 @@ public class VerifyRunner {
     /**
      * 全量运行的范围外链明细上限——超出部分以计数收尾（缩域运行本就只出计数）
      */
-    private static final int OUT_OF_SCOPE_DETAIL_LIMIT = 20;
+    private static final int OUT_OF_SCOPE_DETAIL_LIMIT = 10;
+    private static final int OUT_OF_SCOPE_TEXT_BUDGET = 48;
 
     private final StorageRepository repository;
     private final DeterministicComparator comparator;
@@ -190,7 +191,8 @@ public class VerifyRunner {
                 }
             }
             if (!matched) {
-                unmatchedLocal.add(chain.getRequestText() + " (session " + chain.getSessionId() + ")");
+                // 请求文本截断进清单：范围外链只作卫生提示，全文倒出会压过报告正文
+                unmatchedLocal.add(CliSupport.abbreviateText(chain.getRequestText(), OUT_OF_SCOPE_TEXT_BUDGET) + " (session " + chain.getSessionId() + ")");
             }
         }
 
@@ -387,6 +389,8 @@ public class VerifyRunner {
             if (narrowedRun) {
                 sb.append("\n> Out-of-scope local chains (not judged): ").append(unmatchedLocal.size()).append(" outside the --task prefix; expected in a narrowed run, not listed.\n");
             } else {
+                // 默认形态列首 N 条：范围外清单只是卫生提示，
+                // 全量倒出会压过判定正文（narrowed 形态本就不列）
                 List<String> shown = unmatchedLocal.size() <= OUT_OF_SCOPE_DETAIL_LIMIT ? unmatchedLocal : unmatchedLocal.subList(0, OUT_OF_SCOPE_DETAIL_LIMIT);
                 sb.append("\n> Out-of-scope local chains (not judged): ").append(String.join("; ", shown));
                 if (unmatchedLocal.size() > shown.size()) {

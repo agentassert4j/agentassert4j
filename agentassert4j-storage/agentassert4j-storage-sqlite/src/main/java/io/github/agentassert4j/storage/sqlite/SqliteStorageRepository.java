@@ -3,6 +3,7 @@ package io.github.agentassert4j.storage.sqlite;
 import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.spi.StorageException;
 import io.github.agentassert4j.spi.StorageRepository;
+import io.github.agentassert4j.util.ExceptionUtil;
 
 import java.io.File;
 import java.sql.*;
@@ -87,7 +88,9 @@ public class SqliteStorageRepository implements StorageRepository {
                 }
                 connection = null;
             }
-            LOG.log(Level.SEVERE, "SQLite initialization failed: " + dbPath, e);
+            // 打开级失败多为可行动拒绝态（版本过新/表缺失），带栈打印只会淹没
+            // 可行动消息；根因消息入日志，完整因果链留在异常里供程序消费
+            LOG.log(Level.SEVERE, "SQLite initialization failed: " + dbPath + ": " + ExceptionUtil.rootMessage(e));
             throw new StorageException("initialize: " + dbPath, e);
         }
     }

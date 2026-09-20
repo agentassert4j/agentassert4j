@@ -18,6 +18,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.regex.Pattern;
 import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -334,11 +336,11 @@ class CommandSmokeTest {
         Files.write(rulesFile, "{\"invocations\":{\"queryOrder\":{\"requiredKeywords\":[\"ORD\"]}},\"tasks\":{\"查订单\":{\"requiredSteps\":[\"queryOrder\"]}}}".getBytes(StandardCharsets.UTF_8));
         System.setProperty("agentassert4j.rules.path", rulesFile.toString());
         try {
-            ByteArrayOutputStream out = redirectStdout();
+            ByteArrayOutputStream err = redirectStderr();
             int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath);
 
             assertEquals(0, exit);
-            String text = out.toString();
+            String text = err.toString();
             assertTrue(text.contains("Rules: " + rulesFile), "规则生效正证行必须在场: " + text);
             assertTrue(text.contains("1 invocation declaration(s), 1 task declaration(s)"), "声明计数就地可见: " + text);
         } finally {
@@ -500,13 +502,13 @@ class CommandSmokeTest {
     }
 
     @Test
-    @DisplayName("命令输出披露实际加载的配置来源")
+    @DisplayName("命令输出披露实际加载的配置来源（诊断行恒走 stderr）")
     void configSource_disclosedInCommandOutput() {
-        ByteArrayOutputStream out = redirectStdout();
+        ByteArrayOutputStream err = redirectStderr();
         int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath);
 
         assertEquals(0, exit);
-        String text = out.toString();
+        String text = err.toString();
         assertTrue(text.contains("Config: "), "隐式查找链的命中结果必须披露: " + text);
         assertTrue(text.contains("agentassert4j.json"), "披露必须指明来源文件: " + text);
     }
@@ -526,5 +528,86 @@ class CommandSmokeTest {
         return buffer;
     }
 
+    @Test
+    @DisplayName("顶层 help 退出码图例渲染节标题与码数字")
+    void helpExitCodes_renderHeadingAndNumbers() {
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("--help");
 
+        assertEquals(0, exit);
+        String text = out.toString();
+        assertTrue(text.contains("Exit Codes:"), "退出码节标题必须在场: " + text);
+        assertTrue(Pattern.compile("0\\s+no behavioral regression").matcher(text).find(),
+                "exit 0 行必须渲染码数字: " + text);
+        assertTrue(Pattern.compile("1\\s+behavioral difference or evidence gap").matcher(text).find(),
+                "exit 1 行必须渲染码数字: " + text);
+        assertTrue(Pattern.compile("2\\s+usage, data or environment problem").matcher(text).find(),
+                "exit 2 行必须渲染码数字: " + text);
+    }
+
+    @Test
+    @DisplayName("describe 追加根因消息——包络读者看得到因果链末端")
+    void describe_appendsRootCause() {
+        RuntimeException wrapped = new RuntimeException("top level", new IllegalStateException("schema version 2 is newer"));
+        assertEquals("top level (schema version 2 is newer)", CliSupport.describe(wrapped));
+        assertEquals("plain", CliSupport.describe(new RuntimeException("plain")));
+    }
+
+    @Test
+    @DisplayName("打开级失败的 --json 包络携带根因消息且不泄漏实现栈帧")
+    void openLevelFailure_envelopeCarriesRootCause() throws Exception {
+        Path newerDb = tempDir.resolve("newer-schema.db");
+        SqliteStorageRepository repo = new SqliteStorageRepository(newerDb.toString());
+        repo.initialize();
+        repo.close();
+        try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + newerDb)) {
+            try (Statement st = c.createStatement()) {
+                st.execute("PRAGMA user_version = 2");
+            }
+        }
+
+        ByteArrayOutputStream out = redirectStdout();
+        ByteArrayOutputStream err = redirectStderr();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--db", newerDb.toString(), "--json");
+
+        assertEquals(2, exit);
+        assertTrue(out.toString().contains("agentassert4j.error/1"), "机器通道必须有包络: " + out);
+        assertTrue(out.toString().contains("Database schema version 2 is newer"),
+                "根因消息必须进包络（describe 走因果链）: " + out);
+        assertFalse(err.toString().contains("at io.github.agentassert4j"),
+                "打开级拒绝不得向用户泄漏实现栈帧: " + err);
+    }
+
+    @Test
+    @DisplayName("子命令 --help 退出码 0（rollback 的 --version 命名冲突已修复）")
+    void subcommandHelp_exitsZero() {
+        redirectStdout();
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("rollback", "--help"));
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("verify", "--help"));
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("record", "show", "--help"));
+    }
+
+    @Test
+    @DisplayName("缺必填项以 E_USAGE 包络拒绝并点名必需项")
+    void missingRequiredOptions_rejectedWithUsageEnvelope() {
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("rollback", "--json");
+
+        assertEquals(2, exit);
+        String envelope = out.toString();
+        assertTrue(envelope.contains("E-USAGE"), "缺参必须是用法域拒绝: " + envelope);
+        assertTrue(envelope.contains("rollback requires --invocation and --version"),
+                "缺参必须点名必需项: " + envelope);
+    }
+
+    @Test
+    @DisplayName("status --diff 在 --json 下被响亮拒绝而非静默忽略")
+    void statusDiffUnderJson_rejectedLoudly() {
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath, "--diff", "--json");
+
+        assertEquals(2, exit);
+        assertTrue(out.toString().contains("--diff renders the human inspection view"),
+                "组合拒绝必须指明 --diff 属人类通道: " + out);
+    }
 }

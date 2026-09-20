@@ -149,7 +149,9 @@ public class TaskReplayRunner {
 
         List<TaskChain> chains = CliSupport.taskChains(repository);
         if (chains.isEmpty()) {
-            return fail(CliErrorCode.E_NO_DATA, "No recorded interactions found.", "Run your agent first to record some interactions, then retry.", "agentassert4j status");
+            // 空库的可行动下一步是录制（应用侧 SDK 或 MCP record 摄取），不是任一 CLI 命令；
+            // nextAction 指向 status 仅供确认库确为空
+            return fail(CliErrorCode.E_NO_DATA, "No recorded interactions found.", "Run your agent with recording enabled first (the record tool on the MCP channel ingests raw wire JSON), then retry.", "agentassert4j status");
         }
 
         // 第 1 层 身份检测（全项目，零调用）
@@ -192,7 +194,7 @@ public class TaskReplayRunner {
         } else {
             // 自动建档（开发态自动化，报告可见）：裂键豁免与披露由 establishMissing
             // 扫建路径统一处理（同标签已有兄弟建档的新键只披露、不并入基线）
-            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.currentActor(), null, false, null, rules, null, null);
+            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.autoActor(), null, false, null, rules, null, null);
         }
 
         // 判定语义守卫：任何画像由其他版本（含未标记历史行）批准即拒绝判定——
@@ -392,7 +394,8 @@ public class TaskReplayRunner {
         for (InteractionRecord record : targets) {
             index++;
             String key = CliSupport.invocationKeyOfRecord(record);
-            if (budgetExhausted(maxTotalCalls, maxTotalTokens, rd.callsUsed, rd.tokensUsed)) {
+            if (budgetExhausted(maxTotalCalls, maxTotalTokens, rd.callsUsed, rd.tokensUsed)
+                    || estimateExceedsBudget(maxTotalTokens, rd.tokensUsed, record)) {
                 rd.skipped++;
                 info(stepLine(index, key, "re-drive skipped (budget exhausted)"));
                 if (stepJsons != null) {
@@ -511,6 +514,19 @@ public class TaskReplayRunner {
             return true;
         }
         return maxTokens != null && tokensUsed >= maxTokens;
+    }
+
+    /**
+     * 调用前 token 预检：按该记录录制的 input+output 用量预估本次成本，预估超限即跳过。
+     * 只做累计后验（budgetExhausted）时，上限小于单次调用成本的场景会被第一次调用击穿——
+     * 用户设的硬上限必须「宁少跑、不超限」。
+     */
+    private static boolean estimateExceedsBudget(Integer maxTokens, long tokensUsed, InteractionRecord record) {
+        if (maxTokens == null) {
+            return false;
+        }
+        long estimate = record.getInputTokens() + (long) record.getOutputTokens();
+        return tokensUsed + Math.max(estimate, 1L) > maxTokens;
     }
 
     /**

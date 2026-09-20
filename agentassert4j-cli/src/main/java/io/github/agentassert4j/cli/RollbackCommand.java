@@ -23,12 +23,18 @@ import java.util.concurrent.Callable;
  * @author axy-yxa
  * @since 2026-08-28
  */
-@Command(name = "rollback", aliases = {"rb"}, description = "Restore the active baseline to an archived version", mixinStandardHelpOptions = true)
+@Command(name = "rollback", aliases = {"rb"}, description = "Restore the active baseline to an archived version")
 public class RollbackCommand implements Callable<Integer> {
 
     // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
     PrintStream out = System.out;
     PrintStream err = System.err;
+
+    // 本命令的 --version 是基线版本标签，与标准 help mixin 注入的 --version（打印框架
+    // 版本）选项名冲突，冲突使 mixin 整体失效（--help 一起丢，`rollback --help` 退出码 2）——
+    // 这里显式声明帮助项、不用 mixinStandardHelpOptions；框架版本查询由顶层 --version 承担
+    @Option(names = {"-h", "--help"}, usageHelp = true, description = "Show this help message and exit")
+    boolean helpRequested;
 
 
     @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
@@ -37,10 +43,10 @@ public class RollbackCommand implements Callable<Integer> {
     @Option(names = {"--expected-version"}, description = "Optimistic concurrency guard: refuse unless the active baseline version still equals this tag; protects against concurrent actors changing the baseline between your inspection and this write")
     String expectedVersion;
 
-    @Option(names = {"--invocation"}, required = true, description = "Target invocation: business invocationId, invocationKey, or a unique prefix (see `status` for the full list)")
+    @Option(names = {"--invocation"}, description = "Target invocation (required): business invocationId, invocationKey, or a unique prefix (see `status` for the full list)")
     String invocation;
 
-    @Option(names = {"--version"}, required = true, description = "Target archived version tag (see the archived column in `status`)")
+    @Option(names = {"--version"}, description = "Target archived version tag (required; see the archived column in `status`)")
     String version;
 
     @Option(names = {"--approver"}, description = "Rollback executor identity recorded in the governance event trail (defaults to the current OS user; agents use agent:<name>)")
@@ -51,10 +57,13 @@ public class RollbackCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        if (invocation == null || invocation.trim().isEmpty() || version == null || version.trim().isEmpty()) {
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "rollback requires --invocation and --version (see the archived column in status).", "Run `agentassert4j status` to pick the invocation and the archived version tag to restore.", "agentassert4j status");
+        }
         StorageRepository repository = null;
         try {
-            // --json 模式 stdout 只产出报告本体：配置披露改走 stderr
-            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
+            // --json 模式 stdout 只产出报告本体（配置披露恒走 err）
+            repository = CliSupport.openRepository(db, err);
             String invocationKey = CliSupport.resolveInvocationKeyTarget(repository, invocation);
             InvocationProfile target = repository.findInvocationByKey(invocationKey);
             if (target == null) {
@@ -93,7 +102,7 @@ public class RollbackCommand implements Callable<Integer> {
         } catch (CliFailureException e) {
             return CliSupport.fail(jsonOutput, out, err, e);
         } catch (VersionMismatchException e) {
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run report to see the active version, then retry with --expected-version <tag>, or drop the guard.", "report");
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run `agentassert4j status` to see the active version, then retry with --expected-version <tag>, or drop the guard.", "agentassert4j status");
         } catch (IllegalStateException e) {
             // 目标画像/归档版本不存在，或目标=活动版本（空回滚被拒）：用法域拒绝，非环境故障
             return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, CliSupport.describe(e), "Pick a different archived version in `status` (the active tag is not a rollback target); to discard an in-flight candidate use `reject`.", "agentassert4j status");

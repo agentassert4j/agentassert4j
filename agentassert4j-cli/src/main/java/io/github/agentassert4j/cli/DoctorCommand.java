@@ -46,7 +46,7 @@ public class DoctorCommand implements Callable<Integer> {
         StorageRepository repository = null;
         try {
             // --json 模式 stdout 只产出报告本体：配置披露与规则告警改走 stderr
-            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
+            repository = CliSupport.openRepository(db, err);
             List<InteractionRecord> records = allRecords(repository);
             List<TaskChain> chains = TaskChainView.resolveAll(repository);
             List<InvocationProfile> profiles = repository.findAllInvocations();

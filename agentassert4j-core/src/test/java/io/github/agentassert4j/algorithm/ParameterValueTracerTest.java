@@ -391,9 +391,39 @@ class ParameterValueTracerTest {
         // 创建简单内存仓库
         StorageRepository repo = new SimpleTestRepo(Collections.singletonList("session1"), Collections.singletonMap("session1", Arrays.asList(record("skillA", "{\"orderId\":\"ORD-001\"}", Collections.singletonList(tc("tA", null)), 1000), record("skillB", "ok", Collections.singletonList(tc("tB", Collections.singletonMap("orderId", (Object) "ORD-001"))), 2000))));
 
-        tracer.rebuildGraph(repo);
+        GraphBuildStats stats = tracer.rebuildGraph(repo);
 
         assertTrue(hasEdge(tracer.getGraph(), "invocation:" + "skillA" + ":hash", "invocation:" + "skillB" + ":hash"));
+        assertEquals(1, stats.getSessions());
+        assertEquals(2, stats.getRecords());
+        assertEquals(2, stats.getInvocationKeys());
+        assertEquals(1, stats.getCandidatePairs(), "跨键有序对只有 skillA→skillB 一对");
+    }
+
+    @Test
+    void extractFieldValues_openAiChatEnvelope_reachesMessageContent() {
+        // 真实 wire 信封：正文住在 choices[0].message 第 4 层——深度上限必须覆盖信封内的业务载荷
+        InteractionRecord r = record("s1", "{\"id\":\"c-1\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Order ORD-1042 shipped\"},\"finish_reason\":\"stop\"}]}", null, 0L);
+        assertTrue(tracer.extractFieldValues(r).contains("Order ORD-1042 shipped"),
+                "值提取必须触达信封第 4 层的 message.content");
+    }
+
+    @Test
+    void traceDependency_registersNodesWithoutEdges() {
+        // 单记录会话（无边前提）：节点全集语义要求键在场即入图
+        tracer.traceDependency(Collections.singletonList(record("solo", "{\"k\":\"v\"}", null, 0L)));
+        assertTrue(tracer.getGraph().getAllNodes().contains("invocation:solo:hash"),
+                "数据在场即有节点，空边不等于空图");
+        assertTrue(tracer.getGraph().getAllEdges().isEmpty());
+    }
+
+    @Test
+    void rebuildGraph_sameKeySession_candidatePairsZero() {
+        // 同键多执行会话：跨键对数为 0（值流边前提不存在），是空图最常见根因的诊断信号
+        StorageRepository repo = new SimpleTestRepo(Collections.singletonList("s"), Collections.singletonMap("s", Arrays.asList(record("one", "{\"a\":\"x\"}", null, 1000), record("one", "{\"a\":\"y\"}", null, 2000))));
+        GraphBuildStats stats = tracer.rebuildGraph(repo);
+        assertEquals(0, stats.getCandidatePairs(), "同键对不计入跨键候选对");
+        assertEquals(1, stats.getInvocationKeys());
     }
 
     @Test

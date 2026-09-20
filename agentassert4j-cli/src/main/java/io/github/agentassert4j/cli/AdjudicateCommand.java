@@ -44,8 +44,8 @@ abstract class AdjudicateCommand implements Callable<Integer> {
     public Integer call() {
         StorageRepository repository = null;
         try {
-            // --json 模式 stdout 只产出报告本体：配置披露改走 stderr，候选差异证据行不输出
-            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
+            // --json 模式 stdout 只产出报告本体：候选差异证据行不输出（配置披露恒走 err）
+            repository = CliSupport.openRepository(db, err);
             List<InvocationProfile> targets = resolveTargets(repository);
             if (targets.isEmpty()) {
                 return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, "No candidates pending adjudication.", "Behavioral differences land candidates during `agentassert4j replay`; run it after a template change.", "agentassert4j replay");
@@ -75,7 +75,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
             return CliSupport.fail(jsonOutput, out, err, e);
         } catch (VersionMismatchException e) {
             // 乐观并发守卫：活跃版本与调用方所见不一致——并发写冲突就近拒绝
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run report to see the active version, then retry with --expected-version <tag>, or drop the guard.", "report");
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run `agentassert4j status` to see the active version, then retry with --expected-version <tag>, or drop the guard.", "agentassert4j status");
         } catch (IllegalStateException e) {
             // BaselineManager 的对象缺失守卫（画像/候选不存在）：无对象可操作，非环境故障
             return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, CliSupport.describe(e), "Check the target against `status` output, then retry.", "agentassert4j status");

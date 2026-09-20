@@ -91,7 +91,7 @@ class GraphShowCommandTest {
     }
 
     @Test
-    @DisplayName("无边数据给出会话链提示而非静默空输出")
+    @DisplayName("无边数据给出三前提与扫描统计，节点全集使空边不等于空图")
     void emptyGraphPrintsSessionHint() {
         saveChainRecord("r-only", "loneSkill", 1000L, null, "{\"k\":\"v\"}");
 
@@ -99,8 +99,9 @@ class GraphShowCommandTest {
 
         assertEquals(0, exit);
         String output = stdout.toString();
-        assertTrue(output.contains("Note: no edges"), "空图必须解释边的数据来源条件");
-        assertTrue(output.contains("Nodes (0)"), "节点派生自边，无边即无节点");
+        assertTrue(output.contains("No data-flow edges (scanned 1 record across 1 session"), "空图必须就地披露扫描统计: " + output);
+        assertTrue(output.contains("An edge needs all three"), "出边三前提必须逐条列明: " + output);
+        assertTrue(output.contains("Nodes (1)"), "节点全集语义：数据在场即有节点，空边不等于空图: " + output);
     }
 
     /**

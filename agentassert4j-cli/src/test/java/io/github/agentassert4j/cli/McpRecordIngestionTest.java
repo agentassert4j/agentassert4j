@@ -90,6 +90,29 @@ class McpRecordIngestionTest {
         }
     }
 
+    @Test
+    @DisplayName("缺参负测：逐字段点名缺失项 + nextAction 指回 record 工具")
+    void missingParams_namedIndividually() {
+        Map<String, Object> onlySessionId = new LinkedHashMap<>();
+        onlySessionId.put("sessionId", "s1");
+
+        McpToolOutcome twoMissing = McpRecordIngestion.ingest(dbPath, onlySessionId);
+        assertEquals(2, twoMissing.exit);
+        Map<String, Object> envelope = errorOf(twoMissing);
+        assertEquals("E-USAGE", envelope.get("errorCode"));
+        assertEquals("record requires request, response (request/response are the raw LLM wire JSON strings; blank strings count as missing).",
+                envelope.get("message"), "必须点名缺失字段而非三合一罗列");
+        assertEquals("the `record` tool", envelope.get("nextAction"), "nextAction 不得留空串");
+
+        Map<String, Object> noSession = new LinkedHashMap<>();
+        noSession.put("request", "{\"messages\":[]}");
+        noSession.put("response", "{}");
+        McpToolOutcome oneMissing = McpRecordIngestion.ingest(dbPath, noSession);
+        assertEquals(2, oneMissing.exit);
+        assertTrue(oneMissing.stdout.contains("record requires sessionId"),
+                "单字段缺失必须单点命名: " + oneMissing.stdout);
+    }
+
     @Nested
     @DisplayName("OpenAI chat 摄取（重构回归断言）")
     class OpenAiChat {

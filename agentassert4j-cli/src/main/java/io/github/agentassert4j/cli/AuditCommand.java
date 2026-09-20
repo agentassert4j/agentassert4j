@@ -40,7 +40,7 @@ public class AuditCommand implements Callable<Integer> {
     public Integer call() {
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
+            repository = CliSupport.openRepository(db, err);
             List<String> rows = new ArrayList<>();
             List<String> lines = new ArrayList<>();
             for (GovernanceEvent event : repository.findGovernanceEvents()) {

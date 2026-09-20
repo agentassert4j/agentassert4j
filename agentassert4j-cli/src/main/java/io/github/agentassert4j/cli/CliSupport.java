@@ -18,6 +18,7 @@ import io.github.agentassert4j.result.ComparisonResult;
 import io.github.agentassert4j.result.DriftReport;
 import io.github.agentassert4j.result.TaskAlignment;
 import io.github.agentassert4j.spi.InteractionQueryStore;
+import io.github.agentassert4j.util.ExceptionUtil;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
@@ -71,18 +72,20 @@ final class CliSupport {
      * @param dbOverride 显式数据库路径（--db），null 时取 agentassert4j.json 的 storage.url
      * @return 已初始化的存储仓库（调用方负责 close）
      */
-    static StorageRepository openRepository(String dbOverride, PrintStream out) {
+    static StorageRepository openRepository(String dbOverride, PrintStream diagnostics) {
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
+        // Config/Rules 诊断行只走 diagnostics（err 流）：stdout 是报告交付通道，
+        // 人读模式的管道消费者不得混入诊断行
         // 隐式查找链（cwd → home → classpath）命中了哪个文件必须就地披露——
         // 错误目录下运行时旧配置静默生效是最难排查的故障形态
         String configSource = ConfigLoader.describeMainConfigSource();
-        out.println(configSource != null ? "Config: " + configSource : "Config: no agentassert4j.json found; using built-in defaults.");
+        diagnostics.println(configSource != null ? "Config: " + configSource : "Config: no agentassert4j.json found; using built-in defaults.");
         // 规则文件命中哪个路径必须与主配置同格披露——「规则是否生效、生效的是哪个文件」
         // 只能靠反证（无规则任务行的 Note）才能发现是最难排查的故障形态；doctor 之外的每次运行就地直接可见
         String rulesPath = ConfigLoader.resolveRulesPath();
         if (rulesPath != null) {
             InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
-            out.println("Rules: " + rulesPath + " (" + rules.getDeclaredInvocationIds().size() + " invocation declaration(s), " + rules.getDeclaredTaskKeys().size() + " task declaration(s); declarations bind into baselines when pinned at establish/accept)");
+            diagnostics.println("Rules: " + rulesPath + " (" + rules.getDeclaredInvocationIds().size() + " invocation declaration(s), " + rules.getDeclaredTaskKeys().size() + " task declaration(s); declarations bind into baselines when pinned at establish/accept)");
         }
         String url = dbOverride != null ? dbOverride : config.getStorage().getUrl();
         StorageRepository repository = new SqliteStorageRepository(ConfigLoader.expandHome(url));
@@ -242,12 +245,26 @@ final class CliSupport {
     /**
      * 从交互记录现场重建依赖图（只读，不写任何文件）。
      * 图是派生数据，重建永远反映最新录制状态；全量扫描在 v1 规模（数千条）
-     * 毫秒级，轻量列裁剪与增量构建按既定决策延迟。
+     * 毫秒级，轻量列裁剪与增量构建按既定决策延迟。返回值携带扫描统计，
+     * 空图诊断（「没数据」vs「数据在、无边」）由调用方就地披露。
      */
-    static InMemoryDependencyGraph rebuildGraph(StorageRepository repository) {
+    static GraphRebuild rebuildGraph(StorageRepository repository) {
         ParameterValueTracer tracer = new ParameterValueTracer(new InMemoryDependencyGraph());
-        tracer.rebuildGraph(repository);
-        return tracer.getGraph();
+        GraphBuildStats stats = tracer.rebuildGraph(repository);
+        return new GraphRebuild(tracer.getGraph(), stats);
+    }
+
+    /**
+     * 图重建结果：图本体 + 扫描统计（会话/记录/调用点键/跨键记录对）。
+     */
+    static final class GraphRebuild {
+        final InMemoryDependencyGraph graph;
+        final GraphBuildStats stats;
+
+        GraphRebuild(InMemoryDependencyGraph graph, GraphBuildStats stats) {
+            this.graph = graph;
+            this.stats = stats;
+        }
     }
 
     /**
@@ -257,6 +274,15 @@ final class CliSupport {
     static String currentActor() {
         String user = System.getProperty("user.name");
         return user != null && !user.trim().isEmpty() ? user.trim() : "unknown";
+    }
+
+    /**
+     * 框架自发治理写入的操作者身份：auto: 前缀把「自动建档/自动收集」与人工及
+     * agent 的显式写入在审计时间线上一眼分开——裸 replay 的自动建档若署 OS 用户名，
+     * AI 进程触发的写入会伪装成人写的，对账凭据失真。
+     */
+    static String autoActor() {
+        return "auto:" + currentActor();
     }
 
     /**
@@ -641,15 +667,17 @@ final class CliSupport {
      * 步骤级判定度量 JSON 片段（similarity + dims 五维 + 可选 summary）。task-report
      * 与 verify-report 两份报告共用——维度词表与 contentRules 的合成规则只此一份，
      * 两份报告对同一判定必须报出完全一致的度量形态。
+     * 五键一律 Matched 后缀：布尔语义 = 该维是否一致（true=无差异），键名自述极性，
+     * 纯 JSON 消费者不再需要人类摘要行反推
      */
     static String comparisonMetricsFragment(ComparisonResult comparison) {
         StringBuilder sb = new StringBuilder();
         sb.append(",\"similarity\":").append(comparison.getScore());
-        sb.append(",\"dims\":{\"toolSet\":").append(comparison.isToolCallMatch());
-        sb.append(",\"paramTypes\":").append(comparison.isParamTypeMatch());
-        sb.append(",\"outputStructure\":").append(comparison.isStructureMatch());
-        sb.append(",\"contentRules\":").append(comparison.isKeywordMatch() && comparison.isRegexMatch());
-        sb.append(",\"behaviors\":").append(comparison.isBehaviorMatch()).append("}");
+        sb.append(",\"dims\":{\"toolSetMatched\":").append(comparison.isToolCallMatch());
+        sb.append(",\"paramTypesMatched\":").append(comparison.isParamTypeMatch());
+        sb.append(",\"outputStructureMatched\":").append(comparison.isStructureMatch());
+        sb.append(",\"contentRulesMatched\":").append(comparison.isKeywordMatch() && comparison.isRegexMatch());
+        sb.append(",\"behaviorsMatched\":").append(comparison.isBehaviorMatch()).append("}");
         if (comparison.getSummary() != null) {
             sb.append(",\"summary\":\"").append(RecursiveJsonParser.escape(comparison.getSummary())).append('"');
         }
@@ -701,8 +729,15 @@ final class CliSupport {
 
     /**
      * 异常的单行现象描述——message 缺席时退化为类名，包络与 stderr 不出 "null"。
+     * 被包装异常追加根因消息（括号内）：打开级失败等场景的可行动原因住在因果链末端，
+     * 只报顶层消息会让包络读者看不到「schema version 过新」这类下一步线索。
      */
     static String describe(Throwable e) {
-        return e.getMessage() != null ? e.getMessage() : e.toString();
+        String top = e.getMessage() != null ? e.getMessage() : e.toString();
+        Throwable root = ExceptionUtil.rootCause(e);
+        if (root != null && root != e && root.getMessage() != null && !root.getMessage().equals(e.getMessage())) {
+            return top + " (" + root.getMessage() + ")";
+        }
+        return top;
     }
 }

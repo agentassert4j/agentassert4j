@@ -113,22 +113,6 @@ public final class BehaviorChecker {
         return true;
     }
 
-    /**
-     * 批量校验所有声明的 behavior。
-     *
-     * @param behaviors 声明的 behavior 集合
-     * @param fp        当前指纹
-     * @param output    当前输出文本
-     * @return true=全部通过，false=至少一个不满足
-     */
-    public static boolean checkAll(Set<String> behaviors, DeterministicFingerprint fp, String output) {
-        if (behaviors == null || behaviors.isEmpty()) return true;
-        for (String behavior : behaviors) {
-            if (!check(behavior, fp, output)) return false;
-        }
-        return true;
-    }
-
     public static Set<String> getBuiltinBehaviorNames() {
         return BUILTINS.keySet();
     }

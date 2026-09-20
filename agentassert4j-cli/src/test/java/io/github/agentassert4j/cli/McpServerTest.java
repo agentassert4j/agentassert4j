@@ -307,7 +307,8 @@ class McpServerTest {
                     continue;
                 }
                 assertTrue(tool.description.contains("value-flow provenance"), "值溯源规则必须在场: " + tool.description);
-                assertTrue(tool.description.contains("traces back to an earlier response"), "全对触达语义必须在场: " + tool.description);
+                assertTrue(tool.description.contains("different invocation identities"), "跨调用点身份前提必须在场: " + tool.description);
+                assertTrue(tool.description.contains("equals that value exactly"), "参数值精确相等前提必须在场: " + tool.description);
                 assertTrue(tool.description.contains("matched value and record pair"), "HIGH 边证据声明必须在场: " + tool.description);
                 assertTrue(tool.description.contains("adjacent vocabulary hints"), "LOW 边相邻提示声明必须在场: " + tool.description);
             }

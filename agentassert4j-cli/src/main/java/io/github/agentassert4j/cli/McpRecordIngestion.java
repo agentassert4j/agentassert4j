@@ -65,8 +65,12 @@ final class McpRecordIngestion {
         String sessionId = stringArg(args, "sessionId");
         String requestRaw = nonBlankString(args, "request");
         String responseRaw = nonBlankString(args, "response");
-        if (sessionId == null || requestRaw == null || responseRaw == null) {
-            return envelopeOutcome(CliErrorCode.E_USAGE, "record requires sessionId, request and response (all strings; request/response are the raw LLM wire JSON strings).", "Send the raw request and response JSON your stack produced, plus the session id.", "");
+        List<String> missing = new ArrayList<>();
+        if (sessionId == null) missing.add("sessionId");
+        if (requestRaw == null) missing.add("request");
+        if (responseRaw == null) missing.add("response");
+        if (!missing.isEmpty()) {
+            return envelopeOutcome(CliErrorCode.E_USAGE, "record requires " + String.join(", ", missing) + " (request/response are the raw LLM wire JSON strings; blank strings count as missing).", "Send the raw request and response JSON your stack produced, plus the session id.", "the `record` tool");
         }
         String typeError = numericArgsTypeError(args);
         if (typeError != null) {
@@ -106,6 +110,8 @@ final class McpRecordIngestion {
         StorageRepository repository = null;
         try {
             InteractionRecord record = buildRecord(sessionId, protocol, requestRaw, request, responseRaw, response, args, metadata, warnings);
+            // 逐条摄取是高频路径：配置披露对 stdio server 只产生噪音，这里显式丢弃
+            // （doctor 等低频命令照常走 err 披露）
             repository = CliSupport.openRepository(db, CliSupport.discardStream());
             boolean saved = repository.saveInteractionIfAbsent(record);
             String storedSessionId = null;

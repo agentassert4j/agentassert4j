@@ -316,6 +316,25 @@ class DeterministicComparatorTest {
     }
 
     @Test
+    void dimensions3and4_failuresItemizedWithNames() {
+        // 失配明细必须点名失败项：修复者无需回读规则声明自行对照。
+        // 集合来源序不稳定，明细按字典序排序保证 summary 可复现
+        DeterministicFingerprint baseline = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1, new LinkedHashSet<>(Arrays.asList("REF-", "ORD-")), new LinkedHashSet<>(Arrays.asList("抱歉")), false);
+        baseline.setDeclaredBehaviors(new LinkedHashSet<>(Arrays.asList("nonEmptyOutput", "mustUseEnglish")));
+        DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1, null, null, false);
+
+        ComparisonResult r = comparator.compare(baseline, current, "sorry, plain english answer without any code word 抱歉");
+
+        assertEquals(Arrays.asList("ORD-", "REF-"), r.getMissingRequiredKeywords());
+        assertEquals(Collections.singletonList("抱歉"), r.getPresentForbiddenKeywords());
+        assertEquals(Collections.singletonList("mustUseEnglish"), r.getFailedBehaviors(), "nonEmptyOutput 通过，只点名失败的行为（输出含 CJK 使 mustUseEnglish 失败）");
+        assertTrue(r.getSummary().contains("content rules mismatch (required missing: [ORD-, REF-]; forbidden present: [抱歉])"),
+                "摘要必须点名缺失的必需词与出现的禁用词: " + r.getSummary());
+        assertTrue(r.getSummary().contains("behavior constraints failed (failed: [mustUseEnglish])"),
+                "摘要必须点名失败的行为: " + r.getSummary());
+    }
+
+    @Test
     void dimension3_regexPattern_match() {
         DeterministicFingerprint baseline = fpWithRegex(Collections.singletonList(new RegexPattern("ORD-\\d+", "order ID pattern")));
         DeterministicFingerprint current = fp(Collections.singleton("toolA"), Collections.singletonMap("id", "String"), "text/plain", null, null, 1, null, null, false);

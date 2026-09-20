@@ -934,6 +934,33 @@ class TaskReplayRunnerTest {
         }
 
         @Test
+        @DisplayName("token 预算预检：单次预估超限 → 首调用即跳过，硬上限宁少跑不超限")
+        void reDrive_tokenBudget_preCheckSkipsFirstCall() {
+            seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
+            // 漂移点最新记录携带录制用量（input 80 + output 20 = 预估 100 > 上限 10）
+            InteractionRecord heavy = new InteractionRecord();
+            heavy.setRecordId("budget-heavy");
+            heavy.setSessionId("session-budget");
+            heavy.setTimestamp(3500L);
+            heavy.setSeq(3500L);
+            heavy.setUserInput("查订单");
+            heavy.setInvocationId("order");
+            heavy.setSkeletonHash("skl-1");
+            heavy.setTemplateHash("hash-budget");
+            heavy.setInvocationKey("invocation:order:skl-1");
+            heavy.setModelResponse("{\"result\":\"ok\"}");
+            heavy.setModel("stub-model");
+            heavy.setInputTokens(80);
+            heavy.setOutputTokens(20);
+            repository.saveInteractionIfAbsent(heavy);
+            saveTemplateText("hash-budget", "预算模板全文");
+
+            assertEquals(2, runner.run(null, null, false, false, false, null, false, true, false, null, 10));
+            assertEquals(0, stubClient.calls, "预估超限的调用必须预检跳过，不得击穿硬上限");
+            assertTrue(output.toString().contains("budget exhausted"));
+        }
+
+        @Test
         @DisplayName("重驱全败（无任何比对结果）→ 退出码 2 而非误报回归")
         void reDrive_allFailed() {
             seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
@@ -1087,6 +1114,35 @@ class TaskReplayRunnerTest {
                 }
             }
             return keys;
+        }
+
+        @Test
+        @DisplayName("bare replay 自动建档署名 auto: 前缀——审计时间线区分自动写与显式写")
+        void autoEstablish_actorCarriesAutoPrefix() {
+            SqliteStorageRepository replayRepo = new SqliteStorageRepository(tempDir.resolve("eq-auto-actor.db").toString());
+            try {
+                replayRepo.initialize();
+                seedSharedFixture(replayRepo);
+
+                TaskReplayRunner replayRunner = new TaskReplayRunner(replayRepo, new StubLlmClient(), new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), false);
+                replayRunner.run(null, null, false, false, false, null, false, false, false, null, null);
+
+                List<GovernanceEvent> events = replayRepo.findGovernanceEvents();
+                assertFalse(events.isEmpty(), "自动建档必须落治理事件");
+                boolean autoEventSeen = false;
+                for (GovernanceEvent event : events) {
+                    if (event.getActor() != null && event.getActor().startsWith("auto:")) {
+                        autoEventSeen = true;
+                    }
+                    if ("invocation:freshAgent:h-f".equals(event.getInvocationKey())) {
+                        assertTrue(event.getActor() != null && event.getActor().startsWith("auto:"),
+                                "freshAgent 只可能被 replay 自动建档，署名必须带 auto: 前缀: " + event.getActor());
+                    }
+                }
+                assertTrue(autoEventSeen, "至少一条自动建档事件携带 auto: 前缀");
+            } finally {
+                replayRepo.close();
+            }
         }
 
         @Test

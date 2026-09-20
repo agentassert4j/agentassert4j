@@ -34,7 +34,7 @@ public class StatusCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--diff"}, description = "Render per-dimension candidate vs baseline diffs for invocations holding candidate fingerprints")
+    @Option(names = {"--diff"}, description = "Render per-dimension candidate vs baseline diffs for invocations holding candidate fingerprints (human channel; rejected under --json)")
     boolean diff;
 
     @Option(names = {"--invocation"}, description = "Narrow the view to one invocation (both channels): business label (fans out to all its template-version buckets), invocationKey prefix, or the status display form")
@@ -45,10 +45,14 @@ public class StatusCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        if (jsonOutput && diff) {
+            // 候选差异渲染只有人类巡检形态，--json 下静默忽略旗标会误导机器消费方
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--diff renders the human inspection view; it has no JSON form.", "Drop --json to see the per-dimension candidate diffs, or drop --diff for the status/1 JSON report.", "agentassert4j status");
+        }
         StorageRepository repository = null;
         try {
-            // --json 模式 stdout 只产出报告本体：配置披露改走 stderr，人类巡检表不输出
-            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
+            // --json 模式 stdout 只产出报告本体：人类巡检表不输出（配置披露恒走 err）
+            repository = CliSupport.openRepository(db, err);
             List<InvocationProfile> allProfiles = repository.findAllInvocations();
             List<InvocationProfile> profiles = allProfiles;
             DriftReport drift = DriftDetector.detect(repository);

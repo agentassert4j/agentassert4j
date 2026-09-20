@@ -262,3 +262,4 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
   「wire 方言归一」节单源承载。归一器实现与测试同批交付（McpRecordIngestionTest）。
 | 2026-09-17 | D1 术语清扫（维护者「质量优先」裁决） | 契约基准句「画像活跃指纹」→「画像认可形态集合」+「accept 提升链末形态」→「把链末形态加入认可集合」（与 D2 后代码及用户文档词表同形）；台账历史行保留原词 |
 | 2026-09-17 | 1.0.0 收尾批：member-check manifest 字段集描述同步 + record 命名终裁 | ①member-check 描述句改恒定字段集口径（always carries matchedSessions … closestSession/closestScore null on a match），契约 6 措辞同批改写（权威表述见 replay.md 契约 13）；②延迟池终裁（维护者裁决「明确不做」，防翻账）：CLI `record show`（查看）与 MCP `record`（摄取）的同名不同义维持现状为终态——manifest description 已自解释摄取语义，改名扰动 parity 映射/文档/测试全链收益不抵；除非出现明确 issue 再议 |
+| 2026-09-20 | 通道2 round8：record 缺参逐字段点名 | 三合一缺参消息不点名缺失项且 nextAction 空串——改收集缺失字段名逐一点名（"record requires request, response …"，空白串计缺失），nextAction 补 the `record` tool（与协议错误站点一致）；标准 MCP 客户端用户仍先被 inputSchema 拦截（双层防护不变）。【测试钉】McpRecordIngestionTest.missingParams_namedIndividually |

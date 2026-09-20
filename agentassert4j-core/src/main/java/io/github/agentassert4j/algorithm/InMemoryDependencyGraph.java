@@ -22,6 +22,21 @@ public class InMemoryDependencyGraph {
     private final Map<String, Map<String, GraphEdge>> outEdges = new LinkedHashMap<>();
 
     /**
+     * 只出现于记录、尚未参与任何边的调用点键——勘察视图的节点全集语义：
+     * 库里有数据时节点行非空，「数据在、无边」与「没数据」由此可区分
+     */
+    private final Set<String> isolatedNodes = new LinkedHashSet<>();
+
+    /**
+     * 登记一个调用点键为节点（无边也入集；null 与空串忽略）。
+     */
+    public void addNode(String node) {
+        if (node != null && !node.isEmpty()) {
+            isolatedNodes.add(node);
+        }
+    }
+
+    /**
      * 添加一条边（携带证据载荷：命中值 + 源/目标记录 id；LOW 边传 null）。
      * 同一条边多次添加时保留高置信度（秩小者优先）：
      * LOW→HIGH 升级时替换证据（高置信度证据更有解释力）；同级重复保留最早证据
@@ -95,13 +110,14 @@ public class InMemoryDependencyGraph {
     }
 
     /**
-     * 获取所有节点（含只作为目标出现的汇点）
+     * 获取所有节点：边的全部端点，加上只出现于记录的孤立键
      */
     public Set<String> getAllNodes() {
         Set<String> nodes = new LinkedHashSet<>(outEdges.keySet());
         for (Map<String, GraphEdge> targets : outEdges.values()) {
             nodes.addAll(targets.keySet());
         }
+        nodes.addAll(isolatedNodes);
         return nodes;
     }
 

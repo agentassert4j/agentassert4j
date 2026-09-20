@@ -31,7 +31,9 @@ public class VerifyCommand implements Callable<Integer> {
     PrintStream out = System.out;
     PrintStream err = System.err;
 
-    @Option(names = {"--pack"}, required = true, description = "Acceptance pack file (produced by `baseline export`)")
+    // 必填项校验放 call() 而非 picocli required=true：picocli 原生缺参报错没有
+    // error/1 包络，机器消费方无法按 hints/nextAction 自助续行
+    @Option(names = {"--pack"}, description = "Acceptance pack file (required; produced by `baseline export`)")
     String packPath;
 
     @Option(names = {"--task"}, description = "Verify only pack tasks whose request text/task key matches this prefix (defaults to all)")
@@ -51,6 +53,9 @@ public class VerifyCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        if (packPath == null || packPath.trim().isEmpty()) {
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "verify requires --pack (the acceptance pack file).", "Produce a pack with `agentassert4j baseline export` first, then pass its path here.", "agentassert4j baseline export");
+        }
         String packContent;
         try {
             packContent = new String(Files.readAllBytes(Paths.get(packPath)), StandardCharsets.UTF_8);
@@ -62,7 +67,7 @@ public class VerifyCommand implements Callable<Integer> {
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
         StorageRepository repository = null;
         try {
-            repository = CliSupport.openRepository(db, jsonOutput ? err : out);
+            repository = CliSupport.openRepository(db, err);
             DeterministicComparator comparator = CliSupport.createComparator(config);
             return new VerifyRunner(repository, comparator, out, err, jsonOutput).run(packContent, digest, task, reportPath, dryRun);
         } catch (CliFailureException e) {

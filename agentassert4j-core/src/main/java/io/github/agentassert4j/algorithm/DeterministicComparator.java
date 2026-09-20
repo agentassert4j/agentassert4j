@@ -82,9 +82,21 @@ public class DeterministicComparator {
 
         double d3;
         if (hasDeclaredRules) {
-            boolean kwOk = baseline.getRequiredKeywords().stream().allMatch(kw -> output.contains(kw));
-            boolean fkOk = baseline.getForbiddenKeywords().stream().noneMatch(kw -> output.contains(kw));
-            boolean reOk = matchRegexPatterns(baseline.getRegexPatterns(), output);
+            // 失配明细就地收集：失败项身份只在检查现场可得，坍缩成布尔后即不可恢复
+            List<String> missingRequired = orEmpty(baseline.getRequiredKeywords()).stream()
+                    .filter(kw -> !output.contains(kw)).collect(Collectors.toList());
+            List<String> presentForbidden = orEmpty(baseline.getForbiddenKeywords()).stream()
+                    .filter(kw -> output.contains(kw)).collect(Collectors.toList());
+            List<String> failedRegex = failedRegexPatterns(baseline.getRegexPatterns(), output);
+            Collections.sort(missingRequired);
+            Collections.sort(presentForbidden);
+            Collections.sort(failedRegex);
+            boolean kwOk = missingRequired.isEmpty();
+            boolean fkOk = presentForbidden.isEmpty();
+            boolean reOk = failedRegex.isEmpty();
+            r.setMissingRequiredKeywords(missingRequired);
+            r.setPresentForbiddenKeywords(presentForbidden);
+            r.setFailedRegexPatterns(failedRegex);
             r.setKeywordMatch(kwOk && fkOk);
             r.setRegexMatch(reOk);
             d3 = (kwOk ? 0.4 : 0.0) + (fkOk ? 0.3 : 0.0) + (reOk ? 0.3 : 0.0);
@@ -98,9 +110,16 @@ public class DeterministicComparator {
         boolean hasDeclaredBehaviors = !isEmpty(baseline.getDeclaredBehaviors());
         double d4;
         if (hasDeclaredBehaviors) {
-            boolean behMatch = BehaviorChecker.checkAll(baseline.getDeclaredBehaviors(), current, output);
-            r.setBehaviorMatch(behMatch);
-            d4 = behMatch ? 1.0 : 0.0;
+            List<String> failedBehaviors = new ArrayList<>();
+            for (String behavior : baseline.getDeclaredBehaviors()) {
+                if (!BehaviorChecker.check(behavior, current, output)) {
+                    failedBehaviors.add(behavior);
+                }
+            }
+            Collections.sort(failedBehaviors);
+            r.setFailedBehaviors(failedBehaviors);
+            r.setBehaviorMatch(failedBehaviors.isEmpty());
+            d4 = failedBehaviors.isEmpty() ? 1.0 : 0.0;
         } else {
             d4 = 1.0; // 无声明行为，该维不构成差异
             r.setBehaviorMatch(true);
@@ -174,11 +193,6 @@ public class DeterministicComparator {
         }
     }
 
-    private boolean matchRegexPatterns(List<RegexPattern> patterns, String output) {
-        if (patterns == null || patterns.isEmpty()) return true;
-        return patterns.stream().allMatch(p -> p.matches(output));
-    }
-
     private Set<String> filterIgnorable(Set<String> fields) {
         if (fields == null) return Collections.emptySet();
         return fields.stream().filter(f -> !isIgnorable(f)).collect(Collectors.toSet());
@@ -223,10 +237,55 @@ public class DeterministicComparator {
         if (!r.isStructureMatch() && isEmpty(r.getAddedFields()) && isEmpty(r.getRemovedFields()) && r.isFieldTypeMatch()) {
             sb.append(" | output structure changed");
         }
-        if (!r.isKeywordMatch()) sb.append(" | content rules mismatch");
-        if (!r.isRegexMatch()) sb.append(" | regex rules mismatch");
-        if (!r.isBehaviorMatch()) sb.append(" | behavior constraints failed");
+        if (!r.isKeywordMatch()) {
+            sb.append(" | content rules mismatch");
+            sb.append(keywordFailureDetail(r));
+        }
+        if (!r.isRegexMatch()) {
+            sb.append(" | regex rules mismatch");
+            if (!isEmptyList(r.getFailedRegexPatterns())) {
+                sb.append(" (failed: ").append(r.getFailedRegexPatterns()).append(")");
+            }
+        }
+        if (!r.isBehaviorMatch()) {
+            sb.append(" | behavior constraints failed");
+            if (!isEmptyList(r.getFailedBehaviors())) {
+                sb.append(" (failed: ").append(r.getFailedBehaviors()).append(")");
+            }
+        }
 
         return sb.toString();
+    }
+
+    /**
+     * 内容规则失配的人类可读明细：只列实际失配的段，两段皆空时不加括号。
+     */
+    private static String keywordFailureDetail(ComparisonResult r) {
+        List<String> parts = new ArrayList<>();
+        if (!isEmptyList(r.getMissingRequiredKeywords())) {
+            parts.add("required missing: " + r.getMissingRequiredKeywords());
+        }
+        if (!isEmptyList(r.getPresentForbiddenKeywords())) {
+            parts.add("forbidden present: " + r.getPresentForbiddenKeywords());
+        }
+        return parts.isEmpty() ? "" : " (" + String.join("; ", parts) + ")";
+    }
+
+    private static boolean isEmptyList(List<String> list) {
+        return list == null || list.isEmpty();
+    }
+
+    /**
+     * 未命中的正则模式清单（按声明模式串点名；空清单 = 全部命中或无声明）。
+     */
+    private static List<String> failedRegexPatterns(List<RegexPattern> patterns, String output) {
+        List<String> failed = new ArrayList<>();
+        if (patterns == null) return failed;
+        for (RegexPattern p : patterns) {
+            if (p != null && !p.matches(output)) {
+                failed.add(p.getPattern());
+            }
+        }
+        return failed;
     }
 }
