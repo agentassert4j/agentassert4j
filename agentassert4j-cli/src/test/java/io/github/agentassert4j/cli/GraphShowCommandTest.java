@@ -18,9 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * graph show 命令契约：多轮会话产边渲染、空图提示、注册可达。
@@ -102,6 +100,10 @@ class GraphShowCommandTest {
         assertTrue(output.contains("No data-flow edges (scanned 1 record across 1 session"), "空图必须就地披露扫描统计: " + output);
         assertTrue(output.contains("An edge needs all three"), "出边三前提必须逐条列明: " + output);
         assertTrue(output.contains("Nodes (1)"), "节点全集语义：数据在场即有节点，空边不等于空图: " + output);
+
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("graph", "show", "--db", dbPath, "--json"));
+        String graphJson = stdout.toString();
+        assertTrue(graphJson.contains("\"nodes\":[\"invocation:loneSkill:"), "机器面必须携带 nodes 数组（只有计数不可寻址）: " + graphJson);
     }
 
     /**

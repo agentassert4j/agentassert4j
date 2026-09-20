@@ -14,13 +14,9 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.regex.Pattern;
+import java.sql.*;
 import java.util.ArrayList;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -409,8 +405,7 @@ class CommandSmokeTest {
         repository.saveInteractionIfAbsent(other2);
         repository.saveInteractionIfAbsent(other);
         // 模板原文种子：saveTemplateText 已是存储实现私有，经同一 SQL 语义直插 prompt_texts
-        try (Connection seedConn = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
-             PreparedStatement seedPs = seedConn.prepareStatement("INSERT OR IGNORE INTO prompt_texts (prompt_hash, prompt_text, created_at) VALUES (?,?,?)")) {
+        try (Connection seedConn = DriverManager.getConnection("jdbc:sqlite:" + dbPath); PreparedStatement seedPs = seedConn.prepareStatement("INSERT OR IGNORE INTO prompt_texts (prompt_hash, prompt_text, created_at) VALUES (?,?,?)")) {
             seedPs.setString(1, "hash-old");
             seedPs.setString(2, "baseline template body for queryOrder");
             seedPs.setLong(3, 1L);
@@ -537,12 +532,9 @@ class CommandSmokeTest {
         assertEquals(0, exit);
         String text = out.toString();
         assertTrue(text.contains("Exit Codes:"), "退出码节标题必须在场: " + text);
-        assertTrue(Pattern.compile("0\\s+no behavioral regression").matcher(text).find(),
-                "exit 0 行必须渲染码数字: " + text);
-        assertTrue(Pattern.compile("1\\s+behavioral difference or evidence gap").matcher(text).find(),
-                "exit 1 行必须渲染码数字: " + text);
-        assertTrue(Pattern.compile("2\\s+usage, data or environment problem").matcher(text).find(),
-                "exit 2 行必须渲染码数字: " + text);
+        assertTrue(Pattern.compile("0\\s+no behavioral regression").matcher(text).find(), "exit 0 行必须渲染码数字: " + text);
+        assertTrue(Pattern.compile("1\\s+behavioral difference or evidence gap").matcher(text).find(), "exit 1 行必须渲染码数字: " + text);
+        assertTrue(Pattern.compile("2\\s+usage, data or environment problem").matcher(text).find(), "exit 2 行必须渲染码数字: " + text);
     }
 
     @Test
@@ -554,8 +546,41 @@ class CommandSmokeTest {
     }
 
     @Test
-    @DisplayName("打开级失败的 --json 包络携带根因消息且不泄漏实现栈帧")
+    @DisplayName("空库上的选择器零命中指路录制而非自循环")
+    void emptyDbSelectorMiss_routesToRecordFirst() {
+        String emptyDb = tempDir.resolve("selector-empty.db").toString();
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--invocation", "s01-probe", "--db", emptyDb, "--json");
+
+        assertEquals(2, exit);
+        String envelope = out.toString();
+        assertTrue(envelope.contains("No recorded interactions found."), "空库零命中必须走录制指引分支: " + envelope);
+        assertTrue(envelope.contains("the record tool on the MCP channel"), "hints 必须点名录制入口: " + envelope);
+    }
+
+    @Test
+    @DisplayName("plural 辅音+y 名词按英文正字法变 ies")
+    void plural_consonantYBecomesIes() {
+        assertEquals("1 family", CliSupport.plural(1, "family"));
+        assertEquals("2 families", CliSupport.plural(2, "family"));
+        assertEquals("3 records", CliSupport.plural(3, "record"));
+        assertEquals("2 days", CliSupport.plural(2, "day"));
+    }
+
+    @Test
+    @DisplayName("rollback 缺单项只点名缺失项")
+    void rollbackMissingParam_namesOnlyMissing() {
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("rollback", "--invocation", "some-key", "--json");
+
+        assertEquals(2, exit);
+        assertTrue(out.toString().contains("rollback requires --version"), "只缺 version 时不得点名 --invocation: " + out);
+    }
+
+    @Test
+    @DisplayName("打开级失败的 --json 包络携带根因消息且不泄漏实现栈帧；JUL 级别词恒英文")
     void openLevelFailure_envelopeCarriesRootCause() throws Exception {
+        CliSupport.installEnglishJulFormatter();
         Path newerDb = tempDir.resolve("newer-schema.db");
         SqliteStorageRepository repo = new SqliteStorageRepository(newerDb.toString());
         repo.initialize();
@@ -572,10 +597,22 @@ class CommandSmokeTest {
 
         assertEquals(2, exit);
         assertTrue(out.toString().contains("agentassert4j.error/1"), "机器通道必须有包络: " + out);
-        assertTrue(out.toString().contains("Database schema version 2 is newer"),
-                "根因消息必须进包络（describe 走因果链）: " + out);
-        assertFalse(err.toString().contains("at io.github.agentassert4j"),
-                "打开级拒绝不得向用户泄漏实现栈帧: " + err);
+        assertTrue(out.toString().contains("Database schema version 2 is newer"), "根因消息必须进包络（describe 走因果链）: " + out);
+        assertFalse(err.toString().contains("at io.github.agentassert4j"), "打开级拒绝不得向用户泄漏实现栈帧: " + err);
+    }
+
+    @Test
+    @DisplayName("JUL 根格式器钉英文：级别词与时间戳不随 JVM 本地化")
+    void julFormatter_englishRegardlessOfLocale() {
+        CliSupport.installEnglishJulFormatter();
+        boolean englishSeen = false;
+        for (java.util.logging.Handler handler : java.util.logging.Logger.getLogger("").getHandlers()) {
+            String line = handler.getFormatter().format(new java.util.logging.LogRecord(java.util.logging.Level.SEVERE, "probe message"));
+            if (line.contains("SEVERE probe message")) {
+                englishSeen = !line.contains("严重") && !line.contains("上午");
+            }
+        }
+        assertTrue(englishSeen, "根 logger 的格式器必须输出英文级别词与无本地化时间戳");
     }
 
     @Test
@@ -596,8 +633,7 @@ class CommandSmokeTest {
         assertEquals(2, exit);
         String envelope = out.toString();
         assertTrue(envelope.contains("E-USAGE"), "缺参必须是用法域拒绝: " + envelope);
-        assertTrue(envelope.contains("rollback requires --invocation and --version"),
-                "缺参必须点名必需项: " + envelope);
+        assertTrue(envelope.contains("rollback requires --invocation and --version"), "缺参必须点名必需项: " + envelope);
     }
 
     @Test
@@ -607,7 +643,6 @@ class CommandSmokeTest {
         int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath, "--diff", "--json");
 
         assertEquals(2, exit);
-        assertTrue(out.toString().contains("--diff renders the human inspection view"),
-                "组合拒绝必须指明 --diff 属人类通道: " + out);
+        assertTrue(out.toString().contains("--diff renders the human inspection view"), "组合拒绝必须指明 --diff 属人类通道: " + out);
     }
 }

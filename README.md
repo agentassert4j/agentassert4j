@@ -360,7 +360,7 @@ identity, baseline status, version, candidate, archived versions, business label
 | `1` | Behavioral deviation (including missing/added steps) | Human adjudication: accept / reject |
 | `2` | Usage or infrastructure failure / incomplete evidence (budget exhausted, coverage gap, `--ci` with unbaselined invocations, judgment-semantics mismatch) | Fix the environment; not a regression |
 
-`--json` emits a single-line machine-readable report on stdout (one schema tag per command);
+`--json` emits machine-readable JSON reports on stdout, one document per line (multi-report commands emit a document stream; one schema tag per command);
 diagnostics go to stderr. A failed run appends an `agentassert4j.error/1` error envelope to
 stdout (error code, actionable hints, next command) — ask for JSON, always get JSON.
 Channel contract and schema list in [OPERATIONS.md](OPERATIONS.md).

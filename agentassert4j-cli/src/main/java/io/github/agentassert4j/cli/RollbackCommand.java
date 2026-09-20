@@ -57,8 +57,11 @@ public class RollbackCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        if (invocation == null || invocation.trim().isEmpty() || version == null || version.trim().isEmpty()) {
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "rollback requires --invocation and --version (see the archived column in status).", "Run `agentassert4j status` to pick the invocation and the archived version tag to restore.", "agentassert4j status");
+        List<String> missing = new ArrayList<>();
+        if (invocation == null || invocation.trim().isEmpty()) missing.add("--invocation");
+        if (version == null || version.trim().isEmpty()) missing.add("--version");
+        if (!missing.isEmpty()) {
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "rollback requires " + String.join(" and ", missing) + " (see the archived column in status).", "Run `agentassert4j status` to pick the invocation and the archived version tag to restore.", "agentassert4j status");
         }
         StorageRepository repository = null;
         try {

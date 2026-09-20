@@ -86,14 +86,9 @@ public class GraphShowCommand implements Callable<Integer> {
         StringBuilder edgeJson = new StringBuilder();
         for (GraphEdge edge : edges) {
             if (edgeJson.length() > 0) edgeJson.append(",");
-            edgeJson.append("{\"source\":\"").append(RecursiveJsonParser.escape(edge.getSource()))
-                    .append("\",\"target\":\"").append(RecursiveJsonParser.escape(edge.getTarget()))
-                    .append("\",\"confidence\":\"").append(edge.getConfidence()).append("\"");
+            edgeJson.append("{\"source\":\"").append(RecursiveJsonParser.escape(edge.getSource())).append("\",\"target\":\"").append(RecursiveJsonParser.escape(edge.getTarget())).append("\",\"confidence\":\"").append(edge.getConfidence()).append("\"");
             if (edge.getEvidenceValue() != null) {
-                edgeJson.append(",\"evidence\":{\"value\":").append(jsonStringOrNull(edge.getEvidenceValue()))
-                        .append(",\"sourceRecordId\":").append(jsonStringOrNull(edge.getEvidenceSourceRecordId()))
-                        .append(",\"targetRecordId\":").append(jsonStringOrNull(edge.getEvidenceTargetRecordId()))
-                        .append("}");
+                edgeJson.append(",\"evidence\":{\"value\":").append(jsonStringOrNull(edge.getEvidenceValue())).append(",\"sourceRecordId\":").append(jsonStringOrNull(edge.getEvidenceSourceRecordId())).append(",\"targetRecordId\":").append(jsonStringOrNull(edge.getEvidenceTargetRecordId())).append("}");
             }
             edgeJson.append("}");
         }
@@ -102,11 +97,12 @@ public class GraphShowCommand implements Callable<Integer> {
             if (cyclesJson.length() > 0) cyclesJson.append(",");
             cyclesJson.append("\"").append(RecursiveJsonParser.escape(node)).append("\"");
         }
-        return "{\"schema\":\"" + ReportSchemas.GRAPH + "\",\"nodeCount\":" + nodes.size() + ",\"edgeCount\":" + edges.size()
-                + ",\"edges\":[" + edgeJson + "],\"cycles\":[" + cyclesJson + "]"
-                + ",\"scanned\":{\"sessions\":" + stats.getSessions() + ",\"records\":" + stats.getRecords()
-                + ",\"invocationKeys\":" + stats.getInvocationKeys() + ",\"candidatePairs\":" + stats.getCandidatePairs() + "}"
-                + (edges.isEmpty() ? ",\"note\":\"" + EDGE_CONDITIONS_JSON + "\"" : "") + "}";
+        StringBuilder nodesJson = new StringBuilder();
+        for (String node : nodes) {
+            if (nodesJson.length() > 0) nodesJson.append(",");
+            nodesJson.append("\"").append(RecursiveJsonParser.escape(node)).append("\"");
+        }
+        return "{\"schema\":\"" + ReportSchemas.GRAPH + "\",\"nodeCount\":" + nodes.size() + ",\"nodes\":[" + nodesJson + "],\"edgeCount\":" + edges.size() + ",\"edges\":[" + edgeJson + "],\"cycles\":[" + cyclesJson + "]" + ",\"scanned\":{\"sessions\":" + stats.getSessions() + ",\"records\":" + stats.getRecords() + ",\"invocationKeys\":" + stats.getInvocationKeys() + ",\"candidatePairs\":" + stats.getCandidatePairs() + "}" + (edges.isEmpty() ? ",\"note\":\"" + EDGE_CONDITIONS_JSON + "\"" : "") + "}";
     }
 
     private void renderHuman(Set<String> nodes, List<GraphEdge> edges, InMemoryDependencyGraph graph, GraphBuildStats stats) {
@@ -119,9 +115,7 @@ public class GraphShowCommand implements Callable<Integer> {
         out.println("Edges (" + edges.size() + "):");
         if (edges.isEmpty()) {
             // 扫描统计先行：candidatePairs=0 即全部记录对共享同一调用点身份（出边前提不存在）
-            out.println("  No data-flow edges (scanned " + CliSupport.plural(stats.getRecords(), "record") + " across "
-                    + CliSupport.plural(stats.getSessions(), "session") + "; " + CliSupport.plural(stats.getInvocationKeys(), "invocation key")
-                    + ", " + CliSupport.plural(stats.getCandidatePairs(), "cross-key record pair") + ").");
+            out.println("  No data-flow edges (scanned " + CliSupport.plural(stats.getRecords(), "record") + " across " + CliSupport.plural(stats.getSessions(), "session") + "; " + CliSupport.plural(stats.getInvocationKeys(), "invocation key") + ", " + CliSupport.plural(stats.getCandidatePairs(), "cross-key record pair") + ").");
             out.println("  An edge needs all three: (1) the two records carry different invocation identities");
             out.println("  (declare per-step invocation labels); (2) the upstream value appears in a tool result,");
             out.println("  either recorded alongside its call or carried by an earlier record's request history;");
@@ -147,14 +141,11 @@ public class GraphShowCommand implements Callable<Integer> {
     }
 
     private String edgeLine(GraphEdge edge) {
-        StringBuilder line = new StringBuilder("  ").append(CliSupport.displayKey(edge.getSource()))
-                .append(" -> ").append(CliSupport.displayKey(edge.getTarget()))
-                .append("  ").append(edge.getConfidence());
+        StringBuilder line = new StringBuilder("  ").append(CliSupport.displayKey(edge.getSource())).append(" -> ").append(CliSupport.displayKey(edge.getTarget())).append("  ").append(edge.getConfidence());
         if (edge.getEvidenceValue() != null) {
             line.append("  \"").append(CliSupport.abbreviateText(edge.getEvidenceValue(), EVIDENCE_DISPLAY_BUDGET)).append("\"");
             if (edge.getEvidenceSourceRecordId() != null && edge.getEvidenceTargetRecordId() != null) {
-                line.append(" (").append(edge.getEvidenceSourceRecordId())
-                        .append(" -> ").append(edge.getEvidenceTargetRecordId()).append(")");
+                line.append(" (").append(edge.getEvidenceSourceRecordId()).append(" -> ").append(edge.getEvidenceTargetRecordId()).append(")");
             }
         }
         return line.toString();

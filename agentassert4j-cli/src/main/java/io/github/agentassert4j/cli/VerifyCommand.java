@@ -64,9 +64,11 @@ public class VerifyCommand implements Callable<Integer> {
         }
         String digest = HashUtil.sha256(packContent);
 
-        AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
         StorageRepository repository = null;
         try {
+            // 配置加载在 try 内：坏配置文件抛出的异常必须落 E-ENV 包络，
+            // 不得穿透给 picocli 打全栈
+            AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
             repository = CliSupport.openRepository(db, err);
             DeterministicComparator comparator = CliSupport.createComparator(config);
             return new VerifyRunner(repository, comparator, out, err, jsonOutput).run(packContent, digest, task, reportPath, dryRun);

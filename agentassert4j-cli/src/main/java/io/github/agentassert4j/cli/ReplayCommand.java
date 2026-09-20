@@ -64,7 +64,7 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--dry-run"}, description = "Read-only preview: drift set, alignment plan and re-drive cost estimate; no baseline writes, no graph snapshot, no dispositions")
     boolean dryRun;
 
-    @Option(names = {"--json"}, description = "stdout carries a single-line JSON evidence report (for CI/agent consumption); diagnostics and usage errors go to stderr")
+    @Option(names = {"--json"}, description = "stdout carries JSON evidence documents, one per line (drift summary, per-task alignments, disposition, exit health; for CI/agent consumption); diagnostics and usage errors go to stderr")
     boolean jsonOutput;
 
     @Override
@@ -102,14 +102,16 @@ public class ReplayCommand implements Callable<Integer> {
                 }
             }
         }
-        AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
-        // 解析阶梯的配置侧：显式缺省时取 regression.memberSampleWindow（有限整数，
-        // 配置面只收 N；all 仅单次调用显式传入）
-        if (memberWindow == null && config.getRegression().getMemberSampleWindow() != null) {
-            resolvedMemberWindow = config.getRegression().getMemberSampleWindow();
-        }
         StorageRepository repository = null;
         try {
+            // 配置加载在 try 内：坏配置文件抛出的异常必须落 E-ENV 包络，
+            // 不得穿透给 picocli 打全栈
+            AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
+            // 解析阶梯的配置侧：显式缺省时取 regression.memberSampleWindow（有限整数，
+            // 配置面只收 N；all 仅单次调用显式传入）
+            if (memberWindow == null && config.getRegression().getMemberSampleWindow() != null) {
+                resolvedMemberWindow = config.getRegression().getMemberSampleWindow();
+            }
             repository = CliSupport.openRepository(db, err);
 
             String resolvedInvocation = null;

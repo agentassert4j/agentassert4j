@@ -324,7 +324,7 @@ accept 扩展集合——裁决立即对门禁生效）为判定基准；不做�
 | `1` | 存在行为差异（含缺步骤 / 新增步骤） | 人裁决 accept / reject |
 | `2` | 用法或基础设施故障 / 证据不完整（预算耗尽、覆盖缺口、`--ci` 遇无基线调用点、判定语义不符） | 修环境，不算回归 |
 
-`--json` 输出单行机器可读报告到 stdout（每命令一个 schema 标签），诊断与进度走 stderr；
+`--json` 向 stdout 输出机器可读 JSON 报告、每行一个文档（多报告命令输出文档流；每命令一个 schema 标签），诊断与进度走 stderr；
 失败的运行以 `agentassert4j.error/1` 错误包络收尾 stdout（错误码 + 可行动建议 + 下一步命令）——
 要了 JSON 就恒得 JSON。通道契约与 schema 清单见 [OPERATIONS.md](OPERATIONS.md#4-ci-门禁配方)。
 

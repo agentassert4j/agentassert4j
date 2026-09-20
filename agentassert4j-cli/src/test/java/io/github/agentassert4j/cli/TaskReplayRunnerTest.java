@@ -1014,7 +1014,7 @@ class TaskReplayRunnerTest {
 
             assertEquals(0, runner.run(null, null, false, false, false, null, false, true, false, null, null));
             assertEquals(0, stubClient.calls);
-            assertTrue(output.toString().contains("(drift points only)"), output.toString());
+            assertTrue(output.toString().contains("No re-drive targets: default re-drive covers drift points only"), "零目标必须就地解释原因（静默 total:0 会让人以为是故障）: " + output);
         }
 
         @Test
@@ -1135,8 +1135,7 @@ class TaskReplayRunnerTest {
                         autoEventSeen = true;
                     }
                     if ("invocation:freshAgent:h-f".equals(event.getInvocationKey())) {
-                        assertTrue(event.getActor() != null && event.getActor().startsWith("auto:"),
-                                "freshAgent 只可能被 replay 自动建档，署名必须带 auto: 前缀: " + event.getActor());
+                        assertTrue(event.getActor() != null && event.getActor().startsWith("auto:"), "freshAgent 只可能被 replay 自动建档，署名必须带 auto: 前缀: " + event.getActor());
                     }
                 }
                 assertTrue(autoEventSeen, "至少一条自动建档事件携带 auto: 前缀");

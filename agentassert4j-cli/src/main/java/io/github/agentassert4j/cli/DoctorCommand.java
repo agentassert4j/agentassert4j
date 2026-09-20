@@ -162,7 +162,7 @@ public class DoctorCommand implements Callable<Integer> {
     private void printIdentitySection(DoctorFindings findings) {
         out.println("Identity check:");
         if (findings.skeletons.isEmpty()) {
-            out.println("  No skeleton-declared records; for dynamic templates consider declaring templateSkeleton when recording (see the minimal recording contract in OPERATIONS).");
+            out.println("  No skeleton-declared records; for dynamic templates consider declaring templateSkeleton when recording via the Java SDK (see the minimal recording contract in OPERATIONS; the MCP record tool has no skeleton parameter — declare an invocation label instead).");
         } else {
             for (Map.Entry<String, SkeletonStat> entry : findings.skeletons.entrySet()) {
                 out.println("  " + CliSupport.displayKey("skeleton:" + entry.getKey()) + ": " + CliSupport.plural(entry.getValue().records, "record") + ", " + CliSupport.plural(entry.getValue().fullTextVariants, "full-text variant"));
@@ -172,19 +172,15 @@ public class DoctorCommand implements Callable<Integer> {
         if (findings.multiStepUnlabeled.isEmpty()) {
             out.println("  Multi-step unlabeled chains: none.");
         } else {
-            out.println("  " + CliSupport.plural(findings.multiStepUnlabeled.size(), "multi-step unlabeled chain") + " (step visibility and task rules both rely on invocationId labels); consider building a label vocabulary for key invocations:");
-            for (TaskChain chain : samples(findings.multiStepUnlabeled)) {
-                out.println("    '" + CliSupport.visibleText(CliSupport.abbreviateText(chain.getRequestText(), 60)) + "' (session " + chain.getSessionId() + ", " + CliSupport.plural(chain.getRecords().size(), "step") + ")");
-            }
+            out.println("  " + CliSupport.plural(findings.multiStepUnlabeled.size(), "multi-step unlabeled chain") + " (one session executed the same request more than once with no invocation labels; step visibility and task rules both rely on labels); consider building a label vocabulary for key invocations:");
+            printSampled(findings.multiStepUnlabeled, chain -> "    '" + CliSupport.visibleText(CliSupport.abbreviateText(chain.getRequestText(), 60)) + "' (session " + chain.getSessionId() + ", " + CliSupport.plural(chain.getRecords().size(), "step") + ")");
         }
 
         if (findings.repeatedFamilies.isEmpty()) {
             out.println("  Repeated request-text families: none (undeclared tasks repeating across sessions are good taskKey candidates; rule refinement only applies to declared tasks).");
         } else {
             out.println("  " + CliSupport.plural(findings.repeatedFamilies.size(), "repeated request-text family") + " (declare taskKey to enable rule refinement and cross-session pairing):");
-            for (RequestFamily family : samples(findings.repeatedFamilies)) {
-                out.println("    '" + CliSupport.visibleText(CliSupport.abbreviateText(family.request, 60)) + "' appears in " + CliSupport.plural(family.sessions, "session"));
-            }
+            printSampled(findings.repeatedFamilies, family -> "    '" + CliSupport.visibleText(CliSupport.abbreviateText(family.request, 60)) + "' appears in " + CliSupport.plural(family.sessions, "session"));
         }
     }
 
@@ -197,9 +193,7 @@ public class DoctorCommand implements Callable<Integer> {
             out.println("  Unestablished invocations: none.");
         } else {
             out.println("  " + CliSupport.plural(findings.unestablished.size(), "unestablished invocation") + " (run `agentassert4j baseline` to collect):");
-            for (InvocationFootprint footprint : samples(findings.unestablished)) {
-                out.println("    " + CliSupport.displayKey(footprint.invocationKey) + " (" + (footprint.label != null ? footprint.label : "no label") + ") " + CliSupport.plural(footprint.recordCount, "record"));
-            }
+            printSampled(findings.unestablished, footprint -> "    " + CliSupport.displayKey(footprint.invocationKey) + " (" + (footprint.label != null ? footprint.label : "no label") + ") " + CliSupport.plural(footprint.recordCount, "record"));
         }
         out.println("  Records missing template_hash: " + findings.recordsMissingTemplateHash + (findings.recordsMissingTemplateHash > 0 ? "; these records have no full-text archive and no template hash, so drift detection cannot check them (re-recording fixes this)." : "."));
     }
@@ -218,9 +212,7 @@ public class DoctorCommand implements Callable<Integer> {
             out.println("  tasks expectation mismatches: none" + (findings.noTasksConfigured ? " (no tasks rules configured)." : "."));
         } else {
             out.println("  " + CliSupport.plural(findings.expectationMismatches.size(), "tasks expectation mismatch") + " (taskKey declared but no recorded chain ever matched it; check key spelling or recording scope):");
-            for (String key : samples(findings.expectationMismatches)) {
-                out.println("    " + key);
-            }
+            printSampled(findings.expectationMismatches, key -> "    " + key);
         }
     }
 
@@ -274,6 +266,28 @@ public class DoctorCommand implements Callable<Integer> {
 
     private static <T> List<T> samples(List<T> items) {
         return items.size() <= MAX_SAMPLES ? items : items.subList(0, MAX_SAMPLES);
+    }
+
+    /**
+     * 样本行渲染 + 封顶收尾：明细封顶而计数全量时以「… and N more」收口，
+     * 计数与可见明细的关系就地可见，不教读者怀疑数字。
+     */
+    private <T> void printSampled(List<T> items, SampleLine<T> line) {
+        List<T> shown = samples(items);
+        for (T item : shown) {
+            out.println(line.render(item));
+        }
+        if (items.size() > shown.size()) {
+            out.println("    ... and " + (items.size() - shown.size()) + " more");
+        }
+    }
+
+    /**
+     * 样本行的单行渲染策略。
+     */
+    private interface SampleLine<T> {
+
+        String render(T item);
     }
 
     /**

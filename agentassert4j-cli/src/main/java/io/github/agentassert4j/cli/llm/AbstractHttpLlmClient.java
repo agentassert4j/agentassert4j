@@ -139,8 +139,10 @@ public abstract class AbstractHttpLlmClient implements LlmClient {
                 }
 
                 // 诊断三要素随行：协议端点不匹配（anthropic 载荷打到 OpenAI 兼容端点
-                // 的 404）曾因错误串只有状态码与空响应体而无法归因
-                String httpError = "HTTP " + statusCode + " from " + endpoint + requestPath() + ": " + responseBody;
+                // 的 404）曾因错误串只有状态码与空响应体而无法归因；空体补占位文案，
+                // 避免行尾悬空冒号让「冒号后是原因」的读法落空
+                String errorBody = responseBody != null && !responseBody.trim().isEmpty() ? responseBody : "(no response body)";
+                String httpError = "HTTP " + statusCode + " from " + endpoint + requestPath() + ": " + errorBody;
 
                 // 可重试的状态码
                 if (statusCode == 429 || statusCode >= 500) {

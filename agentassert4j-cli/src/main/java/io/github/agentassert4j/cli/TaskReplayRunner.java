@@ -150,8 +150,8 @@ public class TaskReplayRunner {
         List<TaskChain> chains = CliSupport.taskChains(repository);
         if (chains.isEmpty()) {
             // 空库的可行动下一步是录制（应用侧 SDK 或 MCP record 摄取），不是任一 CLI 命令；
-            // nextAction 指向 status 仅供确认库确为空
-            return fail(CliErrorCode.E_NO_DATA, "No recorded interactions found.", "Run your agent with recording enabled first (the record tool on the MCP channel ingests raw wire JSON), then retry.", "agentassert4j status");
+            // nextAction 指向 status 仅供确认库确为空（指引文案与选择器阶梯空库分支同源）
+            return fail(CliErrorCode.E_NO_DATA, "No recorded interactions found.", CliSupport.RECORD_FIRST_HINT, "agentassert4j status");
         }
 
         // 第 1 层 身份检测（全项目，零调用）
@@ -297,7 +297,7 @@ public class TaskReplayRunner {
             return fail(CliErrorCode.E_ENV, "All re-drive calls failed (no comparisons).", "Check llm config, credentials and network, then retry.", "agentassert4j doctor");
         }
         if (reDriveTotals.skipped > 0) {
-            return fail(CliErrorCode.E_USAGE, "Re-drive truncated by the budget caps: " + reDriveTotals.callsUsed + " call(s), " + reDriveTotals.tokensUsed + " tokens used; " + CliSupport.plural(reDriveTotals.skipped, "record") + " skipped.", "Raise --max-total-calls/--max-total-tokens, narrow the scope with --task/--invocation, or drop the caps.", "");
+            return fail(CliErrorCode.E_USAGE, "Re-drive truncated by the budget caps: " + reDriveTotals.callsUsed + " call(s), " + reDriveTotals.tokensUsed + " tokens used; " + CliSupport.plural(reDriveTotals.skipped, "record") + " skipped.", "Raise --max-total-calls/--max-total-tokens, narrow the scope with --task/--invocation, or drop the caps.", "agentassert4j replay");
         }
         return 0;
     }
@@ -384,8 +384,12 @@ public class TaskReplayRunner {
      */
     private void reDriveLayer(DriftReport drift, boolean fullChain, boolean narrowed, String invocationKey, List<TaskChain> scoped, BaselineManager manager, Integer maxTotalCalls, Integer maxTotalTokens, ReDriveTotals rd) {
         List<InteractionRecord> targets = reDriveTargets(drift, fullChain, narrowed, invocationKey, scoped);
-        info("Re-drive: " + CliSupport.plural(targets.size(), "record") + " using each point\'s latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + ".");
-        if (!targets.isEmpty()) {
+        if (targets.isEmpty()) {
+            // 计划为空必须就地解释：默认重驱只打漂移点，静默 total:0 让人以为是故障
+            // （走 diagnostic：--json 模式落 stderr，stdout 报告契约不变）
+            diagnostic("No re-drive targets: default re-drive covers drift points only, and the scope currently has none. Widen with --task/--invocation, or use --full-chain.");
+        } else {
+            info("Re-drive: " + CliSupport.plural(targets.size(), "record") + " using each point\'s latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + ".");
             info(CostEstimator.estimate(targets, llmClient.name()));
         }
         RegressionTestExecutor executor = new RegressionTestExecutor(llmClient, comparator, manager, rules);
@@ -394,8 +398,7 @@ public class TaskReplayRunner {
         for (InteractionRecord record : targets) {
             index++;
             String key = CliSupport.invocationKeyOfRecord(record);
-            if (budgetExhausted(maxTotalCalls, maxTotalTokens, rd.callsUsed, rd.tokensUsed)
-                    || estimateExceedsBudget(maxTotalTokens, rd.tokensUsed, record)) {
+            if (budgetExhausted(maxTotalCalls, maxTotalTokens, rd.callsUsed, rd.tokensUsed) || estimateExceedsBudget(maxTotalTokens, rd.tokensUsed, record)) {
                 rd.skipped++;
                 info(stepLine(index, key, "re-drive skipped (budget exhausted)"));
                 if (stepJsons != null) {
@@ -657,8 +660,7 @@ public class TaskReplayRunner {
             }
         }
         TaskChain judged = TaskAligner.trimToLatestPerInvocation(newChain);
-        TaskAlignment alignment = TaskAligner.alignLatestPerInvocation(
-                BaselineSides.fromProfiles(judged.getRecords(), profiles::get), newChain, comparator, rules);
+        TaskAlignment alignment = TaskAligner.alignLatestPerInvocation(BaselineSides.fromProfiles(judged.getRecords(), profiles::get), newChain, comparator, rules);
         if (verdictsByKey != null) {
             for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
                 if (step.getVerdict() != null) {
@@ -713,8 +715,7 @@ public class TaskReplayRunner {
                 InteractionRecord earlier = groupRecords.get(i);
                 String key = CliSupport.invocationKeyOfRecord(earlier);
                 InvocationProfile profile = key == null ? null : profiles.get(key);
-                if (profile == null || profile.getFingerprints() == null
-                        || !profile.getFingerprints().contains(FingerprintExtractor.extract(earlier, rules, earlier.getInvocationId()))) {
+                if (profile == null || profile.getFingerprints() == null || !profile.getFingerprints().contains(FingerprintExtractor.extract(earlier, rules, earlier.getInvocationId()))) {
                     unapproved++;
                 }
             }
@@ -926,8 +927,7 @@ public class TaskReplayRunner {
                 }
                 if (step.getEarlierRecords() > 0) {
                     Integer unapproved = unapprovedEarlierByRecordId != null ? unapprovedEarlierByRecordId.get(step.getNewRecordId()) : null;
-                    info("    (--ci gates the latest execution per invocation; " + CliSupport.plural(step.getEarlierRecords(), "earlier record") + " on this invocation not re-judged"
-                            + (unapproved != null && unapproved > 0 ? ", unapproved shape on " + CliSupport.plural(unapproved.intValue(), "record") + " (visible here and in the stability view; not gated)" : "") + ")");
+                    info("    (--ci gates the latest execution per invocation; " + CliSupport.plural(step.getEarlierRecords(), "earlier record") + " on this invocation not re-judged" + (unapproved != null && unapproved > 0 ? ", unapproved shape on " + CliSupport.plural(unapproved.intValue(), "record") + " (visible here and in the stability view; not gated)" : "") + ")");
                 }
             }
             render.comparedPairs += step.getComparedPairs();

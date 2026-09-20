@@ -9,24 +9,27 @@ import io.github.agentassert4j.config.AgentAssert4jConfig;
 import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.config.InvocationRulesConfig.InvocationRule;
-import io.github.agentassert4j.model.DeterministicFingerprint;
-import io.github.agentassert4j.model.InteractionRecord;
-import io.github.agentassert4j.model.InvocationProfile;
-import io.github.agentassert4j.model.LlmWireProtocol;
-import io.github.agentassert4j.model.TaskChain;
+import io.github.agentassert4j.model.*;
 import io.github.agentassert4j.result.ComparisonResult;
 import io.github.agentassert4j.result.DriftReport;
 import io.github.agentassert4j.result.TaskAlignment;
 import io.github.agentassert4j.spi.InteractionQueryStore;
-import io.github.agentassert4j.util.ExceptionUtil;
 import io.github.agentassert4j.spi.LlmClient;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
+import io.github.agentassert4j.util.ExceptionUtil;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.logging.Formatter;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 /**
  * CLI 支撑工具 — 存储打开、调用点 枚举、依赖图加载、--invocation 目标解析的共用逻辑。
@@ -39,7 +42,32 @@ import java.util.*;
  */
 final class CliSupport {
 
+    /**
+     * 空库场景的可行动指引——录制入口只有应用侧 SDK 与 MCP record 工具
+     * （CLI 无摄取命令），文案两处消费（replay 空库分支与选择器阶梯空库分支）
+     * 必须同词，单源防漂移。
+     */
+    static final String RECORD_FIRST_HINT = "Run your agent with recording enabled first (the record tool on the MCP channel ingests raw wire JSON), then retry.";
+
     private CliSupport() {
+    }
+
+    /**
+     * JUL 输出钉英文格式：默认 ConsoleFormatter 随 JVM 本地化级别词与日期
+     * （中文环境打出「严重:」「上午」），与 CLI 英文单语输出面冲突。
+     * 级别词取 Level.getName()（恒英文）、时间戳取 ISO-8601 本地时区无本地化。
+     * 仅 main 入口调用，不影响测试注入流。
+     */
+    static void installEnglishJulFormatter() {
+        for (Handler handler : Logger.getLogger("").getHandlers()) {
+            handler.setFormatter(new Formatter() {
+                @Override
+                public String format(LogRecord record) {
+                    String timestamp = DateTimeFormatter.ISO_LOCAL_DATE_TIME.withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(record.getMillis()));
+                    return timestamp + " " + record.getLevel().getName() + " " + formatMessage(record) + System.lineSeparator();
+                }
+            });
+        }
     }
 
     /**
@@ -79,7 +107,7 @@ final class CliSupport {
         // 隐式查找链（cwd → home → classpath）命中了哪个文件必须就地披露——
         // 错误目录下运行时旧配置静默生效是最难排查的故障形态
         String configSource = ConfigLoader.describeMainConfigSource();
-        diagnostics.println(configSource != null ? "Config: " + configSource : "Config: no agentassert4j.json found; using built-in defaults.");
+        diagnostics.println(configSource != null ? "Config: " + configSource : "Config: no agentassert4j.json found; using built-in defaults (point -Dagentassert4j.config.path at a config file to load one).");
         // 规则文件命中哪个路径必须与主配置同格披露——「规则是否生效、生效的是哪个文件」
         // 只能靠反证（无规则任务行的 Note）才能发现是最难排查的故障形态；doctor 之外的每次运行就地直接可见
         String rulesPath = ConfigLoader.resolveRulesPath();
@@ -322,7 +350,7 @@ final class CliSupport {
             }
             if (!labelKeys.isEmpty()) {
                 if (labelKeys.size() > 1 && !plural) {
-                    throw new CliFailureException(CliErrorCode.E_USAGE, "Business label " + filter + " covers multiple invocations: " + String.join(", ", labelKeys) + "; specify one with an invocationKey (unique prefix or the status display form).", "Pick one invocationKey (unique prefix or the status display form) from the listed candidates.", "");
+                    throw new CliFailureException(CliErrorCode.E_USAGE, "Business label " + filter + " covers multiple invocations: " + String.join(", ", labelKeys) + "; specify one with an invocationKey (unique prefix or the status display form).", "Pick one invocationKey (unique prefix or the status display form) from the listed candidates.", "agentassert4j status");
                 }
                 return new ArrayList<>(labelKeys);
             }
@@ -341,13 +369,18 @@ final class CliSupport {
             }
         }
         if (prefixMatches.size() > 1) {
-            throw new CliFailureException(CliErrorCode.E_USAGE, "Prefix matches multiple invocations: " + String.join(", ", prefixMatches) + "; provide a longer prefix.", "Provide a longer --invocation prefix so exactly one invocation matches.", "");
+            throw new CliFailureException(CliErrorCode.E_USAGE, "Prefix matches multiple invocations: " + String.join(", ", prefixMatches) + "; provide a longer prefix.", "Provide a longer --invocation prefix so exactly one invocation matches.", "agentassert4j status");
         }
         if (prefixMatches.size() == 1) {
             if (notice != null) {
                 notice.println("Note: --invocation " + filter + " matched invocationKey prefix " + prefixMatches.get(0));
             }
             return prefixMatches;
+        }
+        if (recordedKeys.isEmpty()) {
+            // 空库零命中：教选择器写法没有意义（没有任何可选项），指路录制才可行动——
+            // 否则 nextAction 指回查看类命令会形成自循环
+            throw new CliFailureException(CliErrorCode.E_NO_DATA, "No recorded interactions found.", RECORD_FIRST_HINT, "agentassert4j status");
         }
         throw new CliFailureException(CliErrorCode.E_NO_DATA, "No invocation matching " + filter + " (accepted: business label, an invocationKey prefix starting with `invocation:`, or the status display form like label@8hex; see `status` for the full list).", "Check the value against `status` output, then retry.", "agentassert4j status");
     }
@@ -360,7 +393,7 @@ final class CliSupport {
      */
     static String resolveInvocationKeyTarget(StorageRepository repository, String filter) {
         if (filter == null || filter.isEmpty()) {
-            throw new CliFailureException(CliErrorCode.E_USAGE, "Missing invocation target.", "Pass --invocation with a business label, invocationKey prefix, or the status display form.", "");
+            throw new CliFailureException(CliErrorCode.E_USAGE, "Missing invocation target.", "Pass --invocation with a business label, invocationKey prefix, or the status display form.", "agentassert4j status");
         }
         return resolveInvocationKeys(repository, filter, false, null).get(0);
     }
@@ -407,7 +440,7 @@ final class CliSupport {
             return null;
         }
         if (matches.size() > 1) {
-            throw new CliFailureException(CliErrorCode.E_USAGE, "Display form " + filter + " matches multiple invocations (subdivision hash collision in the first 8 hex chars): " + String.join(", ", matches) + "; provide the full invocationKey.", "Provide the full invocationKey to disambiguate the hash collision.", "");
+            throw new CliFailureException(CliErrorCode.E_USAGE, "Display form " + filter + " matches multiple invocations (subdivision hash collision in the first 8 hex chars): " + String.join(", ", matches) + "; provide the full invocationKey.", "Provide the full invocationKey to disambiguate the hash collision.", "agentassert4j status");
         }
         return matches.get(0);
     }
@@ -487,9 +520,17 @@ final class CliSupport {
 
     /**
      * 计数名词的原生单复数形态（"1 record" / "2 records"；零取复数是英文惯例）。
+     * 辅音+y 结尾的名词按英文正字法变 ies（family → families）。
      */
     static String plural(long n, String noun) {
+        if (n != 1 && noun.endsWith("y") && noun.length() > 1 && !isVowel(noun.charAt(noun.length() - 2))) {
+            return n + " " + noun.substring(0, noun.length() - 1) + "ies";
+        }
         return n + " " + noun + (n == 1 ? "" : "s");
+    }
+
+    private static boolean isVowel(char c) {
+        return c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u';
     }
 
     /**
