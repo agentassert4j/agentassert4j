@@ -1117,7 +1117,7 @@ final class McpRecordIngestion {
      */
     private static String parseFailureDetail(String json) {
         try {
-            RecursiveJsonParser.parse(json);
+            RecursiveJsonParser.parseStrict(json);
         } catch (RuntimeException e) {
             String message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             return message.length() > 120 ? " (" + message.substring(0, 120) + "…)" : " (" + message + ")";

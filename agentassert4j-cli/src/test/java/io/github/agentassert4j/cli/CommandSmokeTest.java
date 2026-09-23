@@ -664,4 +664,47 @@ class CommandSmokeTest {
         assertEquals(2, exit);
         assertTrue(blankErr.toString().contains("must not be blank") || out.toString().contains("must not be blank"), "空白覆盖值静默当缺省会误导: " + out + blankErr);
     }
+
+    @Test
+    @DisplayName("rules 配置目录兜底：-D 钉配置 + CWD 无规则文件 → 命中配置旁规则文件")
+    void rules_findsRulesFileNextToPinnedConfig() throws Exception {
+        Path dir = Files.createTempDirectory("agentassert4j-rules-probe");
+        try {
+            Files.write(dir.resolve("agentassert4j.json"), "{}".getBytes(StandardCharsets.UTF_8));
+            Files.write(dir.resolve("agentassert4j-rules.json"),
+                    "{\"invocations\":{\"order\":{\"requiredKeywords\":[\"order\"]}}}".getBytes(StandardCharsets.UTF_8));
+            System.setProperty("agentassert4j.config.path", dir.resolve("agentassert4j.json").toString());
+            ByteArrayOutputStream out = redirectStdout();
+            ByteArrayOutputStream err = redirectStderr();
+            int exit = new CommandLine(new AgentAssert4jCli()).execute("rules");
+            assertEquals(0, exit);
+            String combined = out.toString() + err;
+            String rendered = combined.replace('\\', '/');
+            assertTrue(rendered.contains("Active rules file: " + dir.resolve("agentassert4j-rules.json").toString().replace('\\', '/')),
+                    "配置目录兜底必须命中在场的规则文件: " + combined);
+            assertTrue(combined.contains("1 invocation declaration"), "声明计数在场: " + combined);
+        } finally {
+            System.clearProperty("agentassert4j.config.path");
+            Files.walk(dir).sorted((a, b) -> b.compareTo(a)).forEach(p -> p.toFile().delete());
+        }
+    }
+
+    @Test
+    @DisplayName("rules 命令坏配置 → stderr 携 Config warning 根因")
+    void rules_brokenConfig_rendersWarning() throws Exception {
+        Path dir = Files.createTempDirectory("agentassert4j-broken-rules");
+        try {
+            Files.write(dir.resolve("agentassert4j.json"), "not json at all".getBytes(StandardCharsets.UTF_8));
+            System.setProperty("agentassert4j.config.path", dir.resolve("agentassert4j.json").toString());
+            ByteArrayOutputStream out = redirectStdout();
+            ByteArrayOutputStream err = redirectStderr();
+            int exit = new CommandLine(new AgentAssert4jCli()).execute("rules");
+            assertEquals(0, exit, "坏配置退化不中断");
+            assertTrue(err.toString().contains("Config warning: config file ") && err.toString().contains("is unparsable"),
+                    "rules 面的退化必须可见: " + err);
+        } finally {
+            System.clearProperty("agentassert4j.config.path");
+            Files.walk(dir).sorted((a, b) -> b.compareTo(a)).forEach(p -> p.toFile().delete());
+        }
+    }
 }

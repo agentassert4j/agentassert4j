@@ -1,6 +1,7 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.BehaviorChecker;
+import io.github.agentassert4j.config.AgentAssert4jConfig;
 import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.config.InvocationRulesConfig;
 import io.github.agentassert4j.util.RecursiveJsonParser;
@@ -34,6 +35,10 @@ public class RulesCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        // 主配置先加载：规则查找链的第 4 级兜底锚在主配置所在目录——不加载时该兜底
+        // 恒失效，CWD 与配置目录不同就会把在场的规则文件误报成 none found
+        AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
+        CliSupport.renderConfigWarnings(config, err);
         Set<String> builtins = new TreeSet<>(BehaviorChecker.getBuiltinBehaviorNames());
         // 生效面披露：其他命令的 stderr 都打 Rules 行，本命令作为规则的主查看入口
         // 必须自答「加载了哪个文件、生效几条声明」——只列目录不报生效面等于没核验

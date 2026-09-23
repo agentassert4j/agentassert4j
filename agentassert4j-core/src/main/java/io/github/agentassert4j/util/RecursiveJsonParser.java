@@ -40,16 +40,29 @@ public final class RecursiveJsonParser {
             return null;
         }
         try {
-            Parser p = new Parser(json.trim());
-            Object result = p.parseValue();
-            p.skipWhitespace();
-            if (p.pos < p.len) {
-                return null; // 尾部有垃圾字符
-            }
-            return result;
+            return parseStrict(json);
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * 严格解析：与 {@link #parse(String)} 同一语法语义，但失败不退化而是抛出
+     * {@link JsonParseException}，消息携带根因（语法错误 / 嵌套超限 / 尾部多余
+     * 字符 / 空白输入）。供需要区分「解析失败根因」的消费方使用——拒收包络要
+     * 告诉用户是深度超限还是语法错误，静默返回 null 就地丢失了这层信息。
+     */
+    public static Object parseStrict(String json) {
+        if (TextUtil.isBlank(json)) {
+            throw new JsonParseException("JSON input is blank");
+        }
+        Parser p = new Parser(json.trim());
+        Object result = p.parseValue();
+        p.skipWhitespace();
+        if (p.pos < p.len) {
+            throw new JsonParseException("Unexpected trailing characters after JSON value");
+        }
+        return result;
     }
 
     /**
@@ -348,13 +361,13 @@ public final class RecursiveJsonParser {
 
         Object parseValue() {
             skipWhitespace();
-            if (pos >= len) throw new ParseException("Unexpected end");
+            if (pos >= len) throw new JsonParseException("Unexpected end");
             char c = input.charAt(pos);
             switch (c) {
                 case '{':
                 case '[':
                     if (++depth > MAX_DEPTH) {
-                        throw new ParseException("JSON nesting exceeds " + MAX_DEPTH + " levels");
+                        throw new JsonParseException("JSON nesting exceeds " + MAX_DEPTH + " levels");
                     }
                     break;
                 default:
@@ -388,7 +401,7 @@ public final class RecursiveJsonParser {
                     if (c == '-' || (c >= '0' && c <= '9')) {
                         return parseNumber();
                     }
-                    throw new ParseException("Unexpected char: " + c);
+                    throw new JsonParseException("Unexpected char: " + c);
             }
         }
 
@@ -450,7 +463,7 @@ public final class RecursiveJsonParser {
                     return sb.toString();
                 }
                 if (c == '\\') {
-                    if (pos >= len) throw new ParseException("Unexpected end in string escape");
+                    if (pos >= len) throw new JsonParseException("Unexpected end in string escape");
                     char esc = input.charAt(pos++);
                     switch (esc) {
                         case '"':
@@ -478,23 +491,23 @@ public final class RecursiveJsonParser {
                             sb.append('\t');
                             break;
                         case 'u':
-                            if (pos + 4 > len) throw new ParseException("Invalid unicode escape");
+                            if (pos + 4 > len) throw new JsonParseException("Invalid unicode escape");
                             String hex = input.substring(pos, pos + 4);
                             pos += 4;
                             try {
                                 sb.append((char) Integer.parseInt(hex, 16));
                             } catch (NumberFormatException e) {
-                                throw new ParseException("Invalid unicode escape: \\u" + hex);
+                                throw new JsonParseException("Invalid unicode escape: \\u" + hex);
                             }
                             break;
                         default:
-                            throw new ParseException("Invalid escape: \\" + esc);
+                            throw new JsonParseException("Invalid escape: \\" + esc);
                     }
                 } else {
                     sb.append(c);
                 }
             }
-            throw new ParseException("Unterminated string");
+            throw new JsonParseException("Unterminated string");
         }
 
         Number parseNumber() {
@@ -542,7 +555,7 @@ public final class RecursiveJsonParser {
                 pos += 5;
                 return Boolean.FALSE;
             }
-            throw new ParseException("Invalid boolean at pos " + pos);
+            throw new JsonParseException("Invalid boolean at pos " + pos);
         }
 
         Object parseNull() {
@@ -550,7 +563,7 @@ public final class RecursiveJsonParser {
                 pos += 4;
                 return null;
             }
-            throw new ParseException("Invalid null at pos " + pos);
+            throw new JsonParseException("Invalid null at pos " + pos);
         }
 
         void skipWhitespace() {
@@ -566,14 +579,14 @@ public final class RecursiveJsonParser {
 
         void expect(char ch) {
             if (pos >= len || input.charAt(pos) != ch) {
-                throw new ParseException("Expected '" + ch + "' at pos " + pos);
+                throw new JsonParseException("Expected '" + ch + "' at pos " + pos);
             }
             pos++;
         }
 
         void readDigits() {
             if (pos >= len || input.charAt(pos) < '0' || input.charAt(pos) > '9') {
-                throw new ParseException("Expected digit at pos " + pos);
+                throw new JsonParseException("Expected digit at pos " + pos);
             }
             while (pos < len && input.charAt(pos) >= '0' && input.charAt(pos) <= '9') {
                 pos++;
@@ -581,9 +594,4 @@ public final class RecursiveJsonParser {
         }
     }
 
-    private static final class ParseException extends RuntimeException {
-        ParseException(String message) {
-            super(message);
-        }
-    }
 }

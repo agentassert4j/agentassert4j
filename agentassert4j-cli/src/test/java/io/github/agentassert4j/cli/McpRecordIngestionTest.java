@@ -113,10 +113,39 @@ class McpRecordIngestionTest {
                 "单字段缺失必须单点命名: " + oneMissing.stdout);
     }
 
+    @Test
+    @DisplayName("深嵌套请求拒收：根因括注点名 nesting exceeds 128")
+    void deepNestingRequest_rejectionNamesRootCause() {
+        StringBuilder deep = new StringBuilder();
+        for (int i = 0; i < 130; i++) {
+            deep.append("{\"a\":");
+        }
+        deep.append("\"x\"");
+        for (int i = 0; i < 130; i++) {
+            deep.append('}');
+        }
+        String validResponse = "{\"id\":\"chatcmpl-deep\",\"model\":\"m\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}";
+        McpToolOutcome outcome = McpRecordIngestion.ingest(dbPath, args(deep.toString(), validResponse));
+        assertEquals(2, outcome.exit);
+        Map<String, Object> envelope = errorOf(outcome);
+        assertTrue(String.valueOf(envelope.get("message")).contains("nesting exceeds 128"),
+                "深度超限根因必须就地可辨而非三故障同词: " + envelope.get("message"));
+    }
+
+    @Test
+    @DisplayName("合法 JSON 非对象请求：parsed but not a JSON object 括注")
+    void nonObjectRequest_parsedButNotObject() {
+        String validResponse = "{\"id\":\"chatcmpl-arr\",\"model\":\"m\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}";
+        McpToolOutcome outcome = McpRecordIngestion.ingest(dbPath, args("[1,2,3]", validResponse));
+        assertEquals(2, outcome.exit);
+        Map<String, Object> envelope = errorOf(outcome);
+        assertTrue(String.valueOf(envelope.get("message")).contains("parsed but not a JSON object"),
+                "合法 JSON 非对象与语法错误必须可辨: " + envelope.get("message"));
+    }
+
     @Nested
     @DisplayName("OpenAI chat 摄取（重构回归断言）")
     class OpenAiChat {
-
         @Test
         @DisplayName("wire 字段逐项落库 + protocol 回显 openai-chat")
         void happyPath_storesAndEchoesProtocol() {

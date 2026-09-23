@@ -252,4 +252,82 @@ class ConfigLoaderTest {
             }
         }
     }
+
+    @Nested
+    @DisplayName("loadAgentAssert4jConfig 解析失败根因披露")
+    class UnparsableDisclosure {
+
+        @Test
+        @DisplayName("语法垃圾 → 默认值 + configNotes 携 unparsable 根因")
+        void garbageConfig_notesCarryRootCause() throws IOException {
+            Path tempFile = Files.createTempFile("agentassert4j-broken", ".json");
+            try {
+                Files.write(tempFile, "not json at all".getBytes(StandardCharsets.UTF_8));
+                System.setProperty(ConfigLoader.CONFIG_PATH_PROPERTY, tempFile.toString());
+                AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
+                assertNotNull(config);
+                assertTrue(config.getConfigNotes().stream().anyMatch(n -> n.startsWith("config file ") && n.contains("is unparsable")),
+                        "退化必须带 unparsable 根因而非静默: " + config.getConfigNotes());
+            } finally {
+                System.clearProperty(ConfigLoader.CONFIG_PATH_PROPERTY);
+                Files.deleteIfExists(tempFile);
+            }
+        }
+
+        @Test
+        @DisplayName("深度超限 → 根因点名 nesting")
+        void deepNesting_namesNesting() throws IOException {
+            Path tempFile = Files.createTempFile("agentassert4j-deep", ".json");
+            try {
+                StringBuilder deep = new StringBuilder();
+                for (int i = 0; i < 130; i++) {
+                    deep.append("{\"a\":");
+                }
+                deep.append('1');
+                for (int i = 0; i < 130; i++) {
+                    deep.append('}');
+                }
+                Files.write(tempFile, deep.toString().getBytes(StandardCharsets.UTF_8));
+                System.setProperty(ConfigLoader.CONFIG_PATH_PROPERTY, tempFile.toString());
+                AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
+                assertTrue(config.getConfigNotes().stream().anyMatch(n -> n.contains("nesting exceeds 128")),
+                        "深度超限根因必须就地可辨: " + config.getConfigNotes());
+            } finally {
+                System.clearProperty(ConfigLoader.CONFIG_PATH_PROPERTY);
+                Files.deleteIfExists(tempFile);
+            }
+        }
+
+        @Test
+        @DisplayName("根对象为合法 JSON 非 object → 同路径披露")
+        void nonObjectRoot_notesCarryRootCause() throws IOException {
+            Path tempFile = Files.createTempFile("agentassert4j-array", ".json");
+            try {
+                Files.write(tempFile, "[1,2,3]".getBytes(StandardCharsets.UTF_8));
+                System.setProperty(ConfigLoader.CONFIG_PATH_PROPERTY, tempFile.toString());
+                AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
+                assertTrue(config.getConfigNotes().stream().anyMatch(n -> n.contains("config root is not a JSON object")),
+                        "根对象非 object 必须披露: " + config.getConfigNotes());
+            } finally {
+                System.clearProperty(ConfigLoader.CONFIG_PATH_PROPERTY);
+                Files.deleteIfExists(tempFile);
+            }
+        }
+
+        @Test
+        @DisplayName("合法配置 → 不产生 config file 根因 note")
+        void validConfig_noRootCauseNote() throws IOException {
+            Path tempFile = Files.createTempFile("agentassert4j-good", ".json");
+            try {
+                Files.write(tempFile, "{\"llm\":{\"apiKey\":\"k\"}}".getBytes(StandardCharsets.UTF_8));
+                System.setProperty(ConfigLoader.CONFIG_PATH_PROPERTY, tempFile.toString());
+                AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
+                assertFalse(config.getConfigNotes().stream().anyMatch(n -> n.startsWith("config file ")),
+                        "合法配置不得产生解析失败 note: " + config.getConfigNotes());
+            } finally {
+                System.clearProperty(ConfigLoader.CONFIG_PATH_PROPERTY);
+                Files.deleteIfExists(tempFile);
+            }
+        }
+    }
 }

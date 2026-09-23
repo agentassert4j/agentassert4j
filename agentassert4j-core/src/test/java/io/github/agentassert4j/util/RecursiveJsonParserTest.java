@@ -500,4 +500,48 @@ class RecursiveJsonParserTest {
         assertNull(RecursiveJsonParser.asStringMap(RecursiveJsonParser.parse("[1,2]")), "数组输入返回 null");
         assertNull(RecursiveJsonParser.asStringMap(RecursiveJsonParser.parse("\"s\"")), "标量输入返回 null");
     }
+
+    @Test
+    void parseStrict_validJson_sameResultAsParse() {
+        String json = "{\"a\":[1,2.5,\"x\",true,null],\"b\":{\"c\":3}}";
+        assertEquals(RecursiveJsonParser.parse(json), RecursiveJsonParser.parseStrict(json), "严格入口与宽松入口对合法输入同结果");
+    }
+
+    @Test
+    void parseStrict_garbage_throwsWithRootCause() {
+        JsonParseException e = assertThrows(JsonParseException.class, () -> RecursiveJsonParser.parseStrict("not json at all"), "垃圾输入必须抛根因异常而非静默 null");
+        assertTrue(e.getMessage() != null && !e.getMessage().isEmpty(), "异常消息携带根因");
+    }
+
+    @Test
+    void parseStrict_depthExceeded_namesNestingLimit() {
+        StringBuilder deep = new StringBuilder();
+        for (int i = 0; i < 130; i++) {
+            deep.append("{\"a\":");
+        }
+        deep.append('1');
+        for (int i = 0; i < 130; i++) {
+            deep.append('}');
+        }
+        JsonParseException e = assertThrows(JsonParseException.class, () -> RecursiveJsonParser.parseStrict(deep.toString()));
+        assertTrue(e.getMessage().contains("nesting exceeds 128"), "根因必须点名深度超限: " + e.getMessage());
+    }
+
+    @Test
+    void parseStrict_trailingCharacters_namesTail() {
+        JsonParseException e = assertThrows(JsonParseException.class, () -> RecursiveJsonParser.parseStrict("{\"a\":1} trailing"));
+        assertTrue(e.getMessage().contains("trailing"), "尾部垃圾必须点名: " + e.getMessage());
+    }
+
+    @Test
+    void parseStrict_blank_throws() {
+        assertThrows(JsonParseException.class, () -> RecursiveJsonParser.parseStrict("   "), "空白输入按解析失败处理");
+    }
+
+    @Test
+    void parse_lenient_staysNullOnStrictFailures() {
+        assertNull(RecursiveJsonParser.parse("not json at all"), "宽松入口对垃圾输入仍退化 null（语义不变）");
+        assertNull(RecursiveJsonParser.parse("   "));
+        assertNull(RecursiveJsonParser.parse("{\"a\":1} trailing"));
+    }
 }

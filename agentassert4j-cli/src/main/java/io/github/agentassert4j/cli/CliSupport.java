@@ -95,6 +95,18 @@ final class CliSupport {
     }
 
     /**
+     * 渲染配置解析失败的根因警告（退化不中断，但退化不可静默）。
+     * openRepository 与 rules 命令共用——两处各自手写同一循环会出现披露面漂移。
+     */
+    static void renderConfigWarnings(AgentAssert4jConfig config, PrintStream diagnostics) {
+        for (String note : config.getConfigNotes()) {
+            if (note.startsWith("config file ")) {
+                diagnostics.println("Config warning: " + note);
+            }
+        }
+    }
+
+    /**
      * 打开默认 SQLite 存储并初始化（建表/版本检查）。
      *
      * @param dbOverride 显式数据库路径（--db），null 时取 agentassert4j.json 的 storage.url
@@ -110,11 +122,7 @@ final class CliSupport {
         diagnostics.println(configSource != null ? "Config: " + configSource : "Config: no agentassert4j.json found; using built-in defaults (point -Dagentassert4j.config.path at a config file to load one).");
         // 解析失败的根因就地披露（退化不中断，但退化不可静默）：typo 配置的
         // 「神秘默认行为」从「缺 key 误导」变成一眼可判
-        for (String note : config.getConfigNotes()) {
-            if (note.startsWith("config file ")) {
-                diagnostics.println("Config warning: " + note);
-            }
-        }
+        renderConfigWarnings(config, diagnostics);
         // 规则文件命中哪个路径必须与主配置同格披露——「规则是否生效、生效的是哪个文件」
         // 只能靠反证（无规则任务行的 Note）才能发现是最难排查的故障形态；doctor 之外的每次运行就地直接可见
         String rulesPath = ConfigLoader.resolveRulesPath();

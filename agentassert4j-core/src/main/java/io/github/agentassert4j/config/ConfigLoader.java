@@ -1,5 +1,8 @@
 package io.github.agentassert4j.config;
 
+import io.github.agentassert4j.util.RecursiveJsonParser;
+import io.github.agentassert4j.util.TextUtil;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -8,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -74,6 +78,14 @@ public final class ConfigLoader {
             json = resolveEnvVars(json);
         }
         try {
+            if (!TextUtil.isBlank(json)) {
+                // 严格预检把解析根因带进 catch（宽松 parse 对一切失败静默返回 null，
+                // 根因就地丢失）；根对象非 JSON object 同样按不可解析处理
+                Object root = RecursiveJsonParser.parseStrict(json);
+                if (!(root instanceof Map)) {
+                    throw new IllegalArgumentException("config root is not a JSON object");
+                }
+            }
             return AgentAssert4jConfig.fromJson(json);
         } catch (RuntimeException e) {
             // 配置文件存在但解析失败：安全退化为默认值（R10），但退化必须就地可见——
