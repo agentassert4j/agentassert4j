@@ -14,6 +14,7 @@ import io.github.agentassert4j.util.TextDiffUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
@@ -66,6 +67,11 @@ public class TaskReplayRunner {
      */
     private int memberWindow = DEFAULT_MEMBER_WINDOW;
     private boolean memberAllHistory;
+    /**
+     * --invocation 解析后的调用点键（run 入口赋值；null = 不缩域）——对齐报告的
+     * 步骤渲染按它收窄（任务纪律评估仍见全长链）
+     */
+    private String narrowedInvocationKey;
 
     private final StorageRepository repository;
     private final LlmClient llmClient;
@@ -146,6 +152,7 @@ public class TaskReplayRunner {
     public int run(String taskPrefix, String invocationKey, boolean ciMode, boolean dryRun, boolean memberCheck, Integer memberWindowOverride, boolean memberAllHistoryOverride, boolean reDrive, boolean fullChain, Integer maxTotalCalls, Integer maxTotalTokens) {
         this.memberWindow = memberWindowOverride != null ? memberWindowOverride.intValue() : DEFAULT_MEMBER_WINDOW;
         this.memberAllHistory = memberAllHistoryOverride;
+        this.narrowedInvocationKey = invocationKey;
         executionConfig.validate();
 
         List<TaskChain> chains = CliSupport.taskChains(repository);
@@ -194,8 +201,45 @@ public class TaskReplayRunner {
             }
         } else {
             // 自动建档（开发态自动化，报告可见）：裂键豁免与披露由 establishMissing
-            // 扫建路径统一处理（同标签已有兄弟建档的新键只披露、不并入基线）
-            new BaselineService(repository).establishMissing(jsonMode ? discardStream() : out, CliSupport.autoActor(), null, false, null, rules, null, null);
+            // 扫建路径统一处理（同标签已有兄弟建档的新键只披露、不并入基线）。
+            // 缩域时只建立所选调用点——「我的判定动作写了别人的域」在治理感上越界，
+            // 全库扫建留给无缩域形态；已建档调用点只出计数行不逐行刷屏
+            Set<String> autoEstablishKeys = invocationKey != null ? Collections.singleton(invocationKey) : null;
+            ByteArrayOutputStream establishSink = new ByteArrayOutputStream();
+            try {
+                new BaselineService(repository).establishMissing(
+                        jsonMode ? discardStream() : new PrintStream(establishSink, true, StandardCharsets.UTF_8.name()),
+                        CliSupport.autoActor(), null, false, autoEstablishKeys, rules, null, null);
+            } catch (java.io.UnsupportedEncodingException e) {
+                // JVM 规范强制支持 UTF-8，此分支不可达
+                throw new IllegalStateException(e);
+            }
+            if (!jsonMode) {
+                String detail = new String(establishSink.toByteArray(), StandardCharsets.UTF_8);
+                int establishedLines = countContains(detail, "baseline established") + countContains(detail, "baseline re-established");
+                int existsLines = countContains(detail, "baseline exists");
+                if (establishedLines > 0) {
+                    // 有真实建档：建档行与裂键披露（治理信号）全量透出，已建档墙按行压制
+                    for (String line : detail.split("\n", -1)) {
+                        if (!line.contains("baseline exists")) {
+                            out.println(line);
+                        }
+                    }
+                }
+                if (establishedLines == 0) {
+                    // 零建档：裂键披露照常透出（等待显式建档的治理信号），已建档墙收计数行
+                    for (String line : detail.split("\n", -1)) {
+                        if (line.contains("Split key") || line.contains("Run `baseline --invocation")) {
+                            out.println(line);
+                        }
+                    }
+                    if (existsLines > 0) {
+                        info("Auto-establish: nothing to create (" + CliSupport.plural(existsLines, "invocation") + " already baselined; details in `agentassert4j baseline`).");
+                    } else {
+                        info("Auto-establish: nothing to create.");
+                    }
+                }
+            }
         }
 
         // 判定语义守卫：任何画像由其他版本（含未标记历史行）批准即拒绝判定——
@@ -289,16 +333,18 @@ public class TaskReplayRunner {
             out.println("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.EXIT_HEALTH.wireName() + "\",\"judgmentSemantics\":\"" + JudgmentSemantics.VERSION + "\",\"health\":" + health.jsonFragment() + (rulesBlind ? ",\"notes\":[\"" + RecursiveJsonParser.escape(contentNote) + "\"]" : "") + "}");
         }
 
-        // 退出码复合：行为差异或证据缺口（没跑够）→ 1；环境/预算截断 → 2；否则 0
-        boolean anyGap = totals.missing > 0 || totals.added > 0 || totals.ruleViolations > 0 || dispositions.hung > 0;
-        if (totals.changed > 0 || totals.anyTaskChanged || anyGap || reDriveTotals.changed > 0) {
-            return 1;
+        // 退出码复合：预算截断优先于行为差异——证据不完整时「有差异」与「没跑够」
+        // 并存，图例把 budget exhausted 归 exit 2（证据不完整不允许冒充行为差异的红灯，
+        // 也不允许部分证据冒充绿灯）；其次全部重驱失败 → 2（环境故障）；行为差异 → 1
+        if (reDriveTotals.skipped > 0) {
+            return fail(CliErrorCode.E_USAGE, "Re-drive truncated by the budget caps: " + reDriveTotals.callsUsed + " call(s), " + reDriveTotals.tokensUsed + " tokens used; " + CliSupport.plural(reDriveTotals.skipped, "record") + " skipped.", "Raise --max-total-calls/--max-total-tokens, narrow the scope with --task/--invocation, or drop the caps.", "agentassert4j replay");
         }
         if (reDriveTotals.failed > 0 && reDriveTotals.pass == 0) {
             return fail(CliErrorCode.E_ENV, "All re-drive calls failed (no comparisons).", "Check llm config, credentials and network, then retry.", "agentassert4j doctor");
         }
-        if (reDriveTotals.skipped > 0) {
-            return fail(CliErrorCode.E_USAGE, "Re-drive truncated by the budget caps: " + reDriveTotals.callsUsed + " call(s), " + reDriveTotals.tokensUsed + " tokens used; " + CliSupport.plural(reDriveTotals.skipped, "record") + " skipped.", "Raise --max-total-calls/--max-total-tokens, narrow the scope with --task/--invocation, or drop the caps.", "agentassert4j replay");
+        boolean anyGap = totals.missing > 0 || totals.added > 0 || totals.ruleViolations > 0 || dispositions.hung > 0;
+        if (totals.changed > 0 || totals.anyTaskChanged || anyGap || reDriveTotals.changed > 0) {
+            return 1;
         }
         return 0;
     }
@@ -919,6 +965,10 @@ public class TaskReplayRunner {
      * 草稿数）——驱动早记录透明层注记；链/包全量配对路径无草稿概念，传 null。
      */
     private AlignmentRender renderAlignment(TaskAlignment alignment, TaskChain baseline, TaskChain newChain, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager, Stability stability, Map<String, Integer> unapprovedEarlierByRecordId) {
+        return renderAlignment(alignment, baseline, newChain, outcomes, totals, manager, stability, unapprovedEarlierByRecordId, narrowedInvocationKey);
+    }
+
+    private AlignmentRender renderAlignment(TaskAlignment alignment, TaskChain baseline, TaskChain newChain, Map<String, StepOutcome> outcomes, AlignmentTotals totals, BaselineManager manager, Stability stability, Map<String, Integer> unapprovedEarlierByRecordId, String narrowedInvocationKey) {
         AlignmentRender render = new AlignmentRender();
         List<TaskRuleViolation> violations = alignment.getRuleViolations();
         totals.ruleViolations += violations.size();
@@ -934,6 +984,13 @@ public class TaskReplayRunner {
 
         int index = 0;
         for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
+            // 调用点选择器缩域判定报告（不缩任务纪律）：--invocation 命中的调用点之外
+            // 的步骤不渲染不计数——help 承诺 "narrow to one invocation"，静默渲染全链
+            // 与承诺不符；任务纪律评估仍见全长链（在 alignLatestPerInvocation 内完成），
+            // 「恰好两次」类规则不受本过滤影响
+            if (narrowedInvocationKey != null && !narrowedInvocationKey.equals(step.getInvocationKey())) {
+                continue;
+            }
             index++;
             String label = CliSupport.displayKey(step.getInvocationKey());
             if (step.getKind() == StepKind.MISSING) {
@@ -1648,6 +1705,19 @@ public class TaskReplayRunner {
             sb.append(",\"latestTemplateHash\":\"").append(RecursiveJsonParser.escape(point.getLatestTemplateHash())).append('"');
         }
         return sb.append(",\"kind\":\"").append(kind.wireName()).append("\"}").toString();
+    }
+
+    /**
+     * 子串行计数（Java 8 无 String.lines；多行文本按换行切分后逐行匹配）。
+     */
+    private static int countContains(String text, String marker) {
+        int count = 0;
+        for (String line : text.split("\n", -1)) {
+            if (line.contains(marker)) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static String stepLine(int index, String key, String detail) {

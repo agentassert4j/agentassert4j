@@ -203,6 +203,34 @@ class BaselineManagerTest {
 
             assertThrows(IllegalStateException.class, () -> manager.reject("gk-1", null, "tester"));
         }
+
+        @Test
+        @DisplayName("已拒形状不重复排队：同形状再登记返回 false 且事件携带 rejected-fingerprint 标记（round10 M5）")
+        void rejectedShape_notReRegistered() {
+            // recordCandidate 按记录现算键找画像——画像键必须与记录锚定键一致
+            InteractionRecord baselineRecord = makeToolRecord("skill-1", "search");
+            String key = io.github.agentassert4j.algorithm.InvocationResolver.resolve(baselineRecord).getInvocationKey();
+            InvocationProfile profile = makeProfileWithCandidate(key, "skill-1");
+            DeterministicFingerprint rejected = profile.getCandidateFingerprint();
+            repo.saveInvocationProfile(profile);
+            manager.reject(key, null, "tester");
+
+            // reject 事件落了被拒形状哈希标记（待裁决抑制的判定依据）
+            boolean noteFound = false;
+            for (io.github.agentassert4j.model.GovernanceEvent event : repo.findGovernanceEvents()) {
+                if (event.getVerb() == io.github.agentassert4j.model.GovernanceVerb.REJECT
+                        && key.equals(event.getInvocationKey())
+                        && event.getNote() != null
+                        && event.getNote().startsWith("rejected-fingerprint:")) {
+                    noteFound = true;
+                }
+            }
+            assertTrue(noteFound, "REJECT 事件必须携带被拒形状哈希标记");
+
+            // 同形状再登记（复检路径）→ 抑制，不落候选
+            assertFalse(manager.recordCandidate(baselineRecord, rejected), "已拒形状复检不得再次排队");
+            assertNull(repo.findInvocationByKey(key).getCandidateFingerprint(), "候选槽位保持空");
+        }
     }
 
     @Nested

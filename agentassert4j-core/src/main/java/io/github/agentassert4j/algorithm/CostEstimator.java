@@ -130,13 +130,33 @@ public final class CostEstimator {
      */
     public static String estimate(List<InteractionRecord> testCases, String model) {
         int totalCalls = testCases.size();
-        Double costPerCall = estimateCallCostUsd(model, PREVIEW_INPUT_TOKENS, PREVIEW_OUTPUT_TOKENS);
         String calls = totalCalls + " API call" + (totalCalls == 1 ? "" : "s");
-        if (costPerCall == null) {
+        // 与 dry-run 机器计划同口径：逐记录按其真实历史用量折算（预览常量只作
+        // 无用量数据记录的兜底），人读行与 JSON 面数字不再各说各话
+        boolean anyUsage = false;
+        boolean costKnown = true;
+        double recordedCost = 0;
+        for (InteractionRecord record : testCases) {
+            long in = record.getInputTokens();
+            long out = record.getOutputTokens();
+            if (in <= 0 && out <= 0) {
+                in = PREVIEW_INPUT_TOKENS;
+                out = PREVIEW_OUTPUT_TOKENS;
+            } else {
+                anyUsage = true;
+            }
+            Double cost = estimateCallCostUsd(record.getServedModel() != null ? record.getServedModel() : model, in, out);
+            if (cost == null) {
+                costKnown = false;
+            } else {
+                recordedCost += cost;
+            }
+        }
+        if (!costKnown) {
             return String.format("Estimated %s (model %s not in the price snapshot; cost unknown)", calls, model);
         }
-        double estimatedCost = totalCalls * costPerCall;
-        return "Estimated " + calls + ", approx. " + formatUsd(estimatedCost) + " (model: " + model + ")";
+        String basis = anyUsage ? "based on recorded usage" : "no recorded usage; preview-sized estimate";
+        return "Estimated " + calls + ", approx. " + formatUsd(recordedCost) + " (" + basis + "; model: " + model + ")";
     }
 
     /**

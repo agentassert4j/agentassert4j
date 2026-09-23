@@ -1,6 +1,9 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.BehaviorChecker;
+import io.github.agentassert4j.config.ConfigLoader;
+import io.github.agentassert4j.config.InvocationRulesConfig;
+import io.github.agentassert4j.util.RecursiveJsonParser;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -32,15 +35,23 @@ public class RulesCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         Set<String> builtins = new TreeSet<>(BehaviorChecker.getBuiltinBehaviorNames());
+        // 生效面披露：其他命令的 stderr 都打 Rules 行，本命令作为规则的主查看入口
+        // 必须自答「加载了哪个文件、生效几条声明」——只列目录不报生效面等于没核验
+        String rulesPath = ConfigLoader.resolveRulesPath();
+        InvocationRulesConfig effective = ConfigLoader.loadRulesConfig();
+        int invocationDeclarations = effective.getDeclaredInvocationIds().size();
+        int taskDeclarations = effective.getDeclaredTaskKeys().size();
         if (jsonOutput) {
             StringBuilder items = new StringBuilder();
             for (String name : builtins) {
                 if (items.length() > 0) items.append(",");
                 items.append("{\"name\":\"").append(name).append("\",\"description\":\"").append(BehaviorChecker.describeBehavior(name)).append("\"}");
             }
-            out.println("{\"schema\":\"" + ReportSchemas.RULES + "\",\"example\":{\"invocations\":{\"<business invocationId>\":{\"requiredKeywords\":[\"order\"],\"forbiddenKeywords\":[\"sorry\"],\"regexPatterns\":[\"\\\\d{6,}\"],\"behaviors\":[\"mustUseChinese\",\"jsonOutput\"]}},\"tasks\":{\"<declared taskKey>\":{\"requiredSteps\":[\"<invocationId>\",\"<invocationId>\"],\"requiredOrder\":[\"<invocationId>\",\"<invocationId>\"],\"steps\":{\"<invocationId>\":{\"min\":1,\"max\":2}}}}},\"behaviors\":[" + items + "]}");
+            out.println("{\"schema\":\"" + ReportSchemas.RULES + "\",\"rulesFile\":" + (rulesPath != null ? "\"" + RecursiveJsonParser.escape(rulesPath) + "\"" : "null") + ",\"declarations\":{\"invocations\":" + invocationDeclarations + ",\"tasks\":" + taskDeclarations + "},\"example\":{\"invocations\":{\"<business invocationId>\":{\"requiredKeywords\":[\"order\"],\"forbiddenKeywords\":[\"sorry\"],\"regexPatterns\":[\"\\\\d{6,}\"],\"behaviors\":[\"mustUseChinese\",\"jsonOutput\"]}},\"tasks\":{\"<declared taskKey>\":{\"requiredSteps\":[\"<invocationId>\",\"<invocationId>\"],\"requiredOrder\":[\"<invocationId>\",\"<invocationId>\"],\"steps\":{\"<invocationId>\":{\"min\":1,\"max\":2}}}}},\"behaviors\":[" + items + "]}");
             return 0;
         }
+        out.println("Active rules file: " + (rulesPath != null ? rulesPath + " (" + CliSupport.plural(invocationDeclarations, "invocation declaration") + ", " + CliSupport.plural(taskDeclarations, "task declaration") + ")" : "none found (looked up next to agentassert4j.json, then the working directory, then ~/.agentassert4j/)"));
+        out.println();
         out.println("Built-in constraint behaviors (all names accepted by the behaviors field in agentassert4j-rules.json):");
         for (String name : builtins) {
             out.println("  " + name + " — " + BehaviorChecker.describeBehavior(name));

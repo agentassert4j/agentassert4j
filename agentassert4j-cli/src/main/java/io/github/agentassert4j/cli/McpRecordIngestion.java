@@ -92,11 +92,11 @@ final class McpRecordIngestion {
 
         Object requestParsed = parseJsonOrNull(requestRaw);
         if (!(requestParsed instanceof Map)) {
-            return envelopeOutcome(CliErrorCode.E_USAGE, "request is not a valid JSON object.", "Send the raw request body your stack sent to the LLM endpoint.", "");
+            return envelopeOutcome(CliErrorCode.E_USAGE, "request is not a valid JSON object" + parseFailureDetail(requestRaw) + ".", "Send the raw request body your stack sent to the LLM endpoint.", "");
         }
         Object responseParsed = parseJsonOrNull(responseRaw);
         if (!(responseParsed instanceof Map)) {
-            return envelopeOutcome(CliErrorCode.E_USAGE, "response is not a valid JSON object.", "Send the raw response body the endpoint returned (a 200 body, not an error page).", "");
+            return envelopeOutcome(CliErrorCode.E_USAGE, "response is not a valid JSON object" + parseFailureDetail(responseRaw) + ".", "Send the raw response body the endpoint returned (a 200 body, not an error page).", "");
         }
         Map<String, Object> request = castArgs(requestParsed);
         Map<String, Object> response = castArgs(responseParsed);
@@ -115,18 +115,22 @@ final class McpRecordIngestion {
             repository = CliSupport.openRepository(db, CliSupport.discardStream());
             boolean saved = repository.saveInteractionIfAbsent(record);
             String storedSessionId = null;
+            String storedInvocationKey = null;
             if (!saved) {
                 // 跨会话重录同 id 时报告调用方传入的 sessionId 会误导归属：
                 // 回显记录实际所在的会话，让「已存哪、怎么存新的」就近可见
                 for (InteractionRecord existing : repository.findByInvocationKey(record.getInvocationKey())) {
                     if (record.getRecordId() != null && record.getRecordId().equals(existing.getRecordId())) {
                         storedSessionId = existing.getSessionId();
+                        // 存量键与本次现算键是两套身份（重发不同形态响应时现算键按新
+                        // 内容派生）——不回显存量键，对账方会把新形态误当已存身份
+                        storedInvocationKey = existing.getInvocationKey();
                         break;
                     }
                 }
             }
             String stderr = warnings.isEmpty() ? "" : String.join("\n", warnings) + "\n";
-            return McpToolOutcome.of(0, reportLine(record, saved, storedSessionId) + "\n", stderr);
+            return McpToolOutcome.of(0, reportLine(record, saved, storedSessionId, storedInvocationKey) + "\n", stderr);
         } catch (RuntimeException e) {
             return envelopeOutcome(CliErrorCode.E_ENV, "record failed: " + CliSupport.describe(e), "Fix the reported problem and retry; `agentassert4j doctor` reports database and config health.", "agentassert4j doctor");
         } finally {
@@ -1073,11 +1077,14 @@ final class McpRecordIngestion {
         return HashUtil.sha256(record.getSessionId() + "\n" + invocation + "\n" + record.getTurnIndex() + "\n" + HashUtil.sha256(requestRaw) + "\n" + HashUtil.sha256(responseRaw));
     }
 
-    private static String reportLine(InteractionRecord record, boolean saved, String storedSessionId) {
+    private static String reportLine(InteractionRecord record, boolean saved, String storedSessionId, String storedInvocationKey) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.RECORD + "\",\"status\":\"").append(saved ? "saved" : "duplicate").append('"');
         sb.append(",\"recordId\":\"").append(RecursiveJsonParser.escape(record.getRecordId())).append('"');
         sb.append(",\"sessionId\":\"").append(RecursiveJsonParser.escape(record.getSessionId())).append('"');
         sb.append(",\"invocationKey\":\"").append(RecursiveJsonParser.escape(record.getInvocationKey())).append('"');
+        if (!saved && storedInvocationKey != null && !storedInvocationKey.equals(record.getInvocationKey())) {
+            sb.append(",\"storedInvocationKey\":\"").append(RecursiveJsonParser.escape(storedInvocationKey)).append('"');
+        }
         if (record.getInvocationId() != null) {
             sb.append(",\"invocationId\":\"").append(RecursiveJsonParser.escape(record.getInvocationId())).append('"');
         }
@@ -1101,6 +1108,21 @@ final class McpRecordIngestion {
 
     private static McpToolOutcome envelopeOutcome(CliErrorCode errorCode, String message, String hint, String nextAction) {
         return McpToolOutcome.of(2, CliSupport.errorEnvelope(errorCode, message, hint, nextAction) + "\n", "");
+    }
+
+    /**
+     * 解析失败的根因括注：语法错误与深度超限（"JSON nesting exceeds 128 levels"）
+     * 是两类不同的故障，报错不点破根因会把用户引向不存在的语法错误。截断防长载荷
+     * 根因消息撑爆包络。
+     */
+    private static String parseFailureDetail(String json) {
+        try {
+            RecursiveJsonParser.parse(json);
+        } catch (RuntimeException e) {
+            String message = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            return message.length() > 120 ? " (" + message.substring(0, 120) + "…)" : " (" + message + ")";
+        }
+        return " (parsed but not a JSON object)";
     }
 
     private static Object parseJsonOrNull(String json) {

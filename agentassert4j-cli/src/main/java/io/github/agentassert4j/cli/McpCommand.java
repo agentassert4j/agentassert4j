@@ -33,7 +33,7 @@ public class McpCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite database path the server binds to (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--diag"}, description = "Log each protocol message to stderr (method and elapsed time; for troubleshooting)")
+    @Option(names = {"--diag"}, description = "Log each protocol message to stderr while the server runs (method, response preview, elapsed time); a bare run with no callers produces no output")
     boolean diag;
 
     @Override

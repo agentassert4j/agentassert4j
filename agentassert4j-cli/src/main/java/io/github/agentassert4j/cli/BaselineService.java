@@ -86,18 +86,24 @@ public class BaselineService {
 
             if (force) {
                 if (hadBaseline) {
-                    // 破坏性操作必须留痕：被覆盖的旧基线进入归档，rollback 可恢复
+                    // 破坏性操作必须留痕：被覆盖的旧基线进入归档，rollback 可恢复。
+                    // 乐观守卫下沉到 manager 的覆盖写入点（写入前对即将被归档的活跃
+                    // 版本校验）——本处的预检只决定是否打印重建警告
                     if (expectedVersion != null && !expectedVersion.equals(existing.getVersionTag())) {
                         throw new VersionMismatchException("Invocation " + invocationKey + " active baseline is " + existing.getVersionTag() + ", not the expected " + expectedVersion + "; a concurrent actor may have changed it.");
                     }
                     out.println("  Warning: existing baseline " + existing.getVersionTag() + (existing.getApprovedBy() != null ? " (approved by " + existing.getApprovedBy() + ")" : "") + " of " + invocationKey + " will be rebuilt under the current semantics; the old baseline is archived and restorable via `rollback`.");
                 }
                 // 重建取桶内最新记录（与首次建档同语义；force 也是唯一的形态收缩途径——
-                // 重建后集合只留当前形态）
-                manager.reestablishBaseline(seed, actor, rules, codeRef);
+                // 重建后集合只留当前形态）；expectedVersion 随行使守卫（写入前校验）
+                manager.reestablishBaseline(seed, actor, rules, codeRef, expectedVersion);
             } else {
                 try {
-                    manager.autoEstablishBaseline(seed, actor, rules, codeRef);
+                    manager.autoEstablishBaseline(seed, actor, rules, codeRef, expectedVersion);
+                } catch (VersionMismatchException e) {
+                    // 守卫拒绝必须穿透：并发方已把版本推进到非调用方所见——
+                    // 吞掉会把「守卫拒绝」伪装成「建档成功」，报告与 audit 双双失真
+                    throw e;
                 } catch (RuntimeException e) {
                     // 单条建档失败（存储抖动等）不中断整批——与录制 enrich 的
                     // 单条容错同哲学；分桶已剔除不可分组记录，这里只剩存储层故障。

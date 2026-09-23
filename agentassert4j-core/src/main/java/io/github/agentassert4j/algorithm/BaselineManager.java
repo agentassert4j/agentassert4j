@@ -117,10 +117,14 @@ public class BaselineManager {
             throw new IllegalStateException("No candidate to reject for invocation: " + invocationKey);
         }
 
+        // 被拒形状以内容哈希记入 REJECT 事件的 note——事件是 reject 的唯一审计载体
+        // （画像上无状态痕迹），待裁决登记凭它抑制「已声明已知」的形状重复排队
+        String rejectedHash = Integer.toString(profile.getCandidateFingerprint().hashCode());
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);
         repository.saveInvocationProfile(profile);
-        recordGovernanceEvent(GovernanceVerb.REJECT, invocationKey, profile.getVersionTag(), actor, null);
+        recordGovernanceEventWithNote(GovernanceVerb.REJECT, invocationKey, profile.getVersionTag(), actor,
+                "rejected-fingerprint:" + rejectedHash);
     }
 
     /**
@@ -230,11 +234,37 @@ public class BaselineManager {
         if (profile.getFingerprints() != null && profile.getFingerprints().contains(candidate)) {
             return false;
         }
+        if (wasRejected(invocationKey, candidate)) {
+            // 已声明已知的形状不重复排队：reject 是点弃也是裁决记录，同一形状的
+            // 复查不再挂候选——「待裁决」队列只收从未裁决过的新形态
+            return false;
+        }
 
         profile.setCandidateFingerprint(candidate);
         profile.setBaselineStatus(BaselineStatus.CANDIDATE);
         repository.saveInvocationProfile(profile);
         return true;
+    }
+
+    /**
+     * 形状是否已被本调用点 reject 过：比对 REJECT 事件 note 里的内容哈希
+     * （事件是 reject 的唯一审计载体，被拒事实只存在于时间线）。
+     */
+    private boolean wasRejected(String invocationKey, DeterministicFingerprint candidate) {
+        String hash = Integer.toString(candidate.hashCode());
+        try {
+            for (GovernanceEvent event : repository.findGovernanceEvents()) {
+                if (event.getVerb() == GovernanceVerb.REJECT
+                        && invocationKey.equals(event.getInvocationKey())
+                        && event.getNote() != null
+                        && event.getNote().equals("rejected-fingerprint:" + hash)) {
+                    return true;
+                }
+            }
+        } catch (RuntimeException e) {
+            // 事件查询失败按未拒绝处理（登记候选，宁多问不漏报）——判定不被审计面故障阻断
+        }
+        return false;
     }
 
     /**
@@ -245,7 +275,16 @@ public class BaselineManager {
      * @param approver 使该基线成为基线的操作者身份（自动建立同样留痕，纯治理元数据）
      */
     public synchronized void autoEstablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef) {
-        establish(record, approver, false, rules, codeRef);
+        establish(record, approver, false, rules, codeRef, null);
+    }
+
+    /**
+     * 首次录制自动建立基线（带乐观守卫）：expectedVersion 非空时对**当前实际状态**校验——
+     * 含幂等路径（目标已是基线时对存量版本校验而非静默放行），声明了版本预期的调用方
+     * 在每条路径上都受守卫。
+     */
+    public synchronized void autoEstablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef, String expectedVersion) {
+        establish(record, approver, false, rules, codeRef, expectedVersion);
     }
 
     /**
@@ -254,7 +293,7 @@ public class BaselineManager {
      */
     private void checkExpectedVersion(InvocationProfile profile, String expectedActiveVersion) {
         if (expectedActiveVersion != null && !expectedActiveVersion.equals(profile.getVersionTag())) {
-            throw new VersionMismatchException("Invocation " + profile.getInvocationKey() + " active baseline is " + profile.getVersionTag() + ", not the expected " + expectedActiveVersion + "; a concurrent actor may have changed it. Re-read with report, then retry or drop the guard.");
+            throw new VersionMismatchException("Invocation " + profile.getInvocationKey() + " active baseline is " + profile.getVersionTag() + ", not the expected " + expectedActiveVersion + "; a concurrent actor may have changed it. Re-read the current version, then retry or drop the guard.");
         }
     }
 
@@ -270,10 +309,18 @@ public class BaselineManager {
      * @throws IllegalStateException 该调用点无画像且无录制数据可解析时抛出
      */
     public synchronized void reestablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef) {
-        establish(record, approver, true, rules, codeRef);
+        establish(record, approver, true, rules, codeRef, null);
     }
 
-    private void establish(InteractionRecord record, String approver, boolean overwrite, InvocationRulesConfig rules, String codeRef) {
+    /**
+     * 以当前判定语义重建基线（带乐观守卫）：覆盖写入前对即将被归档的活跃版本校验
+     * expectedVersion——「我检查时是 v1」与「我写入时还是 v1」之间的并发窗口在此收口。
+     */
+    public synchronized void reestablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef, String expectedVersion) {
+        establish(record, approver, true, rules, codeRef, expectedVersion);
+    }
+
+    private void establish(InteractionRecord record, String approver, boolean overwrite, InvocationRulesConfig rules, String codeRef, String expectedVersion) {
         if (record == null) {
             return;
         }
@@ -284,12 +331,16 @@ public class BaselineManager {
         InvocationProfile existing = repository.findInvocationByKey(grouping.getInvocationKey());
 
         if (!overwrite && existing != null && existing.getFingerprints() != null && !existing.getFingerprints().isEmpty()) {
-            // 已有基线，不覆盖
+            // 已有基线，不覆盖；声明了版本预期的调用方在幂等路径同样受守卫——
+            // expectedVersion 是「我看到的活跃版本」申报，exists 也是一次真实读取，
+            // 静默忽略申报会让调用方误以为版本仍是它所见的那一版
+            checkExpectedVersion(existing, expectedVersion);
             return;
         }
         if (overwrite && existing != null) {
             // 被替换基线先行归档：重建不是不可逆操作，rollback 可恢复旧语义基线
             //（归档快照的是旧基线自身的指纹与治理事实，必须先于覆盖写入）
+            checkExpectedVersion(existing, expectedVersion);
             archiveIfAbsent(grouping.getInvocationKey(), existing);
         }
 
@@ -310,7 +361,23 @@ public class BaselineManager {
         profile.setTotalRecords(existing != null ? existing.getTotalRecords() : 1);
         stampApproval(profile, approver, codeRef);
 
+        // 并发建档收口：写入后重读，活跃版本或审批人不是本进程刚写的值 = 并发方在我
+        // 写入的同时也写了同一键（INSERT OR REPLACE 后写者胜）——后写者必须响亮拒绝并
+        // 撤销自己的写入（恢复并发方的画像），否则「先检查后写入」窗口里两进程都报成功、
+        // 同一版本标签被静默重定义。重读比较让窗口缩到写入语句本身，剩余竞态可检测。
         repository.saveInvocationProfile(profile);
+        InvocationProfile afterWrite = repository.findInvocationByKey(grouping.getInvocationKey());
+        boolean identityIntact = afterWrite != null && profile.getVersionTag().equals(afterWrite.getVersionTag())
+                && approver != null && approver.equals(afterWrite.getApprovedBy());
+        if (!identityIntact) {
+            if (existing != null) {
+                // 有旧画像可回滚：恢复并发方的状态，撤销本进程的覆盖
+                repository.saveInvocationProfile(existing);
+            }
+            throw new IllegalStateException("Concurrent establishment detected on " + grouping.getInvocationKey()
+                    + ": another actor wrote baseline " + (afterWrite != null ? afterWrite.getVersionTag() : "(?)")
+                    + " during this write; re-read the invocation state and retry if the establishment is still needed.");
+        }
         recordGovernanceEvent(overwrite ? GovernanceVerb.FORCE_REBUILD : GovernanceVerb.ESTABLISH, grouping.getInvocationKey(), profile.getVersionTag(), approver, codeRef);
     }
 
@@ -328,6 +395,20 @@ public class BaselineManager {
             event.setVersionTag(versionTag);
             event.setActor(actor);
             event.setCodeRef(codeRef);
+            repository.appendGovernanceEvent(event);
+        } catch (RuntimeException e) {
+            LOG.log(Level.SEVERE, "governance event append failed: " + verb.wireName() + " " + invocationKey, e);
+        }
+    }
+
+    private void recordGovernanceEventWithNote(GovernanceVerb verb, String invocationKey, String versionTag, String actor, String note) {
+        try {
+            GovernanceEvent event = new GovernanceEvent();
+            event.setVerb(verb);
+            event.setInvocationKey(invocationKey);
+            event.setVersionTag(versionTag);
+            event.setActor(actor);
+            event.setNote(note);
             repository.appendGovernanceEvent(event);
         } catch (RuntimeException e) {
             LOG.log(Level.SEVERE, "governance event append failed: " + verb.wireName() + " " + invocationKey, e);

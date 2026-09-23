@@ -275,4 +275,17 @@ class BaselineServiceTest {
     private String invocationKeyOf(String invocationId) {
         return InvocationResolver.resolve(repository.findByInvocationId(invocationId).get(0)).getInvocationKey();
     }
+
+    @Test
+    @DisplayName("expectedVersion 守卫覆盖幂等路径：exists 降级时版本预期不符同样拒绝（round10 H1）")
+    void expectedVersion_guardCoversIdempotentPath() {
+        repository.saveInteractionIfAbsent(makeRecord("rec-1", "skill-1", 1000L, "{\"a\":1}"));
+        PrintStream out = new PrintStream(output, true);
+        new BaselineService(repository).establishMissing(out, "tester", null, false, null, null, null, null);
+
+        // exists 路径 + expectedVersion=v9（实际 v1）→ 响亮拒绝而非静默降级
+        org.junit.jupiter.api.Assertions.assertThrows(io.github.agentassert4j.algorithm.VersionMismatchException.class,
+                () -> new BaselineService(repository).establishMissing(out, "tester", null, true, null, null, null, "v9"),
+                "exists 降级静默通过会让调用方误以为版本仍是它所见的那一版");
+    }
 }

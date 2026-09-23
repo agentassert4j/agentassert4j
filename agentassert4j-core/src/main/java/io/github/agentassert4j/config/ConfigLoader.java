@@ -6,6 +6,8 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -71,7 +73,19 @@ public final class ConfigLoader {
         if (json != null) {
             json = resolveEnvVars(json);
         }
-        return AgentAssert4jConfig.fromJson(json);
+        try {
+            return AgentAssert4jConfig.fromJson(json);
+        } catch (RuntimeException e) {
+            // 配置文件存在但解析失败：安全退化为默认值（R10），但退化必须就地可见——
+            // 静默用默认值会让用户带着 typo 配置得到「神秘默认行为」（如密钥看似已配
+            // 却报缺 key）。根因经 configNotes 披露，doctor 与 openRepository 的 Config
+            // 诊断行渲染
+            AgentAssert4jConfig defaults = AgentAssert4jConfig.fromJson(null);
+            String detail = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            defaults.setConfigNotes(new ArrayList<>(Collections.singletonList(
+                    "config file " + origin + " is unparsable (" + detail + "); built-in defaults are in effect")));
+            return defaults;
+        }
     }
 
     /**

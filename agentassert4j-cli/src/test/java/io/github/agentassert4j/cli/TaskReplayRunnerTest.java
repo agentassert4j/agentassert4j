@@ -995,6 +995,23 @@ class TaskReplayRunnerTest {
         }
 
         @Test
+        @DisplayName("预算截断恒 exit 2 + 包络（即使同轮有 CHANGED——证据不完整不冒充行为差异，round10 M4）")
+        void reDrive_budgetTruncation_beatsChangedExitCode() {
+            seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
+            stubClient.setScriptedContent("{\"verdict\":\"flipped\"}");
+            saveSkeletonRecord("c-1", "session-c", 3000L, "写诗", "other", "skl-2", "hash-o2", "{\"result\":\"ok\"}");
+            saveSkeletonRecord("c-2", "session-c2", 3100L, "写诗", "other", "skl-2", "hash-o2", "{\"result\":\"ok\"}");
+            establishedProfile("invocation:other:skl-2", "other", "hash-old");
+            saveTemplateText("hash-o2", "另一模板全文");
+
+            // 预算 1 次调用：首个漂移点 CHANGED 后截断，剩余 skipped——
+            // 截断优先于行为差异，exit 2 + E-USAGE 包络（而非 exit 1）
+            int exit = runner.run(null, null, false, false, false, null, false, true, false, 1, null);
+            assertEquals(2, exit, "预算截断恒 exit 2: " + output);
+            assertTrue(output.toString().contains("Re-drive truncated by the budget caps"), "包络必须点名截断: " + output);
+        }
+
+        @Test
         @DisplayName("预算池恰发：两漂移点上限 1 次 → 1 调用 + 1 跳过，退出码 2")
         void reDrive_budget() {
             seedArchivedSkeletonDrift("{\"result\":\"ok\"}");

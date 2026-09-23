@@ -108,6 +108,13 @@ final class CliSupport {
         // 错误目录下运行时旧配置静默生效是最难排查的故障形态
         String configSource = ConfigLoader.describeMainConfigSource();
         diagnostics.println(configSource != null ? "Config: " + configSource : "Config: no agentassert4j.json found; using built-in defaults (point -Dagentassert4j.config.path at a config file to load one).");
+        // 解析失败的根因就地披露（退化不中断，但退化不可静默）：typo 配置的
+        // 「神秘默认行为」从「缺 key 误导」变成一眼可判
+        for (String note : config.getConfigNotes()) {
+            if (note.startsWith("config file ")) {
+                diagnostics.println("Config warning: " + note);
+            }
+        }
         // 规则文件命中哪个路径必须与主配置同格披露——「规则是否生效、生效的是哪个文件」
         // 只能靠反证（无规则任务行的 Note）才能发现是最难排查的故障形态；doctor 之外的每次运行就地直接可见
         String rulesPath = ConfigLoader.resolveRulesPath();
