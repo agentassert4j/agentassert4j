@@ -561,6 +561,21 @@ final class CliSupport {
      * （单一来源），端点/密钥/模型/重试/extraBody 规则不得分叉。未知协议值在
      * 此抛用法错误并列全部合法值——配置错误就近可见，不静默回退。
      */
+    /**
+     * 本次运行的发射覆盖并入配置（--model/--endpoint）：必须在 {@link #createLlmClient}
+     * 之前调用——发射客户端的模型/端点从配置读取，覆盖值经同一条装配路径生效，
+     * 不另开第二构造入口。调用方另需把模型写入 TestExecutionConfig（观测记录的
+     * 请求模型身份与换模型告警消费它）。
+     */
+    static void applyReDriveOverrides(AgentAssert4jConfig config, String model, String endpoint) {
+        if (model != null) {
+            config.getLlm().setModel(model.trim());
+        }
+        if (endpoint != null) {
+            config.getLlm().setEndpoint(endpoint.trim());
+        }
+    }
+
     static LlmClient createLlmClient(AgentAssert4jConfig config) {
         String protocol = config.getLlm().getProtocol();
         if (protocol != null && LlmWireProtocol.fromWireName(protocol) == null) {

@@ -648,4 +648,20 @@ class CommandSmokeTest {
         assertTrue(report.contains("\"invocations\":[]"), "无候选调用点时空数组仍为合法快照: " + report);
         assertTrue(report.contains("\"note\":\"Anchor = the first approved shape"), "锚定语义注记必须在场: " + report);
     }
+
+    @Test
+    @DisplayName("--model/--endpoint 只挂重驱：无 --re-drive 响亮拒绝，空白值响亮拒绝")
+    void reDriveOverrides_guards() {
+        ByteArrayOutputStream out = redirectStdout();
+        ByteArrayOutputStream errOut = redirectStderr();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--model", "deepseek-v4-pro");
+        assertEquals(2, exit);
+        String combined = out.toString() + errOut;
+        assertTrue(combined.contains("add --re-drive"), "零调用命令没有可覆盖的模型，必须点名前提: " + combined);
+
+        ByteArrayOutputStream blankErr = redirectStderr();
+        exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--re-drive", "--model", "   ");
+        assertEquals(2, exit);
+        assertTrue(blankErr.toString().contains("must not be blank") || out.toString().contains("must not be blank"), "空白覆盖值静默当缺省会误导: " + out + blankErr);
+    }
 }

@@ -476,19 +476,23 @@ structuredContent（`{"reports":[...]}`；失败态为 agentassert4j.error/1 包
 配方：
 
 1. 录制期：当前模型真实跑任务链 → `baseline --ref <模型/版本标注>`（代码锚顺带锚定模型版本）。
-2. 热切换：改 `llm.model`（配置热读，无需重启）；思考档位 = 在快档/思考档两档模型间切换。
+2. 切换：`replay --re-drive --model <新模型>`（单次运行覆盖，不改配置文件；`--endpoint` 同理可
+   换端点）。改 `llm.model` 配置热读同样可行，但共享配置文件会被并行宿主互踩——**多宿主/CI
+   场景优先用旗标**；思考档位 = 在快档/思考档两档模型间切换。MCP 面对应 re-drive 工具的
+   `model`/`endpoint` 参数。
 3. `replay --re-drive --dry-run` 看报价（调用数/预算），确认后真跑——录制的提示词原样发往新模型，
    `served_model` 注记就地披露服务端实际服务的模型（含厂商别名映射，配置模型 ≠ 到手模型当场可见）。
 4. 判定读法：结构判定跨模型成立——PASS = 结构行为在新模型下保持；CHANGED 逐调用点点名影响面
    （工具集 / 参数类型 / 输出结构），措辞与详略差异不进判定。
-5. 代价观测：input/output/**reasoning** tokens、costUsd、latencyMs/ttftMs 逐链对照——关思考省了
-   多少时延与 token、开思考贵了多少，是数字不是感觉。
+5. 代价观测：input/output/**reasoning** tokens、costUsd、latencyMs 逐链对照——关思考省了
+   多少时延与 token、开思考贵了多少，是数字不是感觉（reasoning/cache tokens 在记录的
+   结构化列与 usage_raw，观测记录无 raw wire 双列，取证走结构化面）。
 6. 跨环境验收：`baseline export` / `verify` 的主判据同样是结构指纹（跨模型成立），见 §6。
 
-同一配方亦适用于提示词 A/B（两变体各真实跑同任务集）与工具服务升级回归（工具维指纹直接比对）。
-边界与守卫：配置模型 ≠ 录制模型时重放有换模型告警（含默认模型盲区）；思考内容不进结构指纹，
-原文取证走 `record show`（MCP 上报/重驱记录 raw 全量）；重驱花真实调用，`--max-total-calls`
-/`--max-total-tokens` 预算池封顶。
+同一配方亦适用于提示词 A/B（两变体各真实跑同任务集，`--model` 一旗标之差）与工具服务升级回归
+（工具维指纹直接比对）。
+边界与守卫：配置模型 ≠ 录制模型时重放有换模型告警（含默认模型盲区）；思考内容不进结构指纹；
+重驱花真实调用，`--max-total-calls`/`--max-total-tokens` 预算池封顶。
 
 ## 7. 故障排查
 

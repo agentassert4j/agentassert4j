@@ -61,6 +61,12 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--max-total-tokens"}, description = "Re-drive budget pool: cap on total re-drive tokens for this run (requires --re-drive)")
     Integer maxTotalTokens;
 
+    @Option(names = {"--model"}, description = "Re-drive model override for this run (requires --re-drive): passed to the LLM endpoint as-is, wins over llm.model in agentassert4j.json; the emitter disclosure and the model-switch warning reflect it")
+    String model;
+
+    @Option(names = {"--endpoint"}, description = "Re-drive endpoint override for this run (requires --re-drive): base URL of the LLM API, wins over llm.endpoint in agentassert4j.json")
+    String endpoint;
+
     @Option(names = {"--dry-run"}, description = "Read-only preview: drift set, alignment plan and re-drive cost estimate; no baseline writes, no graph snapshot, no dispositions")
     boolean dryRun;
 
@@ -102,6 +108,12 @@ public class ReplayCommand implements Callable<Integer> {
                 }
             }
         }
+        if ((model != null && model.trim().isEmpty()) || (endpoint != null && endpoint.trim().isEmpty())) {
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--model/--endpoint must not be blank.", "Pass a model name / base URL, or drop the flag to keep the configured value.", "");
+        }
+        if ((model != null || endpoint != null) && !reDrive) {
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--model/--endpoint override the re-drive LLM call; add --re-drive.", "The only LLM-consuming path is the controlled re-drive; zero-call commands have no model to override.", "");
+        }
         StorageRepository repository = null;
         try {
             // 配置加载在 try 内：坏配置文件抛出的异常必须落 E-ENV 包络，
@@ -120,11 +132,15 @@ public class ReplayCommand implements Callable<Integer> {
             }
 
             DeterministicComparator comparator = CliSupport.createComparator(config);
+            // 本次运行覆盖（--model/--endpoint）在客户端构造前并入配置——发射客户端
+            // 的模型/端点经同一条装配路径生效；executionConfig 的 model 单独携带
+            // （观测记录的请求模型身份与换模型告警消费它）
+            CliSupport.applyReDriveOverrides(config, model, endpoint);
             LlmClient client = CliSupport.createLlmClient(config);
             if (reDrive && TextUtil.isBlank(config.getLlm().getApiKey())) {
                 (jsonOutput ? err : out).println("Warning: no API key configured (llm.apiKey in agentassert4j.json or its ${ENV} reference); re-drive calls will fail.");
             }
-            TestExecutionConfig executionConfig = new TestExecutionConfig().timeoutMs(config.getLlm().getTimeoutMs()).temperature(config.getLlm().getTemperature()).maxTokens(config.getLlm().getMaxTokens()).endpoint(config.getLlm().getEndpoint()).wireProtocol(config.getLlm().getProtocol());
+            TestExecutionConfig executionConfig = new TestExecutionConfig().timeoutMs(config.getLlm().getTimeoutMs()).temperature(config.getLlm().getTemperature()).maxTokens(config.getLlm().getMaxTokens()).endpoint(config.getLlm().getEndpoint()).wireProtocol(config.getLlm().getProtocol()).model(model != null ? model.trim() : null);
             InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
             CliSupport.warnUnknownBehaviors(rules, jsonOutput ? err : out);
             CliSupport.warnMalformedTaskRules(rules, jsonOutput ? err : out);

@@ -51,4 +51,18 @@ class CliSupportLlmClientTest {
         assertTrue(CliSupport.createLlmClient(configWithProtocol("anthropic-messages")) instanceof ProtocolRoutingLlmClient);
         assertTrue(CliSupport.createLlmClient(configWithProtocol("openai-responses")) instanceof ProtocolRoutingLlmClient);
     }
+
+    @Test
+    @DisplayName("本次运行覆盖（--model/--endpoint）经同一装配路径生效（round10 裁决项）")
+    void runOverrides_reachClientConstruction() {
+        AgentAssert4jConfig config = configWithProtocol(null);
+        CliSupport.applyReDriveOverrides(config, "deepseek-v4-pro", "https://override.example.com");
+
+        assertEquals("deepseek-v4-pro", CliSupport.createLlmClient(config).name(), "覆盖模型必须进入发射客户端（emitter/报价如实反映）");
+        assertEquals("https://override.example.com", config.getLlm().getEndpoint(), "覆盖端点必须进入配置");
+        // 空覆盖不动配置
+        AgentAssert4jConfig untouched = configWithProtocol(null);
+        CliSupport.applyReDriveOverrides(untouched, null, null);
+        assertEquals("deepseek-chat", untouched.getLlm().getModel(), "未传覆盖时保持配置原值");
+    }
 }
