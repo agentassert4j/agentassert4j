@@ -261,6 +261,45 @@ class TaskReplayRunnerTest {
     class Scoping {
 
         @Test
+        @DisplayName("无 taskKey 的多步会话裂成多个单步任务时输出一行指引")
+        void splitSingleStepTask_hinted() {
+            // 同会话两段不同请求文本（无 taskKey 声明）→ 任务面按请求文本裂成两个单步任务
+            saveRecord("a-1", "session-split", 1000L, "第一步请求", "plan", "hash-p", "{\"v\":1}", null);
+            saveRecord("a-2", "session-split", 1100L, "第二步请求", "lookup", "hash-l", "{\"v\":2}", null);
+
+            assertEquals(0, runner.run(null, null, false, false, false, null, false, false, false, null, null));
+            assertTrue(output.toString().contains("declare taskKey at recording time to align the whole chain"),
+                    "裂任务必须给声明指引: " + output);
+        }
+
+        @Test
+        @DisplayName("--task 缩域的自动建档只建域内键：域外键不被扫建（--task 不算全库形态）")
+        void taskScopedAutoEstablish_leavesOtherTasksUnestablished() {
+            saveRecord("a-1", "session-a", 1000L, "任务甲", "order", "hash-a", "{\"v\":1}", null);
+            saveRecord("b-1", "session-b", 2000L, "任务乙", "stock", "hash-b", "{\"v\":2}", null);
+
+            assertEquals(0, runner.run("任务甲", null, false, false, false, null, false, false, false, null, null));
+
+            assertNotNull(repository.findInvocationByKey("invocation:order:hash-a"), "域内键正常自动建档");
+            assertNull(repository.findInvocationByKey("invocation:stock:hash-b"), "域外键不得被 --task 缩域的判定动作扫建");
+        }
+
+        @Test
+        @DisplayName("dry-run 计划与真跑同目标集：--full-chain 在 dry-run 生效（不被漂移点裁剪）")
+        void dryRun_fullChainPlansAllRecords() {
+            saveRecord("a-1", "session-a", 1000L, "任务丙", "order", "hash-c", "{\"v\":1}", null);
+            saveRecord("b-1", "session-b", 2000L, "任务丙", "order", "hash-c", "{\"v\":1}", null);
+
+            runner.run("任务丙", null, false, false, false, null, false, false, false, null, null);
+
+            output.reset();
+            runner.run("任务丙", null, false, true, false, null, false, true, true, null, null);
+            String plan = output.toString();
+            assertTrue(plan.contains("Re-drive plan (--re-drive): 2 records"), "--full-chain 计划须含域内全部记录（两条会话记录，同形态无漂移时漂移点形态为 0）: " + plan);
+            assertTrue(plan.contains("(--full-chain)"), "计划披露行带 full-chain 标注: " + plan);
+        }
+
+        @Test
         @DisplayName("精确命中优先，前缀家族不被静默扩选")
         void exactBeatsPrefixFamily() {
             saveRecord("a-1", "session-a", 1000L, "V1 请求", "order", "hash-a", "{\"v\":1}", null);
@@ -959,6 +998,7 @@ class TaskReplayRunnerTest {
             TaskReplayRunner jsonRunner = new TaskReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
             assertEquals(0, jsonRunner.run(null, null, false, false, false, null, false, true, false, null, null));
             assertTrue(jsonOut.toString().contains("\"observationRecordId\":\""), "机器面步级对象必须回带观测记录 id: " + jsonOut);
+            assertFalse(jsonOut.toString().contains("\"usageRaw\""), "步级不得混入录制侧账单（完整账单在观测记录的 record-view/1）: " + jsonOut);
 
             List<InteractionRecord> bucket = repository.findByInvocationKey("invocation:order:skl-1");
             List<InteractionRecord> observations = new ArrayList<>();

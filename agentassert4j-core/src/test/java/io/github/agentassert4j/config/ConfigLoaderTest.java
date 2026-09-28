@@ -254,6 +254,43 @@ class ConfigLoaderTest {
     }
 
     @Nested
+    @DisplayName("loadAgentAssert4jConfig 退化可见性补全")
+    class DegradationDisclosure {
+
+        @Test
+        @DisplayName("llm 数值键类型错 → note 就地告警（与 regression 段同一可见性）")
+        void llmNumericTypeMismatch_noted() throws IOException {
+            Path tempFile = Files.createTempFile("agentassert4j-llmtype", ".json");
+            try {
+                Files.write(tempFile, "{\"llm\":{\"timeoutMs\":\"abc\"}}".getBytes(StandardCharsets.UTF_8));
+                System.setProperty(ConfigLoader.CONFIG_PATH_PROPERTY, tempFile.toString());
+                AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
+                assertTrue(config.getConfigNotes().stream().anyMatch(n -> n.contains("llm.timeoutMs must be a JSON number")),
+                        "类型错静默回退与「配置没生效」同源，必须告警: " + config.getConfigNotes());
+            } finally {
+                System.clearProperty(ConfigLoader.CONFIG_PATH_PROPERTY);
+                Files.deleteIfExists(tempFile);
+            }
+        }
+
+        @Test
+        @DisplayName("未解析 ${VAR} → note 披露变量名单（不再静默替换为空串）")
+        void unresolvedEnvVar_noted() throws IOException {
+            Path tempFile = Files.createTempFile("agentassert4j-envvar", ".json");
+            try {
+                Files.write(tempFile, "{\"llm\":{\"apiKey\":\"${AGENTASSERT4J_NO_SUCH_VAR_9f3}\"}}".getBytes(StandardCharsets.UTF_8));
+                System.setProperty(ConfigLoader.CONFIG_PATH_PROPERTY, tempFile.toString());
+                AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
+                assertTrue(config.getConfigNotes().stream().anyMatch(n -> n.contains("AGENTASSERT4J_NO_SUCH_VAR_9f3")),
+                        "被引用却不存在的环境变量必须披露: " + config.getConfigNotes());
+            } finally {
+                System.clearProperty(ConfigLoader.CONFIG_PATH_PROPERTY);
+                Files.deleteIfExists(tempFile);
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("loadAgentAssert4jConfig 解析失败根因披露")
     class UnparsableDisclosure {
 

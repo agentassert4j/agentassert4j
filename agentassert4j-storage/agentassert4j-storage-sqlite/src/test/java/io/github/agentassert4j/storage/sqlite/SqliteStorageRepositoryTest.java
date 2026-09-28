@@ -147,7 +147,6 @@ class SqliteStorageRepositoryTest {
         p.setInvocationType(InvocationType.TOOL);
         p.setBaselineStatus(BaselineStatus.BASELINE);
         p.setVersionTag("v1.0");
-        p.setTotalRecords(42);
 
         DeterministicFingerprint fp = new DeterministicFingerprint();
         Set<String> tools = new HashSet<>();
@@ -169,7 +168,6 @@ class SqliteStorageRepositoryTest {
         assertEquals(InvocationType.TOOL, loaded.getInvocationType());
         assertEquals(BaselineStatus.BASELINE, loaded.getBaselineStatus());
         assertEquals("v1.0", loaded.getVersionTag());
-        assertEquals(42, loaded.getTotalRecords());
         assertNotNull(loaded.getFingerprints());
         assertEquals(2, loaded.getFingerprints().size(), "认可集合整集往返（有序，首元素=种子锚）");
         assertTrue(loaded.getFingerprints().get(0).getToolCallSet().contains("queryOrder"));
@@ -595,7 +593,6 @@ class SqliteStorageRepositoryTest {
         p.setParamSignature("orderId:string");
         p.setApprovedBy("axy-yxa");
         p.setApprovedAt(1735689600000L);
-        p.setTotalRecords(10);
         DeterministicFingerprint fp = new DeterministicFingerprint();
         fp.setToolCallSet(new HashSet<>());
         p.setFingerprints(new ArrayList<>(Collections.singletonList(fp)));
@@ -632,7 +629,6 @@ class SqliteStorageRepositoryTest {
         p.setInvocationName("OrderTool");
         p.setInvocationType(InvocationType.TOOL);
         p.setBaselineStatus(BaselineStatus.BASELINE);
-        p.setTotalRecords(3);
         DeterministicFingerprint fp = new DeterministicFingerprint();
         fp.setToolCallSet(new HashSet<>());
         p.setFingerprints(new ArrayList<>(Collections.singletonList(fp)));
@@ -668,7 +664,6 @@ class SqliteStorageRepositoryTest {
         p.setInvocationName(name);
         p.setInvocationType(InvocationType.TOOL);
         p.setBaselineStatus(BaselineStatus.BASELINE);
-        p.setTotalRecords(5);
         DeterministicFingerprint fp = new DeterministicFingerprint();
         fp.setToolCallSet(new HashSet<>());
         p.setFingerprints(new ArrayList<>(Collections.singletonList(fp)));

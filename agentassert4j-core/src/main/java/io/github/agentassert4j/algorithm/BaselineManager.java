@@ -359,7 +359,6 @@ public class BaselineManager {
         profile.setCandidateFingerprint(null);
         profile.setBaselineStatus(BaselineStatus.BASELINE);
         profile.setVersionTag(overwrite ? nextAvailableVersionTag(grouping.getInvocationKey(), profile.getVersionTag()) : "v1");
-        profile.setTotalRecords(existing != null ? existing.getTotalRecords() : 1);
         stampApproval(profile, approver, codeRef);
 
         if (!overwrite) {

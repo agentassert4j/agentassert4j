@@ -71,7 +71,7 @@ public class BaselineService {
             InvocationProfile existing = repository.findInvocationByKey(invocationKey);
             boolean hadBaseline = CliSupport.hasBaseline(existing);
             if (hadBaseline && !force) {
-                out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + existing.getVersionTag() + ")" + refSuffix(existing.getCodeRef()));
+                out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + existing.getVersionTag() + ")" + approvedBySuffix(existing) + refSuffix(existing.getCodeRef()));
                 warnRulesDrift(out, firstBusinessLabel(records), existing.getFingerprints(), rules);
                 if (outcomes != null) {
                     outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "exists", existing.getVersionTag(), existing.getCodeRef(), null));
@@ -129,7 +129,7 @@ public class BaselineService {
             if (!wrote) {
                 // 并发建档降级：基线归先到者——成功消息与落库真相必须一致，
                 // 败者按 exists 如实上报（不计数、不署本方种子）
-                out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + created.getVersionTag() + ") (established concurrently)" + refSuffix(created.getCodeRef()));
+                out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + created.getVersionTag() + ")" + approvedBySuffix(created) + " (established concurrently)" + refSuffix(created.getCodeRef()));
                 if (outcomes != null) {
                     outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "exists", created.getVersionTag(), created.getCodeRef(), null));
                 }
@@ -137,8 +137,8 @@ public class BaselineService {
                 continue;
             }
             established++;
-            // 不做画像二次 REPLACE（回填 totalRecords 的旧动作）：该字段全库零读方，
-            // 二次覆盖写入反而重新打开原子建档刚关闭的并发窗口
+            // 不做画像二次 REPLACE（round11 前的回填动作已随 write-only 字段移除）：
+            // 二次覆盖写入会重新打开原子建档刚关闭的并发窗口
             out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "baseline re-established under the current judgment semantics (" + created.getVersionTag() + ")" : "baseline established") + " (seed record " + seed.getRecordId() + ")" + refSuffix(created.getCodeRef()));
             if (outcomes != null) {
                 outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), hadBaseline ? "reestablished" : "created", created.getVersionTag(), created.getCodeRef(), seed.getRecordId()));
@@ -146,6 +146,14 @@ public class BaselineService {
             warnSeedRuleViolations(out, seed, rules);
         }
         return established;
+    }
+
+    /**
+     * exists 行的归属披露：审批人一眼可答「这条基线是谁建的」——竞速败者的普通
+     * exists 路径与并发降级路径共用（并发注记是时序敏感的补充，归属是恒在的事实）。
+     */
+    private static String approvedBySuffix(InvocationProfile profile) {
+        return profile.getApprovedBy() != null ? " (approved by " + profile.getApprovedBy() + ")" : "";
     }
 
     /**

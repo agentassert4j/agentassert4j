@@ -185,7 +185,7 @@ public class TaskReplayRunner {
         boolean narrowed = taskPrefix != null || invocationKey != null;
 
         if (dryRun) {
-            return dryRunPlan(scoped, reDrive, drift, narrowed, ciMode, memberCheck, invocationKey);
+            return dryRunPlan(scoped, reDrive, drift, narrowed, ciMode, memberCheck, invocationKey, fullChain);
         }
 
         // --ci 未建档守卫：缩域内存在未建档调用点即拒绝判定——
@@ -204,8 +204,22 @@ public class TaskReplayRunner {
             // 自动建档（开发态自动化，报告可见）：裂键豁免与披露由 establishMissing
             // 扫建路径统一处理（同标签已有兄弟建档的新键只披露、不并入基线）。
             // 缩域时只建立所选调用点——「我的判定动作写了别人的域」在治理感上越界，
-            // 全库扫建留给无缩域形态；已建档调用点只出计数行不逐行刷屏
-            Set<String> autoEstablishKeys = invocationKey != null ? Collections.singleton(invocationKey) : null;
+            // 全库扫建留给无缩域形态；--task 与 --invocation 都算缩域（仅跟 --invocation
+            // 会让 --task 形态扫全库，共库下等于替别人建域外键）；已建档调用点只出计数行
+            Set<String> autoEstablishKeys = null;
+            if (invocationKey != null) {
+                autoEstablishKeys = Collections.singleton(invocationKey);
+            } else if (taskPrefix != null) {
+                autoEstablishKeys = new LinkedHashSet<>();
+                for (TaskChain chain : scoped) {
+                    for (InteractionRecord record : chain.getRecords()) {
+                        String key = CliSupport.invocationKeyOfRecord(record);
+                        if (key != null) {
+                            autoEstablishKeys.add(key);
+                        }
+                    }
+                }
+            }
             ByteArrayOutputStream establishSink = new ByteArrayOutputStream();
             try {
                 new BaselineService(repository).establishMissing(
@@ -260,6 +274,7 @@ public class TaskReplayRunner {
         AlignmentTotals totals = new AlignmentTotals();
 
         List<List<TaskChain>> groups = groupByRequestText(scoped);
+        hintSplitSingleStepTasks(groups);
         Map<String, Map<String, Verdict>> verdictsByKey = ciMode && !memberCheck ? new LinkedHashMap<String, Map<String, Verdict>>() : null;
         for (List<TaskChain> group : groups) {
             if (ciMode && !memberCheck) {
@@ -433,8 +448,11 @@ public class TaskReplayRunner {
         List<InteractionRecord> targets = reDriveTargets(drift, fullChain, narrowed, invocationKey, scoped);
         if (targets.isEmpty()) {
             // 计划为空必须就地解释：默认重驱只打漂移点，静默 total:0 让人以为是故障
-            // （走 diagnostic：--json 模式落 stderr，stdout 报告契约不变）
-            diagnostic("No re-drive targets: default re-drive covers drift points only, and the scope currently has none. Widen with --task/--invocation, or use --full-chain.");
+            // （走 diagnostic：--json 模式落 stderr，stdout 报告契约不变）；full-chain
+            // 形态的建议句不得再指 --full-chain（旗标已在手）
+            diagnostic(fullChain
+                    ? "No re-drive targets in this scope: it holds no records with invocation identity."
+                    : "No re-drive targets: default re-drive covers drift points only, and the scope currently has none. Widen with --task/--invocation, or use --full-chain.");
         } else {
             warnIfModelDiffers(targets);
             info("Re-drive: " + CliSupport.plural(targets.size(), "record") + " using each point\'s latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + ".");
@@ -574,12 +592,10 @@ public class TaskReplayRunner {
         if (observationId != null) {
             sb.append(",\"observationRecordId\":\"").append(RecursiveJsonParser.escape(observationId)).append('"');
         }
-        // 账单明细（本次真调的思考/原始用量）随步级可读——思考档位代价账单的机器面
+        // 本次真调的思考 tokens（新鲜侧）；完整账单（usageRaw 全明细）在观测记录上
+        // （record-view/1 可读）——步级不得混入录制侧账单，两来源同对象会误读
         if (result.getReasoningTokens() != null) {
             sb.append(",\"reasoningTokens\":").append(result.getReasoningTokens());
-        }
-        if (record.getUsageRaw() != null && !record.getUsageRaw().isEmpty()) {
-            sb.append(",\"usageRaw\":\"").append(RecursiveJsonParser.escape(record.getUsageRaw())).append('"');
         }
         ComparisonResult comparison = result.getComparison();
         if (comparison != null) {
@@ -1360,6 +1376,24 @@ public class TaskReplayRunner {
      * 缩域链中无法解析调用点键的记录计数告警——这些记录不进对齐分组
      * （TaskAligner 分组器跳过），留在判定集外必须可见。
      */
+    /**
+     * 多步会话未声明 taskKey 时，任务面按请求文本把它裂成多个单步任务——判定只出
+     * 「[1]」会让用户以为只判了一步（round12 宿主实测的「最茫然」点）。同一会话
+     * 裂进多个单步任务组时给一句指引：声明 taskKey 才能整链对齐。
+     */
+    private void hintSplitSingleStepTasks(List<List<TaskChain>> groups) {
+        Map<String, Integer> sessionsSeen = new HashMap<>();
+        for (List<TaskChain> group : groups) {
+            if (group.size() != 1) {
+                continue;
+            }
+            int seen = sessionsSeen.merge(group.get(0).getSessionId(), 1, Integer::sum);
+            if (seen == 2) {
+                diagnostic("Hint: a session without a declared taskKey is judged as separate single-step tasks (one per request text); declare taskKey at recording time to align the whole chain.");
+            }
+        }
+    }
+
     private void warnUngroupableRecords(List<TaskChain> scoped) {
         int ungroupable = 0;
         List<String> samples = new ArrayList<>();
@@ -1568,17 +1602,23 @@ public class TaskReplayRunner {
      * 只读预演：漂移集已在上文报告，这里列出将发生的任务配对与规则适用性，
      * 供 CI 在执行前核对选链是否如愿。
      */
-    private int dryRunPlan(List<TaskChain> scoped, boolean reDrive, DriftReport drift, boolean narrowed, boolean ciMode, boolean memberCheck, String invocationKey) {
+    private int dryRunPlan(List<TaskChain> scoped, boolean reDrive, DriftReport drift, boolean narrowed, boolean ciMode, boolean memberCheck, String invocationKey, boolean fullChain) {
         List<List<TaskChain>> groups = groupByRequestText(scoped);
         info("Alignment plan (dry-run; no judgments, no baselines, no dispositions): " + CliSupport.plural(groups.size(), "task") + ", zero LLM calls.");
         if (reDrive) {
-            List<InteractionRecord> planned = reDriveTargets(drift, false, narrowed, invocationKey, scoped);
-            info("Re-drive plan (--re-drive): " + CliSupport.plural(planned.size(), "record") + " to re-drive with each point\'s latest archived template.");
+            // 计划面与真跑面同目标集：fullChain 必须透传，否则 --full-chain --dry-run
+            // 拿到的是漂移点裁剪（bare 形态恒 0 条 + 建议句让用户开已开的旗标）
+            List<InteractionRecord> planned = reDriveTargets(drift, fullChain, narrowed, invocationKey, scoped);
+            info("Re-drive plan (--re-drive): " + CliSupport.plural(planned.size(), "record") + " to re-drive with each point\'s latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + ".");
             if (!planned.isEmpty()) {
                 info(CostEstimator.estimate(planned, llmClient.name()));
             }
             if (planned.isEmpty()) {
-                info("No re-drive targets: default re-drive covers drift points only, and the scope currently has none. Widen with --task/--invocation, or use --full-chain.");
+                if (fullChain) {
+                    info("No re-drive targets in this scope: it holds no records with invocation identity.");
+                } else {
+                    info("No re-drive targets in this scope: the default covers drift points only. Widen the scope with --task/--invocation, or use --full-chain.");
+                }
             }
             if (jsonMode) {
                 out.println(reDrivePlanJson(planned, llmClient.name()));

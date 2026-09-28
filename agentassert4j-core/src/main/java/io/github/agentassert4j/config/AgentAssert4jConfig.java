@@ -75,7 +75,7 @@ public class AgentAssert4jConfig {
         List<String> notes = new ArrayList<>();
         config.storage = StorageConfig.fromJson(getMap(root, "storage"), config.storage);
         config.regression = RegressionConfig.fromJson(getMap(root, "regression"), config.regression, notes);
-        config.llm = LlmConfig.fromJson(getMap(root, "llm"), config.llm);
+        config.llm = LlmConfig.fromJson(getMap(root, "llm"), config.llm, notes);
         config.governance = GovernanceConfig.fromJson(getMap(root, "governance"), config.governance, notes);
 
         for (Object key : root.keySet()) {
@@ -367,7 +367,7 @@ public class AgentAssert4jConfig {
          */
         private String extraBody;
 
-        static LlmConfig fromJson(Map<String, Object> map, LlmConfig defaults) {
+        static LlmConfig fromJson(Map<String, Object> map, LlmConfig defaults, List<String> notes) {
             if (map == null) return defaults;
             LlmConfig c = new LlmConfig();
             c.apiKey = getString(map, "apiKey", defaults.apiKey);
@@ -385,6 +385,14 @@ public class AgentAssert4jConfig {
                 c.temperature = defaults.temperature;
             }
             c.extraBody = getString(map, "extraBody", defaults.extraBody);
+            // 数值键类型校验：静默回退默认值与「配置没生效」的最难排查形态同源——
+            // regression 段逐键告警，llm 段不得例外
+            for (String numericKey : new String[]{"timeoutMs", "maxRetries", "maxTokens", "temperature"}) {
+                Object value = map.get(numericKey);
+                if (value != null && !(value instanceof Number)) {
+                    notes.add("llm." + numericKey + " must be a JSON number; using the built-in default instead.");
+                }
+            }
             return c;
         }
 

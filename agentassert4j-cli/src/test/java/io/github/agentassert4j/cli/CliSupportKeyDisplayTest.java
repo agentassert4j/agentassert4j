@@ -4,6 +4,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * CliSupport 键展示形态的单元测试——人读短形与完整键的边界（完整键只在 JSON 证据）。
@@ -52,5 +54,17 @@ class CliSupportKeyDisplayTest {
     @DisplayName("含文法字符的标签以解码形展示（键存编码形，人读词汇表原样）")
     void encodedLabelDecoded() {
         assertEquals("plan:v2@abcd1234", CliSupport.displayKey("invocation:plan%3Av2:abcd1234e5"));
+    }
+
+    @Test
+    @DisplayName("abbreviateText 过滤控制字符：NUL/BEL 不再裸渲染进人读输出")
+    void abbreviateText_masksControlChars() {
+        String hostile = "ab\u0000c\u0007d\u001fe";
+        String shown = CliSupport.abbreviateText(hostile, 20);
+        assertFalse(shown.contains("\u0000"), "NUL 不得进人读输出: " + java.util.Arrays.toString(shown.toCharArray()));
+        assertFalse(shown.contains("\u0007"), "BEL 不得进人读输出");
+        assertTrue(shown.contains("ab") && shown.contains("d"), "可读部分保留: " + shown);
+        // 常规空白归一不受影响
+        assertEquals("a b", CliSupport.abbreviateText("a\n b  ", 10));
     }
 }

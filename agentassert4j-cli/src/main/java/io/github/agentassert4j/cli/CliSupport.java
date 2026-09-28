@@ -180,7 +180,9 @@ final class CliSupport {
         if (text == null) {
             return "";
         }
-        String flat = text.replaceAll("\\s+", " ").trim();
+        // 控制字符（NUL/BEL/未配对转义序列等）原样进人读输出会污染终端——
+        // 录制面保真（raw 列逐字节往返）与展示面可读是两回事，展示面替换为可见占位
+        String flat = text.replaceAll("[\\p{Cntrl}&&[^\\n\\r\\t]]", "?").replaceAll("\\s+", " ").trim();
         return flat.length() <= budget ? flat : flat.substring(0, budget) + "...";
     }
 

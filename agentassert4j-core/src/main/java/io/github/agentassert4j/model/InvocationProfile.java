@@ -40,7 +40,6 @@ public class InvocationProfile {
      * 参数类型签名，如 "orderId:String"
      */
     private String paramSignature;
-    private int totalRecords;
     /**
      * 当前基线 = 已认可形态的有序集合（首元素为 establish 种子锚，accept 追加于尾；
      * 判定 = 链末指纹 ∈ 集合，非首元素不淘汰——形态退役唯一途径是 force 重建）
@@ -130,14 +129,6 @@ public class InvocationProfile {
 
     public void setParamSignature(String paramSignature) {
         this.paramSignature = paramSignature;
-    }
-
-    public int getTotalRecords() {
-        return totalRecords;
-    }
-
-    public void setTotalRecords(int totalRecords) {
-        this.totalRecords = totalRecords;
     }
 
 

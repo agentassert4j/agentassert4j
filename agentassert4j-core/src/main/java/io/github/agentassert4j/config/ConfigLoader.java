@@ -74,8 +74,9 @@ public final class ConfigLoader {
         StringBuilder origin = new StringBuilder();
         String json = findAndRead(MAIN_CONFIG_FILE, CONFIG_PATH_PROPERTY, origin);
         lastMainConfigDirectory = directoryOf(origin);
+        java.util.List<String> unresolvedVars = new java.util.ArrayList<>();
         if (json != null) {
-            json = resolveEnvVars(json);
+            json = resolveEnvVars(json, unresolvedVars);
         }
         try {
             if (!TextUtil.isBlank(json)) {
@@ -86,7 +87,9 @@ public final class ConfigLoader {
                     throw new IllegalArgumentException("config root is not a JSON object");
                 }
             }
-            return AgentAssert4jConfig.fromJson(json);
+            AgentAssert4jConfig parsed = AgentAssert4jConfig.fromJson(json);
+            appendUnresolvedVarNote(parsed, unresolvedVars);
+            return parsed;
         } catch (RuntimeException e) {
             // 配置文件存在但解析失败：安全退化为默认值（R10），但退化必须就地可见——
             // 静默用默认值会让用户带着 typo 配置得到「神秘默认行为」（如密钥看似已配
@@ -96,8 +99,20 @@ public final class ConfigLoader {
             String detail = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             defaults.setConfigNotes(new ArrayList<>(Collections.singletonList(
                     "config file " + origin + " is unparsable (" + detail + "); built-in defaults are in effect")));
+            appendUnresolvedVarNote(defaults, unresolvedVars);
             return defaults;
         }
+    }
+
+    /**
+     * 未解析环境变量的披露（两种加载结局共用）：被引用却不存在于环境的 ${VAR}
+     * 以空串生效，调用方必须能看到名单。
+     */
+    private static void appendUnresolvedVarNote(AgentAssert4jConfig config, java.util.List<String> unresolvedVars) {
+        if (unresolvedVars == null || unresolvedVars.isEmpty()) {
+            return;
+        }
+        config.getConfigNotes().add("config references undefined environment variable(s) " + unresolvedVars + "; they resolve to empty strings");
     }
 
     /**
@@ -253,6 +268,15 @@ public final class ConfigLoader {
      * @return 替换后的文本
      */
     public static String resolveEnvVars(String text) {
+        return resolveEnvVars(text, null);
+    }
+
+    /**
+     * 带未解析变量收集的替换：unresolvedOut 非 null 时，环境中不存在的 ${VAR}
+     * 名单就地收集（调用方据此披露）——静默替换为空串会让「配置值莫名为空」
+     * 无从排查（typo 的变量名与缺失的环境变量同形）。
+     */
+    public static String resolveEnvVars(String text, java.util.List<String> unresolvedOut) {
         if (text == null) return null;
         Matcher matcher = ENV_VAR_PATTERN.matcher(text);
         // Matcher 的 appendReplacement/appendTail 在 JDK 8 只有 StringBuffer 重载
@@ -260,6 +284,9 @@ public final class ConfigLoader {
         while (matcher.find()) {
             String varName = matcher.group(1);
             String value = System.getenv(varName);
+            if (value == null && unresolvedOut != null && !unresolvedOut.contains(varName)) {
+                unresolvedOut.add(varName);
+            }
             matcher.appendReplacement(sb, value != null ? Matcher.quoteReplacement(value) : "");
         }
         matcher.appendTail(sb);

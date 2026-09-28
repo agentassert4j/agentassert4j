@@ -78,7 +78,7 @@ class BaselineServiceTest {
         output.reset();
         service.establishMissing(out, "tester", "def5678", false, null, null, null, null);
         String rerun = output.toString();
-        assertTrue(rerun.contains(": baseline exists (v1) (ref abc1234)"), "exists 行回显已落库的锚而非本次声明: " + rerun);
+        assertTrue(rerun.contains(": baseline exists (v1) (approved by tester) (ref abc1234)"), "exists 行回显归属审批人与已落库的锚（归属让「谁建的」一眼可答）: " + rerun);
     }
 
     @Test

@@ -107,7 +107,6 @@ final class Schema {
                     "  param_signature       TEXT," +
                     "  approved_by           TEXT," +
                     "  approved_at           INTEGER," +
-                    "  total_records         INTEGER DEFAULT 0," +
                     "  code_ref              TEXT," +
                     "  updated_at            INTEGER NOT NULL" +
                     ")",

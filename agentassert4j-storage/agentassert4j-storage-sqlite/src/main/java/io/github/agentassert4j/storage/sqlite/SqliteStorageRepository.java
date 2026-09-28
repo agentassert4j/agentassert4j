@@ -269,7 +269,7 @@ public class SqliteStorageRepository implements StorageRepository {
 
     @Override
     public synchronized void saveInvocationProfile(InvocationProfile p) {
-        String sql = "INSERT OR REPLACE INTO invocations" + " (invocation_key, label, template_hash, invocation_name, invocation_type, fingerprint," + "  candidate_fingerprint, baseline_status, version_tag," + "  algo_version, param_signature, approved_by, approved_at," + "  total_records, code_ref, updated_at)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        String sql = "INSERT OR REPLACE INTO invocations" + " (invocation_key, label, template_hash, invocation_name, invocation_type, fingerprint," + "  candidate_fingerprint, baseline_status, version_tag," + "  algo_version, param_signature, approved_by, approved_at," + "  code_ref, updated_at)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             bindProfileColumns(ps, p);
             ps.executeUpdate();
@@ -283,7 +283,7 @@ public class SqliteStorageRepository implements StorageRepository {
     public synchronized boolean saveInvocationProfileIfAbsent(InvocationProfile p) {
         // ON CONFLICT DO NOTHING 让「占位与否」由单条 INSERT 的受影响行数裁决——
         // 并发建档不再依赖「先查后写」的应用层序列，后到者在 SQL 原子性内看到 false
-        String sql = "INSERT INTO invocations" + " (invocation_key, label, template_hash, invocation_name, invocation_type, fingerprint," + "  candidate_fingerprint, baseline_status, version_tag," + "  algo_version, param_signature, approved_by, approved_at," + "  total_records, code_ref, updated_at)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)" + " ON CONFLICT(invocation_key) DO NOTHING";
+        String sql = "INSERT INTO invocations" + " (invocation_key, label, template_hash, invocation_name, invocation_type, fingerprint," + "  candidate_fingerprint, baseline_status, version_tag," + "  algo_version, param_signature, approved_by, approved_at," + "  code_ref, updated_at)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)" + " ON CONFLICT(invocation_key) DO NOTHING";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             bindProfileColumns(ps, p);
             return ps.executeUpdate() == 1;
@@ -309,7 +309,6 @@ public class SqliteStorageRepository implements StorageRepository {
         ps.setString(i++, p.getParamSignature());
         ps.setString(i++, p.getApprovedBy());
         setNullableLong(ps, i++, p.getApprovedAt());
-        ps.setInt(i++, p.getTotalRecords());
         ps.setString(i++, p.getCodeRef());
         ps.setLong(i++, System.currentTimeMillis());
     }

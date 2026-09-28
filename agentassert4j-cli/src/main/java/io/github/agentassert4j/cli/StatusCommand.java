@@ -97,13 +97,15 @@ public class StatusCommand implements Callable<Integer> {
                 return 0;
             }
 
-            out.printf("  %-50s %-9s %-6s %-14s %-4s %-5s %-12s %s%n", "invocationKey", "status", "ver", "approver", "cand", "drift", "archived", "label");
+            out.printf("  %-50s %-9s %-6s %-14s %-4s %-5s %-12s %-24s %s%n", "invocationKey", "status", "ver", "approver", "cand", "drift", "archived", "ref", "label");
             out.println("  drift column: \u25cf consistent / \u25b2 drifted / - none (template identity)");
             out.println("  archived column: rollback targets; * marks the tag that is also the active version");
+            out.println("  ref column: provenance tag recorded at establish/accept (--ref; declared, not verified)");
             for (InvocationProfile profile : profiles) {
                 String archivedTags = archivedVersionTags(repository, profile.getInvocationKey());
                 String markedTags = markActiveTag(archivedTags, profile.getVersionTag());
-                out.printf("  %-50s %-9s %-6s %-14s %-4s %-5s %-12s %s%n", CliSupport.displayKey(profile.getInvocationKey()), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getApprovedBy() != null ? profile.getApprovedBy() : "-", profile.getCandidateFingerprint() != null ? "yes" : "-", driftByInvocationKey.getOrDefault(profile.getInvocationKey(), TemplateDriftState.NONE).symbol(), markedTags.isEmpty() ? "-" : markedTags, labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), "-"));
+                String refTag = profile.getCodeRef() != null ? (profile.getCodeRef().length() > 24 ? profile.getCodeRef().substring(0, 24) + "\u2026" : profile.getCodeRef()) : "-";
+                out.printf("  %-50s %-9s %-6s %-14s %-4s %-5s %-12s %-24s %s%n", CliSupport.displayKey(profile.getInvocationKey()), String.valueOf(profile.getBaselineStatus()), String.valueOf(profile.getVersionTag()), profile.getApprovedBy() != null ? profile.getApprovedBy() : "-", profile.getCandidateFingerprint() != null ? "yes" : "-", driftByInvocationKey.getOrDefault(profile.getInvocationKey(), TemplateDriftState.NONE).symbol(), markedTags.isEmpty() ? "-" : markedTags, refTag, labelsByInvocationKey.getOrDefault(profile.getInvocationKey(), "-"));
                 printTemplateText(repository, profile);
                 if (diff) {
                     printCandidateDiff(profile);
