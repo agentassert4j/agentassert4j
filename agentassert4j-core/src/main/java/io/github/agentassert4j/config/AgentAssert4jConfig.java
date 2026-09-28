@@ -32,6 +32,7 @@ public class AgentAssert4jConfig {
     private StorageConfig storage;
     private RegressionConfig regression;
     private LlmConfig llm;
+    private GovernanceConfig governance;
 
     /**
      * 配置文件未知键告警（加载时收集，doctor 呈现）——拼错/放错层级的键
@@ -43,6 +44,7 @@ public class AgentAssert4jConfig {
         this.storage = new StorageConfig();
         this.regression = new RegressionConfig();
         this.llm = new LlmConfig();
+        this.governance = new GovernanceConfig();
     }
 
     /**
@@ -74,6 +76,7 @@ public class AgentAssert4jConfig {
         config.storage = StorageConfig.fromJson(getMap(root, "storage"), config.storage);
         config.regression = RegressionConfig.fromJson(getMap(root, "regression"), config.regression, notes);
         config.llm = LlmConfig.fromJson(getMap(root, "llm"), config.llm);
+        config.governance = GovernanceConfig.fromJson(getMap(root, "governance"), config.governance, notes);
 
         for (Object key : root.keySet()) {
             if (!ROOT_KEYS.contains(String.valueOf(key))) {
@@ -85,6 +88,14 @@ public class AgentAssert4jConfig {
             for (Object key : regressionMap.keySet()) {
                 if (!REGRESSION_KEYS.contains(String.valueOf(key))) {
                     notes.add("unknown regression key '" + key + "' (valid: " + REGRESSION_KEYS + ")");
+                }
+            }
+        }
+        Map<String, Object> governanceMap = getMap(root, "governance");
+        if (governanceMap != null) {
+            for (Object key : governanceMap.keySet()) {
+                if (!GOVERNANCE_KEYS.contains(String.valueOf(key))) {
+                    notes.add("unknown governance key '" + key + "' (valid: " + GOVERNANCE_KEYS + ")");
                 }
             }
         }
@@ -104,9 +115,10 @@ public class AgentAssert4jConfig {
     /**
      * 已知根段与 llm 段键集——未知键检测的对照基准，键必须与解析路径一一对应。
      */
-    private static final Set<String> ROOT_KEYS = new HashSet<>(Arrays.asList("storage", "regression", "llm"));
+    private static final Set<String> ROOT_KEYS = new HashSet<>(Arrays.asList("storage", "regression", "llm", "governance"));
     private static final Set<String> LLM_KEYS = new HashSet<>(Arrays.asList("protocol", "apiKey", "endpoint", "model", "timeoutMs", "maxRetries", "maxTokens", "temperature", "extraBody"));
     private static final Set<String> REGRESSION_KEYS = new HashSet<>(Arrays.asList("ignorableFields", "memberSampleWindow"));
+    private static final Set<String> GOVERNANCE_KEYS = new HashSet<>(Arrays.asList("actorTag"));
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> getMap(Map<String, Object> parent, String key) {
@@ -155,6 +167,14 @@ public class AgentAssert4jConfig {
             if (item != null) result.add(String.valueOf(item));
         }
         return result;
+    }
+
+    public GovernanceConfig getGovernance() {
+        return governance;
+    }
+
+    public void setGovernance(GovernanceConfig governance) {
+        this.governance = governance;
     }
 
     public StorageConfig getStorage() {
@@ -214,6 +234,37 @@ public class AgentAssert4jConfig {
 
         public void setUrl(String url) {
             this.url = url;
+        }
+    }
+
+    /**
+     * 治理与审计配置。
+     */
+    public static class GovernanceConfig {
+        /**
+         * 宿主标识（可选）：拼进框架自发治理写入的 auto: 署名（auto:&lt;user&gt;@&lt;tag&gt;），
+         * 共库多宿主时自动建档可归因。null/空 = 维持 auto:&lt;user&gt; 原形态。
+         */
+        private String actorTag;
+
+        static GovernanceConfig fromJson(Map<String, Object> map, GovernanceConfig defaults, List<String> notes) {
+            if (map == null) return defaults;
+            GovernanceConfig c = new GovernanceConfig();
+            Object tag = map.get("actorTag");
+            if (tag instanceof String && !((String) tag).trim().isEmpty()) {
+                c.actorTag = ((String) tag).trim();
+            } else if (tag != null) {
+                notes.add("governance.actorTag must be a non-empty string; using no tag instead.");
+            }
+            return c;
+        }
+
+        public String getActorTag() {
+            return actorTag;
+        }
+
+        public void setActorTag(String actorTag) {
+            this.actorTag = actorTag;
         }
     }
 

@@ -158,8 +158,9 @@ public class TaskReplayRunner {
         List<TaskChain> chains = CliSupport.taskChains(repository);
         if (chains.isEmpty()) {
             // 空库的可行动下一步是录制（应用侧 SDK 或 MCP record 摄取），不是任一 CLI 命令；
-            // nextAction 指向 status 仅供确认库确为空（指引文案与选择器阶梯空库分支同源）
-            return fail(CliErrorCode.E_NO_DATA, "No recorded interactions found.", CliSupport.RECORD_FIRST_HINT, "agentassert4j status");
+            // nextAction 指向 doctor（验证 --db/配置指向——空库最常见根因是库指错），
+            // 指回查看类命令在 MCP 面会变成「report 同样无数据」的自循环死路
+            return fail(CliErrorCode.E_NO_DATA, "No recorded interactions found.", CliSupport.RECORD_FIRST_HINT, "agentassert4j doctor");
         }
 
         // 第 1 层 身份检测（全项目，零调用）
@@ -196,8 +197,8 @@ public class TaskReplayRunner {
                 for (String key : unbaselined) {
                     diagnostic("  " + key);
                 }
-                diagnostic("Run `agentassert4j baseline` locally to review and establish baselines, then retry; or drop --ci to auto-establish.");
-                return failWithEnvelopeOnly(CliErrorCode.E_GUARD, "Refusing to judge in --ci mode: the scope holds " + CliSupport.plural(unbaselined.size(), "unbaselined invocation") + " (full list on stderr).", "Run `agentassert4j baseline` locally to review and establish baselines, then retry; or drop --ci to auto-establish.", "agentassert4j baseline");
+                diagnostic("Run `agentassert4j baseline` to review and establish baselines, then retry; or drop --ci to auto-establish.");
+                return failWithEnvelopeOnly(CliErrorCode.E_GUARD, "Refusing to judge in --ci mode: the scope holds " + CliSupport.plural(unbaselined.size(), "unbaselined invocation") + " (full list on stderr).", "Run `agentassert4j baseline` to review and establish baselines, then retry; or drop --ci to auto-establish.", "agentassert4j baseline");
             }
         } else {
             // 自动建档（开发态自动化，报告可见）：裂键豁免与披露由 establishMissing
@@ -304,9 +305,6 @@ public class TaskReplayRunner {
         // 第 3 层 受控重驱（显式开启）：逐点以最新归档模板重驱录制输入
         ReDriveTotals reDriveTotals = new ReDriveTotals();
         if (reDrive) {
-            // 模型身份告警只挂真实消费处——判定与对齐层零 LLM 调用，不消费
-            // 重放模型，提早告警只会训练用户忽略它
-            warnIfModelDiffers();
             reDriveLayer(drift, fullChain, narrowed, invocationKey, scoped, manager, maxTotalCalls, maxTotalTokens, reDriveTotals);
         }
 
@@ -340,7 +338,8 @@ public class TaskReplayRunner {
             return fail(CliErrorCode.E_USAGE, "Re-drive truncated by the budget caps: " + reDriveTotals.callsUsed + " call(s), " + reDriveTotals.tokensUsed + " tokens used; " + CliSupport.plural(reDriveTotals.skipped, "record") + " skipped.", "Raise --max-total-calls/--max-total-tokens, narrow the scope with --task/--invocation, or drop the caps.", "agentassert4j replay");
         }
         if (reDriveTotals.failed > 0 && reDriveTotals.pass == 0) {
-            return fail(CliErrorCode.E_ENV, "All re-drive calls failed (no comparisons).", "Check llm config, credentials and network, then retry.", "agentassert4j doctor");
+            String cause = reDriveTotals.timedOut ? "One or more calls hit llm.timeoutMs; thinking-tier models can exceed the default 60s." : "Check llm config, credentials and network.";
+            return fail(CliErrorCode.E_ENV, "All re-drive calls failed (no comparisons).", cause + " Then retry.", "agentassert4j doctor");
         }
         boolean anyGap = totals.missing > 0 || totals.added > 0 || totals.ruleViolations > 0 || dispositions.hung > 0;
         if (totals.changed > 0 || totals.anyTaskChanged || anyGap || reDriveTotals.changed > 0) {
@@ -359,6 +358,7 @@ public class TaskReplayRunner {
         int skipped;
         int callsUsed;
         long tokensUsed;
+        boolean timedOut;
     }
 
     /**
@@ -436,6 +436,7 @@ public class TaskReplayRunner {
             // （走 diagnostic：--json 模式落 stderr，stdout 报告契约不变）
             diagnostic("No re-drive targets: default re-drive covers drift points only, and the scope currently has none. Widen with --task/--invocation, or use --full-chain.");
         } else {
+            warnIfModelDiffers(targets);
             info("Re-drive: " + CliSupport.plural(targets.size(), "record") + " using each point\'s latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + ".");
             info(CostEstimator.estimate(targets, llmClient.name()));
         }
@@ -489,6 +490,9 @@ public class TaskReplayRunner {
                 info(stepLine(index, key, "re-drive PASS") + served + observationNote);
             } else {
                 rd.failed++;
+                if (result.getStatus() == TestResultStatus.TIMEOUT) {
+                    rd.timedOut = true;
+                }
                 info(stepLine(index, key, result.getStatus() + " " + (result.getErrorMessage() != null ? result.getErrorMessage() : "")));
             }
             if (stepJsons != null) {
@@ -570,6 +574,13 @@ public class TaskReplayRunner {
         if (observationId != null) {
             sb.append(",\"observationRecordId\":\"").append(RecursiveJsonParser.escape(observationId)).append('"');
         }
+        // 账单明细（本次真调的思考/原始用量）随步级可读——思考档位代价账单的机器面
+        if (result.getReasoningTokens() != null) {
+            sb.append(",\"reasoningTokens\":").append(result.getReasoningTokens());
+        }
+        if (record.getUsageRaw() != null && !record.getUsageRaw().isEmpty()) {
+            sb.append(",\"usageRaw\":\"").append(RecursiveJsonParser.escape(record.getUsageRaw())).append('"');
+        }
         ComparisonResult comparison = result.getComparison();
         if (comparison != null) {
             sb.append(",\"verdict\":\"").append(comparison.getVerdict()).append('"');
@@ -615,6 +626,9 @@ public class TaskReplayRunner {
         }
         sb.append("],\"estimatedTokens\":").append(estimatedTokens);
         sb.append(",\"estimatedCostUsd\":").append(plainDecimal(estimatedCostUsd));
+        // model 与人读报价同源（llmClient.name()）——运行时覆盖的机器面核验点，
+        // 缺了它消费者无法在零调用面确认 --model/MCP model 覆盖是否生效
+        sb.append(",\"model\":\"").append(RecursiveJsonParser.escape(llmClient.name())).append('"');
         return sb.append("}}").toString();
     }
 
@@ -988,7 +1002,7 @@ public class TaskReplayRunner {
             // 的步骤不渲染不计数——help 承诺 "narrow to one invocation"，静默渲染全链
             // 与承诺不符；任务纪律评估仍见全长链（在 alignLatestPerInvocation 内完成），
             // 「恰好两次」类规则不受本过滤影响
-            if (narrowedInvocationKey != null && !narrowedInvocationKey.equals(step.getInvocationKey())) {
+            if (stepExcludedByNarrowing(step, narrowedInvocationKey)) {
                 continue;
             }
             index++;
@@ -1028,7 +1042,7 @@ public class TaskReplayRunner {
                             totals.pendingCandidates++;
                             info("Candidate registered: " + CliSupport.displayKey(step.getInvocationKey()) + " (behavior change awaiting adjudication; accept adds the shape to the approved set, reject discards).");
                         } else {
-                            info("Difference holds against the paired chain, but the record fingerprint is already in the invocation's approved shape set; no candidate registered (nothing to adjudicate).");
+                            info("Difference holds against the paired chain, but this shape is already tracked by the invocation (approved or previously rejected); no candidate registered (nothing to adjudicate).");
                         }
                     }
                 } else {
@@ -1093,6 +1107,11 @@ public class TaskReplayRunner {
         }
 
         for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
+            // 机器面与人读面同滤：JSON 步骤数组若渲染全链，缩域承诺只兑现一半，
+            // summary 计数（comparedPairs）与 steps 数组会自相矛盾
+            if (stepExcludedByNarrowing(step, narrowedInvocationKey)) {
+                continue;
+            }
             String action = step.getKind() == StepKind.MISSING ? "missing" : step.getKind() == StepKind.ADDED ? "added" : "aligned";
             render.stepJsons.add(alignedStepJson(action, step, unapprovedEarlierByRecordId != null ? Integer.valueOf(unapprovedEarlierByRecordId.getOrDefault(step.getNewRecordId(), 0)) : null));
         }
@@ -1379,30 +1398,25 @@ public class TaskReplayRunner {
     }
 
     /**
-     * 基线与重放配置的模型身份不一致时告警——换模型重放的判定结果不可与
-     * 原基线直接比较。只在受控重驱前调用（唯一消费重放模型的路径）；配置
-     * 未指定模型时比对客户端实际生效模型，否则「默认模型 ≠ 录制模型」这
-     * 一最常见场景恰成盲区。
+     * 重驱目标与重放配置的模型身份不一致时告警——换模型重驱的判定结果不可与
+     * 这些录制的原基线直接比较。比对对象必须是本次目标记录的录制模型而非全库
+     * 历史：按全库并集判据，一条实验模型的记录入库后，后续相同模型的告警就不再出现（双宿主
+     * 实测的「换模型不告警」假象即源于此）；配置未指定模型时比对客户端实际生效
+     * 模型，否则「默认模型 ≠ 录制模型」这一最常见场景恰成盲区。
      */
-    private void warnIfModelDiffers() {
+    private void warnIfModelDiffers(List<InteractionRecord> targets) {
         String configModel = executionConfig.getModel();
         if (configModel == null || configModel.isEmpty()) {
             configModel = llmClient.name();
         }
         Set<String> recordedModels = new TreeSet<>();
-        try {
-            for (String sessionId : repository.findAllSessionIds()) {
-                for (InteractionRecord record : repository.findBySessionId(sessionId)) {
-                    if (record.getModel() != null && !record.getModel().isEmpty()) {
-                        recordedModels.add(record.getModel());
-                    }
-                }
+        for (InteractionRecord record : targets) {
+            if (record.getModel() != null && !record.getModel().isEmpty()) {
+                recordedModels.add(record.getModel());
             }
-        } catch (RuntimeException e) {
-            return;
         }
         if (!recordedModels.isEmpty() && !recordedModels.contains(configModel)) {
-            diagnostic("Warning: replay model " + configModel + " differs from recorded models " + recordedModels + "; verdicts are not directly comparable to baselines (model switching is experimental).");
+            diagnostic("Warning: replay model " + configModel + " differs from the recorded models of the re-drive targets " + recordedModels + "; verdicts are not directly comparable to baselines (model switching is experimental).");
         }
     }
 
@@ -1845,6 +1859,11 @@ public class TaskReplayRunner {
      * 区分「无草稿」与「字段缺席」两种形态）；earlierRecords 来自步骤本体
      * （core 链末判定入口就近写入）。
      */
+    /** 缩域判定的人读/机器两循环共用出口——第三处渲染再漏滤就是面间漂移。 */
+    private static boolean stepExcludedByNarrowing(TaskAlignment.StepAlignment step, String narrowedInvocationKey) {
+        return narrowedInvocationKey != null && !narrowedInvocationKey.equals(step.getInvocationKey());
+    }
+
     private static String alignedStepJson(String action, TaskAlignment.StepAlignment step, Integer unapprovedEarlier) {
         StringBuilder sb = new StringBuilder("{");
         String recordId = step.getNewRecordId() != null ? step.getNewRecordId() : step.getBaselineRecordId();

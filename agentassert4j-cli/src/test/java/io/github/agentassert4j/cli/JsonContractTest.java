@@ -332,6 +332,19 @@ class JsonContractTest {
         }
 
         @Test
+        @DisplayName("reject 事件的 note 取证链黑盒可见（rejected-fingerprint:哈希）")
+        void rejectEvent_noteVisibleInAudit() throws Exception {
+            InteractionRecord record = seedOneRecord();
+            execute("baseline", "--db", dbPath);
+            seedCandidate("invocation:queryOrder:hash-old", record);
+            execute("reject", "--db", dbPath, "--invocation", "queryOrder", "--approver", "agent:codex", "--json");
+
+            assertEquals(0, execute("audit", "--db", dbPath, "--json"));
+            String audit = singleLineReport();
+            assertTrue(audit.contains("rejected-fingerprint:"), "REJECT 事件必须携带被拒形状哈希（待裁决抑制的取证依据）: " + audit);
+        }
+
+        @Test
         @DisplayName("status/1 审批溯源：approvedBy/approvedAt 随画像回读（「谁批的」任何面可答）")
         void statusJson_exposesApprover() throws Exception {
             seedOneRecord();
@@ -610,6 +623,29 @@ class JsonContractTest {
             assertTrue(report.startsWith("{\"schema\":\"agentassert4j.record-view/1\""), report);
             assertTrue(report.contains("\"latencyMs\":1234"), report);
             assertTrue(report.contains("\"taskKey\":\"order-probe\""), "metadata 必须原样投影（taskKey 住里面）: " + report);
+        }
+
+        @Test
+        @DisplayName("record show --json：recordKind 恒在场 + reasoning/usageRaw 账单明细条件投影")
+        void recordShow_projectsKindAndBillingDetails() throws Exception {
+            InteractionRecord r = seedOneRecord();
+            r.setRecordId("rec-billing");
+            r.setReasoningTokens(2891);
+            r.setUsageRaw("{\"prompt_tokens\":97,\"completion_tokens\":3155}");
+            r.setMetadata("{\"redriveOf\":\"rec-1\"}");
+            repository.saveInteractionIfAbsent(r);
+
+            assertEquals(0, execute("record", "show", "--db", dbPath, "--record-id", "rec-billing", "--json"));
+            String report = singleLineReport();
+            assertTrue(report.contains("\"recordKind\":\"re-drive-observation\""), "观测身份必须恒在场免解析 metadata: " + report);
+            assertTrue(report.contains("\"reasoningTokens\":2891"), "思考 tokens 必须可读（账单透明度）: " + report);
+            assertTrue(report.contains("\"usageRaw\":") , "原始用量必须可读: " + report);
+
+            // 业务记录对照：无 redriveOf 标记 → kind=business；无明细 → 键不出现（null 与 0 不混淆）
+            assertEquals(0, execute("record", "show", "--db", dbPath, "--record-id", "rec-1", "--json"));
+            String business = singleLineReport();
+            assertTrue(business.contains("\"recordKind\":\"business\""), "业务记录身份恒在场: " + business);
+            assertFalse(business.contains("reasoningTokens"), "无明细时键不得出现（null 与 0 不混淆）: " + business);
         }
 
         @Test

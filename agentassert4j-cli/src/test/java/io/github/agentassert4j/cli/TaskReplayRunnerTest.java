@@ -507,7 +507,7 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("换模型告警只挂重驱：零调用判定路径不告警，重驱前必须告警")
+        @DisplayName("换模型告警只挂重驱：零调用判定路径不告警")
         void modelDiffers_warnsOnlyBeforeReDrive() {
             seedIdenticalChains("{\"v\":1}");
             TestExecutionConfig withModel = new TestExecutionConfig().timeoutMs(1000).temperature(null).model("another-model");
@@ -515,12 +515,7 @@ class TaskReplayRunnerTest {
 
             modelRunner.run(null, null, false, false, false, null, false, false, false, null, null);
 
-            assertFalse(output.toString().contains("differs from recorded models"), "判定与对齐层零 LLM 调用，不消费重放模型，不得告警: " + output);
-
-            output.reset();
-            modelRunner.run(null, null, false, false, false, null, false, true, false, null, null);
-
-            assertTrue(output.toString().contains("differs from recorded models"), "重驱真实消费重放模型，必须告警: " + output);
+            assertFalse(output.toString().contains("differs from the recorded models"), "判定与对齐层零 LLM 调用，不消费重放模型，不得告警: " + output);
         }
 
         @Test
@@ -914,6 +909,34 @@ class TaskReplayRunnerTest {
             assertTrue(report.contains("\"endpoint\":\"https://api.example.com\""), "端点必须披露: " + report);
             assertTrue(report.contains("\"protocol\":\"openai-responses\""), "显式协议必须披露: " + report);
             assertTrue(report.contains("Re-drive emitter: model"), "人读诊断行必须披露发射面: " + report);
+        }
+
+        @Test
+        @DisplayName("换模型告警判据=本次重驱目标的录制模型：他键同模型记录不抑制告警")
+        void modelWarning_scopedToReDriveTargets() {
+            seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
+            // 非重驱目标（无基线未漂移的他键）持有与配置相同的模型——
+            // 全库并集判据下这条记录会让告警不再出现（按目标判据后告警应当照常出场）
+            saveSkeletonRecord("z-1", "session-z", 3000L, "查物流", "logistics", "skl-9", "hash-z", "{\"result\":\"ok\"}");
+            TestExecutionConfig withModel = new TestExecutionConfig().timeoutMs(1000).temperature(null).model("another-model");
+            TaskReplayRunner modelRunner = new TaskReplayRunner(repository, new StubLlmClient(), new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), withModel, new PrintStream(output, true), new PrintStream(output, true), false);
+
+            modelRunner.run(null, null, false, false, false, null, false, true, false, null, null);
+
+            assertTrue(output.toString().contains("differs from the recorded models of the re-drive targets"),
+                    "告警必须只看重驱目标的录制模型: " + output);
+        }
+
+        @Test
+        @DisplayName("重驱 dry-run 计划 JSON 带 model 字段（运行时覆盖的机器面核验点）")
+        void reDrivePlan_modelDisclosed() {
+            seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
+            ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+            TaskReplayRunner jsonRunner = new TaskReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
+
+            jsonRunner.run(null, null, false, true, false, null, false, true, false, null, null);
+
+            assertTrue(jsonOut.toString().contains("\"model\":\"stub-model\""), "dry-run 计划面必须披露发射模型: " + jsonOut);
         }
 
         @Test

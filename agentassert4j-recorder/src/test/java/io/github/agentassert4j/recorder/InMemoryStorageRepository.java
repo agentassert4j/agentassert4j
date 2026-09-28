@@ -85,6 +85,11 @@ class InMemoryStorageRepository implements StorageRepository {
     }
 
     @Override
+    public boolean saveInvocationProfileIfAbsent(InvocationProfile p) {
+        return false;
+    }
+
+    @Override
     public InvocationProfile findInvocationByKey(String key) {
         return null;
     }

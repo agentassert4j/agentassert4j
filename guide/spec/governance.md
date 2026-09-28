@@ -21,7 +21,10 @@
 | 候选 | 画像 candidateFingerprint 列 | 跨进程持久化——重放与裁决通常不在同一进程，候选必须落库才对裁决可达 |
 | 归档基线 | invocation_template_versions 行 | 完整治理面快照：指纹、模板哈希、语义版本、审批人/时间、代码锚、归档时间；rollback 的唯一恢复源 |
 | 审批事实 | approvedBy/approvedAt | 空白身份归一为 null——approvedBy=null 是「未经审批链盖章」的显式信号，空白串会稀释该信号 |
-| 治理事件 | governance_events 行（只追加时间线） | 六动词（accept/reject/rollback/establish/force-rebuild/collect）发生时经 BaselineManager 单源落账，happenedAt 由存储实现方盖章；reject/rollback 不在画像上留状态痕迹，事件是其唯一审计载体——无状态痕迹的动作没有派生重建路径，事件必须成为真源（R11） |
+| 治理事件 | governance_events 行（只追加时间线） | 六动词（accept/reject/rollback/establish/force-rebuild/collect）发生时经 BaselineManager 单源落账，happenedAt 由存储实现方盖章；reject/rollback 不在画像上留状态痕迹，事件是其唯一审计载体——无状态痕迹的动作没有派生重建路径，事件必须成为真源（R11）；
+note 列承载 reject 的被拒形状哈希（`rejected-fingerprint:<哈希>`），是 recordCandidate
+待裁决抑制的判定依据（rollback 归档形状复检重新排队与此不同：回退=回到旧认可集，
+拒绝=声明已知） |
 | 代码锚 | codeRef（invocations 与 invocation_template_versions 双表携带） | 申报制审计标注：建档/accept 时调用方声明的代码参照（如 git 提交号），定位「行为最后被认可于哪个提交」；不校验、不连 git、不参与判定；空白归一为 null，空缺合法。归档行携带归档基线自身的锚，rollback 连锚回退——活跃行的锚必须始终描述当前基线自身，否则账本说谎 |
 | 模板身份 | 最新可分组记录的 templateHash | 建档种子携带；accept/显式收编按同一口径前移（身份前移见下） |
 

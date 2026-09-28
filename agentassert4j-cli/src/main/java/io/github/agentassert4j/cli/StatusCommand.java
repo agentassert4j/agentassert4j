@@ -197,7 +197,8 @@ public class StatusCommand implements Callable<Integer> {
         if (profile.getCandidateFingerprint() == null) {
             return;
         }
-        out.println("      └ candidate diff (baseline → candidate):");
+        out.println("      └ candidate diff (baseline → candidate); each row names the changed dimension:");
+        out.println("        (tool set / param types / output field set / field types / content rules / behaviors — text wording alone never diffs)");
         for (String line : FingerprintDiffRenderer.render(CliSupport.anchorShape(profile), profile.getCandidateFingerprint())) {
             out.println("        " + line);
         }

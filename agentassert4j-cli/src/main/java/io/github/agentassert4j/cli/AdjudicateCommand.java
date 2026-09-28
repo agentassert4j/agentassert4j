@@ -118,7 +118,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
         if (target.getCandidateFingerprint() == null) {
             return;
         }
-        out.println("  " + target.getInvocationKey() + " candidate diff (baseline → candidate):");
+        out.println("  " + CliSupport.displayKey(target.getInvocationKey()) + " candidate diff (baseline → candidate); each row names the changed dimension:");
         for (String line : FingerprintDiffRenderer.render(CliSupport.anchorShape(target), target.getCandidateFingerprint())) {
             out.println("    " + line);
         }

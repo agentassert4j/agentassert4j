@@ -78,6 +78,11 @@ class SimpleTestRepo implements StorageRepository {
     }
 
     @Override
+    public boolean saveInvocationProfileIfAbsent(InvocationProfile p) {
+        return invocationProfiles.putIfAbsent(p.getInvocationKey(), p) == null;
+    }
+
+    @Override
     public InvocationProfile findInvocationByKey(String key) {
         return invocationProfiles.get(key);
     }

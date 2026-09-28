@@ -175,4 +175,34 @@ public final class InvocationResolver {
             return tc.getArgTypes().entrySet().stream().map(e -> e.getKey().toLowerCase(Locale.ROOT) + ":" + String.valueOf(e.getValue()).toLowerCase(Locale.ROOT));
         });
     }
+
+    /**
+     * 调用点键的人读短形（plan@dfd4e8fa / tpl@1a2b3c4d）——键词表（invocation/
+     * skeleton/template/adhoc 四锚点）由本类定义，短形投影与其同源单点；CLI 的
+     * displayKey 直接委托此处，报告与异常消息不再各写一份键形转译。
+     */
+    public static String displayKey(String invocationKey) {
+        if (invocationKey == null || invocationKey.isEmpty()) {
+            return "(unresolved invocation)";
+        }
+        String[] segments = invocationKey.split(":");
+        if ("invocation".equals(segments[0]) && segments.length >= 2) {
+            String label = TaskAligner.declaredLabelOfKey(invocationKey);
+            return (label != null ? label : segments[1]) + (segments.length >= 3 ? "@" + abbreviateHash(segments[2]) : "");
+        }
+        if ("skeleton".equals(segments[0]) && segments.length >= 2) {
+            return "skl@" + abbreviateHash(segments[1]);
+        }
+        if ("template".equals(segments[0]) && segments.length >= 2) {
+            return "tpl@" + abbreviateHash(segments[1]);
+        }
+        if ("adhoc".equals(segments[0])) {
+            return segments.length >= 2 && !"no-anchor".equals(segments[1]) ? "adhoc@" + abbreviateHash(segments[1]) : "adhoc";
+        }
+        return invocationKey;
+    }
+
+    private static String abbreviateHash(String value) {
+        return value.length() <= 8 ? value : value.substring(0, 8);
+    }
 }

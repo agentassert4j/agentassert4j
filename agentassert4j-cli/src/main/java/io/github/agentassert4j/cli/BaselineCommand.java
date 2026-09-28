@@ -44,7 +44,7 @@ public class BaselineCommand implements Callable<Integer> {
     @Option(names = {"--expected-version"}, description = "Optimistic concurrency guard for --force: refuse unless every active baseline version still equals this tag")
     String expectedVersion;
 
-    @Option(names = {"--ref"}, description = "Code reference (e.g. a git commit) the established baselines correspond to; declared, not verified")
+    @Option(names = {"--ref"}, description = "Provenance tag recorded with the baselines (commonly a git commit or a model label); declared, not verified")
     String codeRef;
 
     @Option(names = {"--json"}, description = "Print a single-line JSON report to stdout")

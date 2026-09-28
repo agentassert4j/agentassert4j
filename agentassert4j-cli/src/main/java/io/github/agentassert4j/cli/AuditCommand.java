@@ -88,6 +88,11 @@ public class AuditCommand implements Callable<Integer> {
             sb.append(",\"codeRef\":\"").append(RecursiveJsonParser.escape(event.getCodeRef())).append('"');
         }
         sb.append(",\"happenedAt\":").append(event.getHappenedAt() != null ? event.getHappenedAt().toString() : "null");
+        // note 是 reject 的取证载体（rejected-fingerprint:<哈希>）——不投影则
+        // 「为何被拒」的证据链在审计面断头，黑盒消费者无从核对抑制依据
+        if (event.getNote() != null) {
+            sb.append(",\"note\":\"").append(RecursiveJsonParser.escape(event.getNote())).append('"');
+        }
         return sb.append('}').toString();
     }
 
@@ -99,6 +104,9 @@ public class AuditCommand implements Callable<Integer> {
         sb.append(' ').append(event.getActor() != null ? event.getActor() : "(no actor)");
         if (event.getCodeRef() != null) {
             sb.append(" (ref ").append(event.getCodeRef()).append(')');
+        }
+        if (event.getNote() != null) {
+            sb.append(" (note ").append(event.getNote()).append(')');
         }
         return sb.toString();
     }

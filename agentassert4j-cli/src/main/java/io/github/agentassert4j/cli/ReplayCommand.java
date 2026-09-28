@@ -46,13 +46,13 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--member-check"}, description = "Member determination: the latest chain of each task is checked against the most recent chains (bounded window) and passes if its behavior matches any of them; the member block carries the matched count (stability probe before accepting a new shape); default pairing compares the latest chain against the previous one only")
     boolean memberCheck;
 
-    @Option(names = {"--member-window"}, paramLabel = "N|all", description = "Member-check sample window: an integer >= 1, or 'all' to scan every historical chain (archaeology, not a stability signal). Default: 5, overridable via regression.memberSampleWindow in agentassert4j.json (finite integers only); this run's value wins (requires --member-check)")
+    @Option(names = {"--member-window"}, paramLabel = "N|all", description = "Member-check sample window: how many recent task CHAINS to sample — an integer >= 1, or 'all' to scan every historical chain (archaeology, not a stability signal). Default: 5, overridable via regression.memberSampleWindow in agentassert4j.json (finite integers only); this run's value wins (requires --member-check)")
     String memberWindow;
 
     @Option(names = {"--re-drive"}, description = "Controlled re-drive (spends LLM calls): drift points by default, or every invocation in scope with --task/--invocation; re-drives recorded inputs with each point's latest archived template. Run --dry-run first for a cost estimate")
     boolean reDrive;
 
-    @Option(names = {"--full-chain"}, description = "Widen the re-drive: drop the drift-points-only trim and re-drive every record in scope (requires --re-drive)")
+    @Option(names = {"--full-chain"}, description = "Widen the re-drive: drop the drift-points-only trim and re-drive every record of every chain in the scope — with --task/--invocation this covers all sessions, not just the selected invocation (requires --re-drive)")
     boolean fullChain;
 
     @Option(names = {"--max-total-calls"}, description = "Re-drive budget pool: cap on real re-drive calls for this run (requires --re-drive)")
@@ -79,13 +79,13 @@ public class ReplayCommand implements Callable<Integer> {
             return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--full-chain requires --re-drive.", "Add --re-drive to run the widened re-drive, or drop --full-chain.", "agentassert4j replay --re-drive --full-chain");
         }
         if ((maxTotalCalls != null || maxTotalTokens != null) && !reDrive) {
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--max-total-calls/--max-total-tokens require --re-drive.", "Add --re-drive, or drop the budget caps.", "");
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--max-total-calls/--max-total-tokens require --re-drive.", "Add --re-drive, or drop the budget caps.", "agentassert4j replay");
         }
         if (maxTotalCalls != null && maxTotalCalls < 1) {
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--max-total-calls must be >= 1.", "Pass a positive call cap, or drop the flag for no cap.", "");
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--max-total-calls must be >= 1.", "Pass a positive call cap, or drop the flag for no cap.", "agentassert4j replay");
         }
         if (maxTotalTokens != null && maxTotalTokens < 1) {
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--max-total-tokens must be >= 1.", "Pass a positive token cap, or drop the flag for no cap.", "");
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--max-total-tokens must be >= 1.", "Pass a positive token cap, or drop the flag for no cap.", "agentassert4j replay");
         }
         if (memberWindow != null && !memberCheck) {
             return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--member-window requires --member-check.", "Add --member-check, or drop --member-window to keep the configured default window.", "agentassert4j replay --member-check");
@@ -101,18 +101,18 @@ public class ReplayCommand implements Callable<Integer> {
                 try {
                     resolvedMemberWindow = Integer.valueOf(Integer.parseInt(memberWindow.trim()));
                 } catch (NumberFormatException e) {
-                    return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--member-window must be an integer >= 1 or 'all', got '" + memberWindow + "'.", "Pass a positive integer, 'all', or drop the flag.", "");
+                    return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--member-window must be an integer >= 1 or 'all', got '" + memberWindow + "'.", "Pass a positive integer, 'all', or drop the flag.", "agentassert4j replay");
                 }
                 if (resolvedMemberWindow.intValue() < 1) {
-                    return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--member-window must be >= 1.", "Pass a positive integer, 'all', or drop the flag.", "");
+                    return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--member-window must be >= 1.", "Pass a positive integer, 'all', or drop the flag.", "agentassert4j replay");
                 }
             }
         }
         if ((model != null && model.trim().isEmpty()) || (endpoint != null && endpoint.trim().isEmpty())) {
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--model/--endpoint must not be blank.", "Pass a model name / base URL, or drop the flag to keep the configured value.", "");
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--model/--endpoint must not be blank.", "Pass a model name / base URL, or drop the flag to keep the configured value.", "agentassert4j replay");
         }
         if ((model != null || endpoint != null) && !reDrive) {
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--model/--endpoint override the re-drive LLM call; add --re-drive.", "The only LLM-consuming path is the controlled re-drive; zero-call commands have no model to override.", "");
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_USAGE, "--model/--endpoint override the re-drive LLM call; add --re-drive.", "The only LLM-consuming path is the controlled re-drive; zero-call commands have no model to override.", "agentassert4j replay");
         }
         StorageRepository repository = null;
         try {

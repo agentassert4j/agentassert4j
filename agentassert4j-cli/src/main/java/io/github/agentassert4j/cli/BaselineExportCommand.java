@@ -52,7 +52,7 @@ public class BaselineExportCommand implements Callable<Integer> {
     @Option(names = {"--out"}, defaultValue = "acceptance-pack.json", description = "Output file path (default ./acceptance-pack.json)")
     String outPath;
 
-    @Option(names = {"--ref"}, description = "Code reference (e.g. a git commit) recorded in the acceptance pack metadata; declared, not verified")
+    @Option(names = {"--ref"}, description = "Provenance tag recorded in the acceptance pack metadata (commonly a git commit or a model label); declared, not verified")
     String codeRef;
 
     @Option(names = {"--json"}, description = "Print a single-line JSON report to stdout (agentassert4j.export-report/1)")

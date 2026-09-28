@@ -216,6 +216,16 @@ class AgentAssert4jConfigTest {
         }
 
         @Test
+        @DisplayName("governance.actorTag 配置键哨兵：合法值吸收进 auto 署名链路，空串告警回退")
+        void governanceActorTag_absorbedAndGuarded() {
+            AgentAssert4jConfig tagged = AgentAssert4jConfig.fromJson("{\"governance\":{\"actorTag\":\"zcode\"}}");
+            assertEquals("zcode", tagged.getGovernance().getActorTag(), "宿主标识逐字段吸收");
+
+            AgentAssert4jConfig blank = AgentAssert4jConfig.fromJson("{\"governance\":{\"actorTag\":\"   \"}}");
+            assertNull(blank.getGovernance().getActorTag(), "空串按未配置处理");
+            assertTrue(blank.getConfigNotes().stream().anyMatch(n -> n.contains("actorTag")), "空串告警就近可见: " + blank.getConfigNotes());
+        }
+
         @DisplayName("memberSampleWindow 配置键哨兵：合法整数逐字段吸收，非法值告警回退内置默认")
         void memberSampleWindow_absorbedAndGuarded() {
             AgentAssert4jConfig config = AgentAssert4jConfig.fromJson("{\"regression\":{\"memberSampleWindow\":8}}");

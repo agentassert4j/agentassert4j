@@ -395,6 +395,44 @@ class BaselineManagerTest {
         }
 
         @Test
+        @DisplayName("原子幂等建档：双建只落一次，第二次返回 false 且 audit 恰一条 establish")
+        void doubleEstablish_singleWriteSingleEvent() {
+            InteractionRecord first = makeToolRecord("skill-race", "toolA");
+            InteractionRecord second = makeToolRecord("skill-race", "toolA");
+            repo.saveInteractionIfAbsent(first);
+            repo.saveInteractionIfAbsent(second);
+
+            assertTrue(manager.autoEstablishBaseline(first, "actor-a", null, null), "先到者占位成功");
+            assertFalse(manager.autoEstablishBaseline(second, "actor-b", null, null), "后到者原子降级（不再覆盖先到者）");
+
+            InvocationProfile profile = repo.findAllInvocations().get(0);
+            assertEquals("v1", profile.getVersionTag());
+            assertEquals("actor-a", profile.getApprovedBy(), "画像归先到者");
+            long establishEvents = 0;
+            for (io.github.agentassert4j.model.GovernanceEvent event : repo.findGovernanceEvents()) {
+                if (event.getVerb() == io.github.agentassert4j.model.GovernanceVerb.ESTABLISH
+                        && "actor-a".equals(event.getActor())) {
+                    establishEvents++;
+                }
+            }
+            assertEquals(1, establishEvents, "audit 恰一条先到者事件，败者不落事件");
+        }
+
+        @Test
+        @DisplayName("并发降级路径也受 expectedVersion 守卫：声明错值 → E-GUARD 就近拒绝")
+        void concurrentDegrade_expectedVersionGuarded() {
+            InteractionRecord first = makeToolRecord("skill-guard", "toolA");
+            InteractionRecord second = makeToolRecord("skill-guard", "toolA");
+            repo.saveInteractionIfAbsent(first);
+            repo.saveInteractionIfAbsent(second);
+            manager.autoEstablishBaseline(first, "actor-a", null, null);
+
+            // 申报 v9 而实际 v1：原子降级读到 winner 后必须守卫，静默放行会伪装成功
+            assertThrows(io.github.agentassert4j.algorithm.VersionMismatchException.class,
+                    () -> manager.autoEstablishBaseline(second, "actor-b", null, null, "v9"));
+        }
+
+        @Test
         @DisplayName("已有基线 → 不覆盖（幂等）")
         void existingBaseline_noOverwrite() {
             InteractionRecord record = makeToolRecord("skill-exist", "toolA");

@@ -17,7 +17,7 @@ public class AcceptCommand extends AdjudicateCommand {
     @Option(names = {"--approver"}, description = "Approver identity recorded with the baseline and its archives (defaults to the current OS user)")
     String approver;
 
-    @Option(names = {"--ref"}, description = "Code reference (e.g. a git commit) the accepted shape corresponds to; declared, not verified")
+    @Option(names = {"--ref"}, description = "Provenance tag recorded with the acceptance (commonly a git commit or a model label); declared, not verified")
     String codeRef;
 
     @Override

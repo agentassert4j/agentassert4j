@@ -84,6 +84,8 @@ public class BaselineService {
             // 锚定为基线。播种与披露共用同一变量，报告披露的永远是实际入基线的那条
             InteractionRecord seed = latestBusinessRecord(records);
 
+            boolean wrote = false;
+            boolean storageFailed = false;
             if (force) {
                 if (hadBaseline) {
                     // 破坏性操作必须留痕：被覆盖的旧基线进入归档，rollback 可恢复。
@@ -96,10 +98,12 @@ public class BaselineService {
                 }
                 // 重建取桶内最新记录（与首次建档同语义；force 也是唯一的形态收缩途径——
                 // 重建后集合只留当前形态）；expectedVersion 随行使守卫（写入前校验）
-                manager.reestablishBaseline(seed, actor, rules, codeRef, expectedVersion);
+                wrote = manager.reestablishBaseline(seed, actor, rules, codeRef, expectedVersion);
             } else {
                 try {
-                    manager.autoEstablishBaseline(seed, actor, rules, codeRef, expectedVersion);
+                    // 原子幂等建档：键被并发方先占时返回 false（而非覆盖先到者）——
+                    // 报告与 audit 都以「基线归先到者」如实呈现
+                    wrote = manager.autoEstablishBaseline(seed, actor, rules, codeRef, expectedVersion);
                 } catch (VersionMismatchException e) {
                     // 守卫拒绝必须穿透：并发方已把版本推进到非调用方所见——
                     // 吞掉会把「守卫拒绝」伪装成「建档成功」，报告与 audit 双双失真
@@ -108,11 +112,12 @@ public class BaselineService {
                     // 单条建档失败（存储抖动等）不中断整批——与录制 enrich 的
                     // 单条容错同哲学；分桶已剔除不可分组记录，这里只剩存储层故障。
                     // 本地不计数不重试：故障可见性由存储层 SEVERE 日志与下方落库回验承担
+                    storageFailed = true;
                 }
             }
 
-            // 落库回验：建档路径吞掉单条存储故障（不中断整批），但全失败时
-            // 画像不存在——此时不得上报「已建立」的假成功、不得计入计数
+            // 落库回验：建档路径吞掉单条存储故障（不中断整批），但画像缺席时
+            // 不得上报「已建立」的假成功、不得计入计数
             InvocationProfile created = repository.findInvocationByKey(invocationKey);
             if (!CliSupport.hasBaseline(created)) {
                 out.println("  " + displayLabel(records) + invocationKey + ": baseline establishment failed (storage error; see storage logs)");
@@ -121,10 +126,19 @@ public class BaselineService {
                 }
                 continue;
             }
+            if (!wrote) {
+                // 并发建档降级：基线归先到者——成功消息与落库真相必须一致，
+                // 败者按 exists 如实上报（不计数、不署本方种子）
+                out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + created.getVersionTag() + ") (established concurrently)" + refSuffix(created.getCodeRef()));
+                if (outcomes != null) {
+                    outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "exists", created.getVersionTag(), created.getCodeRef(), null));
+                }
+                warnRulesDrift(out, firstBusinessLabel(records), created.getFingerprints(), rules);
+                continue;
+            }
             established++;
-            // 首条记录建立画像时 totalRecords=1，回填该分组的真实记录数
-            created.setTotalRecords(records.size());
-            repository.saveInvocationProfile(created);
+            // 不做画像二次 REPLACE（回填 totalRecords 的旧动作）：该字段全库零读方，
+            // 二次覆盖写入反而重新打开原子建档刚关闭的并发窗口
             out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "baseline re-established under the current judgment semantics (" + created.getVersionTag() + ")" : "baseline established") + " (seed record " + seed.getRecordId() + ")" + refSuffix(created.getCodeRef()));
             if (outcomes != null) {
                 outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), hadBaseline ? "reestablished" : "created", created.getVersionTag(), created.getCodeRef(), seed.getRecordId()));

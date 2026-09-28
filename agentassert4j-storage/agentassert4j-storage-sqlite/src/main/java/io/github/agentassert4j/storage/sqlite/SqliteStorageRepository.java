@@ -271,28 +271,47 @@ public class SqliteStorageRepository implements StorageRepository {
     public synchronized void saveInvocationProfile(InvocationProfile p) {
         String sql = "INSERT OR REPLACE INTO invocations" + " (invocation_key, label, template_hash, invocation_name, invocation_type, fingerprint," + "  candidate_fingerprint, baseline_status, version_tag," + "  algo_version, param_signature, approved_by, approved_at," + "  total_records, code_ref, updated_at)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
-            int i = 1;
-            ps.setString(i++, p.getInvocationKey());
-            ps.setString(i++, p.getLabel());
-            ps.setString(i++, p.getTemplateHash());
-            ps.setString(i++, p.getInvocationName());
-            ps.setString(i++, p.getInvocationType() != null ? p.getInvocationType().name() : InvocationType.TOOL.name());
-            ps.setString(i++, JsonMapper.shapesToJson(p.getFingerprints()));
-            ps.setString(i++, JsonMapper.fingerprintToJson(p.getCandidateFingerprint()));
-            ps.setString(i++, p.getBaselineStatus() != null ? p.getBaselineStatus().name() : BaselineStatus.BASELINE.name());
-            ps.setString(i++, p.getVersionTag());
-            ps.setString(i++, p.getAlgoVersion());
-            ps.setString(i++, p.getParamSignature());
-            ps.setString(i++, p.getApprovedBy());
-            setNullableLong(ps, i++, p.getApprovedAt());
-            ps.setInt(i++, p.getTotalRecords());
-            ps.setString(i++, p.getCodeRef());
-            ps.setLong(i++, System.currentTimeMillis());
+            bindProfileColumns(ps, p);
             ps.executeUpdate();
         } catch (SQLException e) {
             LOG.log(Level.SEVERE, "saveInvocationProfile failed", e);
             throw new StorageException("saveInvocationProfile", e);
         }
+    }
+
+    @Override
+    public synchronized boolean saveInvocationProfileIfAbsent(InvocationProfile p) {
+        // ON CONFLICT DO NOTHING 让「占位与否」由单条 INSERT 的受影响行数裁决——
+        // 并发建档不再依赖「先查后写」的应用层序列，后到者在 SQL 原子性内看到 false
+        String sql = "INSERT INTO invocations" + " (invocation_key, label, template_hash, invocation_name, invocation_type, fingerprint," + "  candidate_fingerprint, baseline_status, version_tag," + "  algo_version, param_signature, approved_by, approved_at," + "  total_records, code_ref, updated_at)" + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)" + " ON CONFLICT(invocation_key) DO NOTHING";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            bindProfileColumns(ps, p);
+            return ps.executeUpdate() == 1;
+        } catch (SQLException e) {
+            LOG.log(Level.SEVERE, "saveInvocationProfileIfAbsent failed", e);
+            throw new StorageException("saveInvocationProfileIfAbsent", e);
+        }
+    }
+
+    /** 两个画像写入路径的列绑定单源——第二份手写绑定会出现列序漂移。 */
+    private void bindProfileColumns(PreparedStatement ps, InvocationProfile p) throws SQLException {
+        int i = 1;
+        ps.setString(i++, p.getInvocationKey());
+        ps.setString(i++, p.getLabel());
+        ps.setString(i++, p.getTemplateHash());
+        ps.setString(i++, p.getInvocationName());
+        ps.setString(i++, p.getInvocationType() != null ? p.getInvocationType().name() : InvocationType.TOOL.name());
+        ps.setString(i++, JsonMapper.shapesToJson(p.getFingerprints()));
+        ps.setString(i++, JsonMapper.fingerprintToJson(p.getCandidateFingerprint()));
+        ps.setString(i++, p.getBaselineStatus() != null ? p.getBaselineStatus().name() : BaselineStatus.BASELINE.name());
+        ps.setString(i++, p.getVersionTag());
+        ps.setString(i++, p.getAlgoVersion());
+        ps.setString(i++, p.getParamSignature());
+        ps.setString(i++, p.getApprovedBy());
+        setNullableLong(ps, i++, p.getApprovedAt());
+        ps.setInt(i++, p.getTotalRecords());
+        ps.setString(i++, p.getCodeRef());
+        ps.setLong(i++, System.currentTimeMillis());
     }
 
     @Override

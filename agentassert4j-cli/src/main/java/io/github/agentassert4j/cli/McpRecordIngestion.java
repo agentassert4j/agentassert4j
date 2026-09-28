@@ -74,7 +74,7 @@ final class McpRecordIngestion {
         }
         String typeError = numericArgsTypeError(args);
         if (typeError != null) {
-            return envelopeOutcome(CliErrorCode.E_USAGE, typeError, "Pass the value as a JSON number (epoch milliseconds / milliseconds), or drop the field to use defaults.", "");
+            return envelopeOutcome(CliErrorCode.E_USAGE, typeError, "Pass the value as a JSON number (epoch milliseconds / milliseconds), or drop the field to use defaults.", "the `record` tool");
         }
         String protocolParam = nonBlankString(args, "protocol");
         if (protocolParam != null && LlmWireProtocol.fromWireName(protocolParam) == null) {
@@ -85,25 +85,25 @@ final class McpRecordIngestion {
         if (metadataParam != null) {
             Object parsed = parseJsonOrNull(metadataParam);
             if (!(parsed instanceof Map)) {
-                return envelopeOutcome(CliErrorCode.E_USAGE, "metadata must be a JSON object string.", "Pass metadata as a JSON object string, or drop it.", "");
+                return envelopeOutcome(CliErrorCode.E_USAGE, "metadata must be a JSON object string.", "Pass metadata as a JSON object string, or drop it.", "the `record` tool");
             }
             metadata = castArgs(parsed);
         }
 
         Object requestParsed = parseJsonOrNull(requestRaw);
         if (!(requestParsed instanceof Map)) {
-            return envelopeOutcome(CliErrorCode.E_USAGE, "request is not a valid JSON object" + parseFailureDetail(requestRaw) + ".", "Send the raw request body your stack sent to the LLM endpoint.", "");
+            return envelopeOutcome(CliErrorCode.E_USAGE, "request is not a valid JSON object" + parseFailureDetail(requestRaw) + ".", "Send the raw request body your stack sent to the LLM endpoint.", "the `record` tool");
         }
         Object responseParsed = parseJsonOrNull(responseRaw);
         if (!(responseParsed instanceof Map)) {
-            return envelopeOutcome(CliErrorCode.E_USAGE, "response is not a valid JSON object" + parseFailureDetail(responseRaw) + ".", "Send the raw response body the endpoint returned (a 200 body, not an error page).", "");
+            return envelopeOutcome(CliErrorCode.E_USAGE, "response is not a valid JSON object" + parseFailureDetail(responseRaw) + ".", "Send the raw response body the endpoint returned (a 200 body, not an error page).", "the `record` tool");
         }
         Map<String, Object> request = castArgs(requestParsed);
         Map<String, Object> response = castArgs(responseParsed);
 
         LlmWireProtocol protocol = protocolParam != null ? LlmWireProtocol.fromWireName(protocolParam) : detectProtocol(response);
         if (protocol == null) {
-            return envelopeOutcome(CliErrorCode.E_USAGE, "cannot detect the wire protocol from the response shape (no choices array, no Anthropic content blocks, no Responses output/status).", "Pass protocol explicitly (" + LlmWireProtocol.legalWireNames() + "), or send the raw 200 body the endpoint returned.", "");
+            return envelopeOutcome(CliErrorCode.E_USAGE, "cannot detect the wire protocol from the response shape (no choices array, no Anthropic content blocks, no Responses output/status).", "Pass protocol explicitly (" + LlmWireProtocol.legalWireNames() + "), or send the raw 200 body the endpoint returned.", "the `record` tool");
         }
 
         List<String> warnings = new ArrayList<>();
@@ -118,15 +118,15 @@ final class McpRecordIngestion {
             String storedInvocationKey = null;
             if (!saved) {
                 // 跨会话重录同 id 时报告调用方传入的 sessionId 会误导归属：
-                // 回显记录实际所在的会话，让「已存哪、怎么存新的」就近可见
-                for (InteractionRecord existing : repository.findByInvocationKey(record.getInvocationKey())) {
-                    if (record.getRecordId() != null && record.getRecordId().equals(existing.getRecordId())) {
-                        storedSessionId = existing.getSessionId();
-                        // 存量键与本次现算键是两套身份（重发不同形态响应时现算键按新
-                        // 内容派生）——不回显存量键，对账方会把新形态误当已存身份
-                        storedInvocationKey = existing.getInvocationKey();
-                        break;
-                    }
+                // 回显记录实际所在的会话，让「已存哪、怎么存新的」就近可见。
+                // 查找必须按 recordId（duplicate 的判重身份）：按现算键找会在
+                // 重发异形态时落空——键已随新内容漂移，存量记录恰是旧键
+                InteractionRecord existing = record.getRecordId() != null ? repository.findByRecordId(record.getRecordId()) : null;
+                if (existing != null) {
+                    storedSessionId = existing.getSessionId();
+                    // 存量键与本次现算键是两套身份（重发不同形态响应时现算键按新
+                    // 内容派生）——不回显存量键，对账方会把新形态误当已存身份
+                    storedInvocationKey = existing.getInvocationKey();
                 }
             }
             String stderr = warnings.isEmpty() ? "" : String.join("\n", warnings) + "\n";

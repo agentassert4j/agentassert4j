@@ -171,7 +171,14 @@ public class RecordShowCommand implements Callable<Integer> {
             out.println("  Protocol: " + record.getApiProtocol());
         }
         out.println("  Model: " + CliSupport.visibleText(record.getModel()) + (record.getServedModel() != null ? " (served " + record.getServedModel() + ")" : ""));
-        out.println("  Turn " + record.getTurnIndex() + " | Tokens: " + record.getInputTokens() + " in / " + record.getOutputTokens() + " out");
+        // 账单明细投影：思考/缓存 tokens 已入库（协议 usage 明细），读面不透出
+        // 「关思考省多少、开思考贵多少」就只能看总量拆不开
+        out.println("  Turn " + record.getTurnIndex() + " | Tokens: " + record.getInputTokens() + " in / " + record.getOutputTokens() + " out"
+                + (record.getReasoningTokens() != null ? " / " + record.getReasoningTokens() + " reasoning" : "")
+                + (record.getCacheReadTokens() != null ? " / " + record.getCacheReadTokens() + " cache-read" : ""));
+        if (record.getUsageRaw() != null && !record.getUsageRaw().isEmpty()) {
+            out.println("  Usage raw: " + record.getUsageRaw());
+        }
         if (RedriveMarkerUtil.isRedriveObservation(record)) {
             out.println("  Re-drive observation (metadata: " + record.getMetadata() + ")");
         }
@@ -190,6 +197,9 @@ public class RecordShowCommand implements Callable<Integer> {
 
     private String recordViewJson(InteractionRecord record) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.RECORD_VIEW + "\",\"recordId\":\"").append(RecursiveJsonParser.escape(record.getRecordId())).append('"');
+        // recordKind 恒在场：观测记录与业务记录同形状，机器消费者靠它过滤检测
+        // 仪器的真调，不必解析 metadata 才知道身份
+        sb.append(",\"recordKind\":\"").append(RedriveMarkerUtil.isRedriveObservation(record) ? "re-drive-observation" : "business").append('"');
         sb.append(",\"sessionId\":\"").append(RecursiveJsonParser.escape(record.getSessionId())).append('"');
         if (record.getInvocationId() != null) {
             sb.append(",\"invocationId\":\"").append(RecursiveJsonParser.escape(record.getInvocationId())).append('"');
@@ -216,6 +226,19 @@ public class RecordShowCommand implements Callable<Integer> {
         }
         sb.append(",\"inputTokens\":").append(record.getInputTokens());
         sb.append(",\"outputTokens\":").append(record.getOutputTokens());
+        // 账单明细条件投影（协议未回传明细的记录为 null——恒在场会与 0 混淆）
+        if (record.getReasoningTokens() != null) {
+            sb.append(",\"reasoningTokens\":").append(record.getReasoningTokens());
+        }
+        if (record.getCacheReadTokens() != null) {
+            sb.append(",\"cacheReadTokens\":").append(record.getCacheReadTokens());
+        }
+        if (record.getCacheWriteTokens() != null) {
+            sb.append(",\"cacheWriteTokens\":").append(record.getCacheWriteTokens());
+        }
+        if (record.getUsageRaw() != null && !record.getUsageRaw().isEmpty()) {
+            sb.append(",\"usageRaw\":\"").append(RecursiveJsonParser.escape(record.getUsageRaw())).append('"');
+        }
         sb.append(",\"hasToolCalls\":").append(record.isHasToolCalls());
         appendRawField(sb, "modelRequestRaw", record.getModelRequestRaw());
         appendRawField(sb, "modelResponseRaw", record.getModelResponseRaw());

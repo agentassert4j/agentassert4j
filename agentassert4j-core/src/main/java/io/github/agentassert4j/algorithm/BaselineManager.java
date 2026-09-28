@@ -114,7 +114,7 @@ public class BaselineManager {
         }
         checkExpectedVersion(profile, expectedActiveVersion);
         if (profile.getCandidateFingerprint() == null) {
-            throw new IllegalStateException("No candidate to reject for invocation: " + invocationKey);
+            throw new IllegalStateException("No candidate to reject for " + InvocationResolver.displayKey(invocationKey) + " (full key " + invocationKey + ")");
         }
 
         // 被拒形状以内容哈希记入 REJECT 事件的 note——事件是 reject 的唯一审计载体
@@ -273,9 +273,10 @@ public class BaselineManager {
      *
      * @param record   首次录制的交互记录
      * @param approver 使该基线成为基线的操作者身份（自动建立同样留痕，纯治理元数据）
+     * @return 本调用是否实际写入（false = 键已被并发方或先前调用占用，幂等降级）
      */
-    public synchronized void autoEstablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef) {
-        establish(record, approver, false, rules, codeRef, null);
+    public synchronized boolean autoEstablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef) {
+        return establish(record, approver, false, rules, codeRef, null);
     }
 
     /**
@@ -283,8 +284,8 @@ public class BaselineManager {
      * 含幂等路径（目标已是基线时对存量版本校验而非静默放行），声明了版本预期的调用方
      * 在每条路径上都受守卫。
      */
-    public synchronized void autoEstablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef, String expectedVersion) {
-        establish(record, approver, false, rules, codeRef, expectedVersion);
+    public synchronized boolean autoEstablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef, String expectedVersion) {
+        return establish(record, approver, false, rules, codeRef, expectedVersion);
     }
 
     /**
@@ -308,21 +309,21 @@ public class BaselineManager {
      * @param rules    规则配置（维度 3-4 规则，与重放判定同源；null = 无规则）
      * @throws IllegalStateException 该调用点无画像且无录制数据可解析时抛出
      */
-    public synchronized void reestablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef) {
-        establish(record, approver, true, rules, codeRef, null);
+    public synchronized boolean reestablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef) {
+        return establish(record, approver, true, rules, codeRef, null);
     }
 
     /**
      * 以当前判定语义重建基线（带乐观守卫）：覆盖写入前对即将被归档的活跃版本校验
      * expectedVersion——「我检查时是 v1」与「我写入时还是 v1」之间的并发窗口在此收口。
      */
-    public synchronized void reestablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef, String expectedVersion) {
-        establish(record, approver, true, rules, codeRef, expectedVersion);
+    public synchronized boolean reestablishBaseline(InteractionRecord record, String approver, InvocationRulesConfig rules, String codeRef, String expectedVersion) {
+        return establish(record, approver, true, rules, codeRef, expectedVersion);
     }
 
-    private void establish(InteractionRecord record, String approver, boolean overwrite, InvocationRulesConfig rules, String codeRef, String expectedVersion) {
+    private boolean establish(InteractionRecord record, String approver, boolean overwrite, InvocationRulesConfig rules, String codeRef, String expectedVersion) {
         if (record == null) {
-            return;
+            return false;
         }
         // 画像字段（label/invocationName）全部以解析器产出为基底——
         // 记录上的 invocationId 只是可选业务声明位，未声明记录（模板/请求锚点身份）同样建档
@@ -335,7 +336,7 @@ public class BaselineManager {
             // expectedVersion 是「我看到的活跃版本」申报，exists 也是一次真实读取，
             // 静默忽略申报会让调用方误以为版本仍是它所见的那一版
             checkExpectedVersion(existing, expectedVersion);
-            return;
+            return false;
         }
         if (overwrite && existing != null) {
             // 被替换基线先行归档：重建不是不可逆操作，rollback 可恢复旧语义基线
@@ -361,24 +362,25 @@ public class BaselineManager {
         profile.setTotalRecords(existing != null ? existing.getTotalRecords() : 1);
         stampApproval(profile, approver, codeRef);
 
-        // 并发建档收口：写入后重读，活跃版本或审批人不是本进程刚写的值 = 并发方在我
-        // 写入的同时也写了同一键（INSERT OR REPLACE 后写者胜）——后写者必须响亮拒绝并
-        // 撤销自己的写入（恢复并发方的画像），否则「先检查后写入」窗口里两进程都报成功、
-        // 同一版本标签被静默重定义。重读比较让窗口缩到写入语句本身，剩余竞态可检测。
-        repository.saveInvocationProfile(profile);
-        InvocationProfile afterWrite = repository.findInvocationByKey(grouping.getInvocationKey());
-        boolean identityIntact = afterWrite != null && profile.getVersionTag().equals(afterWrite.getVersionTag())
-                && approver != null && approver.equals(afterWrite.getApprovedBy());
-        if (!identityIntact) {
-            if (existing != null) {
-                // 有旧画像可回滚：恢复并发方的状态，撤销本进程的覆盖
-                repository.saveInvocationProfile(existing);
+        if (!overwrite) {
+            // 原子幂等建档：键已被并发方占用时单条 INSERT 不落行——「是否本进程写入」
+            // 由语句受影响行数裁决，跨进程先后在 SQL 原子性内可判，后到者如实降级
+            // exists 而非覆盖先到者；声明了版本预期的调用方在并发降级路径同样受守卫
+            boolean wrote = repository.saveInvocationProfileIfAbsent(profile);
+            if (!wrote) {
+                InvocationProfile winner = repository.findInvocationByKey(grouping.getInvocationKey());
+                if (winner != null) {
+                    checkExpectedVersion(winner, expectedVersion);
+                }
+                return false;
             }
-            throw new IllegalStateException("Concurrent establishment detected on " + grouping.getInvocationKey()
-                    + ": another actor wrote baseline " + (afterWrite != null ? afterWrite.getVersionTag() : "(?)")
-                    + " during this write; re-read the invocation state and retry if the establishment is still needed.");
+            recordGovernanceEvent(GovernanceVerb.ESTABLISH, grouping.getInvocationKey(), profile.getVersionTag(), approver, codeRef);
+            return true;
         }
-        recordGovernanceEvent(overwrite ? GovernanceVerb.FORCE_REBUILD : GovernanceVerb.ESTABLISH, grouping.getInvocationKey(), profile.getVersionTag(), approver, codeRef);
+        // force 覆盖：显式破坏性操作，活跃版本已在写入前校验并归档
+        repository.saveInvocationProfile(profile);
+        recordGovernanceEvent(GovernanceVerb.FORCE_REBUILD, grouping.getInvocationKey(), profile.getVersionTag(), approver, codeRef);
+        return true;
     }
 
     /**

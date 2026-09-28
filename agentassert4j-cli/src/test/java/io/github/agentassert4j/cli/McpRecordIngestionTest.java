@@ -114,6 +114,43 @@ class McpRecordIngestionTest {
     }
 
     @Test
+    @DisplayName("duplicate 按记录 id 查存量：异形态重发回显 storedInvocationKey")
+    void duplicateDifferentShape_reportsStoredInvocationKey() {
+        String request1 = "{\"model\":\"m\",\"messages\":[{\"role\":\"system\",\"content\":\"template A\"},{\"role\":\"user\",\"content\":\"hi\"}]}";
+        String response1 = "{\"id\":\"chatcmpl-dup\",\"model\":\"m\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"v1\"},\"finish_reason\":\"stop\"}]}";
+        McpToolOutcome first = McpRecordIngestion.ingest(dbPath, argsWithRecordId("dup-1", request1, response1));
+        assertEquals(0, first.exit, "首次上报 saved: " + first.stdout);
+
+        // 同 recordId、异形态（换 system 模板 → 现算键漂移）
+        String request2 = "{\"model\":\"m\",\"messages\":[{\"role\":\"system\",\"content\":\"template B\"},{\"role\":\"user\",\"content\":\"hi\"}]}";
+        String response2 = "{\"id\":\"chatcmpl-dup\",\"model\":\"m\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"v2\"},\"finish_reason\":\"stop\"}]}";
+        McpToolOutcome second = McpRecordIngestion.ingest(dbPath, argsWithRecordId("dup-1", request2, response2));
+        assertEquals(0, second.exit, "duplicate 幂等 exit 0: " + second.stdout);
+        Map<String, Object> report = reportOf(second);
+        assertEquals("duplicate", report.get("status"));
+        assertNotNull(report.get("storedInvocationKey"), "异形态重发必须回显存量键供对账: " + second.stdout);
+        assertNotEquals(report.get("invocationKey"), report.get("storedInvocationKey"), "存量键与新算键不同=两套身份如实对照");
+    }
+
+    @Test
+    @DisplayName("同形态 duplicate 不带 storedInvocationKey（无差异不注记）")
+    void duplicateSameShape_noStoredKey() {
+        String request = "{\"model\":\"m\",\"messages\":[{\"role\":\"system\",\"content\":\"t\"},{\"role\":\"user\",\"content\":\"hi\"}]}";
+        String response = "{\"id\":\"chatcmpl-same\",\"model\":\"m\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"v1\"},\"finish_reason\":\"stop\"}]}";
+        McpRecordIngestion.ingest(dbPath, argsWithRecordId("dup-2", request, response));
+        McpToolOutcome again = McpRecordIngestion.ingest(dbPath, argsWithRecordId("dup-2", request, response));
+        Map<String, Object> report = reportOf(again);
+        assertEquals("duplicate", report.get("status"));
+        assertFalse(report.containsKey("storedInvocationKey"), "同形态重发无差异不注记: " + again.stdout);
+    }
+
+    private static Map<String, Object> argsWithRecordId(String recordId, String request, String response) {
+        Map<String, Object> a = args(request, response);
+        a.put("recordId", recordId);
+        return a;
+    }
+
+    @Test
     @DisplayName("深嵌套请求拒收：根因括注点名 nesting exceeds 128")
     void deepNestingRequest_rejectionNamesRootCause() {
         StringBuilder deep = new StringBuilder();

@@ -206,28 +206,8 @@ final class CliSupport {
     }
 
     static String displayKey(String invocationKey) {
-        if (invocationKey == null || invocationKey.isEmpty()) {
-            return "(unresolved invocation)";
-        }
-        String[] segments = invocationKey.split(":");
-        if ("invocation".equals(segments[0]) && segments.length >= 2) {
-            String label = TaskAligner.declaredLabelOfKey(invocationKey);
-            return (label != null ? label : segments[1]) + (segments.length >= 3 ? "@" + abbreviateHash(segments[2]) : "");
-        }
-        if ("skeleton".equals(segments[0]) && segments.length >= 2) {
-            return "skl@" + abbreviateHash(segments[1]);
-        }
-        if ("template".equals(segments[0]) && segments.length >= 2) {
-            return "tpl@" + abbreviateHash(segments[1]);
-        }
-        if ("adhoc".equals(segments[0])) {
-            return segments.length >= 2 && !"no-anchor".equals(segments[1]) ? "adhoc@" + abbreviateHash(segments[1]) : "adhoc";
-        }
-        return invocationKey;
-    }
-
-    private static String abbreviateHash(String value) {
-        return value.length() <= 8 ? value : value.substring(0, 8);
+        // 短形投影单源在 core（键词表所有者），null 入参同形返回
+        return InvocationResolver.displayKey(invocationKey);
     }
 
     /**
@@ -322,10 +302,14 @@ final class CliSupport {
     /**
      * 框架自发治理写入的操作者身份：auto: 前缀把「自动建档/自动收集」与人工及
      * agent 的显式写入在审计时间线上一眼分开——裸 replay 的自动建档若署 OS 用户名，
-     * AI 进程触发的写入会伪装成人写的，对账凭据失真。
+     * AI 进程触发的写入会伪装成人写的，对账凭据失真。governance.actorTag 配置
+     * 追加宿主标识（auto:<user>@<tag>），共库多宿主（同一 OS 用户名）时自动写入
+     * 仍可归因；配置热读与其他配置键同纪律。
      */
     static String autoActor() {
-        return "auto:" + currentActor();
+        AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
+        String tag = config.getGovernance() != null ? config.getGovernance().getActorTag() : null;
+        return "auto:" + currentActor() + (tag != null && !tag.isEmpty() ? "@" + tag : "");
     }
 
     /**
@@ -393,9 +377,10 @@ final class CliSupport {
             return prefixMatches;
         }
         if (recordedKeys.isEmpty()) {
-            // 空库零命中：教选择器写法没有意义（没有任何可选项），指路录制才可行动——
-            // 否则 nextAction 指回查看类命令会形成自循环
-            throw new CliFailureException(CliErrorCode.E_NO_DATA, "No recorded interactions found.", RECORD_FIRST_HINT, "agentassert4j status");
+            // 空库零命中：教选择器写法没有意义（没有任何可选项）。nextAction 也不得指回
+            // 查看类命令（自循环，MCP 面会变成「report 同样无数据」的死路）——doctor 验证
+            // 存储健康与配置指向（空库最常见根因是 --db/配置指错文件），录制指引在 hints
+            throw new CliFailureException(CliErrorCode.E_NO_DATA, "No recorded interactions found.", RECORD_FIRST_HINT, "agentassert4j doctor");
         }
         throw new CliFailureException(CliErrorCode.E_NO_DATA, "No invocation matching " + filter + " (accepted: business label, an invocationKey prefix starting with `invocation:`, or the status display form like label@8hex; see `status` for the full list).", "Check the value against `status` output, then retry.", "agentassert4j status");
     }

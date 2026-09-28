@@ -419,6 +419,13 @@ harness 权限系统执行。`--ref` 与 approver 是申报制自由串、不做
 缺省=全部在途候选）；裁决前先 `status --diff`（或 MCP `report` 带 `diff:true`）看清候选
 属于谁（`approvedBy`/候选指纹的来源会话在列）。单代理独库场景 bare 形态无此风险。
 
+**自动建档归因：`governance.actorTag`**。裸 replay 的自动建档署名形如 `auto:<OS用户名>`——多宿主
+共用一台机器（同一 OS 用户名）时不可分。为每个宿主配置 `governance.actorTag`（如 `"zcode"`/
+`"claude-code"`）后署名变 `auto:<user>@<tag>`，审计时间线恢复可归因；不配置则维持原形态。
+
+**taskKey 是全局命名空间**。声明了相同 taskKey 的会话在共库上合并为同一任务——对齐域与重驱
+预算随之合并（你会替对方的记录买单）。共库多宿主给 taskKey 带宿主前缀（如 `z11-…`/`c2-…`）。
+
 ## 6.2 MCP 接入（AI 自主验证回路）
 
 standalone jar 本身就是 MCP server（stdio）：把行为回归能力交给 code agent / harness

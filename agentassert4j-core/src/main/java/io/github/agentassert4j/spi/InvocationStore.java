@@ -18,6 +18,13 @@ public interface InvocationStore {
     void saveInvocationProfile(InvocationProfile p);
 
     /**
+     * 占位式保存：键未被占用时写入并返回 true；已被占用时不改动现况返回 false。
+     * 并发建档的先后由单条 INSERT 的原子性裁决——后到者据此如实降级为
+     * 「已存在」语义，而不是覆盖先到者的画像。
+     */
+    boolean saveInvocationProfileIfAbsent(InvocationProfile p);
+
+    /**
      * 按调用点键查询画像
      */
     InvocationProfile findInvocationByKey(String invocationKey);
