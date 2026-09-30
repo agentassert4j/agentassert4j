@@ -51,7 +51,7 @@ final class SchemaMigrator {
         for (String table : Schema.tableNames()) {
             try (ResultSet rs = connection.getMetaData().getTables(null, null, table, null)) {
                 if (!rs.next()) {
-                    throw new SQLException("Database file is missing required table '" + table + "' (a leftover database from an earlier development build; development builds do not migrate old schemas). " + "Delete the file or point --db at a fresh path.");
+                    throw new SQLException("Database file is missing required table '" + table + "' (causes range from an earlier development build to truncation or tampering). Back the file up first if you need forensics, then point --db at a fresh path or remove the backed-up file.");
                 }
             }
         }

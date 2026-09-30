@@ -202,6 +202,19 @@ public class TaskReplayRunner {
                 diagnostic("Run `agentassert4j baseline` to review and establish baselines, then retry; or drop --ci to auto-establish. Exit 2 here means a change awaits adjudication, not an environment problem.");
                 return failWithEnvelopeOnly(CliErrorCode.E_GUARD, "Refusing to judge in --ci mode: the scope holds " + CliSupport.plural(unbaselined.size(), "unbaselined invocation") + " (full list on stderr).", "Run `agentassert4j baseline` to review and establish baselines, then retry; or drop --ci to auto-establish.", "agentassert4j baseline");
             }
+            // 缩域门禁的域外披露：缩域是共库礼仪的正当用法（我的门禁不替别人把门），
+            // 但「缩域外还有红灯/在途候选」必须让运行者看见——否则一条流水线配置
+            // 改个 --invocation 就能让全库红旗在门禁面上隐身（round16 红队实弹）
+            if (narrowed) {
+                String outOfScopeNote = outOfScopeGateNote(scoped, drift);
+                if (outOfScopeNote != null) {
+                    if (jsonMode) {
+                        diagnostic(outOfScopeNote);
+                    } else {
+                        info(outOfScopeNote);
+                    }
+                }
+            }
         } else {
             // 自动建档（开发态自动化，报告可见）：裂键豁免与披露由 establishMissing
             // 扫建路径统一处理（同标签已有兄弟建档的新键只披露、不并入基线）。
@@ -1779,6 +1792,56 @@ public class TaskReplayRunner {
             sb.append('"').append(RecursiveJsonParser.escape(key)).append('"');
         }
         return sb.toString();
+    }
+
+    /**
+     * 缩域门禁的域外状态披露：域外在途候选 / 同键漂移 / 未建档键的计数行。
+     * 只披露不拦截——拦截会破坏共库礼仪（别人的候选不该挂我的缩域门禁），
+     * 但隐身会让 CI 运行者误以为全库绿。返回 null = 域外无可披露项。
+     */
+    private String outOfScopeGateNote(List<TaskChain> scoped, DriftReport drift) {
+        Set<String> scopeKeys = new LinkedHashSet<>();
+        for (TaskChain chain : scoped) {
+            for (InteractionRecord record : chain.getRecords()) {
+                String key = CliSupport.invocationKeyOfRecord(record);
+                if (key != null) {
+                    scopeKeys.add(key);
+                }
+            }
+        }
+        int outCandidates = 0;
+        int outUnbaselined = 0;
+        for (Map.Entry<String, List<InteractionRecord>> bucket : CliSupport.invocationBuckets(repository).entrySet()) {
+            if (scopeKeys.contains(bucket.getKey())) {
+                continue;
+            }
+            InvocationProfile profile = repository.findInvocationByKey(bucket.getKey());
+            if (!CliSupport.hasBaseline(profile)) {
+                outUnbaselined++;
+            } else if (profile.getCandidateFingerprint() != null) {
+                outCandidates++;
+            }
+        }
+        int outDrifts = 0;
+        for (DriftReport.DriftPoint point : drift.getSameKeyDrifts()) {
+            if (!scopeKeys.contains(point.getInvocationKey())) {
+                outDrifts++;
+            }
+        }
+        if (outCandidates == 0 && outDrifts == 0 && outUnbaselined == 0) {
+            return null;
+        }
+        List<String> parts = new ArrayList<>();
+        if (outCandidates > 0) {
+            parts.add(CliSupport.plural(outCandidates, "pending candidate"));
+        }
+        if (outDrifts > 0) {
+            parts.add(CliSupport.plural(outDrifts, "drifted invocation"));
+        }
+        if (outUnbaselined > 0) {
+            parts.add(CliSupport.plural(outUnbaselined, "unbaselined key"));
+        }
+        return "Note: outside the narrowed scope: " + String.join(", ", parts) + " — this run does not gate them (drop the narrowing flags for the full-project gate).";
     }
 
     /**

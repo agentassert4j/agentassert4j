@@ -131,7 +131,13 @@ final class CliSupport {
             diagnostics.println("Rules: " + rulesPath + " (" + rules.getDeclaredInvocationIds().size() + " invocation declaration(s), " + rules.getDeclaredTaskKeys().size() + " task declaration(s); declarations bind into baselines when pinned at establish/accept)");
         }
         String url = dbOverride != null ? dbOverride : config.getStorage().getUrl();
-        StorageRepository repository = new SqliteStorageRepository(ConfigLoader.expandHome(url));
+        String expanded = ConfigLoader.expandHome(url);
+        // 「从没数据」与「库丢了/指错了」必须可区分：静默初始化会把指错 --db/配置
+        // 伪装成干净空库（round16 红队实弹——截断攻击现场被 status 读作 exit 0）
+        if (!new java.io.File(expanded).isFile()) {
+            diagnostics.println("Database: " + expanded + " not found; a new empty database will be initialized (check --db / storage.url if this is unexpected).");
+        }
+        StorageRepository repository = new SqliteStorageRepository(expanded);
         repository.initialize();
         return repository;
     }

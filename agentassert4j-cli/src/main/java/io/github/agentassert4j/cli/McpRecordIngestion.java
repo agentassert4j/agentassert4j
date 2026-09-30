@@ -65,6 +65,14 @@ final class McpRecordIngestion {
         String sessionId = stringArg(args, "sessionId");
         String requestRaw = nonBlankString(args, "request");
         String responseRaw = nonBlankString(args, "response");
+        // 类型错先于缺失报：值在场只是类型不对时，报「缺字段」会把调用方引向
+        // 完全错误的排查方向（round16 实弹：request 传 JSON 对象被报 requires request）
+        for (String field : new String[] {"request", "response"}) {
+            Object value = args.get(field);
+            if (value != null && !(value instanceof String)) {
+                return envelopeOutcome(CliErrorCode.E_USAGE, field + " must be a JSON string (the raw wire body), not a " + jsonTypeName(value) + ".", "Send the raw request/response body your stack produced, serialized as a string.", "the `record` tool");
+            }
+        }
         List<String> missing = new ArrayList<>();
         if (sessionId == null) missing.add("sessionId");
         if (requestRaw == null) missing.add("request");
@@ -1106,7 +1114,7 @@ final class McpRecordIngestion {
         // 的事」——两源同时命中时一句话接一句话，机器消费方无需解析多字段
         StringBuilder note = new StringBuilder();
         if (shapeMismatch) {
-            note.append("Response shape does not match the declared protocol; usage and model extraction degraded (check `record show` for what was stored).");
+            note.append("Response shape does not match the declared protocol; usage and model extraction degraded, and re-drive will replay this record under the declared protocol (check `record show` for what was stored).");
         }
         if (!saved) {
             if (storedSessionId != null && !storedSessionId.equals(record.getSessionId())) {
@@ -1121,6 +1129,22 @@ final class McpRecordIngestion {
             sb.append(",\"note\":\"").append(RecursiveJsonParser.escape(note.toString())).append('"');
         }
         return sb.append('}').toString();
+    }
+
+    /**
+     * 参数值的 JSON 形态名（类型错消息用）：object/array/number/boolean。
+     */
+    private static String jsonTypeName(Object value) {
+        if (value instanceof Map) {
+            return "object";
+        }
+        if (value instanceof List) {
+            return "array";
+        }
+        if (value instanceof Number || value instanceof Boolean) {
+            return value.getClass().getSimpleName().toLowerCase(java.util.Locale.ROOT);
+        }
+        return value.getClass().getSimpleName();
     }
 
     private static McpToolOutcome envelopeOutcome(CliErrorCode errorCode, String message, String hint, String nextAction) {

@@ -182,6 +182,9 @@ public class RecordShowCommand implements Callable<Integer> {
         }
         if (RedriveMarkerUtil.isRedriveObservation(record)) {
             out.println("  Re-drive observation (metadata: " + record.getMetadata() + ")");
+        } else if (record.getMetadata() != null && !record.getMetadata().isEmpty()) {
+            // 取证视图不得比库少知道东西：metadata 全量落库，人读面就全量回显
+            out.println("  Metadata: " + record.getMetadata());
         }
         printRaw(record.getModelRequestRaw(), "request");
         printRaw(record.getModelResponseRaw(), "response");

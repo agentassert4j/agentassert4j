@@ -573,6 +573,28 @@ class TaskReplayRunnerTest {
     class Guards {
 
         @Test
+        @DisplayName("缩域门禁的域外披露：域外候选/漂移/未建档键计数可见，不拦截")
+        void narrowedCi_disclosesOutOfScopeState() {
+            // 域内绿键 + 域外在途候选 + 域外未建档键
+            establishFromRecord(saveRecord("g-1", "session-g1", 100L, "查订单", "in-scope", "hash-i", "{\"v\":1}", null));
+            saveRecord("g-2", "session-g2", 200L, "发货", "out-a", "hash-a", "{\"v\":1}", null);
+            InvocationProfile outEstablished = establishFromRecord(saveRecord("g-3", "session-g3", 300L, "备货", "out-b", "hash-b", "{\"v\":1}", null));
+            outEstablished.setCandidateFingerprint(new DeterministicFingerprint());
+            outEstablished.setBaselineStatus(BaselineStatus.CANDIDATE);
+            repository.saveInvocationProfile(outEstablished);
+
+            int exit = runner.run(null, "invocation:in-scope:hash-i", true, false, false, null, false, false, false, null, null);
+
+            String out = output.toString();
+            assertEquals(0, exit, "域内绿键缩域门禁仍绿（共库礼仪不拦截）: " + out);
+            assertTrue(out.contains("outside the narrowed scope"), "域外状态必须就地披露: " + out);
+            assertTrue(out.contains("pending candidate"), "域外在途候选必须点名计数: " + out);
+            assertTrue(out.contains("unbaselined key"), "域外未建档键必须点名计数: " + out);
+            assertTrue(out.contains("drop the narrowing flags"), "必须指路全库门禁形态: " + out);
+        }
+
+
+        @Test
         @DisplayName("判定语义版本不一致 → 拒绝判定退出码 2")
         void staleAlgoVersion_refuses() {
             seedIdenticalChains("{\"v\":1}");

@@ -349,7 +349,7 @@ always describes the baseline that is actually active.) Five ways teams use it:
 | `record show` | Echo one stored interaction's raw wire payloads (troubleshooting/forensics) |
 | `verify` | Delivery acceptance: pack × locally recorded chains (read-only); `--dry-run` previews the pairing, `--report` writes the markdown evidence |
 | `rules` | List built-in behavior checks and rules-file syntax |
-| `graph show` | Read-only value-flow provenance graph (HIGH edges carry the matched value and record pair); edges require model-issued tool calls with arguments — pure prompt chains without tool calls have no value-flow edges |
+| `graph show` | Read-only value-flow provenance graph (HIGH edges carry the matched value and record pair); edges require model-issued tool calls with arguments, and the upstream tool result must be visible to the framework — recorded with the call (SDK) or fed back to the model so it lands in the next request history (wire round-trips); results kept only inside your own script produce no edges |
 | `audit` | List governance writes from the event timeline (verb/actor/time/code ref, including reject and rollback) — AI (`agent:*`) and human writes on one timeline |
 | `mcp` | Run as a stdio MCP server (17 tools mirroring CLI verbs, for non-Java AI hosts) |
 | `doctor` | Read-only health check in three deterministic sections: identity (skeleton families, unlabeled multi-step chains, repeated request-text families worth declaring), coverage (unestablished invocations, records missing template_hash), rules (malformed declarations, expectation mismatches); advisory only (exit 0 in normal operation; not a gate) |

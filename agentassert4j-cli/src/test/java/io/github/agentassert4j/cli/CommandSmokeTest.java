@@ -768,6 +768,21 @@ class CommandSmokeTest {
     }
 
     @Test
+    @DisplayName("record 摄取参数类型错（非字符串）→ 报类型而非缺失")
+    void record_typeError_reportsTypeNotMissing() {
+        java.util.Map<String, Object> args = new java.util.LinkedHashMap<>();
+        args.put("sessionId", "smoke-type-err");
+        java.util.Map<String, Object> objectRequest = new java.util.LinkedHashMap<>();
+        objectRequest.put("model", "m");
+        args.put("request", objectRequest);
+        args.put("response", "{\"ok\":true}");
+        McpToolOutcome outcome = McpRecordIngestion.ingest(dbPath, args);
+        assertEquals(2, outcome.exit);
+        assertTrue(outcome.stdout.contains("request must be a JSON string"), "类型错必须报类型: " + outcome.stdout);
+        assertFalse(outcome.stdout.contains("record requires request"), "不得误报字段缺失: " + outcome.stdout);
+    }
+
+    @Test
     @DisplayName("--invocation 短形哈希段非法（非 8 位十六进制）→ 专用形式错误，不误导为键不存在")
     void invocation_malformedDisplayForm_dedicatedError() {
         seedWithResponse("session-malformed", 1000L, "{\"v\":1}");
