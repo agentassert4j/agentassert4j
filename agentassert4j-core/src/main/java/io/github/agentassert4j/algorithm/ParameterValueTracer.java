@@ -117,53 +117,135 @@ public class ParameterValueTracer {
         if (chain.size() < 2) return;
 
         int n = chain.size();
-        // 逐记录提取缓存：值集/名集每记录提取一次，供全部对扫描复用
-        List<Set<String>> valueCache = new ArrayList<>(n);
-        List<Set<String>> nameCache = new ArrayList<>(n);
-        List<Set<String>> argValueCache = new ArrayList<>(n);
-        List<Set<String>> argNameCache = new ArrayList<>(n);
+
+        // toolCallId → 发起记录下标：响应侧发出调用的记录是值的业务源头。wire 回灌
+        // 模式下工具结果只出现在后续请求 history 里——按 tool_use_id 把结果值归因回
+        // 发起方，而不是归给「恰好携带它的中间记录」（round18 实弹：最常见的一轮式
+        // 工具循环因此零边、出边时源头指错人）。SDK 记录无 id 时退化为携带者归因
+        Map<String, Integer> callIssuer = new LinkedHashMap<>();
         for (int k = 0; k < n; k++) {
-            valueCache.add(null);
-            nameCache.add(null);
-            argValueCache.add(null);
-            argNameCache.add(null);
+            if (chain.get(k).getToolCalls() == null) {
+                continue;
+            }
+            for (ToolCall call : chain.get(k).getToolCalls()) {
+                if (call != null && call.getToolCallId() != null && !call.getToolCallId().isEmpty()) {
+                    callIssuer.putIfAbsent(call.getToolCallId(), k);
+                }
+            }
+        }
+
+        // 值源累计表：记录下标 → 该记录作为「值的业务源头」拥有的叶子值。消费者 i
+        // 判定前先吸收 0..i 的全部贡献（i 自身的值对 i 不可见，j>=i 跳过）；i 的请求
+        // history 工具帧按发起方归因入源——发起方恒早于 i，恰是「同记录诞生+消费」
+        // 首跳（值在本记录 history 诞生、本记录响应消费）的跨记录归因路径
+        Map<Integer, Set<String>> valueSources = new LinkedHashMap<>();
+        List<Set<String>> argCache = new ArrayList<>(n);
+        for (int k = 0; k < n; k++) {
+            argCache.add(null);
         }
 
         for (int i = 1; i < n; i++) {
+            absorbRecordSources(chain, i - 1, valueSources, callIssuer);
+            absorbRecordSources(chain, i, valueSources, callIssuer);
+
             String currInvocation = invocationKeys.get(i);
-            if (currInvocation == null) continue;
+            if (currInvocation == null) {
+                continue;
+            }
+            if (argCache.get(i) == null) {
+                argCache.set(i, extractArgValues(chain.get(i)));
+            }
+            if (argCache.get(i).isEmpty()) {
+                continue;
+            }
 
-            for (int j = 0; j < i; j++) {
-                String prevInvocation = invocationKeys.get(j);
-                if (prevInvocation == null || prevInvocation.equals(currInvocation)) continue;
-
-                // ====== 第 1 层：字段值精确匹配（j 会话内全对触达） ======
-                if (valueCache.get(j) == null) {
-                    valueCache.set(j, extractFieldValues(chain.get(j)));
-                }
-                if (argValueCache.get(i) == null) {
-                    argValueCache.set(i, extractArgValues(chain.get(i)));
-                }
-                String matchedValue = firstMeaningfulMatch(valueCache.get(j), argValueCache.get(i));
-                if (matchedValue != null) {
-                    graph.addEdge(prevInvocation, currInvocation, Confidence.HIGH,
-                            matchedValue, chain.get(j).getRecordId(), chain.get(i).getRecordId(), allMeaningfulMatches(valueCache.get(j), argValueCache.get(i)));
+            boolean adjacentHigh = false;
+            for (Map.Entry<Integer, Set<String>> source : valueSources.entrySet()) {
+                int j = source.getKey();
+                if (j >= i) {
                     continue;
                 }
-
-                // ====== 第 2 层：字段名前缀匹配（仅相邻对） ======
-                if (j == i - 1) {
-                    if (nameCache.get(j) == null) {
-                        nameCache.set(j, extractFieldNames(chain.get(j)));
+                String prevInvocation = invocationKeys.get(j);
+                if (prevInvocation == null || prevInvocation.equals(currInvocation)) {
+                    continue;
+                }
+                String matchedValue = firstMeaningfulMatch(source.getValue(), argCache.get(i));
+                if (matchedValue != null) {
+                    if (j == i - 1) {
+                        adjacentHigh = true;
                     }
-                    if (argNameCache.get(i) == null) {
-                        argNameCache.set(i, extractArgNames(chain.get(i)));
-                    }
-                    if (prefixMatched(nameCache.get(j), argNameCache.get(i))) {
-                        graph.addEdge(prevInvocation, currInvocation, Confidence.LOW, null, null, null);
-                    }
+                    graph.addEdge(prevInvocation, currInvocation, Confidence.HIGH,
+                            matchedValue, chain.get(j).getRecordId(), chain.get(i).getRecordId(), allMeaningfulMatches(source.getValue(), argCache.get(i)));
                 }
             }
+
+            // ====== 第 2 层：字段名前缀匹配（仅相邻对、且未命中精确匹配） ======
+            if (!adjacentHigh) {
+                String prevInvocation = invocationKeys.get(i - 1);
+                if (prevInvocation != null && !prevInvocation.equals(currInvocation)
+                        && prefixMatched(extractFieldNames(chain.get(i - 1)), extractArgNames(chain.get(i)))) {
+                    graph.addEdge(prevInvocation, currInvocation, Confidence.LOW, null, null, null);
+                }
+            }
+        }
+    }
+
+    /**
+     * 吸收记录 idx 的值源贡献，按载体优先级：录制工具结果（自产，源头=本记录）>
+     * 请求 history 工具帧（按 tool_use_id 归因到发起记录，无 id 退携带者）>
+     * 响应体（自产，源头=本记录）。前面的载体在场时后面的被遮蔽——与
+     * {@link #extractFieldValues} 的载体优先级一致，区别仅在帧的归因方向。
+     */
+    private void absorbRecordSources(List<InteractionRecord> chain, int idx, Map<Integer, Set<String>> valueSources, Map<String, Integer> callIssuer) {
+        InteractionRecord record = chain.get(idx);
+        if (hasRecordedToolResult(record)) {
+            absorbInto(valueSources, idx, extractFieldValues(record));
+            return;
+        }
+        if (record.getPreviousTurns() != null) {
+            boolean hasFrame = false;
+            for (TurnContext turn : record.getPreviousTurns()) {
+                if (turn == null || !"tool".equals(turn.getRole())) {
+                    continue;
+                }
+                String content = turn.getContent();
+                if (content == null || content.trim().isEmpty()) {
+                    continue;
+                }
+                Object json = RecursiveJsonParser.parse(content);
+                if (json == null) {
+                    continue;
+                }
+                hasFrame = true;
+                Set<String> values = new LinkedHashSet<>();
+                collectLeafValues(json, values, 0);
+                Integer issuer = turn.getToolCallId() != null ? callIssuer.get(turn.getToolCallId()) : null;
+                absorbInto(valueSources, issuer != null ? issuer : idx, values);
+            }
+            if (hasFrame) {
+                return;
+            }
+        }
+        if (record.getModelResponse() == null) {
+            return;
+        }
+        Object json = RecursiveJsonParser.parse(record.getModelResponse());
+        if (json != null) {
+            Set<String> values = new LinkedHashSet<>();
+            collectLeafValues(json, values, 0);
+            absorbInto(valueSources, idx, values);
+        }
+    }
+
+    private static void absorbInto(Map<Integer, Set<String>> valueSources, int idx, Set<String> values) {
+        if (values == null || values.isEmpty()) {
+            return;
+        }
+        Set<String> existing = valueSources.get(idx);
+        if (existing == null) {
+            valueSources.put(idx, new LinkedHashSet<>(values));
+        } else {
+            existing.addAll(values);
         }
     }
 
@@ -352,13 +434,18 @@ public class ParameterValueTracer {
     }
 
     /**
-     * 判断是否为"有意义的值"——排除纯数字、单个字符、布尔值等噪声。
+     * 判断是否为"有意义的值"——排除短数字、小数、单个字符、布尔值等噪声；
+     * ≥6 位纯整数是订单号/工单号形态的 ID，保留。
      */
     public boolean isMeaningfulValue(String val) {
         if (val == null || val.length() < 3) return false;
         // 布尔字面量是高噪值：几乎所有工具链都会流经 true/false，建边即假依赖
         if ("true".equals(val) || "false".equals(val)) return false;
-        if (val.matches("-?\\d+(\\.\\d+)?")) return false; // 纯数字排除
+        // 纯小数（量测值）恒排除；纯整数按长度分流：短数字是数量/序号（高噪），
+        // ≥6 位整数是订单号/工单号/时间戳形态的 ID——排掉它们等于对电商与工单类
+        // 链的跨步值系统性失明（round20 实弹：20260930 形态的值零边）
+        if (val.matches("-?\\d+\\.\\d+")) return false;
+        if (val.matches("-?\\d+")) return val.length() >= 6;
         return true;
     }
 

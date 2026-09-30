@@ -2,6 +2,7 @@ package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.ToolCall;
+import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -105,6 +106,104 @@ class GraphShowCommandTest {
         assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("graph", "show", "--db", dbPath, "--json"));
         String graphJson = stdout.toString();
         assertTrue(graphJson.contains("\"nodes\":[\"invocation:loneSkill:"), "机器面必须携带 nodes 数组（只有计数不可寻址）: " + graphJson);
+    }
+
+    @Test
+    @DisplayName("一轮式工具循环主形态出边：同记录 history 值→响应 tool call 参数，按 tool_use_id 归因到发起记录")
+    void wireRoundTripSameRecordHop_attributedToIssuer() {
+        // r1：响应发出 get_order（toolCallId=T1）；r2：请求 history 携带 T1 的结果
+        // {order:ORD-7}，响应即发起 create_wo(order_id=ORD-7)——值诞生与首次消费
+        // 同记录，历史上该跳零边（round18 主形态盲区）
+        InteractionRecord r1 = wireRecord("w-1", 1000L, "getOrder", "hash-w1", null, "T1", null);
+        InteractionRecord r2 = wireRecord("w-2", 2000L, "createWork", "hash-w2", "T1", "T2", "ORD-7");
+        repository.saveInteractionIfAbsent(r1);
+        repository.saveInteractionIfAbsent(r2);
+
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("graph", "show", "--db", dbPath);
+
+        assertEquals(0, exit);
+        String output = stdout.toString();
+        assertTrue(output.contains("getOrder@hash-w1 -> createWork@hash-w2  HIGH"), "主形态必须出边且源头归发起记录: " + output);
+        assertTrue(output.contains("\"ORD-7\" (w-1 -> w-2)"), "证据记录对指向发起记录: " + output);
+    }
+
+    @Test
+    @DisplayName("携带者不冒名源头：中间记录的 history 帧值归因到更早的发起记录")
+    void carrierRecordNotAttributedAsSource() {
+        // r1 发出 T1；r2 携带 T1 结果（响应纯文本）；r3 的参数用该值——
+        // 边必须是 r1→r3（发起方），不得是 r2→r3（携带者）
+        InteractionRecord r1 = wireRecord("c-1", 1000L, "lookup", "hash-c1", null, "T1", null);
+        InteractionRecord r2 = wireRecord("c-2", 2000L, "narrate", "hash-c2", "T1", null, "VAL-9");
+        InteractionRecord r3 = wireRecord("c-3", 3000L, "notify", "hash-c3", null, "T3", "VAL-9");
+        r2.setModelResponse("{\"text\":\"中间叙述\"}");
+        r2.setToolCalls(new ArrayList<>());
+        r2.setHasToolCalls(false);
+        repository.saveInteractionIfAbsent(r1);
+        repository.saveInteractionIfAbsent(r2);
+        repository.saveInteractionIfAbsent(r3);
+
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("graph", "show", "--db", dbPath);
+
+        assertEquals(0, exit);
+        String output = stdout.toString();
+        assertTrue(output.contains("lookup@hash-c1 -> notify@hash-c3  HIGH"), "源头=发起记录 r1: " + output);
+        assertFalse(output.contains("narrate@hash-c2 ->"), "携带者不得冒名源头: " + output);
+    }
+
+    @Test
+    @DisplayName("纯数字 ID 值流：≥6 位整数串过噪声过滤器（订单号形态），小数与短数字仍排除")
+    void digitIdValuesFlow() {
+        InteractionRecord r1 = wireRecord("d-1", 1000L, "getOrder", "hash-d1", null, "T1", null);
+        InteractionRecord r2 = wireRecord("d-2", 2000L, "createWork", "hash-d2", "T1", "T2", "20260930");
+        repository.saveInteractionIfAbsent(r1);
+        repository.saveInteractionIfAbsent(r2);
+
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("graph", "show", "--db", dbPath);
+
+        assertEquals(0, exit);
+        String output = stdout.toString();
+        assertTrue(output.contains("getOrder@hash-d1 -> createWork@hash-d2  HIGH"), "8 位数字 ID 必须建边: " + output);
+        assertTrue(output.contains("20260930"), "命中值必须是数字串本体: " + output);
+    }
+
+        /**
+     * wire 回灌形态的记录构造：issuerCallId = 本记录响应发出的工具调用 id（无则响应纯文本）；
+     * fedBackCallId/fedBackValue = 请求 history 携带的更早调用的结果帧；consumeValue =
+     * 本记录响应发出的工具调用实参值（与 fedBackValue 同值即「同记录诞生+消费」）。
+     */
+    private InteractionRecord wireRecord(String recordId, long ts, String invocationId, String templateHash, String fedBackCallId, String issuerCallId, String value) {
+        InteractionRecord record = new InteractionRecord();
+        record.setRecordId(recordId);
+        record.setSessionId("session-wire");
+        record.setTimestamp(ts);
+        record.setSeq(ts);
+        record.setInvocationId(invocationId);
+        record.setTemplateHash(templateHash);
+        record.setInvocationKey("invocation:" + invocationId + ":" + templateHash);
+        record.setUserInput("输入 " + recordId);
+        record.setTurnIndex(0);
+        List<TurnContext> turns = new ArrayList<>();
+        if (fedBackCallId != null) {
+            TurnContext frame = new TurnContext("tool", "{\"ref\":\"" + value + "\"}");
+            frame.setToolCallId(fedBackCallId);
+            turns.add(frame);
+        }
+        if (!turns.isEmpty()) {
+            record.setPreviousTurns(turns);
+        }
+        List<ToolCall> calls = new ArrayList<>();
+        if (issuerCallId != null) {
+            ToolCall call = new ToolCall();
+            call.setToolCallId(issuerCallId);
+            call.setToolName(invocationId);
+            Map<String, Object> args = new LinkedHashMap<>();
+            args.put("ref", value);
+            call.setArguments(args);
+            calls.add(call);
+        }
+        record.setToolCalls(calls);
+        record.setHasToolCalls(!calls.isEmpty());
+        return record;
     }
 
     @Test

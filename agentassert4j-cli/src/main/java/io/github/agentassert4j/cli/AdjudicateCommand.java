@@ -101,7 +101,24 @@ abstract class AdjudicateCommand implements Callable<Integer> {
             targets.add(profile);
             return targets;
         }
-        // bare = 裁决全部待裁决候选（与「bare 命令=全项目完整默认能力」同一语义约定）
+        // bare = 裁决全部待裁决候选（与「bare 命令=全项目完整默认能力」同一语义约定）。
+        // 共库防线：候选由他人 approver 建档时，bare 会替别人裁决——先查后拒，
+        // 要求显式 --invocation 声明范围（round21 实弹：跨代理吞并候选成立）。
+        // 比对因子 = 本次裁决的署名（--approver，缺省回落进程默认身份）——
+        // 旗标申报的身份必须参与判定，否则按指南申报身份的 AI 宿主永远撞墙（round22 实弹）
+        String self = signingApprover();
+        List<String> foreignKeys = new ArrayList<>();
+        for (InvocationProfile profile : repository.findAllInvocations()) {
+            if (profile.getCandidateFingerprint() != null
+                    && profile.getApprovedBy() != null && !profile.getApprovedBy().equals(self)) {
+                foreignKeys.add(profile.getInvocationKey());
+            }
+        }
+        if (!foreignKeys.isEmpty()) {
+            throw new CliFailureException(CliErrorCode.E_GUARD, "Bare " + action() + " would adjudicate " + foreignKeys.size() + " candidate(s) established by other actors (this run signs as '" + self + "'; candidates belong to the listed approvers): " + String.join(", ", foreignKeys) + ".",
+                    "Adjudicate deliberately with --invocation <prefix>, pass --approver matching the candidate owner, or re-run bare after coordinating with the other actors.",
+                    "agentassert4j status");
+        }
         for (InvocationProfile profile : repository.findAllInvocations()) {
             if (profile.getCandidateFingerprint() != null) {
                 targets.add(profile);
@@ -127,6 +144,15 @@ abstract class AdjudicateCommand implements Callable<Integer> {
     /**
      * 执行裁决操作（accept/reject）。
      */
+    /**
+     * 本次裁决的署名身份：子类的 --approver 旗标值，缺省回落进程默认身份。
+     * bare 防线的比对因子——旗标申报的身份必须参与判定（round22 实弹：
+     * 只比进程默认身份时，按指南申报身份的 AI 宿主永远撞墙）。
+     */
+    protected String signingApprover() {
+        return CliSupport.currentActor();
+    }
+
     abstract void apply(BaselineManager manager, String expectedVersion, String invocationKey);
 
     /**

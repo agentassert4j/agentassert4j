@@ -46,6 +46,16 @@ public class RulesCommand implements Callable<Integer> {
         InvocationRulesConfig effective = ConfigLoader.loadRulesConfig();
         int invocationDeclarations = effective.getDeclaredInvocationIds().size();
         int taskDeclarations = effective.getDeclaredTaskKeys().size();
+        String fatalNote = null;
+        for (String note : effective.getParseNotes()) {
+            if (note.endsWith("no declarations are in effect")) {
+                fatalNote = note;
+                break;
+            }
+        }
+        if (fatalNote != null) {
+            err.println("Rules warning: " + (rulesPath != null ? rulesPath : "<rules file>") + " — " + fatalNote);
+        }
         if (jsonOutput) {
             StringBuilder items = new StringBuilder();
             for (String name : builtins) {

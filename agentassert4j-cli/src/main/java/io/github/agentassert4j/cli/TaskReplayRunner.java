@@ -291,9 +291,13 @@ public class TaskReplayRunner {
         List<List<TaskChain>> groups = groupByRequestText(scoped);
         hintSplitSingleStepTasks(groups);
         Map<String, Map<String, Verdict>> verdictsByKey = ciMode && !memberCheck ? new LinkedHashMap<String, Map<String, Verdict>>() : null;
+        List<String> tasksWithFindings = new ArrayList<>();
         for (List<TaskChain> group : groups) {
             if (ciMode && !memberCheck) {
                 alignCiGroup(group, outcomes, totals, manager, verdictsByKey);
+                if (groupRed(group, outcomes)) {
+                    tasksWithFindings.add(group.get(group.size() - 1).getRequestText());
+                }
                 continue;
             }
             if (group.size() == 1) {
@@ -305,6 +309,23 @@ public class TaskReplayRunner {
             } else {
                 alignTaskGroup(group, outcomes, totals, manager);
             }
+            if (groupRed(group, outcomes)) {
+                tasksWithFindings.add(group.get(group.size() - 1).getRequestText());
+            }
+        }
+
+        // 多任务报告的红位索引：几十个任务里唯一的红任务埋在逐任务明细中段时，
+        // CI 日志读者要翻几百行才能定位（round18 实弹：22 任务中第 67/256 行）——
+        // 收尾前点名红任务，一眼定位回归
+        if (!tasksWithFindings.isEmpty()) {
+            List<String> shown = new ArrayList<>();
+            for (String name : tasksWithFindings) {
+                if (shown.size() >= 5) {
+                    break;
+                }
+                shown.add("\"" + CliSupport.abbreviateText(name, 40) + "\"");
+            }
+            info("Tasks with findings (" + tasksWithFindings.size() + "): " + String.join(", ", shown) + (tasksWithFindings.size() > shown.size() ? " ... and " + (tasksWithFindings.size() - shown.size()) + " more" : ""));
         }
 
         // 同调用点跨任务链混形指路：认可集合满足一边、另一边是集合外形态——判定本身
@@ -368,8 +389,17 @@ public class TaskReplayRunner {
             return fail(CliErrorCode.E_USAGE, "Re-drive truncated by the budget caps: " + reDriveTotals.callsUsed + " call(s), " + reDriveTotals.tokensUsed + " tokens used; " + CliSupport.plural(reDriveTotals.skipped, "record") + " skipped.", "Raise --max-total-calls/--max-total-tokens, narrow the scope with --task/--invocation, or drop the caps.", "agentassert4j replay");
         }
         if (reDriveTotals.failed > 0 && reDriveTotals.pass == 0) {
-            String cause = reDriveTotals.timedOut ? "One or more calls hit llm.timeoutMs; thinking-tier models can exceed the default 60s." : "Check llm config, credentials and network.";
-            return fail(CliErrorCode.E_ENV, "All re-drive calls failed (no comparisons).", cause + " Then retry.", "agentassert4j doctor");
+            // 根因透传：首个失败的原始消息（HTTP 状态/端点路径/方言错配）优先于
+            // 泛化指引——「check credentials」掩盖 404 方言×端点错配是最难排查形态
+            String cause;
+            if (reDriveTotals.timedOut) {
+                cause = "One or more calls hit llm.timeoutMs; thinking-tier models can exceed the default 60s.";
+            } else if (reDriveTotals.firstError != null) {
+                cause = "First failure: " + CliSupport.abbreviateText(reDriveTotals.firstError, 200);
+            } else {
+                cause = "Check llm config, credentials and network.";
+            }
+            return fail(CliErrorCode.E_ENV, "All re-drive calls failed (no comparisons).", cause.trim() + " Then retry.", "agentassert4j doctor");
         }
         boolean anyGap = totals.missing > 0 || totals.added > 0 || totals.ruleViolations > 0 || dispositions.hung > 0;
         if (totals.changed > 0 || totals.anyTaskChanged || anyGap || reDriveTotals.changed > 0) {
@@ -389,6 +419,7 @@ public class TaskReplayRunner {
         int callsUsed;
         long tokensUsed;
         boolean timedOut;
+        String firstError;
     }
 
     /**
@@ -526,6 +557,9 @@ public class TaskReplayRunner {
                 if (result.getStatus() == TestResultStatus.TIMEOUT) {
                     rd.timedOut = true;
                 }
+                if (rd.firstError == null && result.getErrorMessage() != null) {
+                    rd.firstError = result.getErrorMessage();
+                }
                 info(stepLine(index, key, result.getStatus() + " " + (result.getErrorMessage() != null ? result.getErrorMessage() : "")));
             }
             if (stepJsons != null) {
@@ -632,7 +666,7 @@ public class TaskReplayRunner {
      * 单价折算，属参考值而非报价承诺。
      */
     private String reDrivePlanJson(List<InteractionRecord> planned, String fallbackModel) {
-        StringBuilder sb = new StringBuilder("{\"mode\":\"" + TaskReportMode.RE_DRIVE_DRY_RUN.wireName() + "\"");
+        StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.RE_DRIVE_DRY_RUN.wireName() + "\"");
         sb.append(",\"plan\":{\"calls\":").append(planned.size()).append(",\"records\":[");
         boolean first = true;
         long estimatedTokens = 0;
@@ -1654,6 +1688,17 @@ public class TaskReplayRunner {
             // 计划面与真跑面同目标集：fullChain 必须透传，否则 --full-chain --dry-run
             // 拿到的是漂移点裁剪（bare 形态恒 0 条 + 建议句让用户开已开的旗标）
             List<InteractionRecord> planned = reDriveTargets(drift, fullChain, narrowed, invocationKey, scoped);
+            // 换模型告警前置到 dry-run：用户先看报价再决定真跑——告警只出现在真跑
+            // 等于最贵的提示来得最晚（round19 D6）；判定不可比的决策在报价时就要在场
+            Set<String> plannedModels = new LinkedHashSet<>();
+            for (InteractionRecord record : planned) {
+                if (record.getModel() != null && !record.getModel().isEmpty()) {
+                    plannedModels.add(record.getModel());
+                }
+            }
+            if (!plannedModels.isEmpty() && !plannedModels.contains(llmClient.name())) {
+                info("Warning: replay model " + llmClient.name() + " differs from the recorded models of the re-drive targets " + new ArrayList<>(plannedModels) + "; verdicts are not directly comparable to baselines (model switching is experimental).");
+            }
             info("Re-drive plan (--re-drive): " + CliSupport.plural(planned.size(), "record") + " to re-drive with each point's latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + " Emitter: model " + llmClient.name() + ", protocol " + (executionConfig.getWireProtocol() != null ? executionConfig.getWireProtocol() : "auto") + ".");
             if (!planned.isEmpty()) {
                 info(CostEstimator.estimate(planned, llmClient.name()));
@@ -1861,6 +1906,29 @@ public class TaskReplayRunner {
             parts.add(CliSupport.plural(outUnbaselined, "unbaselined key"));
         }
         return "Note: outside the narrowed scope: " + String.join(", ", parts) + " — this run does not gate them (drop the narrowing flags for the full-project gate).";
+    }
+
+    /**
+     * 该任务组是否带红：逐调用点 outcome 取最差（CHANGED/GAP 任一即红）。
+     * outcome 表在 alignXGroup 内经 worstOutcome 写入，此处只读判定。
+     */
+    private boolean groupRed(List<TaskChain> group, Map<String, StepOutcome> outcomes) {
+        Set<String> keys = new LinkedHashSet<>();
+        for (TaskChain chain : group) {
+            for (InteractionRecord record : chain.getRecords()) {
+                String key = CliSupport.invocationKeyOfRecord(record);
+                if (key != null) {
+                    keys.add(key);
+                }
+            }
+        }
+        for (String key : keys) {
+            StepOutcome outcome = outcomes.get(key);
+            if (outcome == StepOutcome.CHANGED || outcome == StepOutcome.GAP) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

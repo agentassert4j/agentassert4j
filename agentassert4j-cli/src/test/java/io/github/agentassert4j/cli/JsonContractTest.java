@@ -827,12 +827,12 @@ class JsonContractTest {
 
             int exit = execute("verify", "--pack", packPath.toString(), "--db", emptyDb.toString(), "--json");
 
+            // verify 只读：缺库先拒绝、不创建文件（round21 实弹——曾静默初始化 64KB 空库）
             assertEquals(2, exit);
-            assertTrue(stdout().contains("agentassert4j.verify-report/1"), "验收报告先行产出: " + stdout());
-            assertTrue(stdout().contains("\"health\":{\"labelSplits\":0,\"selfEstablishedTasks\":0,\"multiStepUnlabeledChains\":0}"), "验收报告携带出口健康三计数: " + stdout());
+            assertFalse(java.nio.file.Files.exists(emptyDb), "缺库不得创建文件: " + emptyDb);
             String envelope = lastStdoutLine();
             assertErrorEnvelope(envelope, "E-NO-DATA");
-            assertTrue(envelope.contains("no local execution"), "包络点明缺口语义: " + envelope);
+            assertTrue(envelope.contains("verify does not create databases"), "包络点名只读语义: " + envelope);
         }
 
         @Test

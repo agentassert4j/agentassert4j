@@ -239,7 +239,7 @@ public class StatusCommand implements Callable<Integer> {
             }
             invocations.append(dimensions).append("]}");
         }
-        return "{\"schema\":\"" + ReportSchemas.CANDIDATE_DIFF + "\",\"invocations\":[" + invocations + "],\"summary\":{\"scoped\":" + profiles.size() + ",\"withCandidate\":" + withCandidate + ",\"identical\":" + identical + "},\"note\":\"Anchor = the first approved shape; verdicts compare against the whole approved set.\"}";
+        return "{\"schema\":\"" + ReportSchemas.CANDIDATE_DIFF + "\",\"invocations\":[" + invocations + "],\"summary\":{\"scoped\":" + profiles.size() + ",\"withCandidate\":" + withCandidate + ",\"identical\":" + identical + "},\"note\":\"Anchor = the first approved shape; verdicts compare against the whole approved set. Dimensions are structural fingerprint diffs; content-rule and behavior VERDICT mismatches (baseline declares, current output answers) are reported in replay step lines and are not re-derived here.\"}";
     }
 
     private static String stringArray(List<String> values) {

@@ -71,15 +71,71 @@ public final class PackCodec {
         if (pack.getRules() != null && !pack.getRules().isEmpty()) {
             root.put("rules", pack.getRules());
         }
+        // 完整性锚最后写入：对「meta(除锚)+tasks+rules」的规范序列化取摘要——
+        // 锚自身不能进被摘要的载荷，否则自引用
+        meta.put("integrityHash", computeIntegrityHash(root));
         return RecursiveJsonParser.serialize(root);
     }
 
-    public static AcceptancePack fromJson(String json) {
+    /**
+     * 完整性锚 = 载荷（meta 除 integrityHash + tasks + rules）按写入序规范序列化后的
+     * SHA-256。防的是「从包里删任务/改指纹」这类静默篡改；导出方与验收方用同一算法
+     * 复算，不符即拒。JSON 解析丢类型信息（如整型变浮点）会造成误报，故比较发生在
+     * 字符串层（serialize 输出稳定）。
+     */
+    /**
+     * 解析并校验包根形态（JSON 对象），供 fromJson 与完整性锚复算共用同一解析——
+     * 两条路径对同一字节串必须看到同一棵树。
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> parseRoot(String json) {
         Object parsed = RecursiveJsonParser.parse(json);
         if (!(parsed instanceof Map)) {
             throw new IllegalArgumentException("The acceptance pack is not a JSON object.");
         }
-        Map<?, ?> root = (Map<?, ?>) parsed;
+        return (Map<String, Object>) parsed;
+    }
+
+    public static String computeIntegrityHash(Map<String, Object> root) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> payload = (Map<String, Object>) canonicalized(root);
+        if (payload.get("meta") instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> metaCopy = new LinkedHashMap<>((Map<String, Object>) payload.get("meta"));
+            metaCopy.remove("integrityHash");
+            payload.put("meta", metaCopy);
+        }
+        return HashUtil.sha256(RecursiveJsonParser.serialize(payload));
+    }
+
+    /**
+     * 规范化：键全排序 + 数值统一 BigDecimal 表示——JSON 工具链对同一文档的
+     * 重序列化（键序倒置、1 与 1.0、空白差异）是等值变换，不得当成篡改；
+     * 数组序保留（步骤顺序是业务语义）。
+     */
+    private static Object canonicalized(Object node) {
+        if (node instanceof Map) {
+            Map<String, Object> sorted = new java.util.TreeMap<>();
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) node).entrySet()) {
+                sorted.put(String.valueOf(entry.getKey()), canonicalized(entry.getValue()));
+            }
+            return sorted;
+        }
+        if (node instanceof List) {
+            List<Object> items = new ArrayList<>();
+            for (Object item : (List<?>) node) {
+                items.add(canonicalized(item));
+            }
+            return items;
+        }
+        if (node instanceof Number && !(node instanceof java.math.BigDecimal)) {
+            return new java.math.BigDecimal(node.toString());
+        }
+        return node;
+    }
+
+    public static AcceptancePack fromJson(String json) {
+        Map<?, ?> root = parseRoot(json);
         String schema = asString(root.get("schema"));
         if (!AcceptancePack.SCHEMA.equals(schema)) {
             throw new IllegalArgumentException("Unsupported acceptance pack schema: " + schema + " (expected " + AcceptancePack.SCHEMA + ").");
@@ -99,6 +155,7 @@ public final class PackCodec {
             m.setFrameworkVersion(asString(meta.get("frameworkVersion")));
             m.setServedModel(asString(meta.get("servedModel")));
             m.setCodeRef(asString(meta.get("codeRef")));
+            m.setIntegrityHash(asString(meta.get("integrityHash")));
             pack.setMeta(m);
         }
         if (root.get("tasks") instanceof List) {

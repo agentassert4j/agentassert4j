@@ -58,6 +58,26 @@ public class BaselineService {
         // 定向 --invocation 是逐键的显式意图，不过滤
         Set<String> sweepSkipped = invocationKeys == null ? splitKeysSkippedBySweep(out) : Collections.<String>emptySet();
 
+        // force 的乐观守卫必须两阶段：先全量校验、再统一写入——逐键检查到中途才抛，
+        // 前面的键已经被重建（approver 改写、归档落库、audit 记账），「整体拒绝」的
+        // 包络让操作者以为零写入，共享库多 actor 场景下等于移动了别人的基线（round26 实弹）
+        if (force && expectedVersion != null) {
+            List<String> mismatches = new ArrayList<>();
+            for (Map.Entry<String, List<InteractionRecord>> bucket : CliSupport.invocationBuckets(repository).entrySet()) {
+                String key = bucket.getKey();
+                if (sweepSkipped.contains(key) || (invocationKeys != null && !invocationKeys.contains(key))) {
+                    continue;
+                }
+                InvocationProfile profile = repository.findInvocationByKey(key);
+                if (CliSupport.hasBaseline(profile) && !expectedVersion.equals(profile.getVersionTag())) {
+                    mismatches.add(key + " is " + profile.getVersionTag());
+                }
+            }
+            if (!mismatches.isEmpty()) {
+                throw new VersionMismatchException("Expected every active baseline version to be " + expectedVersion + ", but: " + String.join("; ", mismatches) + "; a concurrent actor may have changed them. Nothing was rebuilt.");
+            }
+        }
+
         for (Map.Entry<String, List<InteractionRecord>> bucket : CliSupport.invocationBuckets(repository).entrySet()) {
             if (sweepSkipped.contains(bucket.getKey())) {
                 continue;

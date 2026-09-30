@@ -138,6 +138,28 @@ public class DoctorCommand implements Callable<Integer> {
                 findings.recordsMissingTemplateHash++;
             }
         }
+        // 协议形态失配：声明/存储的协议与响应 wire 形态不符——摄取回执有 note，但
+        // 连续三轮黑盒被试都没看见（可发现性问题）；doctor 作为体检面给出聚合视图
+        for (InteractionRecord record : records) {
+            if (record.getApiProtocol() == null || record.getModelResponseRaw() == null || record.getModelResponseRaw().isEmpty()) {
+                continue;
+            }
+            Object parsed;
+            try {
+                parsed = io.github.agentassert4j.util.RecursiveJsonParser.parseStrict(record.getModelResponseRaw());
+            } catch (RuntimeException e) {
+                continue;
+            }
+            if (!(parsed instanceof java.util.Map)) {
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> responseMap = (java.util.Map<String, Object>) parsed;
+            io.github.agentassert4j.model.LlmWireProtocol declared = io.github.agentassert4j.model.LlmWireProtocol.fromWireName(record.getApiProtocol());
+            if (declared != null && McpRecordIngestion.detectProtocol(responseMap) != declared) {
+                findings.protocolShapeMismatches.add(record.getRecordId());
+            }
+        }
 
         findings.ruleWarnings.addAll(CliSupport.malformedTaskRuleWarnings(rules));
         findings.noTasksConfigured = rules.getDeclaredTaskKeys().isEmpty();
@@ -196,6 +218,12 @@ public class DoctorCommand implements Callable<Integer> {
             printSampled(findings.unestablished, footprint -> "    " + CliSupport.displayKey(footprint.invocationKey) + " (" + (footprint.label != null ? footprint.label : "no label") + ") " + CliSupport.plural(footprint.recordCount, "record"));
         }
         out.println("  Records missing template_hash: " + findings.recordsMissingTemplateHash + (findings.recordsMissingTemplateHash > 0 ? "; these records have no full-text archive and no template hash, so drift detection cannot check them (re-recording fixes this)." : "."));
+        if (findings.protocolShapeMismatches.isEmpty()) {
+            out.println("  Protocol shape mismatches: none.");
+        } else {
+            java.util.List<String> shown = findings.protocolShapeMismatches.subList(0, Math.min(3, findings.protocolShapeMismatches.size()));
+            out.println("  Protocol shape mismatches: " + findings.protocolShapeMismatches.size() + " record(s) whose stored protocol does not match the response shape (usage/model extraction degraded and re-drive sends them under the declared dialect): " + String.join(", ", shown) + (findings.protocolShapeMismatches.size() > shown.size() ? " ... and " + (findings.protocolShapeMismatches.size() - shown.size()) + " more" : "") + ".");
+        }
     }
 
     /**
@@ -242,7 +270,14 @@ public class DoctorCommand implements Callable<Integer> {
             unestablishedJsons.add("{\"invocationKey\":\"" + RecursiveJsonParser.escape(footprint.invocationKey) + "\",\"label\":\"" + RecursiveJsonParser.escape(footprint.label != null ? footprint.label : "") + "\",\"recordCount\":" + footprint.recordCount + "}");
         }
         String rulesPath = ConfigLoader.resolveRulesPath();
-        sb.append(String.join(",", unestablishedJsons)).append("],\"recordsMissingTemplateHash\":").append(findings.recordsMissingTemplateHash).append("},\"rules\":{\"rulesFile\":").append(rulesPath != null ? "\"" + RecursiveJsonParser.escape(rulesPath) + "\"" : "null").append(",\"ruleWarnings\":[");
+        // 机器面与人读面同款覆盖：协议失配行必须双面齐（round24 D1——人读有整行、
+        // JSON 面无此键，AI 消费方看不到库里的方言错配）
+        StringBuilder protocolMismatchesJson = new StringBuilder();
+        for (String recordId : findings.protocolShapeMismatches) {
+            if (protocolMismatchesJson.length() > 0) protocolMismatchesJson.append(",");
+            protocolMismatchesJson.append("\"").append(RecursiveJsonParser.escape(recordId)).append("\"");
+        }
+        sb.append(String.join(",", unestablishedJsons)).append("],\"recordsMissingTemplateHash\":").append(findings.recordsMissingTemplateHash).append(",\"protocolShapeMismatches\":[").append(protocolMismatchesJson).append("]},\"rules\":{\"rulesFile\":").append(rulesPath != null ? "\"" + RecursiveJsonParser.escape(rulesPath) + "\"" : "null").append(",\"ruleWarnings\":[");
         List<String> warningJsons = new ArrayList<>();
         for (String warning : findings.ruleWarnings) {
             warningJsons.add("\"" + RecursiveJsonParser.escape(warning) + "\"");
@@ -311,6 +346,7 @@ public class DoctorCommand implements Callable<Integer> {
          */
         final List<InvocationFootprint> unestablished = new ArrayList<>();
         int recordsMissingTemplateHash;
+        final java.util.List<String> protocolShapeMismatches = new java.util.ArrayList<>();
         /**
          * rules.tasks 畸形告警（全量；人类通道加 Warning: 前缀输出）。
          */

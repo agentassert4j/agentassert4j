@@ -573,6 +573,29 @@ class TaskReplayRunnerTest {
     class Guards {
 
         @Test
+        @DisplayName("force --expected-version 两阶段守卫：任一键版本不符 → 零写入整体拒绝，匹配键不得被先重建")
+        void forceExpectedVersion_partialMismatch_rejectsAtomically() {
+            establishFromRecord(saveRecord("gk-1", "session-gk", 100L, "查订单", "alpha", "hash-a", "{\"v\":1}", null));
+            InvocationProfile beta = establishFromRecord(saveRecord("gk-2", "session-gk", 200L, "查订单", "beta", "hash-b", "{\"v\":1}", null));
+            // beta 已被推进到 v3（模拟并发 actor），alpha 仍 v1
+            beta.setVersionTag("v3");
+            repository.saveInvocationProfile(beta);
+
+            BaselineService service = new BaselineService(repository);
+            java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+            try {
+                service.establishMissing(new java.io.PrintStream(buf, true), "tester", null, true, null, null, null, "v1");
+                org.junit.jupiter.api.Assertions.fail("守卫必须拒绝");
+            } catch (io.github.agentassert4j.algorithm.VersionMismatchException e) {
+                org.junit.jupiter.api.Assertions.assertTrue(e.getMessage().contains("beta"), "拒绝消息列出全部不符键: " + e.getMessage());
+                org.junit.jupiter.api.Assertions.assertTrue(e.getMessage().contains("Nothing was rebuilt"), "明确声明零写入: " + e.getMessage());
+            }
+            // 匹配键 alpha 不得被重建（仍是 v1 + 原 approver）
+            InvocationProfile alpha = repository.findInvocationByKey("invocation:alpha:hash-a");
+            org.junit.jupiter.api.Assertions.assertEquals("v1", alpha.getVersionTag(), "部分不符时匹配键不得先被重建");
+        }
+
+        @Test
         @DisplayName("latest chain 健康披露：链记录数少于历史峰值点名，未来时间戳告警")
         void ciDisclosesChainCoverageAndFutureTimestamp() {
             establishFromRecord(saveRecord("h-1", "session-h1", 100L, "查订单", "order", "hash-h", "{\"v\":1}", null));

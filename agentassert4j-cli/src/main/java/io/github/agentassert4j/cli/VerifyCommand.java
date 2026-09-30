@@ -69,6 +69,13 @@ public class VerifyCommand implements Callable<Integer> {
             // 配置加载在 try 内：坏配置文件抛出的异常必须落 E-ENV 包络，
             // 不得穿透给 picocli 打全栈
             AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
+            // verify 是只读命令：缺库先拒绝（openRepository 会静默初始化 64KB 空文件，
+            // 与「只读不落库」承诺矛盾——round21 实弹）
+            java.io.File dbFile = new java.io.File(db != null ? db : ConfigLoader.expandHome(ConfigLoader.loadAgentAssert4jConfig().getStorage().getUrl()));
+            if (!dbFile.isFile()) {
+                return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, "Database not found: " + dbFile.getPath() + " (verify does not create databases).",
+                        "Point --db at the accepting-side database recorded during the real executions, then retry.", "agentassert4j baseline export");
+            }
             repository = CliSupport.openRepository(db, err);
             DeterministicComparator comparator = CliSupport.createComparator(config);
             return new VerifyRunner(repository, comparator, out, err, jsonOutput).run(packContent, digest, task, reportPath, dryRun);

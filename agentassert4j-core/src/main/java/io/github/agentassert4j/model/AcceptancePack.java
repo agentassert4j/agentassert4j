@@ -62,6 +62,21 @@ public class AcceptancePack {
          * 导出侧 servedModel 去重并集（跨模型验收时的对照参照）
          */
         private String servedModel;
+        /**
+         * 完整性锚：meta（除本字段）+ tasks + rules 的规范序列化 SHA-256。
+         * verify 复算不符即拒绝——「从包里删掉会失败的任务」这类篡改不再依赖
+         * 带外人工 SHA 核对（round21 实弹：37 变体中删除任务静默全绿）。
+         * 旧包无此字段时跳过复算并警告（向后兼容，不拒历史包）。
+         */
+        private String integrityHash;
+
+        public String getIntegrityHash() {
+            return integrityHash;
+        }
+
+        public void setIntegrityHash(String integrityHash) {
+            this.integrityHash = integrityHash;
+        }
 
         public long getExportedAt() {
             return exportedAt;

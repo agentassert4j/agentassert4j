@@ -65,8 +65,20 @@ public class InvocationRulesConfig {
         InvocationRulesConfig config = new InvocationRulesConfig();
         if (TextUtil.isBlank(json)) return config;
 
-        Object parsed = RecursiveJsonParser.parse(json);
-        if (!(parsed instanceof Map)) return config;
+        // 严格解析取根因：宽松 parse 失败返回 null 时静默给空配置，会把「规则文件
+        // 有一处非法转义」伪装成「没有任何声明」——声明即门禁，整文件归零必须
+        // 响亮可见（round18 实弹：regex 里的 \d 非法转义废掉全部内容规则）
+        Object parsed;
+        try {
+            parsed = RecursiveJsonParser.parseStrict(json);
+        } catch (RuntimeException e) {
+            config.parseNotes.add("rules file is unparsable (" + e.getMessage() + "); no declarations are in effect");
+            return config;
+        }
+        if (!(parsed instanceof Map)) {
+            config.parseNotes.add("rules file root is not a JSON object; no declarations are in effect");
+            return config;
+        }
 
         @SuppressWarnings("unchecked") Map<String, Object> root = (Map<String, Object>) parsed;
         config.loadFromMap(root);

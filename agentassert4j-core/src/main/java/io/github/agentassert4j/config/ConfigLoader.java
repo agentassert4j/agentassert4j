@@ -308,7 +308,7 @@ public final class ConfigLoader {
             while ((read = is.read(chunk)) != -1) {
                 buffer.write(chunk, 0, read);
             }
-            return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+            return stripBom(new String(buffer.toByteArray(), StandardCharsets.UTF_8));
         } catch (IOException e) {
             return null;
         }
@@ -320,10 +320,20 @@ public final class ConfigLoader {
      * @param path 文件路径
      * @return 文件内容，未找到或读取失败返回 null
      */
+    /**
+     * 剥离 UTF-8 BOM：带 BOM 的配置文件首字符是 U+FEFF，JSON 解析按「非法起始字符」
+     * 失败后静默回退内置默认——storage.url 被无视、数据落错库（round20 实弹）。
+     * 配置文件的作者群（Windows 编辑器）高比例产出 BOM 文件，读侧统一剥除。
+     */
+    private static String stripBom(String text) {
+        if (text == null || text.isEmpty()) return text;
+        return text.charAt(0) == '﻿' ? text.substring(1) : text;
+    }
+
     public static String loadFromFile(String path) {
         if (path == null) return null;
         try {
-            return new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
+            return stripBom(new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8));
         } catch (IOException e) {
             return null;
         }

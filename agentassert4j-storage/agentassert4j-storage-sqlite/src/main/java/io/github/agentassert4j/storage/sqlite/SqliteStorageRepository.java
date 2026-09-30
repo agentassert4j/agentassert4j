@@ -91,7 +91,12 @@ public class SqliteStorageRepository implements StorageRepository {
             // 打开级失败多为可行动拒绝态（版本过新/表缺失），带栈打印只会淹没
             // 可行动消息；根因消息入日志，完整因果链留在异常里供程序消费
             LOG.log(Level.SEVERE, "SQLite initialization failed: " + dbPath + ": " + ExceptionUtil.rootMessage(e));
-            throw new StorageException("initialize: " + dbPath, e);
+            String raw = e.getMessage() != null ? e.getMessage() : "";
+            // 截断/损坏与删表同处置对称：取证先备份——截断恰是最需要取证的形态
+            String advice = (raw.contains("malformed") || raw.contains("CORRUPT"))
+                    ? " If the file was corrupted, truncated or tampered, back it up before retrying with a fresh --db."
+                    : "";
+            throw new StorageException("initialize: " + dbPath + advice, e);
         }
     }
 

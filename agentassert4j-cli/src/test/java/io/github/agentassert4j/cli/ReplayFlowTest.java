@@ -67,7 +67,7 @@ class ReplayFlowTest {
     }
 
     private void establishAll() {
-        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), "tester", null, false, null, null, null, null);
+        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream(), true), io.github.agentassert4j.cli.CliSupport.currentActor(), null, false, null, null, null, null);
     }
 
     @Nested
@@ -172,12 +172,37 @@ class ReplayFlowTest {
 
             AcceptCommand accept = new AcceptCommand();
             accept.db = tempDir.resolve("flow.db").toString();
+            accept.approver = io.github.agentassert4j.cli.CliSupport.currentActor();
             accept.out = new PrintStream(new ByteArrayOutputStream(), true);
             accept.err = new PrintStream(new ByteArrayOutputStream(), true);
-            assertEquals(0, accept.call());
+            assertEquals(0, accept.call(), "署名与候选归属一致时 bare 裁决放行");
 
             assertEquals(BaselineStatus.BASELINE, repository.findInvocationByKey("invocation:order:hash-a").getBaselineStatus());
             assertEquals(BaselineStatus.BASELINE, repository.findInvocationByKey("invocation:poem:hash-p").getBaselineStatus());
+        }
+
+        @Test
+        @DisplayName("bare 裁决遇他人候选 → E-GUARD 强制缩域，不替别人裁决")
+        void bareAdjudicate_foreignCandidates_requireNarrowing() throws Exception {
+            saveRecord("rec-1", "session-a", 1000L, "order", "hash-a", "{\"answer\":\"old\"}");
+            establishAll();
+            saveRecord("rec-2", "session-b", 2000L, "order", "hash-a", "{\"result\":\"new\"}");
+            // 模拟他人候选：候选在途画像的 approvedBy 指向别的 actor
+            InvocationProfile profile = repository.findInvocationByKey("invocation:order:hash-a");
+            profile.setCandidateFingerprint(new io.github.agentassert4j.model.DeterministicFingerprint());
+            profile.setBaselineStatus(io.github.agentassert4j.model.BaselineStatus.CANDIDATE);
+            profile.setApprovedBy("agent:someone-else");
+            repository.saveInvocationProfile(profile);
+
+            AcceptCommand accept = new AcceptCommand();
+            accept.db = tempDir.resolve("flow.db").toString();
+            accept.out = new PrintStream(new ByteArrayOutputStream(), true);
+            accept.err = new PrintStream(new ByteArrayOutputStream(), true);
+            ByteArrayOutputStream errBuf = new ByteArrayOutputStream();
+            accept.err = new PrintStream(errBuf, true);
+
+            assertEquals(2, accept.call(), "他人候选在途时 bare 裁决必须拒绝");
+            assertTrue(errBuf.toString().contains("established by other actors"), "拒绝消息点名跨代理候选: " + errBuf);
         }
     }
 

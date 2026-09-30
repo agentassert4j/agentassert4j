@@ -546,7 +546,7 @@ class CommandSmokeTest {
     }
 
     @Test
-    @DisplayName("空库上的选择器零命中指路录制而非自循环")
+    @DisplayName("不存在的库拒绝并指路首录建库，不冒充空库零命中（统一缺库语义）")
     void emptyDbSelectorMiss_routesToRecordFirst() {
         String emptyDb = tempDir.resolve("selector-empty.db").toString();
         ByteArrayOutputStream out = redirectStdout();
@@ -554,8 +554,8 @@ class CommandSmokeTest {
 
         assertEquals(2, exit);
         String envelope = out.toString();
-        assertTrue(envelope.contains("No recorded interactions found."), "空库零命中必须走录制指引分支: " + envelope);
-        assertTrue(envelope.contains("the record tool on the MCP channel"), "hints 必须点名录制入口: " + envelope);
+        assertTrue(envelope.contains("Database not found:"), "缺库必须拒绝: " + envelope);
+        assertTrue(envelope.contains("recording creates it on first write"), "指引必须说明首录建库: " + envelope);
     }
 
     @Test
@@ -713,6 +713,7 @@ class CommandSmokeTest {
     void status_rendersSemanticConfigNotes() throws Exception {
         Path dir = Files.createTempDirectory("agentassert4j-note-probe");
         try {
+            Files.write(dir.resolve("note.db"), new byte[0]);
             Files.write(dir.resolve("agentassert4j.json"),
                     ("{\"llm\":{\"timeoutMs\":\"abc\"},\"regression\":{\"memberSampleWindow\":\"${NO_SUCH_VAR_SMOKETEST}\"},"
                             + "\"storage\":{\"url\":\"" + dir.resolve("note.db").toString().replace('\\', '/') + "\"}}")

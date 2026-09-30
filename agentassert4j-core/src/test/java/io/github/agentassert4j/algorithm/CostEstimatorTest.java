@@ -17,6 +17,20 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class CostEstimatorTest {
 
+    @Test
+    @org.junit.jupiter.api.DisplayName("cost unknown 归因实际判定的名字：servedModel 不命中时报 served 名而非配置模型名")
+    void unknownCost_attributedToServedModel() {
+        io.github.agentassert4j.model.InteractionRecord record = new io.github.agentassert4j.model.InteractionRecord();
+        record.setServedModel("endpoint-alias-x");
+        record.setInputTokens(10);
+        record.setOutputTokens(5);
+        String line = CostEstimator.estimate(java.util.Collections.singletonList(record), "gpt-4o");
+        org.junit.jupiter.api.Assertions.assertTrue(line.contains("model endpoint-alias-x not in the price snapshot"), "归因 served 名: " + line);
+        org.junit.jupiter.api.Assertions.assertFalse(line.contains("model gpt-4o not in"), "不得张冠李戴配置名: " + line);
+    }
+
+
+
     private static final double DELTA = 1e-9;
 
     private InteractionRecord makeRecord(int turnIndex) {

@@ -183,6 +183,26 @@ final class McpDispatcher implements StdioTransport.MessageHandler {
         boolean isError = outcome.failed();
         String stdout = McpVerbs.channelize(outcome.stdout);
         String stderr = McpVerbs.channelize(outcome.stderr);
+        if (!stderr.isEmpty() && !isError) {
+            // 成功态的 stderr 双分：环境回显行（Config/Rules/Database 披露）转发到
+            // server 进程 stderr——进工具文本块会让每条 MCP 消息带环境噪声；
+            // 逐调用发现的注记（扇出披露/规则漂移警告等）保留在文本块——
+            // 双面披露等价钉依赖它们（round19 D-次要 vs DisclosureParity）
+            StringBuilder kept = new StringBuilder();
+            StringBuilder echoed = new StringBuilder();
+            for (String line : stderr.split("\n")) {
+                boolean routine = line.startsWith("Config: ") || line.startsWith("Rules: ") || line.startsWith("Rules warning: ") || line.startsWith("Database: ");
+                if (routine) {
+                    echoed.append(line).append('\n');
+                } else {
+                    kept.append(line).append('\n');
+                }
+            }
+            if (echoed.length() > 0) {
+                System.err.print(echoed);
+            }
+            stderr = kept.toString();
+        }
         StringBuilder text = new StringBuilder(stdout);
         if (!stderr.isEmpty()) {
             if (text.length() > 0 && text.charAt(text.length() - 1) != '\n') {

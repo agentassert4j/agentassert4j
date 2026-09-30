@@ -311,7 +311,9 @@ class McpServerTest {
                 }
                 assertTrue(tool.description.contains("value-flow provenance"), "值溯源规则必须在场: " + tool.description);
                 assertTrue(tool.description.contains("different invocation identities"), "跨调用点身份前提必须在场: " + tool.description);
-                assertTrue(tool.description.contains("equals that value exactly"), "参数值精确相等前提必须在场: " + tool.description);
+                assertTrue(tool.description.contains("argument equals the value exactly"), "参数值精确相等前提必须在场: " + tool.description);
+                assertTrue(tool.description.contains("attributed to the issuing record via tool_use id"), "归因语义必须在场: " + tool.description);
+                assertTrue(tool.description.contains("provenance starts one record later"), "首跳不可见披露必须在场: " + tool.description);
                 assertTrue(tool.description.contains("matched value and record pair"), "HIGH 边证据声明必须在场: " + tool.description);
                 assertTrue(tool.description.contains("adjacent vocabulary hints"), "LOW 边相邻提示声明必须在场: " + tool.description);
             }
@@ -436,6 +438,7 @@ class McpServerTest {
         @Test
         @DisplayName("arguments 成员缺省：按空对象执行（结构合法不拒）")
         void toolsCall_absentArguments_defaults() {
+            seedMemberChain("session-absent", 1000L, "{\"v\":1}");
             String response = dispatcher.handle(rpc("tools/call", "1", "{\"name\":\"doctor\"}"));
             Map<String, Object> result = castMap(parseObject(response).get("result"));
             assertNotNull(result.get("content"));
@@ -460,6 +463,7 @@ class McpServerTest {
         @Test
         @DisplayName("doctor 工具：读动词直调，报告在场")
         void doctor_tool_reports() {
+            seedMemberChain("session-doctor", 1000L, "{\"v\":1}");
             Map<String, Object> result = callTool("doctor", "{}");
             assertFalse(isError(result));
             assertNotNull(reports(result));

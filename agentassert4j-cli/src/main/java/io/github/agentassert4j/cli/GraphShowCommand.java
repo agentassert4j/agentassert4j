@@ -46,7 +46,7 @@ public class GraphShowCommand implements Callable<Integer> {
     // 必须覆盖 tracer 的全部真实匹配规则——独立 JSON 叶子、精确相等、噪声排除
     // （纯数字/布尔/过短）、载体优先级（工具结果 > 历史工具帧 > 响应全文）。
     // 少写一条，用户按说明构造就会全部落空（round13 双宿主实测的坑）
-    private static final String EDGE_CONDITIONS_JSON = "an edge requires all of: the two records carry different invocation identities (declare per-step invocation labels); the upstream value is a standalone JSON leaf (a value embedded inside a longer text never matches) found in a tool result, an earlier record's request-history tool frame, or the response body (up to 4 levels deep); the value passes noise filters (not a pure number, not true/false, length >= 3); and a later response's tool-call argument equals it exactly (substring embedding does not match). Per record only the highest-priority carrier is scanned: tool result first, then history tool frames, then the response body. A value born in a record request history and consumed by the same record response tool call produces no edge; provenance starts one record later";
+    private static final String EDGE_CONDITIONS_JSON = "an edge requires all of: the two records carry different invocation identities (declare per-step invocation labels); the upstream value is a standalone JSON leaf (a value embedded inside a longer text never matches) found in a tool result, an earlier record's request-history tool frame, or the response body (up to 4 levels deep); the value passes noise filters (short pure numbers and decimals are excluded; 6+ digit pure integers count as ids and pass; true/false excluded; length >= 3); and a later response's tool-call argument equals it exactly (substring embedding does not match). Per record only the highest-priority carrier is scanned: tool result first, then history tool frames, then the response body. A value born in a record request history and consumed by the same record response tool call produces no edge; provenance starts one record later";
 
     // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
     PrintStream out = System.out;
@@ -74,7 +74,7 @@ public class GraphShowCommand implements Callable<Integer> {
             edges.sort((a, b) -> (a.getSource() + ">" + a.getTarget()).compareTo(b.getSource() + ">" + b.getTarget()));
 
             if (jsonOutput) {
-                out.println(graphJson(nodes, edges, graph, stats));
+                out.println(graphJson(repository, nodes, edges, graph, stats));
                 return 0;
             }
 
@@ -91,7 +91,7 @@ public class GraphShowCommand implements Callable<Integer> {
         }
     }
 
-    private String graphJson(Set<String> nodes, List<GraphEdge> edges, InMemoryDependencyGraph graph, GraphBuildStats stats) {
+    private String graphJson(StorageRepository repository, Set<String> nodes, List<GraphEdge> edges, InMemoryDependencyGraph graph, GraphBuildStats stats) {
         StringBuilder edgeJson = new StringBuilder();
         for (GraphEdge edge : edges) {
             if (edgeJson.length() > 0) edgeJson.append(",");
@@ -120,7 +120,7 @@ public class GraphShowCommand implements Callable<Integer> {
             if (nodesJson.length() > 0) nodesJson.append(",");
             nodesJson.append("\"").append(RecursiveJsonParser.escape(node)).append("\"");
         }
-        return "{\"schema\":\"" + ReportSchemas.GRAPH + "\",\"nodeCount\":" + nodes.size() + ",\"nodes\":[" + nodesJson + "],\"edgeCount\":" + edges.size() + ",\"edges\":[" + edgeJson + "],\"cycles\":[" + cyclesJson + "]" + ",\"scanned\":{\"sessions\":" + stats.getSessions() + ",\"records\":" + stats.getRecords() + ",\"invocationKeys\":" + stats.getInvocationKeys() + ",\"candidatePairs\":" + stats.getCandidatePairs() + "}" + (edges.isEmpty() ? ",\"note\":\"" + EDGE_CONDITIONS_JSON + "\"" : "") + "}";
+        return "{\"schema\":\"" + ReportSchemas.GRAPH + "\",\"nodeCount\":" + nodes.size() + ",\"nodes\":[" + nodesJson + "],\"edgeCount\":" + edges.size() + ",\"edges\":[" + edgeJson + "],\"cycles\":[" + cyclesJson + "]" + ",\"scanned\":{\"sessions\":" + stats.getSessions() + ",\"records\":" + stats.getRecords() + ",\"invocationKeys\":" + stats.getInvocationKeys() + ",\"candidatePairs\":" + stats.getCandidatePairs() + "}" + (edges.isEmpty() ? ",\"note\":\"" + EDGE_CONDITIONS_JSON + "\"" : "") + graphNearMissJson(repository, edges) + "}";
     }
 
     private void renderHuman(StorageRepository repository, Set<String> nodes, List<GraphEdge> edges, InMemoryDependencyGraph graph, GraphBuildStats stats) {
@@ -151,7 +151,7 @@ public class GraphShowCommand implements Callable<Integer> {
             out.println("  (2) the upstream value is a standalone JSON leaf of a tool result, an earlier record's");
             out.println("      request-history tool frame, or the response body (up to 4 levels deep) -- a value");
             out.println("      embedded inside a longer text never matches;");
-            out.println("  (3) the value passes noise filters: not a pure number, not true/false, length >= 3;");
+            out.println("  (3) the value passes noise filters: not a short pure number (pure integers with 6+ digits count as ids and pass), not a decimal, not true/false, length >= 3;");
             out.println("  (4) a later response's tool-call argument equals the value exactly -- substring");
             out.println("      embedding does not match;");
             out.println("  (5) per record only the highest-priority carrier is scanned: tool result first,");
@@ -201,7 +201,7 @@ public class GraphShowCommand implements Callable<Integer> {
      * 只有子串包含、或参数与上游值毫无交集。用户按条件构造失败时，靠它省掉
      * 逐配方试错；全库没有任何工具调用参数时给出那条结构性事实。
      */
-    private List<String> nearMisses(StorageRepository repository) {
+    private static List<String> nearMisses(StorageRepository repository) {
         List<String> lines = new ArrayList<>();
         ParameterValueTracer probe = new ParameterValueTracer(new InMemoryDependencyGraph());
         boolean anySink = false;
@@ -239,7 +239,7 @@ public class GraphShowCommand implements Callable<Integer> {
                     }
                 }
                 if (meaningful.isEmpty()) {
-                    lines.add(CliSupport.displayKey(laterKey) + " (session " + sessionId + "): upstream values are all noise-excluded (pure numbers, true/false, or shorter than 3 characters)");
+                    lines.add(CliSupport.displayKey(laterKey) + " (session " + sessionId + "): upstream values are all noise-excluded (short pure numbers and decimals, true/false, or shorter than 3 characters)");
                     continue;
                 }
                 boolean embedsOnly = false;
@@ -262,6 +262,22 @@ public class GraphShowCommand implements Callable<Integer> {
             lines.add("no record carries a model-issued tool call with arguments in any response (arguments are where upstream values must land)");
         }
         return lines;
+    }
+
+    /**
+     * graph/1 的近失诊断（仅零边时在场）：机器面与 human 面同一分类逻辑，
+     * 消费方零调用即可读到「差在哪」。
+     */
+    private static String graphNearMissJson(StorageRepository repository, List<GraphEdge> edges) {
+        if (!edges.isEmpty()) {
+            return "";
+        }
+        StringBuilder misses = new StringBuilder();
+        for (String miss : nearMisses(repository)) {
+            if (misses.length() > 0) misses.append(",");
+            misses.append("\"").append(RecursiveJsonParser.escape(miss)).append("\"");
+        }
+        return ",\"nearMisses\":[" + misses + "]";
     }
 
     private String edgeLine(GraphEdge edge) {

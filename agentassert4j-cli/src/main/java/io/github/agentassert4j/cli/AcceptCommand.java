@@ -38,4 +38,9 @@ public class AcceptCommand extends AdjudicateCommand {
     private String resolvedApprover() {
         return approver != null && !approver.trim().isEmpty() ? approver.trim() : CliSupport.currentActor();
     }
+
+    @Override
+    protected String signingApprover() {
+        return resolvedApprover();
+    }
 }

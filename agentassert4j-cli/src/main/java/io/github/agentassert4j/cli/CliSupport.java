@@ -113,6 +113,18 @@ final class CliSupport {
      * @return 已初始化的存储仓库（调用方负责 close）
      */
     static StorageRepository openRepository(String dbOverride, PrintStream diagnostics) {
+        return openRepository(dbOverride, diagnostics, false);
+    }
+
+    /**
+     * 打开 SQLite 存储（写面首录形态）：库文件不存在时静默初始化——record 摄取
+     * 的「第一条记录建库」是合法入口；读面命令走双参重载（拒绝 + 指路）。
+     */
+    static StorageRepository openRepositoryCreating(String dbOverride, PrintStream diagnostics) {
+        return openRepository(dbOverride, diagnostics, true);
+    }
+
+    private static StorageRepository openRepository(String dbOverride, PrintStream diagnostics, boolean createIfMissing) {
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
         // Config/Rules 诊断行只走 diagnostics（err 流）：stdout 是报告交付通道，
         // 人读模式的管道消费者不得混入诊断行
@@ -128,14 +140,35 @@ final class CliSupport {
         String rulesPath = ConfigLoader.resolveRulesPath();
         if (rulesPath != null) {
             InvocationRulesConfig rules = ConfigLoader.loadRulesConfig();
-            diagnostics.println("Rules: " + rulesPath + " (" + rules.getDeclaredInvocationIds().size() + " invocation declaration(s), " + rules.getDeclaredTaskKeys().size() + " task declaration(s); declarations bind into baselines when pinned at establish/accept)");
+            String fatalNote = null;
+            for (String note : rules.getParseNotes()) {
+                if (note.endsWith("no declarations are in effect")) {
+                    fatalNote = note;
+                    break;
+                }
+            }
+            if (fatalNote != null) {
+                // 整文件归零必须以警告形态压过计数行：静默空规则 = 门禁无声洞开
+                diagnostics.println("Rules warning: " + rulesPath + " — " + fatalNote);
+            } else {
+                diagnostics.println("Rules: " + rulesPath + " (" + rules.getDeclaredInvocationIds().size() + " invocation declaration(s), " + rules.getDeclaredTaskKeys().size() + " task declaration(s); declarations bind into baselines when pinned at establish/accept)");
+            }
         }
         String url = dbOverride != null ? dbOverride : config.getStorage().getUrl();
         String expanded = ConfigLoader.expandHome(url);
+        // 路径含解码替换符 = 配置文件编码错位（GBK 写、UTF-8 读一类）：继续会静默
+        // 创建乱码文件名的新库——数据错位比拒绝启动更糟（round20 实弹）
+        if (expanded.indexOf('\uFFFD') >= 0) {
+            throw new CliFailureException(CliErrorCode.E_ENV, "Database path contains undecodable characters (likely a charset mismatch in agentassert4j.json): " + expanded, "Save agentassert4j.json as UTF-8, then retry.", "agentassert4j doctor");
+        }
         // 「从没数据」与「库丢了/指错了」必须可区分：静默初始化会把指错 --db/配置
         // 伪装成干净空库（round16 红队实弹——截断攻击现场被 status 读作 exit 0）
-        if (!new java.io.File(expanded).isFile()) {
-            diagnostics.println("Database: " + expanded + " not found; a new empty database will be initialized (check --db / storage.url if this is unexpected).");
+        if (!createIfMissing && !new java.io.File(expanded).isFile()) {
+            // 读面缺库语义：指向不存在的文件拒绝（不静默初始化空库）——
+            // 「没录过」与「库丢了/指错了」必须可区分，静默初始化把后者伪装成前者
+            //（round20/round22 双轮实弹）；写面首录走 openRepositoryCreating
+            throw new CliFailureException(CliErrorCode.E_NO_DATA, "Database not found: " + expanded,
+                    "Check --db / storage.url against the intended database; recording creates it on first write.", "agentassert4j doctor");
         }
         StorageRepository repository = new SqliteStorageRepository(expanded);
         repository.initialize();
@@ -604,7 +637,9 @@ final class CliSupport {
     static LlmClient createLlmClient(AgentAssert4jConfig config) {
         String protocol = config.getLlm().getProtocol();
         if (protocol != null && LlmWireProtocol.fromWireName(protocol) == null) {
-            throw new CliFailureException(CliErrorCode.E_USAGE, "llm.protocol '" + protocol + "' is not a known wire protocol.", "Valid values: " + LlmWireProtocol.legalWireNames() + ".", "");
+            // 合法词表进消息本体：人读通道只渲染 message（hints 只进 --json 包络），
+            // 词表藏在 hints 里 = 同一承诺只在机器通道成立（round19 承诺审计 D1）
+            throw new CliFailureException(CliErrorCode.E_USAGE, "llm.protocol '" + protocol + "' is not a known wire protocol. Valid values: " + LlmWireProtocol.legalWireNames() + ".", "Set llm.protocol to one of " + LlmWireProtocol.legalWireNames() + ", or remove it to auto-detect per record.", "agentassert4j doctor");
         }
         String endpoint = config.getLlm().getEndpoint();
         String apiKey = config.getLlm().getApiKey();

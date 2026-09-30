@@ -136,6 +136,7 @@ public final class CostEstimator {
         boolean anyUsage = false;
         boolean costKnown = true;
         double recordedCost = 0;
+        String unmatchedName = null;
         for (InteractionRecord record : testCases) {
             long in = record.getInputTokens();
             long out = record.getOutputTokens();
@@ -148,12 +149,19 @@ public final class CostEstimator {
             Double cost = estimateCallCostUsd(record.getServedModel() != null ? record.getServedModel() : model, in, out);
             if (cost == null) {
                 costKnown = false;
+                // 计价优先用 servedModel——快照未命中的常常是 served 别名而非
+                // 配置模型。归因必须指实际判定的名字：文案只报配置模型会把
+                // 「served 别名不在快照」伪装成「配置模型不在快照」（round26 实弹，
+                // 两轮独立被试都被该错位文案误导判了内置快照失效）
+                if (unmatchedName == null) {
+                    unmatchedName = record.getServedModel() != null ? record.getServedModel() : model;
+                }
             } else {
                 recordedCost += cost;
             }
         }
         if (!costKnown) {
-            return String.format("Estimated %s (model %s not in the price snapshot; cost unknown)", calls, model);
+            return String.format("Estimated %s (model %s not in the price snapshot; cost unknown)", calls, unmatchedName != null ? unmatchedName : model);
         }
         String basis = anyUsage ? "based on recorded usage" : "no recorded usage; preview-sized estimate";
         return "Estimated " + calls + ", approx. " + formatUsd(recordedCost) + " (" + basis + "; model: " + model + ")";

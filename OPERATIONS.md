@@ -48,7 +48,9 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
   正斜杠在 shell 引号里无需转义，示例统一用正斜杠）。
 - **Windows**：
   - 管道/重定向消费 CLI 输出（子进程读取、`>` 落盘后按 UTF-8 解析）时，启动命令加
-    `-Dfile.encoding=UTF-8`——JVM 默认按平台字符集（中文 Windows 为 GBK）写特殊字形，
+    `-Dfile.encoding=UTF-8`——JVM 默认按平台字符集（中文 Windows 为 GBK）写特殊字形；
+    同一解码也作用于**命令行参数**：`--db`/`--task` 含 emoji/特殊字形时可能被解码成 `?` 并误报「不存在」——参数含特殊字形时走配置文件，或同样加此参数（建议适用于 JDK 8–17），
+
     UTF-8 消费者会解码失败；交互式终端显示侧可配 `chcp 65001`。框架自身输出串恒为
     UTF-8 源码串，无字面 GBK 内容。
   - Git Bash / PowerShell / CMD 均可运行；`-D` 系统属性与 `--db` 等参数的引号规则遵循
@@ -65,7 +67,7 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 文件名固定 `agentassert4j.json` / `agentassert4j-rules.json`）：
 
 1. 系统属性显式路径（不可读直接报错，不静默换源）→ 2. 当前工作目录 → 3. `~/.agentassert4j/` →
-4. classpath → 5. 安全默认值。打开库的命令开头会打印实际命中的配置来源（`rules`/`completion` 不开库不打印）。`${ENV_VAR}` 引用统一替换，未设置的变量替换为空串。
+4. classpath → 5. 安全默认值。 `storage.url` 为相对路径时按进程当前工作目录解析——服务化部署建议绝对路径。打开库的命令开头会打印实际命中的配置来源（`rules`/`completion` 不开库不打印）。`${ENV_VAR}` 引用统一替换，未设置的变量替换为空串。
 
 全部字段（都有安全默认值，可只写需要的段）：
 
@@ -92,7 +94,7 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 |----|----|------|------|
 | storage.url | — | `~/.agentassert4j/agentassert4j.db` | SQLite 文件路径，`~` 自动展开；开库命令（status/baseline/replay/accept/reject/rollback/verify/doctor/graph show/export）的 `--db` 可逐次覆盖 |
 | regression.ignorableFields | — | 空列表 | 已知噪声字段白名单（归一化后仍不同才构成差异） |
-| llm.protocol | — | 自动推导 | 重放端点的 wire 协议。不配置时自动推导：按基线记录的原摄取方言发射（同协议原样重放零配置），无记录提示时回退 `openai-chat`；显式配置 `openai-chat`/`anthropic-messages`/`openai-responses` 覆盖推导（跨协议重放）；未知值启动时报错并列全部合法值 |
+| llm.protocol | — | 自动推导 | 重放端点的 wire 协议。不配置时自动推导：按基线记录的原摄取方言发射（同协议原样重放零配置），无记录提示时回退 `openai-chat`；显式配置 `openai-chat`/`anthropic-messages`/`openai-responses` 覆盖推导（跨协议重放）；未知值在消费 llm 配置的命令（re-drive 等真跑路径）上报错并列全部合法值——零调用命令不触发 |
 | llm.apiKey | — | 空 | 重放用；支持 `${ENV}` 引用；缺失时 `--re-drive` 打印警告（bare 对齐零调用，不检查 Key） |
 | llm.endpoint | — | `https://api.openai.com` | OpenAI 兼容端点（DeepSeek/通义等同协议端点均可） |
 | llm.model | — | `gpt-4o` | 重放请求的模型；与录制模型不一致时命令行告警 |
@@ -106,7 +108,7 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 > 属性（Boot 应用）与 `RecorderConfig.builder()`（非 Boot 应用）。写了 `recorder`
 > 段会收到未知键告警。
 
-价格快照缺模型族（或需要改价）时，在 `agentassert4j.json` 同目录放 `agentassert4j-prices.json`
+内置价格快照按**模型族**键覆盖主流族（gpt/o/gemini/qwen 等；deepseek 等族不在内置清单内，缺覆盖时报 `cost unknown`——如实不编造）。价格快照缺模型族（或需要改价）时，在 `agentassert4j.json` 同目录放 `agentassert4j-prices.json`（按需惰性加载：仅在有成本估算需求——重驱报价/总结——时读取与告警，零重驱目标的运行不会触碰它）
 覆盖（格式与快照一致：模型族 → `{"input": 每token价, "output": 每token价}`，美元）：
 同族改价、新族补充；文件损坏会被 SEVERE 告警而非静默失效。也可用系统属性
 `agentassert4j.prices.path` 显式指定路径。
@@ -287,7 +289,7 @@ agentassert4j replay --ci --json
   任务规则违规/漂移挂起）——人裁决 accept/reject；`2` 用法或基础设施故障（含 `--ci` 无基线
   拒绝、判定语义不符、重驱预算耗尽/全败）——修环境，不算回归。
 - `--json`：stdout 逐行输出机器可读报告（`agentassert4j.task-report/1`，mode 分段：
-  drift-detection / task-align / drift-disposition / task-re-drive / task-dry-run），
+  drift-detection / task-align / ci-align（`--ci` 判定段）/ drift-disposition / task-re-drive / re-drive-dry-run / task-dry-run / member-check / exit-health（每流收尾的出口健康计数）），
   诊断与进度走 stderr；按退出码分流消费——0/1 解析 stdout 报告，2 解析 stdout 收尾行的
   `agentassert4j.error/1` 失败包络（`errorCode` 四族：E-USAGE 用法与选择器 / E-NO-DATA
   无可操作对象 / E-GUARD 判定守卫拒绝 / E-ENV 环境与 IO；`hints[]` 可行动建议必填，
@@ -384,7 +386,7 @@ requiredSteps/order/counts 的包，编排纪律同样参与判定——跨模�
    - **先看 Cross-model 行再下结论**：端点侧别名映射可能让「换了模型」实际未成立
      （两侧 servedModel 相同，如 deepseek-chat/deepseek-reasoner 同被路由到同一 served 名）——
      此时跨模型结论不适用，验收只是同模型复验；
-   - **覆盖缺口**（包内任务未执行，exit 2）= 补执行后重跑，缺口不允许冒充通过；
+   - **覆盖缺口**（包内任务未执行）= 补执行后重跑，缺口不允许冒充通过；缺口单独存在时 exit 2，与 CHANGED 并存时 exit 1（行为差异优先于证据缺口——两者都要处理，退出码取更接近判定语义的那个）；
    - 跨模型下「字段全消失/全新增」先检查输出是否被 markdown 围栏或包裹格式改变——
      模型换了输出包裹习惯是最常见的假结构差异（下游裸 JSON 解析会真崩，值得当真问题处理）；
    - 范围外链（本地多出的任务）= 只列出，不判定。
@@ -457,7 +459,9 @@ accept/reject + re-drive + export）+ record 摄取（非 Java 栈上报交互�
   等同构（stdio 客户端只需拉起子进程 + 读写管道）。
 - 排障开关 `--diag`：逐消息向 stderr 记 method 与耗时（默认静默；stdout 只出协议消息）。
 - Java 应用的**录制**仍走 starter/SDK（进程内直录）；MCP record 动词服务非 Java 栈
-  （TS/Python agent 把原生 LLM 调用的原始请求/响应 JSON 上报落库，幂等可重发）。
+  （TS/Python agent 把原生 LLM 调用的原始请求/响应 JSON 上报落库，幂等可重发；
+  **部分失败后重录整链时换新 recordId/session**——复用旧 id 会与库内既有记录跨运行混搭，
+  tool_call_id 关联断裂会让值流图静默缺边）。
   注意值流图的前置条件：工具结果必须**回灌给模型**（作为 tool 消息进入下一条请求的
   history 并随该条记录上报），或由 SDK 随调用同记录——工具结果只留在你的本地脚本里时，
   `graph` 对该值流无感知（零边 + 近失诊断会提示）。
@@ -528,6 +532,12 @@ CI 里只给分析侧读权限）。篡改排查时先备份再取证（`agentas
 
 ## 7. 故障排查
 
+**先看两条全局守卫**：分析侧 CLI（status/replay/doctor/graph/verify/audit/baseline）对不存在的
+库文件一律拒绝（`Database not found`）——首录建库只发生在 MCP record 摄取的写路径；
+`Protocol shape mismatches`（doctor）的触发条件是**记录的协议声明与响应体方言不符**
+（如声明 anthropic-messages 却是 openai-chat 报文——连锁后果：模板解析失败、
+template_hash 缺失、invocationKey 无桶后缀），不是「同标签混用多种协议」。
+
 **7.1 数据面**
 
 | 症状 | 处置 |
@@ -541,6 +551,7 @@ CI 里只给分析侧读权限）。篡改排查时先备份再取证（`agentas
 
 | 症状 | 处置 |
 |------|------|
+| member-check 的 closestScore 不含缺步惩罚 | 1 步链对 4 步链可报 `closestScore=1` 而 `matched=0`——读数看 matched 计数与 matchedSessions，closest 只是最相近链的形状分 |
 | 重放全红 | 看每行的 served 模型注记（配置模型 ≠ 录制模型）；`status` 看判定语义版本是否一致（exit 2 有指引） |
 | 疑似误报 | 看 summary 定位维度：参数类型→两侧词表应同源；文本不同≠差异（判定只看结构指纹）；确属噪声的字段加 `regression.ignorableFields` |
 | 纯文本回答被判 CHANGED | 多为数量级跳变（回答长度档位变了）或声明规则失配——维度 2/3 的差异明细会点名 |
@@ -655,7 +666,7 @@ try {
 |------|--------|------|
 | 存储 schema（`PRAGMA user_version`） | 1 | 预发布固定不演进，schema 变更=删库重建；发布后只增不改 |
 | 判定语义 | `det-v1` | 改变「同样差异得出什么判定」的变更必须递增；发布前恒定 |
-| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`candidate-diff/1`（`status --diff --json`：逐调用点的候选 vs 锚定形态结构化差异，供 AI 消费者给出裁决建议）、`graph/1`（`nodes` 全键清单 + `scanned` 扫描统计；HIGH 边含 `evidence`：命中值 + 源/目标记录 id）、`rules/1`、`doctor/1`、`audit/1`（每命令 `--json` 各对应其一；replay 的 mode 分段见 §4）、`error/1`（`--json` 失败包络：errorCode 四族 + hints + nextAction） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
+| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`candidate-diff/1`（`status --diff --json`：逐调用点的候选 vs 锚定形态结构化差异，供 AI 消费者给出裁决建议）、`graph/1`（`nodes` 全键清单 + `scanned` 扫描统计；HIGH 边含 `evidence`：命中值 + 源/目标记录 id）、`rules/1`、`doctor/1`、`audit/1`、`record/1`（MCP record 摄取回执：status/recordId/invocationKey/turnIndex/tokens，duplicate 与形状降级经 note 披露）、`record-view/1`（`record show --json`：单记录全量视图，recordKind 区分业务与重驱观测）（每命令 `--json` 各对应其一；replay 的 mode 分段见 §4）、`error/1`（`--json` 失败包络：errorCode 四族 + hints + nextAction） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
 | Maven 版本 | `1.0.0-SNAPSHOT` | 发布时转正式版 |
 | CLI 可执行形态 | `agentassert4j-cli-standalone` | cli 模块的全依赖 shaded 产物（含 slf4j-nop 与 Main-Class），`java -jar` 直接运行 |
 

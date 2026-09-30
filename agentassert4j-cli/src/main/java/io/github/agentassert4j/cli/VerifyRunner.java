@@ -91,6 +91,8 @@ public class VerifyRunner {
      * @param dryRun 只读预演：装载包、列任务与本地链配对情况、跨模型注记，零判定零写入
      * @return 进程退出码（0 全部结构一致；1 任一结构偏差；2 用法/版本守卫/覆盖缺口）
      */
+    private String integrityWarning;
+
     public int run(String packContent, String packDigest, String taskPrefix, String reportPath, boolean dryRun) {
         AcceptancePack pack;
         try {
@@ -100,6 +102,24 @@ public class VerifyRunner {
         }
         if (pack.getMeta() == null || !JudgmentSemantics.VERSION.equals(pack.getMeta().getJudgmentSemantics())) {
             return fail(CliErrorCode.E_GUARD, "Version guard: pack judgment semantics is " + (pack.getMeta() == null ? "unmarked" : pack.getMeta().getJudgmentSemantics()) + ", current engine is " + JudgmentSemantics.VERSION + ".", "Judging anyway would silently reinterpret the pack; re-export it with the current engine, then retry.", "agentassert4j baseline export");
+        }
+
+        // 完整性锚复算：meta/tasks/rules 任一处被改动（典型：删掉会失败的任务）即拒绝。
+        // 旧包无锚字段时只警告不拒——历史包的判定语义守卫仍然生效
+        String expectedHash = pack.getMeta().getIntegrityHash();
+        if (expectedHash == null || expectedHash.isEmpty()) {
+            integrityWarning = "Pack carries no integrity hash (exported by an older build); content tampering cannot be detected — reconcile the SHA-256 out of band.";
+        } else {
+            Map<String, Object> root;
+            try {
+                root = PackCodec.parseRoot(packContent);
+            } catch (IllegalArgumentException e) {
+                return fail(CliErrorCode.E_USAGE, "Acceptance pack rejected: " + CliSupport.describe(e), "Re-export the pack with `agentassert4j baseline export`, or pass the intended --pack path.", "agentassert4j baseline export");
+            }
+            String actualHash = PackCodec.computeIntegrityHash(root);
+            if (!expectedHash.equals(actualHash)) {
+                return fail(CliErrorCode.E_GUARD, "Integrity guard: pack content does not match its embedded integrity hash (tasks/meta/rules were altered after export).", "Re-export the pack with `agentassert4j baseline export` and reconcile the new SHA-256 with the exporting party, then retry.", "agentassert4j baseline export");
+            }
         }
 
         List<TaskChain> localChains = TaskChainView.resolveAll(repository);
@@ -211,6 +231,9 @@ public class VerifyRunner {
         }
         for (String hint : hints) {
             info("Note: " + hint);
+        }
+        if (integrityWarning != null) {
+            info("Warning: " + integrityWarning);
         }
         info("Pack digest (SHA-256): " + packDigest);
         boolean crossModel = !localServedModels.isEmpty() && pack.getMeta().getServedModel() != null && !String.join(",", localServedModels).equals(pack.getMeta().getServedModel());

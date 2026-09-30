@@ -70,7 +70,7 @@ final class McpRecordIngestion {
         for (String field : new String[] {"request", "response"}) {
             Object value = args.get(field);
             if (value != null && !(value instanceof String)) {
-                return envelopeOutcome(CliErrorCode.E_USAGE, field + " must be a JSON string (the raw wire body), not a " + jsonTypeName(value) + ".", "Send the raw request/response body your stack produced, serialized as a string.", "the `record` tool");
+                return envelopeOutcome(CliErrorCode.E_USAGE, field + " must be a JSON string (the raw wire body), but was of type " + jsonTypeName(value) + ".", "Send the raw request/response body your stack produced, serialized as a string.", "the `record` tool");
             }
         }
         List<String> missing = new ArrayList<>();
@@ -86,7 +86,7 @@ final class McpRecordIngestion {
         }
         String protocolParam = nonBlankString(args, "protocol");
         if (protocolParam != null && LlmWireProtocol.fromWireName(protocolParam) == null) {
-            return envelopeOutcome(CliErrorCode.E_USAGE, "protocol '" + protocolParam + "' is not a known wire protocol.", "Valid values: " + LlmWireProtocol.legalWireNames() + ".", "the `record` tool");
+            return envelopeOutcome(CliErrorCode.E_USAGE, "protocol '" + protocolParam + "' is not a known wire protocol. Valid values: " + LlmWireProtocol.legalWireNames() + ".", "Send one of " + LlmWireProtocol.legalWireNames() + ", or omit protocol to auto-detect from the response shape.", "the `record` tool");
         }
         String metadataParam = nonBlankString(args, "metadata");
         Map<String, Object> metadata = null;
@@ -125,7 +125,7 @@ final class McpRecordIngestion {
             InteractionRecord record = buildRecord(sessionId, protocol, requestRaw, request, responseRaw, response, args, metadata, warnings);
             // 逐条摄取是高频路径：配置披露对 stdio server 只产生噪音，这里显式丢弃
             // （doctor 等低频命令照常走 err 披露）
-            repository = CliSupport.openRepository(db, CliSupport.discardStream());
+            repository = CliSupport.openRepositoryCreating(db, CliSupport.discardStream());
             boolean saved = repository.saveInteractionIfAbsent(record);
             String storedSessionId = null;
             String storedInvocationKey = null;
@@ -159,7 +159,7 @@ final class McpRecordIngestion {
      * anthropic-messages；output 数组或 status → openai-responses。
      * 全部不中返回 null（调用方报用法错误列三候选）。
      */
-    private static LlmWireProtocol detectProtocol(Map<String, Object> response) {
+    static LlmWireProtocol detectProtocol(Map<String, Object> response) {
         if (response.containsKey("choices")) {
             return LlmWireProtocol.OPENAI_CHAT;
         }
