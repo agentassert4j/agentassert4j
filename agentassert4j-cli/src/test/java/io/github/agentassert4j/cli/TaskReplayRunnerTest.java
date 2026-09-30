@@ -497,6 +497,27 @@ class TaskReplayRunnerTest {
             assertTrue(output.toString().contains("left for explicit establish"), "注记指路显式建档: " + output);
             assertTrue(output.toString().contains("baseline --invocation invocation:order:hash-new"), "指路必须带可复制的键: " + output);
         }
+
+        @Test
+        @DisplayName("裂键 CHANGED 步骤：无画像不截断报告——判定后注记建档指引，报告走完退出码走行为差异")
+        void labelSplit_changedStep_completesReportWithEstablishHint() {
+            // 双链逐记录配对下，hash-new 键拿到 CHANGED（输出字段集不同）：候选登记
+            // 撞上无画像，旧实现整场报告被 IllegalStateException 截断
+            saveRecord("c-a1", "session-c1", 100L, "查订单", "order", "hash-new", "{\"result\":\"v1-shape\"}", null);
+            saveRecord("c-b1", "session-c1", 200L, "查订单", "order", "hash-old", "{\"result\":\"ok\"}", null);
+            establishedProfile("invocation:order:hash-old", "order", "hash-old");
+            saveRecord("c-a2", "session-c2", 300L, "查订单", "order", "hash-new", "{\"result\":\"x\",\"extra\":\"field\"}", null);
+            saveRecord("c-b2", "session-c2", 400L, "查订单", "order", "hash-old", "{\"result\":\"ok\"}", null);
+
+            int exit = runner.run(null, null, false, false, false, null, false, false, false, null, null);
+
+            String out = output.toString();
+            assertEquals(1, exit, "判定语义不被治理缺档劫持：行为差异 → 1");
+            assertTrue(out.contains("no baseline profile (label split onto a new template)"), "裂键 CHANGED 步骤必须注记无画像: " + out);
+            assertTrue(out.contains("baseline --invocation <prefix>"), "注记必须指路显式建档: " + out);
+            assertTrue(out.contains("Alignment basis:"), "报告必须走完（基准行/脚注在场）: " + out);
+            assertFalse(out.contains("Invocation profile not found"), "不得再以画像缺席炸掉整场报告: " + out);
+        }
     }
 
     @Nested

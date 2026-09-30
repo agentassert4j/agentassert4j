@@ -87,7 +87,7 @@ public class RollbackCommand implements Callable<Integer> {
                 // 在回执里期待看到自己，两个身份并列才不误读
                 StringBuilder facts = new StringBuilder("rolled back by ").append(actor);
                 if (reloaded.getApprovedBy() != null) {
-                    facts.append(", approver ").append(reloaded.getApprovedBy());
+                    facts.append(", original approver ").append(reloaded.getApprovedBy());
                 }
                 if (reloaded.getCodeRef() != null) {
                     facts.append(", ref ").append(reloaded.getCodeRef());
@@ -101,7 +101,7 @@ public class RollbackCommand implements Callable<Integer> {
         } catch (CliFailureException e) {
             return CliSupport.fail(jsonOutput, out, err, e);
         } catch (VersionMismatchException e) {
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run `agentassert4j status` to see the active version, then retry with --expected-version <tag>, or drop the guard.", "agentassert4j status");
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run `agentassert4j status` to re-read the active version, then retry with the expected-version guard set to it, or drop the guard.", "agentassert4j status");
         } catch (IllegalStateException e) {
             // 目标画像/归档版本不存在，或目标=活动版本（空回滚被拒）：用法域拒绝，非环境故障
             return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, CliSupport.describe(e), "Pick a different archived version in `status` (the active tag is not a rollback target); to discard an in-flight candidate use `reject`.", "agentassert4j status");

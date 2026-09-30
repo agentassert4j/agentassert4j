@@ -40,7 +40,7 @@ public class StatusCommand implements Callable<Integer> {
     @Option(names = {"--diff"}, description = "Render per-dimension candidate vs baseline diffs for invocations holding candidate fingerprints (human channel; with --json emits the candidate-diff/1 report)")
     boolean diff;
 
-    @Option(names = {"--invocation"}, description = "Narrow the view to one invocation (both channels): business label (fans out to all its template-version buckets), invocationKey prefix, or the status display form")
+    @Option(names = {"--invocation"}, description = "Narrow the view to one invocation (both channels): business label (fans out to all its template-version buckets), invocationKey prefix, or the status display form label@8hex (@ plus exactly 8 hex characters)")
     String invocation;
 
     @Option(names = {"--json"}, description = "Print a single-line JSON inspection report to stdout (agentassert4j.status/1)")

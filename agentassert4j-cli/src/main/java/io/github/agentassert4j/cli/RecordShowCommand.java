@@ -9,6 +9,7 @@ import picocli.CommandLine.Option;
 
 import java.io.PrintStream;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 /**
@@ -177,7 +178,7 @@ public class RecordShowCommand implements Callable<Integer> {
                 + (record.getReasoningTokens() != null ? " / " + record.getReasoningTokens() + " reasoning" : "")
                 + (record.getCacheReadTokens() != null ? " / " + record.getCacheReadTokens() + " cache-read" : ""));
         if (record.getUsageRaw() != null && !record.getUsageRaw().isEmpty()) {
-            out.println("  Usage raw: " + record.getUsageRaw());
+            printMultiline("  Usage raw: " + prettyRaw(record.getUsageRaw()));
         }
         if (RedriveMarkerUtil.isRedriveObservation(record)) {
             out.println("  Re-drive observation (metadata: " + record.getMetadata() + ")");
@@ -191,7 +192,65 @@ public class RecordShowCommand implements Callable<Integer> {
         if (raw == null || raw.isEmpty()) {
             out.println("  (no raw " + label + " stored -- this interaction was captured without wire payloads)");
         } else {
-            out.println("  " + raw);
+            printMultiline("  " + prettyRaw(raw));
+        }
+    }
+
+    /**
+     * 人读面的 JSON 美化：能解析为 JSON 则缩进展开（单行超长 raw 在终端里只能水平
+     * 滚动，取证恰恰是最需要逐字段细读的场景）；解析失败按原文单行。
+     * 机器通道不受影响——record-view/1 的 raw 字段恒为逐字节原文。
+     */
+    private static String prettyRaw(String raw) {
+        Object parsed = RecursiveJsonParser.parse(raw);
+        return parsed != null ? prettyValue(parsed, 0) : raw;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String prettyValue(Object node, int depth) {
+        String padInner = repeatSpaces((depth + 1) * 2);
+        String padOuter = repeatSpaces(depth * 2);
+        if (node instanceof Map) {
+            StringBuilder sb = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<String, Object> entry : ((Map<String, Object>) node).entrySet()) {
+                if (!first) {
+                    sb.append(',');
+                }
+                first = false;
+                sb.append('\n').append(padInner).append('"').append(RecursiveJsonParser.escape(entry.getKey())).append("\": ").append(prettyValue(entry.getValue(), depth + 1));
+            }
+            return sb.append('\n').append(padOuter).append('}').toString();
+        }
+        if (node instanceof List) {
+            StringBuilder sb = new StringBuilder("[");
+            boolean first = true;
+            for (Object item : (List<Object>) node) {
+                if (!first) {
+                    sb.append(',');
+                }
+                first = false;
+                sb.append('\n').append(padInner).append(prettyValue(item, depth + 1));
+            }
+            return sb.append('\n').append(padOuter).append(']').toString();
+        }
+        if (node instanceof String) {
+            return "\"" + RecursiveJsonParser.escape((String) node) + "\"";
+        }
+        return String.valueOf(node);
+    }
+
+    private static String repeatSpaces(int count) {
+        StringBuilder sb = new StringBuilder(count);
+        for (int i = 0; i < count; i++) {
+            sb.append(' ');
+        }
+        return sb.toString();
+    }
+
+    private void printMultiline(String text) {
+        for (String line : text.split("\n")) {
+            out.println(line);
         }
     }
 

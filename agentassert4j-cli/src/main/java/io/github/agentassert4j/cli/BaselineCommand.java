@@ -32,7 +32,7 @@ public class BaselineCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--invocation"}, description = "Target invocations: business label (fans out to all its buckets, listed before writing), invocationKey or its unique prefix, or the status display form (defaults to all)")
+    @Option(names = {"--invocation"}, description = "Target invocations: business label (fans out to all its buckets, listed before writing), invocationKey or its unique prefix, or the status display form label@8hex (@ plus exactly 8 hex characters) (defaults to all)")
     String invocation;
 
     @Option(names = {"--approver"}, description = "Operator identity recorded with the baseline approval (defaults to the current OS user)")
@@ -84,7 +84,7 @@ public class BaselineCommand implements Callable<Integer> {
             }
             return 0;
         } catch (VersionMismatchException e) {
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run `agentassert4j status` to see the active versions, then retry with --expected-version <tag>, or drop the guard.", "agentassert4j status");
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run `agentassert4j status` to re-read the active versions, then retry with the expected-version guard set to them, or drop the guard.", "agentassert4j status");
         } catch (CliFailureException e) {
             return CliSupport.fail(jsonOutput, out, err, e);
         } catch (RuntimeException e) {

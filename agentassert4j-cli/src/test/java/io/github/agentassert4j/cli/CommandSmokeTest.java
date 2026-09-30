@@ -707,4 +707,78 @@ class CommandSmokeTest {
             Files.walk(dir).sorted((a, b) -> b.compareTo(a)).forEach(p -> p.toFile().delete());
         }
     }
+
+    @Test
+    @DisplayName("语义类配置 note 在消费面命令就地披露：status 携 timeoutMs 类型错与未定义变量")
+    void status_rendersSemanticConfigNotes() throws Exception {
+        Path dir = Files.createTempDirectory("agentassert4j-note-probe");
+        try {
+            Files.write(dir.resolve("agentassert4j.json"),
+                    ("{\"llm\":{\"timeoutMs\":\"abc\"},\"regression\":{\"memberSampleWindow\":\"${NO_SUCH_VAR_SMOKETEST}\"},"
+                            + "\"storage\":{\"url\":\"" + dir.resolve("note.db").toString().replace('\\', '/') + "\"}}")
+                            .getBytes(StandardCharsets.UTF_8));
+            System.setProperty("agentassert4j.config.path", dir.resolve("agentassert4j.json").toString());
+            ByteArrayOutputStream out = redirectStdout();
+            ByteArrayOutputStream err = redirectStderr();
+            int exit = new CommandLine(new AgentAssert4jCli()).execute("status");
+            assertEquals(0, exit, "坏配置退化不中断");
+            assertTrue(err.toString().contains("Config note: llm.timeoutMs must be a JSON number"),
+                    "类型错 note 必须在 status 消费面可见: " + err);
+            assertTrue(err.toString().contains("undefined environment variable(s) [NO_SUCH_VAR_SMOKETEST]"),
+                    "未定义变量 note 必须在 status 消费面可见: " + err);
+        } finally {
+            System.clearProperty("agentassert4j.config.path");
+            Files.walk(dir).sorted((a, b) -> b.compareTo(a)).forEach(p -> p.toFile().delete());
+        }
+    }
+
+    @Test
+    @DisplayName("record 摄取：显式协议与响应形状不符 → saved 包络携降级 note（退化不可静默）")
+    void record_shapeMismatch_savesWithDegradeNote() {
+        java.util.Map<String, Object> args = new java.util.LinkedHashMap<>();
+        args.put("sessionId", "smoke-shape");
+        args.put("request", "{\"model\":\"m\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}");
+        args.put("response", "{\"foo\":\"bar\"}");
+        args.put("protocol", "openai-chat");
+        McpToolOutcome outcome = McpRecordIngestion.ingest(dbPath, args);
+        assertEquals(0, outcome.exit);
+        assertTrue(outcome.stdout.contains("\"status\":\"saved\""), "形状不匹配是既定容错，保存不拒: " + outcome.stdout);
+        assertTrue(outcome.stdout.contains("usage and model extraction degraded"),
+                "降级必须就地可见: " + outcome.stdout);
+        // 匹配的形状不携带该 note（对照分支）
+        java.util.Map<String, Object> ok = new java.util.LinkedHashMap<>(args);
+        ok.put("response", "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"hi\"}}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1}}");
+        ok.put("sessionId", "smoke-shape-ok");
+        McpToolOutcome okOutcome = McpRecordIngestion.ingest(dbPath, ok);
+        assertEquals(0, okOutcome.exit);
+        assertFalse(okOutcome.stdout.contains("extraction degraded"), "匹配形状不得误报降级: " + okOutcome.stdout);
+    }
+
+    @Test
+    @DisplayName("baseline exists 路径：调用方传 --ref 而基线已存在 → 行内披露 ref not applied")
+    void baseline_existsPath_disclosesRefNotApplied() {
+        seedWithResponse("session-ref", 1000L, "{\"v\":1}");
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath));
+        ByteArrayOutputStream out = redirectStdout();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("baseline", "--db", dbPath, "--ref", "git:second-attempt");
+        assertEquals(0, exit);
+        assertTrue(out.toString().contains("ref not applied; baseline exists, --force re-stamps"),
+                "新锚未落库必须就近披露: " + out);
+        assertFalse(out.toString().contains("(ref git:second-attempt)"), "不得回显未落库的锚: " + out);
+    }
+
+    @Test
+    @DisplayName("--invocation 短形哈希段非法（非 8 位十六进制）→ 专用形式错误，不误导为键不存在")
+    void invocation_malformedDisplayForm_dedicatedError() {
+        seedWithResponse("session-malformed", 1000L, "{\"v\":1}");
+        ByteArrayOutputStream out = redirectStdout();
+        ByteArrayOutputStream err = redirectStderr();
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath, "--invocation", "tpl@7");
+        assertEquals(2, exit);
+        String combined = out.toString() + err;
+        assertTrue(combined.contains("Display form tpl@7 is malformed"),
+                "形式非法必须有专用消息: " + combined);
+        assertFalse(combined.contains("No invocation matching tpl@7"),
+                "不得用 No-match 措辞误导用户翻键清单: " + combined);
+    }
 }

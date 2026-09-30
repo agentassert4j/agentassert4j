@@ -71,7 +71,7 @@ public class BaselineService {
             InvocationProfile existing = repository.findInvocationByKey(invocationKey);
             boolean hadBaseline = CliSupport.hasBaseline(existing);
             if (hadBaseline && !force) {
-                out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + existing.getVersionTag() + ")" + approvedBySuffix(existing) + refSuffix(existing.getCodeRef()));
+                out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + existing.getVersionTag() + ")" + approvedBySuffix(existing) + refSuffix(existing.getCodeRef()) + (codeRef != null ? refNotAppliedSuffix() : ""));
                 warnRulesDrift(out, firstBusinessLabel(records), existing.getFingerprints(), rules);
                 if (outcomes != null) {
                     outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "exists", existing.getVersionTag(), existing.getCodeRef(), null));
@@ -129,7 +129,7 @@ public class BaselineService {
             if (!wrote) {
                 // 并发建档降级：基线归先到者——成功消息与落库真相必须一致，
                 // 败者按 exists 如实上报（不计数、不署本方种子）
-                out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + created.getVersionTag() + ")" + approvedBySuffix(created) + " (established concurrently)" + refSuffix(created.getCodeRef()));
+                out.println("  " + displayLabel(records) + invocationKey + ": baseline exists (" + created.getVersionTag() + ")" + approvedBySuffix(created) + " (established concurrently)" + refSuffix(created.getCodeRef()) + (codeRef != null ? refNotAppliedSuffix() : ""));
                 if (outcomes != null) {
                     outcomes.add(new BaselineOutcome(invocationKey, firstBusinessLabel(records), "exists", created.getVersionTag(), created.getCodeRef(), null));
                 }
@@ -316,6 +316,15 @@ public class BaselineService {
      */
     private static String refSuffix(String codeRef) {
         return codeRef != null ? " (ref " + codeRef + ")" : "";
+    }
+
+    /**
+     * exists 路径的「锚未落库」披露：调用方传了 --ref 而基线已存在时，锚既不写入
+     * 也无反馈——行内只回显既有锚，用户会误以为新锚已标上。仅提示，不改变行为
+     * （重标锚走 --force 重建，属显式破坏性路径）。
+     */
+    private static String refNotAppliedSuffix() {
+        return " (ref not applied; baseline exists, --force re-stamps)";
     }
 
     /**

@@ -1053,10 +1053,21 @@ public class TaskReplayRunner {
                     worstOutcome(outcomes, step.getInvocationKey(), StepOutcome.CHANGED);
                     InteractionRecord changedRecord = newRecords.get(step.getNewRecordId());
                     if (changedRecord != null) {
-                        boolean registered = manager.recordCandidate(changedRecord, FingerprintExtractor.extract(changedRecord, rules, changedRecord.getInvocationId()));
+                        boolean registered = false;
+                        boolean noProfile = false;
+                        try {
+                            registered = manager.recordCandidate(changedRecord, FingerprintExtractor.extract(changedRecord, rules, changedRecord.getInvocationId()));
+                        } catch (IllegalStateException e) {
+                            // 裂键等无画像键：判定已给出（链对链差分成立），候选登记是
+                            // 治理后续动作——无画像时半途炸掉会把「判定已出的报告」
+                            // 截成半份。降级为就地注记 + 显式建档指引，报告走完
+                            noProfile = true;
+                        }
                         if (registered) {
                             totals.pendingCandidates++;
                             info("Candidate registered: " + CliSupport.displayKey(step.getInvocationKey()) + " (behavior change awaiting adjudication; accept adds the shape to the approved set, reject discards).");
+                        } else if (noProfile) {
+                            info("Difference holds against the paired chain, but this invocation has no baseline profile (label split onto a new template); no candidate registered. Establish it with `agentassert4j baseline --invocation <prefix>`, then replay to adjudicate.");
                         } else {
                             info("Difference holds against the paired chain, but this shape is already tracked by the invocation (approved or previously rejected); no candidate registered (nothing to adjudicate).");
                         }
@@ -1717,9 +1728,11 @@ public class TaskReplayRunner {
     private void printDriftReport(DriftReport drift) {
         if (!drift.hasDrift()) {
             info("Drift: all invocation template identities consistent (" + CliSupport.plural(drift.getZeroTemplateProfiles(), "zero-template invocation") + " undetectable).");
+            printZeroTemplateExplainer(drift);
             return;
         }
         info("Drift: " + drift.getSameKeyDrifts().size() + " same-key, " + CliSupport.plural(drift.getLabelSplits().size(), "label split") + " (" + CliSupport.plural(drift.getZeroTemplateProfiles(), "zero-template invocation") + " undetectable)");
+        printZeroTemplateExplainer(drift);
         for (DriftReport.DriftPoint point : drift.getSameKeyDrifts()) {
             info("  ▲ " + CliSupport.displayKey(point.getInvocationKey()) + (point.getLabel() != null ? " (" + point.getLabel() + ")" : "") + " template " + shortHash(point.getProfileTemplateHash()) + " → " + shortHash(point.getLatestTemplateHash()));
         }
@@ -1732,10 +1745,44 @@ public class TaskReplayRunner {
         info("(Baseline seeds take the latest record per bucket — the behavior you approved at establish time; drift points here come from earlier drafts whose template differs, auto-collected point by point after a PASS alignment; mass drifts are usually one-time convergence.)");
     }
 
+    /**
+     * 零模板键的就地展开：计数行只报数量，键名与「为什么不可检测、怎么补救」
+     * 在这里一句话补齐——只有计数时用户既不知道是哪个键、也不知道动作。
+     */
+    private void printZeroTemplateExplainer(DriftReport drift) {
+        if (drift.getZeroTemplateProfiles() <= 0) {
+            return;
+        }
+        List<String> keys = drift.getZeroTemplateKeys();
+        List<String> shown = new ArrayList<>();
+        for (String key : keys) {
+            if (shown.size() >= 3) {
+                break;
+            }
+            shown.add(CliSupport.displayKey(key));
+        }
+        String sample = String.join(", ", shown) + (keys.size() > shown.size() ? " ... and " + (keys.size() - shown.size()) + " more" : "");
+        info("  Zero-template invocations (no template identity recorded, so template drift is invisible for them): " + sample + ". Re-record with an invocation declaration (label or system prompt) to make them checkable.");
+    }
+
+    /**
+     * 零模板键的机器面清单（与计数同现）：消费方按计数报警后无需二跑就能定位到键。
+     */
+    private static String zeroTemplateKeysJson(DriftReport drift) {
+        StringBuilder sb = new StringBuilder();
+        for (String key : drift.getZeroTemplateKeys()) {
+            if (sb.length() > 0) {
+                sb.append(',');
+            }
+            sb.append('"').append(RecursiveJsonParser.escape(key)).append('"');
+        }
+        return sb.toString();
+    }
+
     private static String driftJson(DriftReport drift) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.DRIFT_DETECTION.wireName() + "\"");
         sb.append(",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
-        sb.append(",\"summary\":{\"sameKey\":").append(drift.getSameKeyDrifts().size()).append(",\"labelSplits\":").append(drift.getLabelSplits().size()).append(",\"zeroTemplate\":").append(drift.getZeroTemplateProfiles()).append(",\"skippedQueries\":").append(drift.getSkippedQueries()).append("}");
+        sb.append(",\"summary\":{\"sameKey\":").append(drift.getSameKeyDrifts().size()).append(",\"labelSplits\":").append(drift.getLabelSplits().size()).append(",\"zeroTemplate\":").append(drift.getZeroTemplateProfiles()).append(",\"zeroTemplateKeys\":[").append(zeroTemplateKeysJson(drift)).append("],\"skippedQueries\":").append(drift.getSkippedQueries()).append("}");
         sb.append(",\"drifts\":[");
         List<String> points = new ArrayList<>();
         for (DriftReport.DriftPoint point : drift.getSameKeyDrifts()) {

@@ -61,8 +61,8 @@ class GraphShowCommandTest {
 
         assertEquals(0, exit);
         String output = stdout.toString();
-        // 节点/边正文走 displayKey 短形——完整键不进正文行
-        assertTrue(output.contains("Nodes (2): queryOrder@hash-r-1, refundOrder@hash-r-2"), "节点行必须走短形: " + output);
+        // 节点/边正文走 displayKey 短形——完整键不进正文行；节点换行收纳（缩进 2 空格）
+        assertTrue(output.contains("Nodes (2):" + System.lineSeparator() + "  queryOrder@hash-r-1, refundOrder@hash-r-2"), "节点行必须换行收纳且走短形: " + output);
         assertTrue(output.contains("queryOrder@hash-r-1 -> refundOrder@hash-r-2  HIGH"), "值流边必须短形渲染并标 HIGH: " + output);
         assertFalse(output.contains(" -> invocation:"), "正文边行不得残留完整键: " + output);
         // HIGH 边证据：命中值（引号包裹）+ 源/目标记录对（ASCII 箭头）
@@ -89,7 +89,7 @@ class GraphShowCommandTest {
     }
 
     @Test
-    @DisplayName("无边数据给出三前提与扫描统计，节点全集使空边不等于空图")
+    @DisplayName("无边数据给出全部出边条件与扫描统计，节点全集使空边不等于空图")
     void emptyGraphPrintsSessionHint() {
         saveChainRecord("r-only", "loneSkill", 1000L, null, "{\"k\":\"v\"}");
 
@@ -98,12 +98,35 @@ class GraphShowCommandTest {
         assertEquals(0, exit);
         String output = stdout.toString();
         assertTrue(output.contains("No data-flow edges (scanned 1 record across 1 session"), "空图必须就地披露扫描统计: " + output);
-        assertTrue(output.contains("An edge needs all three"), "出边三前提必须逐条列明: " + output);
+        assertTrue(output.contains("An edge means"), "出边条件必须逐条列明: " + output);
+        assertTrue(output.contains("noise filters"), "条件必须披露噪声排除规则: " + output);
         assertTrue(output.contains("Nodes (1)"), "节点全集语义：数据在场即有节点，空边不等于空图: " + output);
 
         assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("graph", "show", "--db", dbPath, "--json"));
         String graphJson = stdout.toString();
         assertTrue(graphJson.contains("\"nodes\":[\"invocation:loneSkill:"), "机器面必须携带 nodes 数组（只有计数不可寻址）: " + graphJson);
+    }
+
+    @Test
+    @DisplayName("零边近失诊断：纯数字上游值点名噪声排除，子串包含点名精确相等要求")
+    void nearMissDiagnosticsClassifyWhyNoEdge() {
+        // 上游叶子是纯数字（isMeaningfulValue 排除）——数字 ID 体系永远无 HIGH 边的事实必须就近可见。
+        // 字段名前缀（case/ticket）与参数键前缀（order）刻意错开，避免 LOW 前缀边让边集非空
+        saveChainRecord("m-1", "lookupOrder", 1000L, null, "{\"case_id\":1042}");
+        saveChainRecord("m-2", "notifyOrder", 2000L, "1042", null);
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("graph", "show", "--db", dbPath);
+        assertEquals(0, exit);
+        String output = stdout.toString();
+        assertTrue(output.contains("Near miss: notifyOrder@"), "零边时必须出现近失诊断: " + output);
+        assertTrue(output.contains("noise-excluded"), "纯数字上游值的近失原因必须点名: " + output);
+
+        // 子串包含（值埋在更长文本里）不构成精确相等——条件(2)的行为钉
+        saveChainRecord("m-3", "fetchTicket", 3000L, null, "{\"ticket\":\"TRK-9001\"}");
+        saveChainRecord("m-4", "closeTicket", 4000L, "ticket TRK-9001 created", null);
+        exit = new CommandLine(new AgentAssert4jCli()).execute("graph", "show", "--db", dbPath);
+        assertEquals(0, exit);
+        output = stdout.toString();
+        assertTrue(output.contains("substrings"), "子串包含的近失原因必须点名: " + output);
     }
 
     /**

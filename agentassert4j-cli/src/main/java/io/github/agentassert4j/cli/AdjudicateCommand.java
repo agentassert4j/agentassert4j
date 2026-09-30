@@ -75,7 +75,7 @@ abstract class AdjudicateCommand implements Callable<Integer> {
             return CliSupport.fail(jsonOutput, out, err, e);
         } catch (VersionMismatchException e) {
             // 乐观并发守卫：活跃版本与调用方所见不一致——并发写冲突就近拒绝
-            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run `agentassert4j status` to see the active version, then retry with --expected-version <tag>, or drop the guard.", "agentassert4j status");
+            return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_GUARD, CliSupport.describe(e), "Run `agentassert4j status` to re-read the active version, then retry with the expected-version guard set to it, or drop the guard.", "agentassert4j status");
         } catch (IllegalStateException e) {
             // BaselineManager 的对象缺失守卫（画像/候选不存在）：无对象可操作，非环境故障
             return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, CliSupport.describe(e), "Check the target against `status` output, then retry.", "agentassert4j status");

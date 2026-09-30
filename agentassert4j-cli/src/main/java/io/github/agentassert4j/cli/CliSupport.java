@@ -95,14 +95,14 @@ final class CliSupport {
     }
 
     /**
-     * 渲染配置解析失败的根因警告（退化不中断，但退化不可静默）。
+     * 渲染配置诊断（退化不中断，但退化不可静默）：解析失败根因与语义类 note
+     * （类型错 / 未定义环境变量）全部就地披露——坏配置只在 doctor 可见时，
+     * 消费该配置的命令会静默退化（如 memberSampleWindow 悄悄回落默认值）。
      * openRepository 与 rules 命令共用——两处各自手写同一循环会出现披露面漂移。
      */
     static void renderConfigWarnings(AgentAssert4jConfig config, PrintStream diagnostics) {
         for (String note : config.getConfigNotes()) {
-            if (note.startsWith("config file ")) {
-                diagnostics.println("Config warning: " + note);
-            }
+            diagnostics.println(note.startsWith("config file ") ? "Config warning: " + note : "Config note: " + note);
         }
     }
 
@@ -384,7 +384,31 @@ final class CliSupport {
             // 存储健康与配置指向（空库最常见根因是 --db/配置指错文件），录制指引在 hints
             throw new CliFailureException(CliErrorCode.E_NO_DATA, "No recorded interactions found.", RECORD_FIRST_HINT, "agentassert4j doctor");
         }
+        if (malformedDisplayForm(filter)) {
+            throw new CliFailureException(CliErrorCode.E_USAGE, "Display form " + filter + " is malformed: the part after `@` must be exactly 8 hex characters (see the display column in `status`).", "Copy the full display form from `status` output, then retry.", "agentassert4j status");
+        }
         throw new CliFailureException(CliErrorCode.E_NO_DATA, "No invocation matching " + filter + " (accepted: business label, an invocationKey prefix starting with `invocation:`, or the status display form like label@8hex; see `status` for the full list).", "Check the value against `status` output, then retry.", "agentassert4j status");
+    }
+
+    /**
+     * 值形似显示短形但 @ 后不是 8 位十六进制——用户按 status 展示形粘贴却截短/截长。
+     * 与「键不存在」分开发声：No-match 措辞会把用户引向翻键清单，而真因是写法非法。
+     * 判定从严：@ 后必须全为十六进制才视为短形尝试，含非十六进制字符的业务标签不误伤。
+     */
+    private static boolean malformedDisplayForm(String filter) {
+        int at = filter.lastIndexOf('@');
+        int hashLen = filter.length() - at - 1;
+        if (at < 0 || hashLen == 0 || hashLen == 8) {
+            return false;
+        }
+        for (int i = at + 1; i < filter.length(); i++) {
+            char c = filter.charAt(i);
+            boolean hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+            if (!hex) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

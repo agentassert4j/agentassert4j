@@ -34,10 +34,10 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--task"}, description = "Task selector: matches exactly one task chain by request-text prefix (a prefix hitting several tasks errors with the candidate list; see --dry-run for the pairing plan)")
+    @Option(names = {"--task"}, description = "Task selector: matches exactly one task chain by request-text prefix (a prefix hitting several tasks errors with the candidate list; see --dry-run for the pairing plan). Task grouping spans the whole database; shared-database collaborators should declare taskKey to keep separate task domains")
     String task;
 
-    @Option(names = {"--invocation"}, description = "Invocation selector: a business invocationId selects all its template-version buckets; an invocationKey prefix or the status display form must resolve to exactly one key (multiple matches error with the candidate list). Narrows alignment reporting and drift/re-drive to this invocation; task discipline still sees the full chain")
+    @Option(names = {"--invocation"}, description = "Invocation selector: a business invocationId selects all its template-version buckets; an invocationKey prefix or the status display form label@8hex (@ plus exactly 8 hex characters) must resolve to exactly one key (multiple matches error with the candidate list). Narrows alignment reporting and drift/re-drive to this invocation; task discipline still sees the full chain")
     String invocation;
 
     @Option(names = {"--ci"}, description = "CI mode: judges the latest execution of each invocation in each task's latest chain against its approved shape set (earlier same-session records stay visible as notes, not gated); no auto-establish (refuses to judge when the chain-final invocations hold unestablished keys, exit 2); drift identity PASS is not collected (exit 0 with a warning); CHANGED findings still land candidates awaiting adjudication — no other governance writes")
@@ -52,7 +52,7 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--re-drive"}, description = "Controlled re-drive (spends LLM calls): drift points by default, or every invocation in scope with --task/--invocation; re-drives recorded inputs with each point's latest archived template. Run --dry-run first for a cost estimate")
     boolean reDrive;
 
-    @Option(names = {"--full-chain"}, description = "Widen the re-drive: drop the drift-points-only trim and re-drive every record of every chain in the scope — with --task/--invocation this covers all sessions, not just the selected invocation (requires --re-drive)")
+    @Option(names = {"--full-chain"}, description = "Widen the re-drive: re-drive every record in the scope instead of drift points only (--task/--invocation still set the scope; without narrowing the scope is the whole database) (requires --re-drive)")
     boolean fullChain;
 
     @Option(names = {"--max-total-calls"}, description = "Re-drive budget pool: cap on real re-drive calls for this run (requires --re-drive)")

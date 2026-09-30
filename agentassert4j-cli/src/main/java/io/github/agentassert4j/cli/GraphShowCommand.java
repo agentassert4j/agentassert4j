@@ -2,7 +2,9 @@ package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.algorithm.GraphBuildStats;
 import io.github.agentassert4j.algorithm.InMemoryDependencyGraph;
+import io.github.agentassert4j.algorithm.ParameterValueTracer;
 import io.github.agentassert4j.model.GraphEdge;
+import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import picocli.CommandLine.Command;
@@ -10,10 +12,13 @@ import picocli.CommandLine.Option;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
 
 /**
  * graph show 命令 — 现场重建值溯源图并渲染（只读，不写任何文件）。
@@ -23,8 +28,9 @@ import java.util.concurrent.Callable;
  * LOW 边 = 相邻对的字段名前缀提示（不携带证据）。人读输出中节点/边走 displayKey 短形，
  * 完整键在图例逐字可寻址；JSON 面保持完整键（机器契约不变）。
  * 节点集 = 已录制的全部调用点键（含未参与任何边的），空边不再等于空图；
- * 出边的三前提在空态输出就地列明，扫描统计（会话/记录/键/跨键对）区分
- * 「没数据」与「数据在、无边」。</p>
+ * 出边的全部条件在空态输出就地列明（与 tracer 实现的真实匹配规则逐条对齐：
+ * 独立叶子、精确相等、噪声排除、载体优先级），并附近失诊断（最接近成边的
+ * 记录与不成因），扫描统计（会话/记录/键/跨键对）区分「没数据」与「数据在、无边」。</p>
  *
  * @author axy-yxa
  * @since 2026-08-27
@@ -36,8 +42,11 @@ public class GraphShowCommand implements Callable<Integer> {
     // JSON 叶子值可含换行，裸截断会破坏单行报告格式
     private static final int EVIDENCE_DISPLAY_BUDGET = 40;
 
-    // 出边三前提的机器面表述（JSON note 与人读 Note 同语义，两处共用本常量防漂移）
-    private static final String EDGE_CONDITIONS_JSON = "an edge needs all three: the two records carry different invocation identities (declare per-step invocation labels); the upstream value appears in a tool result (recorded alongside its call, or carried by an earlier record's request history); a later tool call's argument value equals that upstream value exactly";
+    // 出边条件的机器面表述（JSON note 与人读条目同语义，两处按同一规则维护）：
+    // 必须覆盖 tracer 的全部真实匹配规则——独立 JSON 叶子、精确相等、噪声排除
+    // （纯数字/布尔/过短）、载体优先级（工具结果 > 历史工具帧 > 响应全文）。
+    // 少写一条，用户按说明构造就会全部落空（round13 双宿主实测的坑）
+    private static final String EDGE_CONDITIONS_JSON = "an edge requires all of: the two records carry different invocation identities (declare per-step invocation labels); the upstream value is a standalone JSON leaf (a value embedded inside a longer text never matches) found in a tool result, an earlier record's request-history tool frame, or the response body (up to 4 levels deep); the value passes noise filters (not a pure number, not true/false, length >= 3); and a later response's tool-call argument equals it exactly (substring embedding does not match). Per record only the highest-priority carrier is scanned: tool result first, then history tool frames, then the response body";
 
     // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
     PrintStream out = System.out;
@@ -69,7 +78,7 @@ public class GraphShowCommand implements Callable<Integer> {
                 return 0;
             }
 
-            renderHuman(nodes, edges, graph, stats);
+            renderHuman(repository, nodes, edges, graph, stats);
             return 0;
         } catch (CliFailureException e) {
             return CliSupport.fail(jsonOutput, out, err, e);
@@ -105,21 +114,42 @@ public class GraphShowCommand implements Callable<Integer> {
         return "{\"schema\":\"" + ReportSchemas.GRAPH + "\",\"nodeCount\":" + nodes.size() + ",\"nodes\":[" + nodesJson + "],\"edgeCount\":" + edges.size() + ",\"edges\":[" + edgeJson + "],\"cycles\":[" + cyclesJson + "]" + ",\"scanned\":{\"sessions\":" + stats.getSessions() + ",\"records\":" + stats.getRecords() + ",\"invocationKeys\":" + stats.getInvocationKeys() + ",\"candidatePairs\":" + stats.getCandidatePairs() + "}" + (edges.isEmpty() ? ",\"note\":\"" + EDGE_CONDITIONS_JSON + "\"" : "") + "}";
     }
 
-    private void renderHuman(Set<String> nodes, List<GraphEdge> edges, InMemoryDependencyGraph graph, GraphBuildStats stats) {
-        StringBuilder nodeLine = new StringBuilder();
+    private void renderHuman(StorageRepository repository, Set<String> nodes, List<GraphEdge> edges, InMemoryDependencyGraph graph, GraphBuildStats stats) {
+        // 节点短形约 100 字符软换行收纳——几十个键挤一行在终端里只能水平滚动
+        out.println("Nodes (" + nodes.size() + "):");
+        StringBuilder nodeLine = new StringBuilder("  ");
         for (String node : nodes) {
-            if (nodeLine.length() > 0) nodeLine.append(", ");
-            nodeLine.append(CliSupport.displayKey(node));
+            String token = CliSupport.displayKey(node);
+            if (nodeLine.length() + token.length() + 2 > 100 && nodeLine.length() > 2) {
+                out.println(nodeLine.toString());
+                nodeLine = new StringBuilder("  ");
+            }
+            if (nodeLine.length() > 2) {
+                nodeLine.append(", ");
+            }
+            nodeLine.append(token);
         }
-        out.println("Nodes (" + nodes.size() + "): " + nodeLine);
+        if (nodeLine.length() > 2) {
+            out.println(nodeLine.toString());
+        }
         out.println("Edges (" + edges.size() + "):");
         if (edges.isEmpty()) {
             // 扫描统计先行：candidatePairs=0 即全部记录对共享同一调用点身份（出边前提不存在）
             out.println("  No data-flow edges (scanned " + CliSupport.plural(stats.getRecords(), "record") + " across " + CliSupport.plural(stats.getSessions(), "session") + "; " + CliSupport.plural(stats.getInvocationKeys(), "invocation key") + ", " + CliSupport.plural(stats.getCandidatePairs(), "cross-key record pair") + ").");
-            out.println("  An edge needs all three: (1) the two records carry different invocation identities");
-            out.println("  (declare per-step invocation labels); (2) the upstream value appears in a tool result,");
-            out.println("  either recorded alongside its call or carried by an earlier record's request history;");
-            out.println("  (3) a later tool call's argument value equals that upstream value exactly.");
+            out.println("  An edge means: a value produced by an earlier record was used as an argument of a");
+            out.println("  later model-issued tool call, in the same session. All of the following must hold:");
+            out.println("  (1) the two records carry different invocation identities (declare per-step labels);");
+            out.println("  (2) the upstream value is a standalone JSON leaf of a tool result, an earlier record's");
+            out.println("      request-history tool frame, or the response body (up to 4 levels deep) -- a value");
+            out.println("      embedded inside a longer text never matches;");
+            out.println("  (3) the value passes noise filters: not a pure number, not true/false, length >= 3;");
+            out.println("  (4) a later response's tool-call argument equals the value exactly -- substring");
+            out.println("      embedding does not match;");
+            out.println("  (5) per record only the highest-priority carrier is scanned: tool result first,");
+            out.println("      then history tool frames, then the response body.");
+            for (String miss : nearMisses(repository)) {
+                out.println("  Near miss: " + miss);
+            }
         }
         for (GraphEdge edge : edges) {
             out.println(edgeLine(edge));
@@ -131,13 +161,94 @@ public class GraphShowCommand implements Callable<Integer> {
             out.println("Cycles (" + CliSupport.plural(cycles.size(), "node") + "): " + String.join(", ", new TreeSet<>(cycles)));
         }
         if (!nodes.isEmpty()) {
-            // 图例：短形 → 完整键逐字映射。完整键是可寻址身份（可直接复制进 --invocation），
-            // 不截断；正文行只走短形，不刷长键
-            out.println("Legend:");
+            // 图例：短形 → 完整键逐字映射（完整键是可寻址身份，可直接复制进 --invocation，
+            // 不截断）。多条映射挤进行内（约 100 字符软换行），不再一键一行刷半屏
+            out.println("Legend (short form = full invocationKey, copy-paste ready):");
+            StringBuilder legendLine = new StringBuilder("  ");
             for (String node : nodes) {
-                out.println("  " + CliSupport.displayKey(node) + " = " + node);
+                String mapping = CliSupport.displayKey(node) + " = " + node;
+                if (legendLine.length() + mapping.length() + 2 > 100 && legendLine.length() > 2) {
+                    out.println(legendLine.toString());
+                    legendLine = new StringBuilder("  ");
+                }
+                if (legendLine.length() > 2) {
+                    legendLine.append("  ");
+                }
+                legendLine.append(mapping);
+            }
+            if (legendLine.length() > 2) {
+                out.println(legendLine.toString());
             }
         }
+    }
+
+    /**
+     * 近失诊断（零边时最多 3 条）：找出「带模型工具调用参数但没接上上游」的记录，
+     * 用 tracer 同一套提取规则回答「差在哪」——上游没有可提取值、值全被噪声排除、
+     * 只有子串包含、或参数与上游值毫无交集。用户按条件构造失败时，靠它省掉
+     * 逐配方试错；全库没有任何工具调用参数时给出那条结构性事实。
+     */
+    private List<String> nearMisses(StorageRepository repository) {
+        List<String> lines = new ArrayList<>();
+        ParameterValueTracer probe = new ParameterValueTracer(new InMemoryDependencyGraph());
+        boolean anySink = false;
+        for (String sessionId : repository.findAllSessionIds()) {
+            List<InteractionRecord> chain = repository.findBySessionId(sessionId).stream()
+                    .sorted(Comparator.comparingLong(InteractionRecord::getTimestamp).thenComparing(r -> r.getRecordId() != null ? r.getRecordId() : ""))
+                    .collect(Collectors.toList());
+            if (chain.size() < 2) {
+                continue;
+            }
+            for (int i = 1; i < chain.size() && lines.size() < 3; i++) {
+                InteractionRecord later = chain.get(i);
+                Set<String> args = probe.extractArgValues(later);
+                if (args.isEmpty()) {
+                    continue;
+                }
+                anySink = true;
+                String laterKey = CliSupport.invocationKeyOfRecord(later);
+                Set<String> leaves = new LinkedHashSet<>();
+                for (int j = 0; j < i; j++) {
+                    String earlierKey = CliSupport.invocationKeyOfRecord(chain.get(j));
+                    if (earlierKey == null || earlierKey.equals(laterKey)) {
+                        continue;
+                    }
+                    leaves.addAll(probe.extractFieldValues(chain.get(j)));
+                }
+                if (leaves.isEmpty()) {
+                    lines.add(CliSupport.displayKey(laterKey) + " (session " + sessionId + "): earlier records expose no extractable values (tool results / history tool frames / response bodies)");
+                    continue;
+                }
+                Set<String> meaningful = new LinkedHashSet<>();
+                for (String leaf : leaves) {
+                    if (probe.isMeaningfulValue(leaf)) {
+                        meaningful.add(leaf);
+                    }
+                }
+                if (meaningful.isEmpty()) {
+                    lines.add(CliSupport.displayKey(laterKey) + " (session " + sessionId + "): upstream values are all noise-excluded (pure numbers, true/false, or shorter than 3 characters)");
+                    continue;
+                }
+                boolean embedsOnly = false;
+                for (String arg : args) {
+                    for (String leaf : meaningful) {
+                        if (!arg.equals(leaf) && (arg.contains(leaf) || leaf.contains(arg))) {
+                            embedsOnly = true;
+                        }
+                    }
+                }
+                lines.add(CliSupport.displayKey(laterKey) + " (session " + sessionId + ")" + (embedsOnly
+                        ? ": argument values only embed upstream values as substrings; matching requires exact equality"
+                        : ": no argument value equals an upstream value exactly"));
+            }
+            if (lines.size() >= 3) {
+                break;
+            }
+        }
+        if (lines.isEmpty() && !anySink) {
+            lines.add("no record carries a model-issued tool call with arguments in any response (arguments are where upstream values must land)");
+        }
+        return lines;
     }
 
     private String edgeLine(GraphEdge edge) {

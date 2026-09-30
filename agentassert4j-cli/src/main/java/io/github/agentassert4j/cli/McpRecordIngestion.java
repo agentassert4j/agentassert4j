@@ -105,6 +105,11 @@ final class McpRecordIngestion {
         if (protocol == null) {
             return envelopeOutcome(CliErrorCode.E_USAGE, "cannot detect the wire protocol from the response shape (no choices array, no Anthropic content blocks, no Responses output/status).", "Pass protocol explicitly (" + LlmWireProtocol.legalWireNames() + "), or send the raw 200 body the endpoint returned.", "the `record` tool");
         }
+        // 显式声明协议而响应不含该协议信封特征（或形态属于另一协议）时，用量/模型
+        // 提取降级是既定容错（保存不拒），但降级必须就地可见——tokens=0 的静默
+        // 保存让调用方以为摄取完整（R11：退化不中断，退化不可静默）。
+        // 对原始响应检测，先于 buildRecord
+        boolean shapeMismatch = protocolParam != null && detectProtocol(response) != protocol;
 
         List<String> warnings = new ArrayList<>();
         StorageRepository repository = null;
@@ -130,7 +135,7 @@ final class McpRecordIngestion {
                 }
             }
             String stderr = warnings.isEmpty() ? "" : String.join("\n", warnings) + "\n";
-            return McpToolOutcome.of(0, reportLine(record, saved, storedSessionId, storedInvocationKey) + "\n", stderr);
+            return McpToolOutcome.of(0, reportLine(record, saved, storedSessionId, storedInvocationKey, shapeMismatch) + "\n", stderr);
         } catch (RuntimeException e) {
             return envelopeOutcome(CliErrorCode.E_ENV, "record failed: " + CliSupport.describe(e), "Fix the reported problem and retry; `agentassert4j doctor` reports database and config health.", "agentassert4j doctor");
         } finally {
@@ -1077,7 +1082,7 @@ final class McpRecordIngestion {
         return HashUtil.sha256(record.getSessionId() + "\n" + invocation + "\n" + record.getTurnIndex() + "\n" + HashUtil.sha256(requestRaw) + "\n" + HashUtil.sha256(responseRaw));
     }
 
-    private static String reportLine(InteractionRecord record, boolean saved, String storedSessionId, String storedInvocationKey) {
+    private static String reportLine(InteractionRecord record, boolean saved, String storedSessionId, String storedInvocationKey, boolean shapeMismatch) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.RECORD + "\",\"status\":\"").append(saved ? "saved" : "duplicate").append('"');
         sb.append(",\"recordId\":\"").append(RecursiveJsonParser.escape(record.getRecordId())).append('"');
         sb.append(",\"sessionId\":\"").append(RecursiveJsonParser.escape(record.getSessionId())).append('"');
@@ -1097,11 +1102,23 @@ final class McpRecordIngestion {
         sb.append(",\"inputTokens\":").append(record.getInputTokens());
         sb.append(",\"outputTokens\":").append(record.getOutputTokens());
         sb.append(",\"hasToolCalls\":").append(record.isHasToolCalls());
+        // note 单字段两源合一：duplicate 身份指引与形状降级提示同为「保存成功但需要你知道
+        // 的事」——两源同时命中时一句话接一句话，机器消费方无需解析多字段
+        StringBuilder note = new StringBuilder();
+        if (shapeMismatch) {
+            note.append("Response shape does not match the declared protocol; usage and model extraction degraded (check `record show` for what was stored).");
+        }
         if (!saved) {
             if (storedSessionId != null && !storedSessionId.equals(record.getSessionId())) {
                 sb.append(",\"storedSessionId\":\"").append(RecursiveJsonParser.escape(storedSessionId)).append('"');
             }
-            sb.append(",\"note\":\"A record with this id is already stored; pass a different recordId (or response id) to store a new record.\"");
+            if (note.length() > 0) {
+                note.append(' ');
+            }
+            note.append("A record with this id is already stored; pass a different recordId (or response id) to store a new record.");
+        }
+        if (note.length() > 0) {
+            sb.append(",\"note\":\"").append(RecursiveJsonParser.escape(note.toString())).append('"');
         }
         return sb.append('}').toString();
     }

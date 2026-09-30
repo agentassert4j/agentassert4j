@@ -219,6 +219,17 @@ collected**: it surfaces as a label split, stays out of the gate (`--ci` exits 2
 for an explicit `baseline --invocation <key>` — a split you have not adjudicated never quietly turns
 the gate green or red.
 
+Rule of thumb for adjudicating a change — pick your path by what you edited:
+
+- **Prompt / template edit** (the common case): the invocation moves to a **new key** (label split) →
+  adjudicate with `baseline --invocation <new key>`, which starts a fresh approved set for it.
+- **Same key, drifted output shape** (nothing edited, e.g. a model switch changed the shape): a
+  **candidate** is registered on the existing invocation → adjudicate with `accept` / `reject`.
+
+Timing note: in dev mode `replay` auto-establishes *fresh* invocations under the automatic actor. If you
+want your own `--approver` / `--ref` on record, run `baseline` **before** the first `replay` — afterwards
+the run is an idempotent exists and discloses `ref not applied`.
+
 ## Delivery acceptance (the second workflow)
 
 Ship the behavior you demonstrated as portable evidence — **even when the customer environment runs a
@@ -338,7 +349,7 @@ always describes the baseline that is actually active.) Five ways teams use it:
 | `record show` | Echo one stored interaction's raw wire payloads (troubleshooting/forensics) |
 | `verify` | Delivery acceptance: pack × locally recorded chains (read-only); `--dry-run` previews the pairing, `--report` writes the markdown evidence |
 | `rules` | List built-in behavior checks and rules-file syntax |
-| `graph show` | Read-only value-flow provenance graph (HIGH edges carry the matched value and record pair) |
+| `graph show` | Read-only value-flow provenance graph (HIGH edges carry the matched value and record pair); edges require model-issued tool calls with arguments — pure prompt chains without tool calls have no value-flow edges |
 | `audit` | List governance writes from the event timeline (verb/actor/time/code ref, including reject and rollback) — AI (`agent:*`) and human writes on one timeline |
 | `mcp` | Run as a stdio MCP server (17 tools mirroring CLI verbs, for non-Java AI hosts) |
 | `doctor` | Read-only health check in three deterministic sections: identity (skeleton families, unlabeled multi-step chains, repeated request-text families worth declaring), coverage (unestablished invocations, records missing template_hash), rules (malformed declarations, expectation mismatches); advisory only (exit 0 in normal operation; not a gate) |
