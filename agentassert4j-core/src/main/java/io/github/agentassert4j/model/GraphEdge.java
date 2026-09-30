@@ -1,14 +1,18 @@
 package io.github.agentassert4j.model;
 
+import java.util.List;
+
 /**
  * 图谱边 — 依赖图谱中两个调用点之间的数据流关系。
  *
  * <p>两种置信度：
  * <ul>
  *   <li>HIGH：字段值精确匹配（如 "ORD-2024-001" → "ORD-2024-001"），携带证据
- *       （命中值 + 源/目标记录 id）</li>
+ *       （命中值 + 源/目标记录 id）。同一记录对可能有多条值同时命中：
+ *       {@code evidenceValue} 是首命中代表值（人读行用），{@code matchedValues}
+ *       是排序后的全量命中值（机器面取证用）</li>
  *   <li>LOW：字段名前缀匹配（如 orderId ≈ orderRef，前缀 "order" 相同），是提示不是证据，
- *       证据三字段为 null</li>
+ *       证据字段为 null</li>
  * </ul>
  *
  * @author axy-yxa
@@ -22,6 +26,7 @@ public class GraphEdge {
     private String evidenceValue;
     private String evidenceSourceRecordId;
     private String evidenceTargetRecordId;
+    private List<String> matchedValues;
 
     public GraphEdge(String source, String target, Confidence confidence) {
         this.source = source;
@@ -75,5 +80,13 @@ public class GraphEdge {
 
     public void setEvidenceTargetRecordId(String evidenceTargetRecordId) {
         this.evidenceTargetRecordId = evidenceTargetRecordId;
+    }
+
+    public List<String> getMatchedValues() {
+        return matchedValues;
+    }
+
+    public void setMatchedValues(List<String> matchedValues) {
+        this.matchedValues = matchedValues;
     }
 }

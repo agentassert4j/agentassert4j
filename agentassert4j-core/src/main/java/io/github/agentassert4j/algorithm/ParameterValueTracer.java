@@ -128,7 +128,7 @@ public class ParameterValueTracer {
                 String matchedValue = firstMeaningfulMatch(valueCache.get(j), argValueCache.get(i));
                 if (matchedValue != null) {
                     graph.addEdge(prevInvocation, currInvocation, Confidence.HIGH,
-                            matchedValue, chain.get(j).getRecordId(), chain.get(i).getRecordId());
+                            matchedValue, chain.get(j).getRecordId(), chain.get(i).getRecordId(), allMeaningfulMatches(valueCache.get(j), argValueCache.get(i)));
                     continue;
                 }
 
@@ -159,6 +159,22 @@ public class ParameterValueTracer {
             }
         }
         return null;
+    }
+
+    /**
+     * 全量命中值（排序后）：机器面取证的完整清单——同一记录对常有多条值同时流经
+     * （如订单号与重量一起进入下游参数），只给首命中会让消费方退回记录层手工拼。
+     * 字典序排序使清单内容与值集插入顺序无关。
+     */
+    private List<String> allMeaningfulMatches(Set<String> fieldValues, Set<String> argValues) {
+        List<String> all = new ArrayList<>();
+        for (String value : fieldValues) {
+            if (isMeaningfulValue(value) && argValues.contains(value)) {
+                all.add(value);
+            }
+        }
+        Collections.sort(all);
+        return all;
     }
 
     /**

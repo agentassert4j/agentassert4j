@@ -44,6 +44,17 @@ public class InMemoryDependencyGraph {
      */
     public void addEdge(String src, String tgt, Confidence confidence,
                         String evidenceValue, String evidenceSourceRecordId, String evidenceTargetRecordId) {
+        addEdge(src, tgt, confidence, evidenceValue, evidenceSourceRecordId, evidenceTargetRecordId, null);
+    }
+
+    /**
+     * 添加一条边（同上，另携全量命中值清单——机器面取证用；LOW 边与单命中边传 null）。
+     * 清单合并语义与证据载荷一致：高置信度升级时替换，同级重复取并集后排序
+     * （调用方迭代序确定 ⇒ 可复现）。
+     */
+    public void addEdge(String src, String tgt, Confidence confidence,
+                        String evidenceValue, String evidenceSourceRecordId, String evidenceTargetRecordId,
+                        java.util.List<String> matchedValues) {
         Map<String, GraphEdge> targets = outEdges.computeIfAbsent(src, k -> new LinkedHashMap<>());
         GraphEdge existing = targets.get(tgt);
         if (existing != null) {
@@ -53,14 +64,33 @@ public class InMemoryDependencyGraph {
                 existing.setEvidenceValue(evidenceValue);
                 existing.setEvidenceSourceRecordId(evidenceSourceRecordId);
                 existing.setEvidenceTargetRecordId(evidenceTargetRecordId);
+                existing.setMatchedValues(matchedValues);
+            } else if (matchedValues != null && confidence.rank() == existing.getConfidence().rank()) {
+                existing.setMatchedValues(mergeSorted(existing.getMatchedValues(), matchedValues));
             }
         } else {
             GraphEdge edge = new GraphEdge(src, tgt, confidence);
             edge.setEvidenceValue(evidenceValue);
             edge.setEvidenceSourceRecordId(evidenceSourceRecordId);
             edge.setEvidenceTargetRecordId(evidenceTargetRecordId);
+            edge.setMatchedValues(matchedValues);
             targets.put(tgt, edge);
         }
+    }
+
+    /**
+     * 同级重复边的全量命中值合并：并集 + 字典序排序——清单内容只由数据决定，
+     * 与调用方迭代顺序无关。
+     */
+    private static java.util.List<String> mergeSorted(java.util.List<String> a, java.util.List<String> b) {
+        java.util.Set<String> merged = new java.util.TreeSet<>();
+        if (a != null) {
+            merged.addAll(a);
+        }
+        if (b != null) {
+            merged.addAll(b);
+        }
+        return new ArrayList<>(merged);
     }
 
     /**

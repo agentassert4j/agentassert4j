@@ -736,7 +736,7 @@ class JsonContractTest {
             assertTrue(report.contains("\"source\":\"invocation:queryOrder:hash-r-1\""), report);
             assertTrue(report.contains("\"target\":\"invocation:refundOrder:hash-r-2\""), report);
             assertTrue(report.contains("\"confidence\":\"HIGH\""), report);
-            assertTrue(report.contains("\"evidence\":{\"value\":\"SO-77\",\"sourceRecordId\":\"r-1\",\"targetRecordId\":\"r-2\"}"), "HIGH 边必须携带证据三元组: " + report);
+            assertTrue(report.contains("\"evidence\":{\"value\":\"SO-77\",\"sourceRecordId\":\"r-1\",\"targetRecordId\":\"r-2\",\"matchedValues\":[\"SO-77\"]}"), "HIGH 边必须携带证据三元组与全量命中值清单: " + report);
             assertFalse(report.contains("throughNodes"), "透传字段已随穿透压缩退役: " + report);
             assertTrue(report.contains("\"cycles\":[]"), report);
             assertFalse(stdout().contains("Nodes ("), "人类渲染不得污染 stdout: " + stdout());

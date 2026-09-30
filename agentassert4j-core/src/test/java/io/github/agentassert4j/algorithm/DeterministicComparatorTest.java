@@ -28,6 +28,22 @@ class DeterministicComparatorTest {
         return m;
     }
 
+    @Test
+    @org.junit.jupiter.api.DisplayName("工具轮不答卷文本规则：候选发了工具调用且无正文 → 维度3/4 不构成差异；无工具调用的空白输出照常答卷")
+    void toolRoundSkipsTextRules_blankTextRoundStillAnswers() {
+        DeterministicFingerprint baseline = fp(new HashSet<>(Arrays.asList("lookup")), null, null, null, null, 0, new HashSet<>(Arrays.asList("order_id")), null, false);
+        // 工具轮：有工具调用集、正文空白——文本规则在该配对上无可答卷（答卷人是链末记录）
+        DeterministicFingerprint toolRound = fp(new HashSet<>(Arrays.asList("lookup")), null, null, null, null, 0, null, null, false);
+        ComparisonResult toolResult = comparator.compare(baseline, toolRound, null);
+        assertEquals(Verdict.PASS, toolResult.getVerdict(), "工具轮不得因关键词缺失翻红: " + toolResult.getSummary());
+        assertTrue(toolResult.isKeywordMatch(), "无可答卷 = 不构成差异，而非放行判定: " + toolResult.getSummary());
+        // 对照：无工具调用、正文空白 → 关键词缺失照常判差异（真空白输出不得借道跳过）
+        DeterministicFingerprint blankText = fp(null, null, null, null, null, 0, null, null, false);
+        ComparisonResult blank = comparator.compare(baseline, blankText, "");
+        assertEquals(Verdict.CHANGED, blank.getVerdict(), "空白正文答卷照常失配: " + blank.getSummary());
+        assertEquals(Arrays.asList("order_id"), blank.getMissingRequiredKeywords());
+    }
+
     private DeterministicFingerprint fp(Set<String> toolCallSet, Map<String, String> toolParamTypes, String contentType, Set<String> fieldPaths, Map<String, String> fieldTypeMap, int textLengthMagnitude, Set<String> requiredKeywords, Set<String> forbiddenKeywords, boolean hasError) {
         DeterministicFingerprint f = new DeterministicFingerprint();
         f.setToolCallSet(toolCallSet != null ? toolCallSet : Collections.emptySet());

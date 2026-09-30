@@ -18,6 +18,17 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class FingerprintExtractorTest {
 
+    @Test
+    @org.junit.jupiter.api.DisplayName("regexPatterns 字符串简写形态受容：rules 命令示例形态不再被静默丢弃")
+    void regexPatterns_acceptsPlainStringForm() {
+        io.github.agentassert4j.config.InvocationRulesConfig rules = io.github.agentassert4j.config.InvocationRulesConfig.fromJson(
+                "{\"invocations\":{\"order\":{\"regexPatterns\":[\"[A-Z]{3}-\\\\d+\"]}}}");
+        io.github.agentassert4j.config.InvocationRulesConfig.InvocationRule rule = rules.getRulesForInvocation("order");
+        assertNotNull(rule, "声明必须被解析");
+        assertEquals(1, rule.getRegexPatterns().size(), "字符串简写不得被静默丢弃");
+        assertEquals("[A-Z]{3}-\\d+", rule.getRegexPatterns().get(0).getPattern());
+    }
+
     private InteractionRecord record(List<ToolCall> toolCalls, String modelResponse) {
         InteractionRecord r = new InteractionRecord();
         r.setToolCalls(toolCalls);

@@ -16,6 +16,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 统一重放引擎 — bare 命令即全项目完整默认能力，参数只做缩域。
@@ -169,6 +170,7 @@ public class TaskReplayRunner {
         if (jsonMode) {
             out.println(driftJson(drift));
         }
+        warnRulesDrift();
 
         // 缩域：--task × --invocation 复合 AND（检测报告不受缩域影响）
         List<TaskChain> scoped;
@@ -197,7 +199,7 @@ public class TaskReplayRunner {
                 for (String key : unbaselined) {
                     diagnostic("  " + key);
                 }
-                diagnostic("Run `agentassert4j baseline` to review and establish baselines, then retry; or drop --ci to auto-establish.");
+                diagnostic("Run `agentassert4j baseline` to review and establish baselines, then retry; or drop --ci to auto-establish. Exit 2 here means a change awaits adjudication, not an environment problem.");
                 return failWithEnvelopeOnly(CliErrorCode.E_GUARD, "Refusing to judge in --ci mode: the scope holds " + CliSupport.plural(unbaselined.size(), "unbaselined invocation") + " (full list on stderr).", "Run `agentassert4j baseline` to review and establish baselines, then retry; or drop --ci to auto-establish.", "agentassert4j baseline");
             }
         } else {
@@ -1777,6 +1779,70 @@ public class TaskReplayRunner {
             sb.append('"').append(RecursiveJsonParser.escape(key)).append('"');
         }
         return sb.toString();
+    }
+
+    /**
+     * 规则漂移披露（README 承诺的 rules drift warning）：rules 文件的声明没有钉进
+     * 对应调用点的活跃基线（建档早于规则文件出现）时，--ci 只按钉定声明判定、
+     * 链对照路径按当前文件判定——两条路径语义在此分叉，且事后规则会重判历史链。
+     * 此态必须可见并指路刷新：重建档（--force）或 accept 把当前声明钉进基线。
+     */
+    private void warnRulesDrift() {
+        if (rules == null || rules.getDeclaredInvocationIds().isEmpty()) {
+            return;
+        }
+        List<InvocationProfile> profiles;
+        try {
+            profiles = repository.findAllInvocations();
+        } catch (RuntimeException e) {
+            return;
+        }
+        List<String> unpinned = new ArrayList<>();
+        for (String label : rules.getDeclaredInvocationIds()) {
+            if (label == null || label.isEmpty() || declarationsPinned(label, profiles)) {
+                continue;
+            }
+            unpinned.add(label);
+        }
+        if (unpinned.isEmpty()) {
+            return;
+        }
+        List<String> shown = unpinned.size() > 3 ? unpinned.subList(0, 3) : unpinned;
+        String line = "Warning: rules drift — declarations for " + shown.stream().map(l -> "'" + l + "'").collect(Collectors.joining(", ")) + (unpinned.size() > shown.size() ? " (and " + (unpinned.size() - shown.size()) + " more)" : "") + " are not pinned into the active baselines (the rules file changed after establish, or was never pinned). --ci judges pinned declarations only; the chain-vs-chain view judges with the current file. Re-establish (`baseline --force`) or accept to pin the current declarations.";
+        if (jsonMode) {
+            diagnostic(line);
+        } else {
+            info(line);
+        }
+    }
+
+    /**
+     * 该声明标签的任一活跃基线形态是否已携带声明集（关键词/正则/行为）——
+     * 无声明即未钉定。
+     */
+    private static boolean declarationsPinned(String label, List<InvocationProfile> profiles) {
+        for (InvocationProfile profile : profiles) {
+            if (!label.equals(profile.getLabel()) || !CliSupport.hasBaseline(profile)) {
+                continue;
+            }
+            List<DeterministicFingerprint> shapes = profile.getFingerprints();
+            if (shapes == null) {
+                continue;
+            }
+            for (DeterministicFingerprint shape : shapes) {
+                if (shape == null) {
+                    continue;
+                }
+                boolean carries = (shape.getRequiredKeywords() != null && !shape.getRequiredKeywords().isEmpty())
+                        || (shape.getForbiddenKeywords() != null && !shape.getForbiddenKeywords().isEmpty())
+                        || (shape.getRegexPatterns() != null && !shape.getRegexPatterns().isEmpty())
+                        || (shape.getDeclaredBehaviors() != null && !shape.getDeclaredBehaviors().isEmpty());
+                if (carries) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static String driftJson(DriftReport drift) {

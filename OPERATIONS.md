@@ -381,6 +381,9 @@ requiredSteps/order/counts 的包，编排纪律同样参与判定——跨模�
 3. 判读：
    - 结构偏差（工具集/参数类型/输出结构）= **真问题**，转开发侧；
    - 跨模型标注（开发侧/本地 servedModel 不同）= 文本措辞差异属预期内，结构判定依然有效；
+   - **先看 Cross-model 行再下结论**：端点侧别名映射可能让「换了模型」实际未成立
+     （两侧 servedModel 相同，如 deepseek-chat/deepseek-reasoner 同被路由到同一 served 名）——
+     此时跨模型结论不适用，验收只是同模型复验；
    - **覆盖缺口**（包内任务未执行，exit 2）= 补执行后重跑，缺口不允许冒充通过；
    - 范围外链（本地多出的任务）= 只列出，不判定。
 4. `verify` 全程只读（不落库、不改本地基线），可反复执行；markdown 报告即交付证据，归档时附包文件的 SHA-256。
@@ -452,7 +455,16 @@ accept/reject + re-drive + export）+ record 摄取（非 Java 栈上报交互�
   等同构（stdio 客户端只需拉起子进程 + 读写管道）。
 - 排障开关 `--diag`：逐消息向 stderr 记 method 与耗时（默认静默；stdout 只出协议消息）。
 - Java 应用的**录制**仍走 starter/SDK（进程内直录）；MCP record 动词服务非 Java 栈
-  （TS/Python agent 把原生 LLM 调用的原始请求/响应 JSON 上报落库，幂等可重发）。两种来源的
+  （TS/Python agent 把原生 LLM 调用的原始请求/响应 JSON 上报落库，幂等可重发）。
+
+**无 MCP 宿主时的最短自写客户端路径**（python/TS 起 stdio 子进程后，三段报文即可上报；
+每次请求带递增 id，服务端响应同 id）：
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"my-app","version":"1.0"}}}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"record","arguments":{"sessionId":"my-run-1","request":"<原始请求 JSON 字符串>","response":"<原始响应 JSON 字符串>","invocation":"my-step-label","taskKey":"my-task"}}}
+```两种来源的
   **原文覆盖不同**：SDK 录制的记录 raw 双列恒为空——Spring AI 的 ChatModel 抽象层与
   LangChain4j 的 ChatModel 抽象层都只交付结构化消息对象、不暴露线上报文（Spring AI 1.x/2.x
   与 LangChain4j 1.0.0/1.18.0 均经字节码核实），属框架侧既有限制而非待办；MCP 上报与 CLI

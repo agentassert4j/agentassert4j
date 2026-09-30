@@ -81,6 +81,32 @@ class TaskReplayRunnerTest {
     /**
      * 声明无骨架记录：全文哈希即键细分（invocation:order:hash-a）。
      */
+    /**
+     * 工具轮记录：模型发了工具调用、正文为 null（wire 上 content=null 的 assistant 帧）——
+     * 文本规则（关键词/行为）在此类配对上无可答卷的判定对象。
+     */
+    private void saveToolRound(String recordId, String sessionId, long ts) {
+        InteractionRecord r = new InteractionRecord();
+        r.setRecordId(recordId);
+        r.setSessionId(sessionId);
+        r.setTimestamp(ts);
+        r.setSeq(ts);
+        r.setUserInput("查订单");
+        r.setInvocationId("order");
+        r.setTemplateHash("hash-x");
+        r.setInvocationKey("invocation:order:hash-x");
+        r.setModelResponse(null);
+        r.setModel("stub-model");
+        ToolCall call = new ToolCall();
+        call.setToolName("lookup");
+        java.util.Map<String, Object> args = new java.util.LinkedHashMap<>();
+        args.put("order_id", "SO-77");
+        call.setArguments(args);
+        r.setToolCalls(new ArrayList<>(Collections.singletonList(call)));
+        r.setHasToolCalls(true);
+        repository.saveInteractionIfAbsent(r);
+    }
+
     private InteractionRecord saveRecord(String recordId, String sessionId, long ts, String userInput, String label, String templateHash, String response, String servedModel) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(recordId);
@@ -517,6 +543,28 @@ class TaskReplayRunnerTest {
             assertTrue(out.contains("baseline --invocation <prefix>"), "注记必须指路显式建档: " + out);
             assertTrue(out.contains("Alignment basis:"), "报告必须走完（基准行/脚注在场）: " + out);
             assertFalse(out.contains("Invocation profile not found"), "不得再以画像缺席炸掉整场报告: " + out);
+        }
+
+        @Test
+        @DisplayName("规则漂移披露：无规则建档后出现规则文件——同构链对照不翻红，警告指路钉定")
+        void postEstablishRules_identicalChainsStayGreen_withDriftWarning() {
+            // 两条同构链：每调用点先工具轮（有工具调用、无正文）后正文轮（含关键词）；建档时无规则
+            saveToolRound("w-t1", "session-w1", 100L);
+            saveRecord("w-f1", "session-w1", 200L, "查订单", "order", "hash-x", "{\"order_id\":\"SO-77\"}", null);
+            establishedProfile("invocation:order:hash-x", "order", "hash-x");
+            saveToolRound("w-t2", "session-w2", 300L);
+            saveRecord("w-f2", "session-w2", 400L, "查订单", "order", "hash-x", "{\"order_id\":\"SO-77\"}", null);
+
+            InvocationRulesConfig rules = InvocationRulesConfig.fromJson("{\"invocations\":{\"order\":{\"requiredKeywords\":[\"order_id\"]}}}");
+            TaskReplayRunner ruled = new TaskReplayRunner(repository, new StubLlmClient(), new DeterministicComparator(ComparatorConfig.defaults()), rules, TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), false);
+
+            int exit = ruled.run(null, null, false, false, false, null, false, false, false, null, null);
+
+            String out = output.toString();
+            assertEquals(0, exit, "同构链不得因事后规则文件翻红（工具轮进答卷 = 假 CHANGED）: " + out);
+            assertTrue(out.contains("rules drift"), "未钉定声明必须就地警告: " + out);
+            assertTrue(out.contains("baseline --force"), "警告必须指路钉定路径: " + out);
+            assertFalse(out.contains("content rules mismatch"), "工具轮不得进文本规则答卷: " + out);
         }
     }
 

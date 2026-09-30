@@ -108,6 +108,53 @@ class GraphShowCommandTest {
     }
 
     @Test
+    @DisplayName("多值命中：机器面 matchedValues 携带排序全量命中值，人读 evidence 保持首命中代表值")
+    void multiValueEdgeCarriesMatchedValues() {
+        InteractionRecord upstream = new InteractionRecord();
+        upstream.setRecordId("mv-1");
+        upstream.setSessionId("session-graph");
+        upstream.setTimestamp(1000L);
+        upstream.setSeq(1000L);
+        upstream.setInvocationId("lookupOrder");
+        upstream.setTemplateHash("hash-mv-1");
+        upstream.setInvocationKey("invocation:lookupOrder:hash-mv-1");
+        upstream.setUserInput("输入 mv-1");
+        upstream.setTurnIndex(0);
+        upstream.setModelResponse("{\"order_id\":\"SO-77\",\"ticket\":\"TRK-1\"}");
+        upstream.setToolCalls(new ArrayList<>());
+        upstream.setHasToolCalls(false);
+        repository.saveInteractionIfAbsent(upstream);
+
+        InteractionRecord downstream = new InteractionRecord();
+        downstream.setRecordId("mv-2");
+        downstream.setSessionId("session-graph");
+        downstream.setTimestamp(2000L);
+        downstream.setSeq(2000L);
+        downstream.setInvocationId("shipOrder");
+        downstream.setTemplateHash("hash-mv-2");
+        downstream.setInvocationKey("invocation:shipOrder:hash-mv-2");
+        downstream.setUserInput("输入 mv-2");
+        downstream.setTurnIndex(0);
+        ToolCall ship = new ToolCall();
+        ship.setToolName("ship");
+        Map<String, Object> shipArgs = new LinkedHashMap<>();
+        shipArgs.put("ref", "SO-77");
+        shipArgs.put("ticketRef", "TRK-1");
+        ship.setArguments(shipArgs);
+        downstream.setToolCalls(new ArrayList<>(java.util.Collections.singletonList(ship)));
+        downstream.setHasToolCalls(true);
+        repository.saveInteractionIfAbsent(downstream);
+
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("graph", "show", "--db", dbPath, "--json"));
+        String graphJson = stdout.toString();
+        // 全量命中值按字典序入机器面（SO-77 < TRK-1），取证不再退回记录层手工拼
+        assertTrue(graphJson.contains("\"matchedValues\":[\"SO-77\",\"TRK-1\"]"), "机器面必须携带排序全量命中值: " + graphJson);
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("graph", "show", "--db", dbPath));
+        String human = stdout.toString();
+        assertTrue(human.contains("\"SO-77\" (mv-1 -> mv-2)"), "人读 evidence 保持首命中代表值: " + human);
+    }
+
+    @Test
     @DisplayName("零边近失诊断：纯数字上游值点名噪声排除，子串包含点名精确相等要求")
     void nearMissDiagnosticsClassifyWhyNoEdge() {
         // 上游叶子是纯数字（isMeaningfulValue 排除）——数字 ID 体系永远无 HIGH 边的事实必须就近可见。

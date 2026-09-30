@@ -273,6 +273,11 @@ public class InvocationRulesConfig {
                     if (pattern != null) {
                         patterns.add(new RegexPattern(pattern, desc));
                     }
+                } else if (item instanceof String) {
+                    // 纯字符串形态 = 无描述的简写（rules 命令示例形态）——此前被静默
+                    // 丢弃，用户照示例写规则会无声失效（退化不可静默的解析面兑现：
+                    // 与其丢弃不如受容）
+                    patterns.add(new RegexPattern((String) item, ""));
                 }
             }
             return Collections.unmodifiableList(patterns);

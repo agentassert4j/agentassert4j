@@ -78,10 +78,17 @@ public class DeterministicComparator {
         double d2 = computeDimension2(baseline, current, removed, added, typeOk);
 
         // === 维度 3：内容规则（基线声明、当前答卷）===
+        // 答卷适用性：候选侧是「发了工具调用且无正文文本」的工具轮时，输出文本规则
+        // （关键词/正则/行为约束）在该配对上无可答卷——文本规则的答卷人是链末记录，
+        // 工具轮进答卷会把「行为相同的两条链」因规则文件的事后变更翻成假 CHANGED；
+        // 跳过不是放行：工具轮的结构差异由维度 1/2 捕捉
+        boolean blankOutput = output.trim().isEmpty();
+        boolean candidateIssuedToolCalls = current.getToolCallSet() != null && !current.getToolCallSet().isEmpty();
+        boolean textRulesApplicable = !(blankOutput && candidateIssuedToolCalls);
         boolean hasDeclaredRules = !isEmpty(baseline.getRequiredKeywords()) || !isEmpty(baseline.getForbiddenKeywords()) || (baseline.getRegexPatterns() != null && !baseline.getRegexPatterns().isEmpty());
 
         double d3;
-        if (hasDeclaredRules) {
+        if (hasDeclaredRules && textRulesApplicable) {
             // 失配明细就地收集：失败项身份只在检查现场可得，坍缩成布尔后即不可恢复
             List<String> missingRequired = orEmpty(baseline.getRequiredKeywords()).stream()
                     .filter(kw -> !output.contains(kw)).collect(Collectors.toList());
@@ -106,10 +113,10 @@ public class DeterministicComparator {
             r.setRegexMatch(true);
         }
 
-        // === 维度 4：约束行为（基线声明、当前答卷）===
+        // === 维度 4：约束行为（基线声明、当前答卷；答卷适用性同维度 3）===
         boolean hasDeclaredBehaviors = !isEmpty(baseline.getDeclaredBehaviors());
         double d4;
-        if (hasDeclaredBehaviors) {
+        if (hasDeclaredBehaviors && textRulesApplicable) {
             List<String> failedBehaviors = new ArrayList<>();
             for (String behavior : baseline.getDeclaredBehaviors()) {
                 if (!BehaviorChecker.check(behavior, current, output)) {

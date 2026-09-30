@@ -97,7 +97,16 @@ public class GraphShowCommand implements Callable<Integer> {
             if (edgeJson.length() > 0) edgeJson.append(",");
             edgeJson.append("{\"source\":\"").append(RecursiveJsonParser.escape(edge.getSource())).append("\",\"target\":\"").append(RecursiveJsonParser.escape(edge.getTarget())).append("\",\"confidence\":\"").append(edge.getConfidence()).append("\"");
             if (edge.getEvidenceValue() != null) {
-                edgeJson.append(",\"evidence\":{\"value\":").append(jsonStringOrNull(edge.getEvidenceValue())).append(",\"sourceRecordId\":").append(jsonStringOrNull(edge.getEvidenceSourceRecordId())).append(",\"targetRecordId\":").append(jsonStringOrNull(edge.getEvidenceTargetRecordId())).append("}");
+                edgeJson.append(",\"evidence\":{\"value\":").append(jsonStringOrNull(edge.getEvidenceValue())).append(",\"sourceRecordId\":").append(jsonStringOrNull(edge.getEvidenceSourceRecordId())).append(",\"targetRecordId\":").append(jsonStringOrNull(edge.getEvidenceTargetRecordId()));
+                if (edge.getMatchedValues() != null && !edge.getMatchedValues().isEmpty()) {
+                    StringBuilder valuesJson = new StringBuilder();
+                    for (String value : edge.getMatchedValues()) {
+                        if (valuesJson.length() > 0) valuesJson.append(",");
+                        valuesJson.append("\"").append(RecursiveJsonParser.escape(value)).append("\"");
+                    }
+                    edgeJson.append(",\"matchedValues\":[").append(valuesJson).append("]");
+                }
+                edgeJson.append("}");
             }
             edgeJson.append("}");
         }

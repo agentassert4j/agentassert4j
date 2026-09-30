@@ -52,7 +52,7 @@ public class RulesCommand implements Callable<Integer> {
                 if (items.length() > 0) items.append(",");
                 items.append("{\"name\":\"").append(name).append("\",\"description\":\"").append(BehaviorChecker.describeBehavior(name)).append("\"}");
             }
-            out.println("{\"schema\":\"" + ReportSchemas.RULES + "\",\"rulesFile\":" + (rulesPath != null ? "\"" + RecursiveJsonParser.escape(rulesPath) + "\"" : "null") + ",\"declarations\":{\"invocations\":" + invocationDeclarations + ",\"tasks\":" + taskDeclarations + "},\"example\":{\"invocations\":{\"<business invocationId>\":{\"requiredKeywords\":[\"order\"],\"forbiddenKeywords\":[\"sorry\"],\"regexPatterns\":[\"\\\\d{6,}\"],\"behaviors\":[\"mustUseChinese\",\"jsonOutput\"]}},\"tasks\":{\"<declared taskKey>\":{\"requiredSteps\":[\"<invocationId>\",\"<invocationId>\"],\"requiredOrder\":[\"<invocationId>\",\"<invocationId>\"],\"steps\":{\"<invocationId>\":{\"min\":1,\"max\":2}}}}},\"behaviors\":[" + items + "]}");
+            out.println("{\"schema\":\"" + ReportSchemas.RULES + "\",\"rulesFile\":" + (rulesPath != null ? "\"" + RecursiveJsonParser.escape(rulesPath) + "\"" : "null") + ",\"declarations\":{\"invocations\":" + invocationDeclarations + ",\"tasks\":" + taskDeclarations + "},\"example\":{\"invocations\":{\"<business invocationId>\":{\"requiredKeywords\":[\"order\"],\"forbiddenKeywords\":[\"sorry\"],\"regexPatterns\":[{\"pattern\":\"\\\\d{6,}\",\"description\":\"six or more digits\"}],\"behaviors\":[\"mustUseChinese\",\"jsonOutput\"]}},\"tasks\":{\"<declared taskKey>\":{\"requiredSteps\":[\"<invocationId>\",\"<invocationId>\"],\"requiredOrder\":[\"<invocationId>\",\"<invocationId>\"],\"steps\":{\"<invocationId>\":{\"min\":1,\"max\":2}}}}},\"behaviors\":[" + items + "]}");
             return 0;
         }
         out.println("Active rules file: " + (rulesPath != null ? rulesPath + " (" + CliSupport.plural(invocationDeclarations, "invocation declaration") + ", " + CliSupport.plural(taskDeclarations, "task declaration") + ")" : "none found (looked up next to agentassert4j.json, then the working directory, then ~/.agentassert4j/)"));
@@ -68,7 +68,7 @@ public class RulesCommand implements Callable<Integer> {
         out.println("    \"<business invocationId>\": {");
         out.println("      \"requiredKeywords\": [\"order\"],");
         out.println("      \"forbiddenKeywords\": [\"sorry\"],");
-        out.println("      \"regexPatterns\": [\"\\\\d{6,}\"],");
+        out.println("      \"regexPatterns\": [{\"pattern\": \"\\\\d{6,}\", \"description\": \"six or more digits\"}],");
         out.println("      \"behaviors\": [\"mustUseChinese\", \"jsonOutput\"]");
         out.println("    }");
         out.println("  },");
