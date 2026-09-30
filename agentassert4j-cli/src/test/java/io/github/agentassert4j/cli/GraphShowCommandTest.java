@@ -108,6 +108,40 @@ class GraphShowCommandTest {
     }
 
     @Test
+    @DisplayName("重驱观测记录不进值流图：不产节点不产边（取证面不产仪器伪影）")
+    void reDriveObservationsExcludedFromGraph() {
+        saveChainRecord("ob-1", "queryOrder", 1000L, null, "{\"order_id\":\"SO-77\"}");
+        saveChainRecord("ob-2", "refundOrder", 2000L, "SO-77", null);
+        // 观测记录：同会话更晚时间戳，参数值精确引用上游值——若不排除会画出指向观测的边
+        InteractionRecord observation = new InteractionRecord();
+        observation.setRecordId("ob-obs");
+        observation.setSessionId("session-graph");
+        observation.setTimestamp(3000L);
+        observation.setSeq(3000L);
+        observation.setInvocationId("notifyOrder");
+        observation.setTemplateHash("hash-ob");
+        observation.setInvocationKey("invocation:notifyOrder:hash-ob");
+        observation.setUserInput("观测");
+        observation.setTurnIndex(0);
+        observation.setMetadata("{\"redriveOf\":\"ob-2\",\"redriveTemplateHash\":\"hash-ob\"}");
+        ToolCall obsCall = new ToolCall();
+        obsCall.setToolName("notify");
+        Map<String, Object> obsArgs = new LinkedHashMap<>();
+        obsArgs.put("order_id", "SO-77");
+        obsCall.setArguments(obsArgs);
+        observation.setToolCalls(new ArrayList<>(java.util.Collections.singletonList(obsCall)));
+        observation.setHasToolCalls(true);
+        repository.saveInteractionIfAbsent(observation);
+
+        int exit = new CommandLine(new AgentAssert4jCli()).execute("graph", "show", "--db", dbPath);
+
+        assertEquals(0, exit);
+        String output = stdout.toString();
+        assertTrue(output.contains("queryOrder@hash-ob-") && output.contains("-> refundOrder@hash-ob-") && output.contains("HIGH"), "业务边保留: " + output);
+        assertFalse(output.contains("notifyOrder"), "观测记录不得成为节点或边端点: " + output);
+    }
+
+    @Test
     @DisplayName("多值命中：机器面 matchedValues 携带排序全量命中值，人读 evidence 保持首命中代表值")
     void multiValueEdgeCarriesMatchedValues() {
         InteractionRecord upstream = new InteractionRecord();

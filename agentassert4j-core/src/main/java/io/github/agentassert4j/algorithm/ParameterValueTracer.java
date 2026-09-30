@@ -6,6 +6,7 @@ import io.github.agentassert4j.model.ToolCall;
 import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.RecursiveJsonParser;
+import io.github.agentassert4j.util.RedriveMarkerUtil;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -62,7 +63,7 @@ public class ParameterValueTracer {
         Set<String> keys = new LinkedHashSet<>();
         int candidatePairs = 0;
         for (String sessionId : sessionIds) {
-            List<InteractionRecord> chain = repository.findBySessionId(sessionId).stream()
+            List<InteractionRecord> chain = businessOnly(repository.findBySessionId(sessionId)).stream()
                     // timestamp 平局时按 recordId 决胜——同毫秒交互的边方向必须可复现
                     .sorted(Comparator.comparingLong(InteractionRecord::getTimestamp).thenComparing(r -> r.getRecordId() != null ? r.getRecordId() : "")).collect(Collectors.toList());
             totalRecords += chain.size();
@@ -85,7 +86,25 @@ public class ParameterValueTracer {
      * 键为 null 或同键的对不建边：同键多执行不自环（自环既污染溯源图又误触环检测）。
      */
     public void traceDependency(List<InteractionRecord> chain) {
-        traceDependency(chain, chain == null ? null : invocationKeysOf(chain));
+        traceDependency(businessOnly(chain), chain == null ? null : invocationKeysOf(businessOnly(chain)));
+    }
+
+    /**
+     * 值流图只画业务执行：重驱观测是检测仪器的真调，不是业务数据流——留在图里会
+     * 产出「指向观测记录的 HIGH 边 + 反向假环」这类仪器伪影（round17 实弹），
+     * 取证面不能产伪影。观测记录的取证走 record show（redriveOf 链）。
+     */
+    private static List<InteractionRecord> businessOnly(List<InteractionRecord> records) {
+        if (records == null) {
+            return null;
+        }
+        List<InteractionRecord> business = new ArrayList<>();
+        for (InteractionRecord record : records) {
+            if (!RedriveMarkerUtil.isRedriveObservation(record)) {
+                business.add(record);
+            }
+        }
+        return business;
     }
 
     private void traceDependency(List<InteractionRecord> chain, List<String> invocationKeys) {

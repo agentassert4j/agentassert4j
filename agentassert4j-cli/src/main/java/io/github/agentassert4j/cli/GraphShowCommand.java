@@ -46,7 +46,7 @@ public class GraphShowCommand implements Callable<Integer> {
     // 必须覆盖 tracer 的全部真实匹配规则——独立 JSON 叶子、精确相等、噪声排除
     // （纯数字/布尔/过短）、载体优先级（工具结果 > 历史工具帧 > 响应全文）。
     // 少写一条，用户按说明构造就会全部落空（round13 双宿主实测的坑）
-    private static final String EDGE_CONDITIONS_JSON = "an edge requires all of: the two records carry different invocation identities (declare per-step invocation labels); the upstream value is a standalone JSON leaf (a value embedded inside a longer text never matches) found in a tool result, an earlier record's request-history tool frame, or the response body (up to 4 levels deep); the value passes noise filters (not a pure number, not true/false, length >= 3); and a later response's tool-call argument equals it exactly (substring embedding does not match). Per record only the highest-priority carrier is scanned: tool result first, then history tool frames, then the response body";
+    private static final String EDGE_CONDITIONS_JSON = "an edge requires all of: the two records carry different invocation identities (declare per-step invocation labels); the upstream value is a standalone JSON leaf (a value embedded inside a longer text never matches) found in a tool result, an earlier record's request-history tool frame, or the response body (up to 4 levels deep); the value passes noise filters (not a pure number, not true/false, length >= 3); and a later response's tool-call argument equals it exactly (substring embedding does not match). Per record only the highest-priority carrier is scanned: tool result first, then history tool frames, then the response body. A value born in a record request history and consumed by the same record response tool call produces no edge; provenance starts one record later";
 
     // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
     PrintStream out = System.out;
@@ -156,6 +156,10 @@ public class GraphShowCommand implements Callable<Integer> {
             out.println("      embedding does not match;");
             out.println("  (5) per record only the highest-priority carrier is scanned: tool result first,");
             out.println("      then history tool frames, then the response body.");
+            out.println("  Note: the hop where a value is born in a record's request history and consumed by");
+            out.println("  the same record's response tool call is not drawn (edges link different records);");
+            out.println("  provenance therefore starts one record later, and the shown origin is the nearest");
+            out.println("  earlier carrier, which may not be the true business source.");
             for (String miss : nearMisses(repository)) {
                 out.println("  Near miss: " + miss);
             }

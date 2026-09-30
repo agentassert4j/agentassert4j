@@ -52,7 +52,7 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--re-drive"}, description = "Controlled re-drive (spends LLM calls): drift points by default, or every invocation in scope with --task/--invocation; re-drives recorded inputs with each point's latest archived template. Run --dry-run first for a cost estimate")
     boolean reDrive;
 
-    @Option(names = {"--full-chain"}, description = "Widen the re-drive: re-drive every record in the scope instead of drift points only (--task/--invocation still set the scope; without narrowing the scope is the whole database) (requires --re-drive)")
+    @Option(names = {"--full-chain"}, description = "Widen the re-drive: re-drive every record in the scope instead of drift points only — every record of every chain, including all historical template buckets, not just the latest chain per invocation (--task/--invocation still set the scope; without narrowing the scope is the whole database) (requires --re-drive)")
     boolean fullChain;
 
     @Option(names = {"--max-total-calls"}, description = "Re-drive budget pool: cap on real re-drive calls for this run (requires --re-drive)")

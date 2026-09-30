@@ -658,8 +658,10 @@ public class TaskReplayRunner {
         sb.append("],\"estimatedTokens\":").append(estimatedTokens);
         sb.append(",\"estimatedCostUsd\":").append(plainDecimal(estimatedCostUsd));
         // model 与人读报价同源（llmClient.name()）——运行时覆盖的机器面核验点，
-        // 缺了它消费者无法在零调用面确认 --model/MCP model 覆盖是否生效
+        // 缺了它消费者无法在零调用面确认 --model/MCP model 覆盖是否生效；
+        // emitterProtocol 同理（跨协议重驱在 dry-run 就要可见，不等 404）
         sb.append(",\"model\":\"").append(RecursiveJsonParser.escape(llmClient.name())).append('"');
+        sb.append(",\"emitterProtocol\":\"").append(RecursiveJsonParser.escape(executionConfig.getWireProtocol() != null ? executionConfig.getWireProtocol() : "auto")).append('"');
         return sb.append("}}").toString();
     }
 
@@ -825,6 +827,23 @@ public class TaskReplayRunner {
 
         String versionNote = newChain.getRecords().size() == 1 ? "" : " (" + CliSupport.plural(judged.getRecords().size(), "invocation") + " judged from " + newChain.getRecords().size() + " records)";
         info("Task \"" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "\": baseline comparison (--ci) — new chain (session " + newChain.getSessionId() + ")" + versionNote + " against the approved shape set" + (baselineTime != null ? " (latest approval on this chain's invocations)" : ""));
+        // latest chain 健康披露：链记录数显著少于本任务历史峰值 = 时间戳劫持/丢步骤的
+        // 静默面（round17 红队实弹：注入一条未来时间戳单记录链即接管门禁判定，
+        // 链上其余步骤整体逃逸）——两行可见性即可封掉这类静默换链
+        int historicalMax = 0;
+        for (TaskChain chain : group) {
+            historicalMax = Math.max(historicalMax, chain.getRecords().size());
+        }
+        if (newChain.getRecords().size() < historicalMax) {
+            info("  Note: latest chain covers " + newChain.getRecords().size() + " of " + historicalMax + " records seen in this task's chains — check session hygiene and record timestamps (a hijacked or truncated chain changes what the gate judges).");
+        }
+        long now = System.currentTimeMillis();
+        if (newChain.firstTimestamp() > now + 3600L * 1000L) {
+            info("  Warning: latest chain carries a future timestamp (" + newChain.firstTimestamp() + " > now) — timestamp is the chain-ordering key; verify the recording clock before trusting this judgment.");
+        }
+        if (rules != null && rules.hasTaskRules() && !newChain.isDeclared()) {
+            info("Note: task has no declared taskKey; task rules do not apply.");
+        }
         if (rules != null && rules.hasTaskRules() && !newChain.isDeclared()) {
             info("Note: task has no declared taskKey; task rules do not apply.");
         }
@@ -1635,7 +1654,7 @@ public class TaskReplayRunner {
             // 计划面与真跑面同目标集：fullChain 必须透传，否则 --full-chain --dry-run
             // 拿到的是漂移点裁剪（bare 形态恒 0 条 + 建议句让用户开已开的旗标）
             List<InteractionRecord> planned = reDriveTargets(drift, fullChain, narrowed, invocationKey, scoped);
-            info("Re-drive plan (--re-drive): " + CliSupport.plural(planned.size(), "record") + " to re-drive with each point\'s latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + ".");
+            info("Re-drive plan (--re-drive): " + CliSupport.plural(planned.size(), "record") + " to re-drive with each point's latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + " Emitter: model " + llmClient.name() + ", protocol " + (executionConfig.getWireProtocol() != null ? executionConfig.getWireProtocol() : "auto") + ".");
             if (!planned.isEmpty()) {
                 info(CostEstimator.estimate(planned, llmClient.name()));
             }

@@ -256,7 +256,7 @@ LLM API Key **只被一个功能消费**：`replay --re-drive`（受控重驱的
   否则 flush 线程锁住文件。
 - **健康检查**：应用日志中的计数闭合账本 `recorded = written + dropped + failed`（filtered 另列）；
   任何对不上账的情况都是缺陷。
-- **幂等键是全库全局的**：recordId / response id 去重不区分写入方——多实例部署或多评估者共库
+- **幂等键是全库全局的**：去重不区分写入方（recordId 恒为幂等键；response id 仅在 recordId 缺省时充当）——多实例部署或多评估者共库
   并行录制时，同 id 的第二条会 duplicate 并归属首录会话（报告带 `storedSessionId` 指路）。
   并行写入方给 recordId/response id 带实例前缀（如 `zcode-r5-…`）可从根上避开撞车。
 - **共享库（多宿主/多人同库）三条运维规则**：①`--ci` 全库门禁对未建档键**fail-closed 拒绝**（E-GUARD

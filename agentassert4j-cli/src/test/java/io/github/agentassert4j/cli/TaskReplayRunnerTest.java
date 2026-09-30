@@ -573,6 +573,21 @@ class TaskReplayRunnerTest {
     class Guards {
 
         @Test
+        @DisplayName("latest chain 健康披露：链记录数少于历史峰值点名，未来时间戳告警")
+        void ciDisclosesChainCoverageAndFutureTimestamp() {
+            establishFromRecord(saveRecord("h-1", "session-h1", 100L, "查订单", "order", "hash-h", "{\"v\":1}", null));
+            establishFromRecord(saveRecord("h-2", "session-h1", 200L, "查订单", "notify", "hash-n", "{\"v\":1}", null));
+            // 劫持链：单记录 + 未来时间戳（+10 天）
+            saveRecord("h-3", "session-h2", System.currentTimeMillis() + 864000000L, "查订单", "order", "hash-h", "{\"v\":1}", null);
+
+            runner.run(null, null, true, false, false, null, false, false, false, null, null);
+
+            String out = output.toString();
+            assertTrue(out.contains("latest chain covers 1 of 2 records"), "链覆盖不足必须点名: " + out);
+            assertTrue(out.contains("future timestamp"), "未来时间戳必须告警: " + out);
+        }
+
+        @Test
         @DisplayName("缩域门禁的域外披露：域外候选/漂移/未建档键计数可见，不拦截")
         void narrowedCi_disclosesOutOfScopeState() {
             // 域内绿键 + 域外在途候选 + 域外未建档键
