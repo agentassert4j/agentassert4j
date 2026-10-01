@@ -36,9 +36,10 @@ class CliSupportLlmClientTest {
     }
 
     @Test
-    @DisplayName("未知 protocol → E-USAGE 且消息列全部合法值（配置错误就近可见）")
-    void unknownProtocol_failsUsageListingValues() {
-        CliFailureException e = assertThrows(CliFailureException.class, () -> CliSupport.createLlmClient(configWithProtocol("openai/cjom")));
+    @DisplayName("未知 protocol：构造点放行（零调用路径存活），发射前守卫拒绝且列全部合法值")
+    void unknownProtocol_deferredToEmissionGuard() {
+        assertTrue(CliSupport.createLlmClient(configWithProtocol("openai/cjom")) instanceof ProtocolRoutingLlmClient, "构造点放行——零调用判定路径不因 protocol 手误被杀");
+        CliFailureException e = assertThrows(CliFailureException.class, () -> CliSupport.ensureKnownWireProtocol("openai/cjom"));
         assertEquals(CliErrorCode.E_USAGE, e.errorCode);
         assertTrue(e.getMessage().contains("openai/cjom"), e.getMessage());
         String combined = e.getMessage() + " " + e.hint;

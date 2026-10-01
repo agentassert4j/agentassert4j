@@ -310,7 +310,7 @@ zero noise. Compliance-style assertions can be declared per invocation in `agent
 `accept` (the candidate fingerprint is extracted under the rules current at that moment). The report
 header's `Rules:` line shows the loaded file; judgment itself only consumes what a fingerprint carries,
 so a rules file edited after establish never silently re-judges history (a rules drift warning points
-you to the refresh paths). Dimensions ③④ then operate as "baseline declares, current output answers"
+you to the refresh paths). Dimensions ③④ then operate as "baseline declares, current output answers" (the current side is fingerprinted under the rules file in effect at that run — editing the rules file changes how new executions are judged, which is what the rules-drift warning and the re-establish refresh paths are for)
 (`rules` lists all built-in behaviors). No second assertion language. Text differences never enter the
 verdict — they are shown to humans as low-confidence references only. The same file's `tasks` section
 adds chain-level discipline for declared tasks (required steps / step counts / ordering); violations

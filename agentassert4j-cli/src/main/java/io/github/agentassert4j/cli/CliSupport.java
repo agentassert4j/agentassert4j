@@ -635,18 +635,28 @@ final class CliSupport {
     }
 
     static LlmClient createLlmClient(AgentAssert4jConfig config) {
+        // protocol 合法性不在构造点校验：bare replay/--dry-run/MCP check 等零调用
+        // 判定路径也构造发射客户端（仅取其名字做报价展示），急切校验会把一个
+        // protocol 手误打瘫主门禁与 AI 自主回路的核心动词（round27 F1）——
+        // 校验下沉到 ensureKnownWireProtocol，只在真跑重驱发射前触发
         String protocol = config.getLlm().getProtocol();
-        if (protocol != null && LlmWireProtocol.fromWireName(protocol) == null) {
-            // 合法词表进消息本体：人读通道只渲染 message（hints 只进 --json 包络），
-            // 词表藏在 hints 里 = 同一承诺只在机器通道成立（round19 承诺审计 D1）
-            throw new CliFailureException(CliErrorCode.E_USAGE, "llm.protocol '" + protocol + "' is not a known wire protocol. Valid values: " + LlmWireProtocol.legalWireNames() + ".", "Set llm.protocol to one of " + LlmWireProtocol.legalWireNames() + ", or remove it to auto-detect per record.", "agentassert4j doctor");
-        }
         String endpoint = config.getLlm().getEndpoint();
         String apiKey = config.getLlm().getApiKey();
         String model = config.getLlm().getModel();
         String extraBody = config.getLlm().getExtraBody();
         int maxRetries = config.getLlm().getMaxRetries();
         return new ProtocolRoutingLlmClient(protocol, new OpenAiCompatibleClient(endpoint, apiKey, model, maxRetries, extraBody), new AnthropicMessagesClient(endpoint, apiKey, model, maxRetries, extraBody), new OpenAiResponsesClient(endpoint, apiKey, model, maxRetries, extraBody));
+    }
+
+    /**
+     * 真跑重驱前的 protocol 合法性守卫：合法词表进消息本体（人读通道只渲染
+     * message，词表藏 hints = 同一承诺只在机器通道成立，round19 承诺审计 D1）。
+     * 只在真正要发请求的路径调用——零调用命令不触发（OPERATIONS §2.1 承诺）。
+     */
+    static void ensureKnownWireProtocol(String protocol) {
+        if (protocol != null && LlmWireProtocol.fromWireName(protocol) == null) {
+            throw new CliFailureException(CliErrorCode.E_USAGE, "llm.protocol '" + protocol + "' is not a known wire protocol. Valid values: " + LlmWireProtocol.legalWireNames() + ".", "Set llm.protocol to one of " + LlmWireProtocol.legalWireNames() + ", or remove it to auto-detect per record.", "agentassert4j doctor");
+        }
     }
 
     /**

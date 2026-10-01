@@ -52,7 +52,7 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--re-drive"}, description = "Controlled re-drive (spends LLM calls): drift points by default, or every invocation in scope with --task/--invocation; re-drives recorded inputs with each point's latest archived template. Run --dry-run first for a cost estimate")
     boolean reDrive;
 
-    @Option(names = {"--full-chain"}, description = "Widen the re-drive: re-drive every record in the scope instead of drift points only — every record of every chain, including all historical template buckets, not just the latest chain per invocation (--task/--invocation still set the scope; without narrowing the scope is the whole database) (requires --re-drive)")
+    @Option(names = {"--full-chain"}, description = "Widen the re-drive: re-drive every record in the scope instead of drift points only — every record of every chain, including all historical template buckets, not just the latest chain per invocation; note --invocation X widens to every record of every chain containing X, not X alone (--task/--invocation still set the scope; without narrowing the scope is the whole database) (requires --re-drive)")
     boolean fullChain;
 
     @Option(names = {"--max-total-calls"}, description = "Re-drive budget pool: cap on real re-drive calls for this run (requires --re-drive)")
@@ -137,6 +137,11 @@ public class ReplayCommand implements Callable<Integer> {
             // （观测记录的请求模型身份与换模型告警消费它）
             CliSupport.applyReDriveOverrides(config, model, endpoint);
             LlmClient client = CliSupport.createLlmClient(config);
+            // 只在真跑重驱（将发请求）时校验 protocol——dry-run 与全部零调用判定
+            // 路径不触发（OPERATIONS §2.1 与接入指南的承诺，round27 F1 复归）
+            if (reDrive && !dryRun) {
+                CliSupport.ensureKnownWireProtocol(config.getLlm().getProtocol());
+            }
             if (reDrive && TextUtil.isBlank(config.getLlm().getApiKey())) {
                 (jsonOutput ? err : out).println("Warning: no API key configured (llm.apiKey in agentassert4j.json or its ${ENV} reference); re-drive calls will fail.");
             }

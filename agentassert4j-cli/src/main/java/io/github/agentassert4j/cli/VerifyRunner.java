@@ -108,6 +108,14 @@ public class VerifyRunner {
         // 旧包无锚字段时只警告不拒——历史包的判定语义守卫仍然生效
         String expectedHash = pack.getMeta().getIntegrityHash();
         if (expectedHash == null || expectedHash.isEmpty()) {
+            // 同版本引擎导出的包恒带锚（PackCodec.toJson 必写）——锚缺席且
+            // frameworkVersion 与当前引擎一致 = 锚被删的伪造形态，拒绝而非降级
+            // （round29 LOW-1：删 hash + 篡改 shape 曾可基于伪造基线产出真实判定）。
+            // 版本不同的包维持警告（真历史包），锚防线的前提与绕过面见 OPERATIONS §6
+            if (AgentAssert4jCli.FRAMEWORK_VERSION.equals(pack.getMeta().getFrameworkVersion())) {
+                return fail(CliErrorCode.E_GUARD, "Integrity guard: pack was exported by this engine version but carries no integrity hash (the field was removed after export).",
+                        "Re-export the pack with `agentassert4j baseline export` and reconcile the new SHA-256 with the exporting party, then retry.", "agentassert4j baseline export");
+            }
             integrityWarning = "Pack carries no integrity hash (exported by an older build); content tampering cannot be detected — reconcile the SHA-256 out of band.";
         } else {
             Map<String, Object> root;

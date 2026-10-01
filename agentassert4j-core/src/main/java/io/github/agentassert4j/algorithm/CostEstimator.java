@@ -164,7 +164,7 @@ public final class CostEstimator {
             return String.format("Estimated %s (model %s not in the price snapshot; cost unknown)", calls, unmatchedName != null ? unmatchedName : model);
         }
         String basis = anyUsage ? "based on recorded usage" : "no recorded usage; preview-sized estimate";
-        return "Estimated " + calls + ", approx. " + formatUsd(recordedCost) + " (" + basis + "; model: " + model + ")";
+        return "Estimated " + calls + ", approx. " + formatUsd(recordedCost) + " (" + basis + "; per-record pricing by served model, emitter: " + model + ")";
     }
 
     /**

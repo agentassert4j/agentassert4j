@@ -259,7 +259,7 @@ public class GraphShowCommand implements Callable<Integer> {
             }
         }
         if (lines.isEmpty() && !anySink) {
-            lines.add("no record carries a model-issued tool call with arguments in any response (arguments are where upstream values must land)");
+            lines.add("no record carries a model-issued tool call with arguments in any response, or every argument value was filtered as noise (short numbers, decimals, booleans)");
         }
         return lines;
     }

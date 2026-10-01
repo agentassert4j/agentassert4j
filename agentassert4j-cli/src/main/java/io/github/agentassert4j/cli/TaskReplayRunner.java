@@ -671,6 +671,7 @@ public class TaskReplayRunner {
         boolean first = true;
         long estimatedTokens = 0;
         double estimatedCostUsd = 0;
+        boolean costKnown = true;
         for (InteractionRecord record : planned) {
             if (!first) {
                 sb.append(",");
@@ -687,10 +688,14 @@ public class TaskReplayRunner {
             Double cost = CostEstimator.estimateCallCostUsd(record.getServedModel() != null ? record.getServedModel() : fallbackModel, record.getInputTokens(), record.getOutputTokens());
             if (cost != null) {
                 estimatedCostUsd += cost;
+            } else {
+                // 无价不编造：机器面 null（与记录面 costUsd 留 null 同一契约），
+                // 0 会被程序化消费方读成「免费」进而误判预算（round28 LOW-1）
+                costKnown = false;
             }
         }
         sb.append("],\"estimatedTokens\":").append(estimatedTokens);
-        sb.append(",\"estimatedCostUsd\":").append(plainDecimal(estimatedCostUsd));
+        sb.append(",\"estimatedCostUsd\":").append(costKnown ? plainDecimal(estimatedCostUsd) : "null");
         // model 与人读报价同源（llmClient.name()）——运行时覆盖的机器面核验点，
         // 缺了它消费者无法在零调用面确认 --model/MCP model 覆盖是否生效；
         // emitterProtocol 同理（跨协议重驱在 dry-run 就要可见，不等 404）
@@ -1699,7 +1704,34 @@ public class TaskReplayRunner {
             if (!plannedModels.isEmpty() && !plannedModels.contains(llmClient.name())) {
                 info("Warning: replay model " + llmClient.name() + " differs from the recorded models of the re-drive targets " + new ArrayList<>(plannedModels) + "; verdicts are not directly comparable to baselines (model switching is experimental).");
             }
-            info("Re-drive plan (--re-drive): " + CliSupport.plural(planned.size(), "record") + " to re-drive with each point's latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + " Emitter: model " + llmClient.name() + ", protocol " + (executionConfig.getWireProtocol() != null ? executionConfig.getWireProtocol() : "auto") + ".");
+            info("Re-drive plan (--re-drive): " + CliSupport.plural(planned.size(), "record") + " to re-drive with each point's latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + ".");
+            info("Re-drive emitter: model " + llmClient.name() + ", protocol " + (executionConfig.getWireProtocol() != null ? executionConfig.getWireProtocol() : "auto") + ".");
+            // 被排除记录逐条点名：重驱需要「该点最新归档模板」——键无基线（无归档
+            // 模板）的记录被静默排除出计数，5→3 这类缩差必须让操作者看见谁缺席、
+            // 为什么（round30 N-2）
+            if (fullChain || narrowed) {
+                java.util.Set<String> plannedIds = new java.util.HashSet<>();
+                for (InteractionRecord record : planned) {
+                    if (record.getRecordId() != null) {
+                        plannedIds.add(record.getRecordId());
+                    }
+                }
+                List<String> excluded = new ArrayList<>();
+                for (TaskChain chain : scoped) {
+                    for (InteractionRecord record : chain.getRecords()) {
+                        if (record.getRecordId() != null && !plannedIds.contains(record.getRecordId())) {
+                            String key = CliSupport.invocationKeyOfRecord(record);
+                            if (key != null && !CliSupport.hasBaseline(repository.findInvocationByKey(key))) {
+                                excluded.add(record.getRecordId() + " (" + CliSupport.displayKey(key) + ", no archived template)");
+                            }
+                        }
+                    }
+                }
+                if (!excluded.isEmpty()) {
+                    List<String> shownEx = excluded.size() > 3 ? excluded.subList(0, 3) : excluded;
+                    info("  Excluded from re-drive (no baseline yet, so no archived template): " + String.join(", ", shownEx) + (excluded.size() > shownEx.size() ? " ... and " + (excluded.size() - shownEx.size()) + " more" : "") + ".");
+                }
+            }
             if (!planned.isEmpty()) {
                 info(CostEstimator.estimate(planned, llmClient.name()));
             }

@@ -769,6 +769,36 @@ class CommandSmokeTest {
     }
 
     @Test
+    @DisplayName("非法 llm.protocol 不杀零调用判定路径；真跑重驱前拒绝并列合法值")
+    void protocolValidation_zeroCallPathsSurvive_realReDriveRefused() throws Exception {
+        Path dir = Files.createTempDirectory("agentassert4j-proto-defer");
+        try {
+            seedWithResponse("proto-s1", 1000L, "{\"v\":1}");
+            Files.write(dir.resolve("agentassert4j.json"),
+                    ("{\"llm\":{\"protocol\":\"bogus-proto\"},\"storage\":{\"url\":\"" + dbPath.replace('\\', '/') + "\"}}")
+                            .getBytes(StandardCharsets.UTF_8));
+            System.setProperty("agentassert4j.config.path", dir.resolve("agentassert4j.json").toString());
+
+            // 零调用路径：bare replay 正常出判定（不因 protocol 手误被杀）
+            ByteArrayOutputStream out = redirectStdout();
+            ByteArrayOutputStream err = redirectStderr();
+            int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath);
+            assertTrue(exit == 0 || exit == 1, "零调用 replay 不因非法 protocol 死于 E-USAGE: exit=" + exit + " err=" + err);
+
+            // 真跑重驱：发射前拒绝，合法词表在消息本体
+            redirectStdout();
+            ByteArrayOutputStream err2 = redirectStderr();
+            exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--re-drive");
+            assertEquals(2, exit, "真跑重驱必须拒绝");
+            String combined = err2.toString();
+            assertTrue(combined.contains("is not a known wire protocol. Valid values: openai-chat, anthropic-messages, openai-responses."), "合法词表进消息本体: " + combined);
+        } finally {
+            System.clearProperty("agentassert4j.config.path");
+            Files.walk(dir).sorted((a, b) -> b.compareTo(a)).forEach(p -> p.toFile().delete());
+        }
+    }
+
+    @Test
     @DisplayName("record 摄取参数类型错（非字符串）→ 报类型而非缺失")
     void record_typeError_reportsTypeNotMissing() {
         java.util.Map<String, Object> args = new java.util.LinkedHashMap<>();
