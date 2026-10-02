@@ -63,6 +63,7 @@ public class DoctorCommand implements Callable<Integer> {
                 }
                 out.println(doctorJson(findings));
             } else {
+                printStorageSection(findings);
                 printIdentitySection(findings);
                 printCoverageSection(findings);
                 printRulesSection(findings);
@@ -165,6 +166,12 @@ public class DoctorCommand implements Callable<Integer> {
         }
 
         findings.ruleWarnings.addAll(CliSupport.malformedTaskRuleWarnings(rules));
+        // 存储深扫放最后：全库扫页是采集里最贵的一步，且与其它发现无依赖
+        try {
+            findings.storageFindings.addAll(repository.quickCheckFindings());
+        } catch (RuntimeException e) {
+            findings.storageFindings.add("storage quick check unavailable: " + e.getMessage());
+        }
         findings.noTasksConfigured = rules.getDeclaredTaskKeys().isEmpty();
         Set<String> declaredSeen = new LinkedHashSet<>();
         for (TaskChain chain : chains) {
@@ -178,6 +185,21 @@ public class DoctorCommand implements Callable<Integer> {
             }
         }
         return findings;
+    }
+
+    /**
+     * 存储段：全库一致性深扫（PRAGMA quick_check）——未触页的物理损坏对查询
+     * 静默不可见，体检面主动扫页把它变成就近可见的异常清单。
+     */
+    private void printStorageSection(DoctorFindings findings) {
+        if (findings.storageFindings.isEmpty()) {
+            out.println("Storage check: database passes quick_check (all pages scanned).");
+        } else {
+            out.println("Storage check: " + findings.storageFindings.size() + " finding(s) from quick_check (the database file is damaged; restore it from a backup before trusting any verdict):");
+            for (String finding : findings.storageFindings) {
+                out.println("    " + finding);
+            }
+        }
     }
 
     /**
@@ -256,7 +278,11 @@ public class DoctorCommand implements Callable<Integer> {
      * 规则告警清单全量携带（数量级受规则文件约束）。
      */
     private String doctorJson(DoctorFindings findings) {
-        StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.DOCTOR + "\",\"identity\":{\"skeletonCount\":").append(findings.skeletons.size()).append(",\"skeletonSamples\":[");
+        List<String> storageJsons = new ArrayList<>();
+        for (String finding : findings.storageFindings) {
+            storageJsons.add("\"" + RecursiveJsonParser.escape(finding) + "\"");
+        }
+        StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.DOCTOR + "\",\"storage\":{\"quickCheckFindings\":[").append(String.join(",", storageJsons)).append("]},\"identity\":{\"skeletonCount\":").append(findings.skeletons.size()).append(",\"skeletonSamples\":[");
         List<String> skeletonJsons = new ArrayList<>();
         for (Map.Entry<String, SkeletonStat> entry : samples(new ArrayList<>(findings.skeletons.entrySet()))) {
             skeletonJsons.add("{\"key\":\"" + RecursiveJsonParser.escape(entry.getKey()) + "\",\"records\":" + entry.getValue().records + ",\"fullTextVariants\":" + entry.getValue().fullTextVariants + "}");
@@ -336,6 +362,10 @@ public class DoctorCommand implements Callable<Integer> {
      * doctor/1 与人类渲染共用的体检事实——采集一次，两通道各自成形。
      */
     private static final class DoctorFindings {
+        /**
+         * 存储深扫异常（PRAGMA quick_check 非 ok 行；空 = 库完好）。
+         */
+        final List<String> storageFindings = new ArrayList<>();
         /**
          * 骨架族（插入序 = 记录遍历序）：哈希 → 记录数与全文变体数。
          */

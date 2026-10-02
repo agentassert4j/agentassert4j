@@ -20,6 +20,12 @@ import java.util.Set;
  */
 class InMemoryStorageRepository implements StorageRepository {
 
+    @Override
+    public List<String> quickCheckFindings() {
+        return Collections.emptyList();
+    }
+
+
     private final List<InteractionRecord> store = Collections.synchronizedList(new ArrayList<>());
     private volatile boolean throwOnSave = false;
 

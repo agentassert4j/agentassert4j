@@ -112,6 +112,30 @@ public class SqliteStorageRepository implements StorageRepository {
     }
 
     /**
+     * 全库一致性深扫（PRAGMA quick_check）：查询按需触页，未触区域的物理损坏
+     * 静默不可见——体检面（doctor）必须主动扫页才能把「未触页损坏」从静默绿灯
+     * 变成就近可见。失败按退化语义返回空清单 + SEVERE（检查本身不得中断体检）。
+     */
+    @Override
+    public synchronized List<String> quickCheckFindings() {
+        if (connection == null) {
+            throw new StorageException("quick_check: repository is closed", new IllegalStateException("connection is null"));
+        }
+        List<String> findings = new ArrayList<>();
+        try (Statement stmt = connection.createStatement(); ResultSet rs = stmt.executeQuery("PRAGMA quick_check")) {
+            while (rs.next()) {
+                String row = rs.getString(1);
+                if (row != null && !"ok".equals(row)) {
+                    findings.add(row);
+                }
+            }
+        } catch (SQLException e) {
+            LOG.log(Level.SEVERE, "quick_check failed on {0}: {1}", new Object[]{dbPath, e.getMessage()});
+        }
+        return findings;
+    }
+
+    /**
      * INSERT OR IGNORE 并回告是否真正写入——record 摄取（MCP record 工具）以回告区分
      * saved 与 duplicate；调用方据此如实报告，幂等语义与批量写入同源。
      */

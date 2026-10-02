@@ -18,6 +18,12 @@ import java.util.stream.Collectors;
  */
 class SimpleTestRepo implements StorageRepository {
 
+    @Override
+    public List<String> quickCheckFindings() {
+        return Collections.emptyList();
+    }
+
+
     final List<InteractionRecord> interactions = new ArrayList<>();
     final Map<String, InvocationProfile> invocationProfiles = new HashMap<>();
     final Map<String, String> promptTexts = new HashMap<>();

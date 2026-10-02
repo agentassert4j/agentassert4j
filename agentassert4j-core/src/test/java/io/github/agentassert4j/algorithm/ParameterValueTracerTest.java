@@ -598,6 +598,12 @@ class ParameterValueTracerTest {
     }
 
     private static class SimpleTestRepo implements StorageRepository {
+
+    @Override
+    public List<String> quickCheckFindings() {
+        return Collections.emptyList();
+    }
+
         private final List<String> sessionIds;
         private final Map<String, List<InteractionRecord>> data;
 

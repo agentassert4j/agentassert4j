@@ -431,14 +431,25 @@ public class TaskReplayRunner {
     private List<InteractionRecord> reDriveTargets(DriftReport drift, boolean fullChain, boolean narrowed, String invocationKey, List<TaskChain> scoped) {
         List<InteractionRecord> targets = new ArrayList<>();
         if (fullChain) {
+            // --invocation 显式点名的调用点先消费预算：链序只是采集序（重驱逐记录独立、
+            // 各用各的归档模板），预算耗尽时被跳过的应是外围记录而不是用户点名要重驱的
+            // 那条（round27 F3：窄选点排在链后段时预算先被链首记录花光）
+            List<InteractionRecord> named = new ArrayList<>();
             for (TaskChain chain : scoped) {
                 for (InteractionRecord record : chain.getRecords()) {
-                    if (CliSupport.invocationKeyOfRecord(record) != null) {
+                    String key = CliSupport.invocationKeyOfRecord(record);
+                    if (key == null) {
+                        continue;
+                    }
+                    if (invocationKey != null && invocationKey.equals(key)) {
+                        named.add(record);
+                    } else {
                         targets.add(record);
                     }
                 }
             }
-            return targets;
+            named.addAll(targets);
+            return named;
         }
         if (narrowed) {
             // 每键取域内最新记录（规范序升序遍历、后写覆盖=最新链胜出）。

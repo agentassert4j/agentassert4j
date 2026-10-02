@@ -76,6 +76,23 @@ class CommandSmokeTest {
     }
 
     @Test
+    @DisplayName("开库披露 Database 行：同 cwd 多库工作流的告警消歧锚（stderr 通道）")
+    void openRepository_disclosesDatabaseLine() {
+        seedWithResponse("session-dbline", 1000L, "{\"v\":1}");
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(buffer, true));
+        try {
+            int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath);
+            assertEquals(0, exit);
+            String err = buffer.toString();
+            assertTrue(err.contains("Database: ") && err.contains(dbPath),
+                    "stderr 必须披露实际打开的库路径（与 Config/Rules 同格）: " + err);
+        } finally {
+            System.setErr(originalStderr);
+        }
+    }
+
+    @Test
     @DisplayName("audit 人读行携带 UTC 时间戳（近因分析可对时）")
     void audit_humanLinesCarryTimestamp() {
         seedWithResponse("session-audit", 1000L, "{\"v\":1}");

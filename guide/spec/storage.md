@@ -123,6 +123,12 @@ close(): 关连接置 null；与写路径共用实例监视器——flush 进行
 
 ## 复核台账
 
+- 2026-10-02 挂账清空批：新增 StorageHealthStore 域接口（单方法 quickCheckFindings，
+  doctor 体检面专用）——查询按需触页，未触区域物理损坏静默不可见；深扫把它变成就近可见的
+  异常清单。StorageRepository 门面聚合六个域扩为七个；SQLite 实现 = PRAGMA quick_check
+  非 ok 行，失败退化空清单 + SEVERE。透传钉 = DoctorCommandTest storageQuickCheck_healthyDbSection。
+
+
 | 日期 | 方式 | 发现 |
 |---|---|
 | 2026-09-16 | D2 结构批随批 | 指纹列载荷契约换为形态集合数组（DDL 零改动）；null↔"[]" 对称；legacy 单对象行响亮拒绝；归档行=整集快照（测试钉 fingerprintColumn_legacySingleShapeRow_failsLoudly + 往返钉改集合断言） |-14 | A3 修复批（批 3）：governance_events 新表 + GovernanceEventStore 域（2 方法） | ①真源表增行（不可重建——发生时落账）；契约 11 补位成文（六动词/实现方盖章/升序读/未知 verb 退化）；契约 12 五域面→六域面；②「五表」计数自 S2 成文起即失真（实为 4 表，graph 表已随图降级摘除）——本批加表后恰为 5，旧失真一并回填；③开发期旧库（channel2/dogfood）user_version=1 且缺新表，打开守卫直接拒开并给删库指引（非静默降级——方案文档原「事件写入恒走 L1 降级」表述据此修正，L1 降级仅作为 BaselineManager 写入侧防御保留） |

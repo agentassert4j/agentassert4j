@@ -67,6 +67,28 @@ class DoctorCommandTest {
     }
 
     @Test
+    @DisplayName("存储深扫段：健康库 quick_check 通过行 + 机器面 storage 节恒在场")
+    void storageQuickCheck_healthyDbSection() {
+        java.util.List<String> findings = repository.quickCheckFindings();
+        assertTrue(findings.isEmpty(), "健康库无异常: " + findings);
+
+        int exit = command.call();
+        assertEquals(0, exit);
+        String report = output.toString();
+        assertTrue(report.contains("Storage check: database passes quick_check"), "人读首段必须披露深扫结论: " + report);
+
+        output.reset();
+        DoctorCommand jsonCommand = new DoctorCommand();
+        ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+        jsonCommand.out = new PrintStream(jsonOut, true);
+        jsonCommand.err = new PrintStream(jsonOut, true);
+        jsonCommand.db = dbPath;
+        jsonCommand.jsonOutput = true;
+        assertEquals(0, jsonCommand.call());
+        assertTrue(jsonOut.toString().contains("\"storage\":{\"quickCheckFindings\":[]}"), "doctor/1 恒携带 storage 节: " + jsonOut);
+    }
+
+    @Test
     @DisplayName("零声明事实：多步零标签链与重复请求族给声明建议，未建档版本可见")
     void zeroDeclarationFacts_suggestions() {
         save("r1", "s1", 1000L, "查订单", "invocation:q:h1", "q", "h1");

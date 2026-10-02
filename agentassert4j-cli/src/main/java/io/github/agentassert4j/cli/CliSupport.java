@@ -170,6 +170,10 @@ final class CliSupport {
             throw new CliFailureException(CliErrorCode.E_NO_DATA, "Database not found: " + expanded,
                     "Check --db / storage.url against the intended database; recording creates it on first write.", "agentassert4j doctor");
         }
+        // 实际打开的库路径与 Config/Rules 同格披露：同 cwd 多库工作流里，下游任何
+        // 告警（如 rules drift）若不带库上下文就无法消歧「说的是哪个库」——
+        // 每次运行的开库事实是消歧的锚（round25 OBS-2）
+        diagnostics.println("Database: " + expanded);
         StorageRepository repository = new SqliteStorageRepository(expanded);
         repository.initialize();
         return repository;

@@ -91,6 +91,20 @@ class McpRecordIngestionTest {
     }
 
     @Test
+    @DisplayName("空 choices 数组：保存不拒 + 退化注记在场（正文级退化必须可见）")
+    void emptyChoices_savesWithDegradationNote() {
+        String request = "{\"model\":\"m\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";
+        String response = "{\"id\":\"x\",\"choices\":[],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":0}}";
+        McpToolOutcome outcome = McpRecordIngestion.ingest(dbPath, args(request, response));
+        assertEquals(0, outcome.exit, "合法 wire 形态保存不拒: " + outcome.stdout);
+        assertTrue(outcome.stdout.contains("\"status\":\"saved\""), "保存成功: " + outcome.stdout);
+        assertTrue(outcome.stderr.contains("empty choices array"), "正文级退化必须留注记: " + outcome.stderr);
+        InteractionRecord record = stored();
+        assertEquals(3, record.getInputTokens(), "usage 来自独立字段不受 choices 影响: " + record.getInputTokens());
+        assertNull(record.getModelResponse(), "无 assistant 内容如实为空");
+    }
+
+    @Test
     @DisplayName("metadata.taskKey 与顶层 taskKey 冲突：顶层赢且就地披露（不静默覆盖）")
     void metadataTaskKey_conflictDisclosed() {
         String request = "{\"model\":\"m\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";

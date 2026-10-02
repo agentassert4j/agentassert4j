@@ -525,6 +525,25 @@ class TaskReplayRunnerTest {
         }
 
         @Test
+        @DisplayName("--full-chain --invocation 预算优先序：窄选调用点先占预算（计划序即可见）")
+        void fullChainReDrive_narrowedInvocationConsumesBudgetFirst() {
+            // 链上外围记录在链首、被窄选调用点在链后：full-chain 采集序若照链序，
+            // 预算 1 会被外围记录花掉、用户点名要重驱的那条被 skip（round27 F3）
+            saveRecord("p-1", "session-p1", 100L, "查订单", "outer", "hash-o", "{\"result\":\"ok\"}", null);
+            saveRecord("p-2", "session-p1", 200L, "查订单", "named", "hash-n", "{\"result\":\"ok\"}", null);
+
+            TaskReplayRunner jsonRunner = new TaskReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), true);
+            int exit = jsonRunner.run(null, "invocation:named:hash-n", false, true, false, null, false, true, true, 1, null);
+
+            assertEquals(0, exit, "预演零调用: " + output);
+            String plan = output.toString();
+            int namedPos = plan.indexOf("\"recordId\":\"p-2\"");
+            int outerPos = plan.indexOf("\"recordId\":\"p-1\"");
+            assertTrue(namedPos >= 0 && outerPos >= 0, "计划须列两条记录: " + plan);
+            assertTrue(namedPos < outerPos, "窄选调用点的记录必须排在计划首位（预算先归它）: " + plan);
+        }
+
+        @Test
         @DisplayName("显式 --invocation 裂键建档后处置：身份已是最新不得谎称 Collected")
         void explicitSplitKeyEstablished_dispositionStaysHonest() {
             // 基线链 = 旧模板（已建档）；新链 = 同标签新模板（裂键）。同标签归并成

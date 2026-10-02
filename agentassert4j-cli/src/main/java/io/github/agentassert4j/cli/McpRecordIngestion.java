@@ -193,7 +193,7 @@ final class McpRecordIngestion {
 
         void mapRequest(Map<String, Object> request, InteractionRecord record, List<String> warnings);
 
-        void mapResponse(Map<String, Object> response, String responseRaw, InteractionRecord record);
+        void mapResponse(Map<String, Object> response, String responseRaw, InteractionRecord record, List<String> warnings);
     }
 
     private static WireRecordMapper mapperFor(LlmWireProtocol protocol) {
@@ -224,7 +224,7 @@ final class McpRecordIngestion {
 
         mapper.mapRequest(request, record, warnings);
         record.setModelRequestRaw(requestRaw);
-        mapper.mapResponse(response, responseRaw, record);
+        mapper.mapResponse(response, responseRaw, record, warnings);
         attachCostEstimate(record);
         String argTaskKey = nonBlankString(args, "taskKey");
         if (argTaskKey != null && metadata != null) {
@@ -264,7 +264,14 @@ final class McpRecordIngestion {
         }
 
         @Override
-        public void mapResponse(Map<String, Object> response, String responseRaw, InteractionRecord record) {
+        public void mapResponse(Map<String, Object> response, String responseRaw, InteractionRecord record, List<String> warnings) {
+            // 空 choices 是合法 wire 形态里的正文级退化（无 assistant 内容、无 finish
+            // reason 可提取；usage 来自独立字段不受影响）——保存不拒（R10），但退化
+            // 必须在场（R11）：静默保存会让调用方以为摄取完整（round25 OBS-4 备查项
+            // 按退化可见原则升级为注记）
+            if (response.get("choices") instanceof List && ((List<?>) response.get("choices")).isEmpty()) {
+                warnings.add("Warning: response carries an empty choices array; no assistant content or finish reason was extracted (usage still comes from the response's usage field).");
+            }
             Map<?, ?> choice = firstMapElement(response.get("choices"));
             Map<?, ?> message = memberMap(choice, "message");
             Object content = message != null ? message.get("content") : null;
@@ -467,7 +474,7 @@ final class McpRecordIngestion {
         }
 
         @Override
-        public void mapResponse(Map<String, Object> response, String responseRaw, InteractionRecord record) {
+        public void mapResponse(Map<String, Object> response, String responseRaw, InteractionRecord record, List<String> warnings) {
             if (response.get("content") instanceof List) {
                 StringBuilder text = new StringBuilder();
                 List<ToolCall> calls = new ArrayList<>();
@@ -737,7 +744,7 @@ final class McpRecordIngestion {
         }
 
         @Override
-        public void mapResponse(Map<String, Object> response, String responseRaw, InteractionRecord record) {
+        public void mapResponse(Map<String, Object> response, String responseRaw, InteractionRecord record, List<String> warnings) {
             StringBuilder text = new StringBuilder();
             List<ToolCall> calls = new ArrayList<>();
             boolean hasFunctionCall = false;
