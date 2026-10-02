@@ -14,6 +14,32 @@
         Zero-intrusion Java AI Agent behavior assertion testing tool.
         Assert Your Agent, Like You Assert Your Code.
     </description>
+    <url>https://github.com/agentassert4j/agentassert4j</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>axy-yxa</id>
+            <name>axy-yxa</name>
+            <email>525238611@qq.com</email>
+            <organization>agentassert4j</organization>
+            <organizationUrl>https://github.com/agentassert4j</organizationUrl>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/agentassert4j/agentassert4j.git</connection>
+        <developerConnection>scm:git:git@github.com:agentassert4j/agentassert4j.git</developerConnection>
+        <url>https://github.com/agentassert4j/agentassert4j</url>
+        <tag>HEAD</tag>
+    </scm>
 
     <modules>
         <!-- 核心模块 -->
@@ -157,6 +183,79 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
                 <version>3.4.1</version>
+            </plugin>
+            <!-- Maven Central 发布四件：sources / javadoc / GPG 签名 / Central 上传。
+                 签名绑定 verify：口令经 settings.xml 的 gpg.passphrase server 段
+                 （loopback 非交互），日常 install 会顺带签名，-Dgpg.skip 可关。
+                 cli-standalone 不入 Central（随 GitHub Releases 分发），发布插件侧排除。 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.11.2</version>
+                <configuration>
+                    <doclint>none</doclint>
+                    <encoding>UTF-8</encoding>
+                    <docencoding>UTF-8</docencoding>
+                    <charset>UTF-8</charset>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-gpg-plugin</artifactId>
+                <version>3.2.7</version>
+                <configuration>
+                    <keyname>C7C32A3405F0F8A3</keyname>
+                    <passphraseServerId>gpg.passphrase</passphraseServerId>
+                    <gpgArguments>
+                        <arg>--pinentry-mode</arg>
+                        <arg>loopback</arg>
+                    </gpgArguments>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>sign-artifacts</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>sign</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.7.0</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <publishingServerId>central</publishingServerId>
+                    <!-- 首次发布走人工核对：上传后到 Portal 网页点 Publish，
+                         校验结果逐条可见；稳定后再考虑 autoPublish -->
+                    <autoPublish>false</autoPublish>
+                    <excludeArtifacts>
+                        <artifact>agentassert4j-cli-standalone</artifact>
+                    </excludeArtifacts>
+                </configuration>
             </plugin>
         </plugins>
     </build>
