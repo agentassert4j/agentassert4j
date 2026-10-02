@@ -1758,7 +1758,7 @@ public class TaskReplayRunner {
             // 模板）的记录被静默排除出计数，5→3 这类缩差必须让操作者看见谁缺席、
             // 为什么（round30 N-2）
             if (fullChain || narrowed) {
-                java.util.Set<String> plannedIds = new java.util.HashSet<>();
+                Set<String> plannedIds = new HashSet<>();
                 for (InteractionRecord record : planned) {
                     if (record.getRecordId() != null) {
                         plannedIds.add(record.getRecordId());
@@ -2197,7 +2197,7 @@ public class TaskReplayRunner {
 
     private static String formatCost(Double costUsd) {
         // 无价不静默成空串：tokens 后面什么都不挂会被读成「免费」或漏看
-        return costUsd == null ? " (cost unknown)" : "/" + io.github.agentassert4j.algorithm.CostEstimator.formatUsd(costUsd);
+        return costUsd == null ? " (cost unknown)" : "/" + CostEstimator.formatUsd(costUsd);
     }
 
     /**

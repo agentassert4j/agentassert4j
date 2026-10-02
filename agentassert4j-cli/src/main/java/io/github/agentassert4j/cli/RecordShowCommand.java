@@ -350,7 +350,13 @@ public class RecordShowCommand implements Callable<Integer> {
             sb.append(",\"latencyMs\":").append(record.getLatencyMs());
         }
         if (record.getMetadata() != null) {
-            sb.append(",\"metadata\":").append(record.getMetadata());
+            // 三个生产者各自承诺 metadata 为合法 JSON，但公开 wire 契约不赌分散不变式：
+            // 就近解析核验，合法原文嵌入；非法时降级为转义字符串——可见退化，不出非法 JSON 行
+            if (RecursiveJsonParser.parse(record.getMetadata()) != null) {
+                sb.append(",\"metadata\":").append(record.getMetadata());
+            } else {
+                sb.append(",\"metadata\":\"").append(RecursiveJsonParser.escape(record.getMetadata())).append('"');
+            }
         }
         sb.append(",\"inputTokens\":").append(record.getInputTokens());
         sb.append(",\"outputTokens\":").append(record.getOutputTokens());

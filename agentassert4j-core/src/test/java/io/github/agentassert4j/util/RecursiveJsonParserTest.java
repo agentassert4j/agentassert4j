@@ -4,6 +4,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.*;
 
+import java.math.BigInteger;
+import java.math.BigDecimal;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 
@@ -257,6 +260,16 @@ class RecursiveJsonParserTest {
     void serialize_number() {
         assertEquals("42", RecursiveJsonParser.serialize(42L));
         assertEquals("3.14", RecursiveJsonParser.serialize(3.14));
+    }
+
+    @Test
+    void serialize_bigIntegerBeyondLong_notSaturated() {
+        // 程序化构造的大整数（解析器自身不产出，防御路径兜底）：longValue 会饱和为
+        // Long.MAX_VALUE 静默失真，必须原样输出纯数字位
+        String beyond = "92233720368547758080"; // Long.MAX_VALUE * 10
+        assertEquals(beyond, RecursiveJsonParser.serialize(new BigInteger(beyond)));
+        // BigDecimal 积分值：toString 可能产 1E+20 形（正指数非合法 JSON），须转纯数字位
+        assertEquals("100000000000000000000", RecursiveJsonParser.serialize(new BigDecimal("1E+20")));
     }
 
     @Test

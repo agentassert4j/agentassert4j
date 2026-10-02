@@ -350,10 +350,16 @@ final class McpRecordIngestion {
                         record.setTurnIndex(userCount - 1);
                         Object content = message.get("content");
                         if (content instanceof List) {
-                            String json = RecursiveJsonParser.serialize(content);
-                            record.setMultimodalInput(true);
-                            record.setMultimodalContent(json);
-                            record.setUserInput(json);
+                            // 与 anthropic/responses 方言同契约：纯文本 part 数组聚合为
+                            // 文本（跨协议的任务分组键可比）；含图像 part 才走多模态数组
+                            if (!hasBlockOfType(content, "image_url")) {
+                                record.setUserInput(joinTextBlocks(content));
+                            } else {
+                                String json = RecursiveJsonParser.serialize(content);
+                                record.setMultimodalInput(true);
+                                record.setMultimodalContent(json);
+                                record.setUserInput(json);
+                            }
                         } else {
                             record.setUserInput(content instanceof String ? (String) content : null);
                         }

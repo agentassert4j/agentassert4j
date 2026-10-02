@@ -1,5 +1,7 @@
 package io.github.agentassert4j.util;
 
+import java.math.BigInteger;
+import java.math.BigDecimal;
 import java.util.*;
 
 /**
@@ -274,7 +276,16 @@ public final class RecursiveJsonParser {
             if (Double.isNaN(d) || Double.isInfinite(d)) {
                 sb.append("null");
             } else if (d == Math.floor(d)) {
-                sb.append(n.longValue());
+                // 整数值但可能超出 long 表达范围（程序化构造的 BigInteger/BigDecimal）：
+                // longValue 会饱和失真。BigDecimal 的 toString 可能产科学计数（1E+20
+                // 的正指数非合法 JSON），积分值转 BigInteger 输出纯数字位
+                if (n instanceof BigInteger) {
+                    sb.append(n.toString());
+                } else if (n instanceof BigDecimal) {
+                    sb.append(((BigDecimal) n).toBigInteger().toString());
+                } else {
+                    sb.append(n.longValue());
+                }
             } else {
                 sb.append(d);
             }

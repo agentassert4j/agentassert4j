@@ -16,6 +16,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -209,6 +210,58 @@ class McpRecordIngestionTest {
         Map<String, Object> envelope = errorOf(outcome);
         assertTrue(String.valueOf(envelope.get("message")).contains("parsed but not a JSON object"),
                 "合法 JSON 非对象与语法错误必须可辨: " + envelope.get("message"));
+    }
+
+    @Test
+    @DisplayName("跨协议归一：纯文本 part 数组的末位输入三方言 userInput/多模态标志同形")
+    void pureTextPartArray_alignedAcrossDialects() {
+        // 同一逻辑输入（用户同一句话），三种 wire 方言各以「纯文本 part/块 数组」表达——
+        // 摄取边界归一后 userInput 必须同形，任务分组键（verbatim request text）才跨协议可比
+        String text = "What is the capital of France?";
+        String chatReq = "{\"model\":\"m\",\"messages\":[{\"role\":\"user\",\"content\":[" + "{\"type\":\"text\",\"text\":\"" + text + "\"}]}]}";
+        String chatResp = "{\"id\":\"c1\",\"model\":\"m\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Paris.\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":1}}";
+        String anthropicReq = "{\"model\":\"claude\",\"max_tokens\":16,\"messages\":[{\"role\":\"user\",\"content\":[" + "{\"type\":\"text\",\"text\":\"" + text + "\"}]}]}";
+        String anthropicResp = "{\"id\":\"a1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude\",\"content\":[{\"type\":\"text\",\"text\":\"Paris.\"}],\"stop_reason\":\"end_turn\",\"usage\":{\"input_tokens\":3,\"output_tokens\":1}}";
+        String responsesReq = "{\"model\":\"m\",\"input\":[{\"type\":\"message\",\"role\":\"user\",\"content\":[" + "{\"type\":\"input_text\",\"text\":\"" + text + "\"}]}]}";
+        String responsesResp = "{\"id\":\"r1\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"m\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Paris.\"}]}],\"usage\":{\"input_tokens\":3,\"output_tokens\":1}}";
+
+        InteractionRecord chat = ingestAndLoad("sess-align-chat", chatReq, chatResp);
+        InteractionRecord anthropic = ingestAndLoad("sess-align-anthropic", anthropicReq, anthropicResp);
+        InteractionRecord responses = ingestAndLoad("sess-align-responses", responsesReq, responsesResp);
+
+        for (InteractionRecord record : Arrays.asList(chat, anthropic, responses)) {
+            assertEquals(text, record.getUserInput(), record.getApiProtocol() + " 纯文本 part 数组必须聚合为纯文本");
+            assertFalse(record.isMultimodalInput(), record.getApiProtocol() + " 纯文本不得标多模态");
+            assertNull(record.getMultimodalContent(), record.getApiProtocol() + " 纯文本无多模态载体");
+        }
+
+        // 对照腿：chat 方言含 image_url part 的数组仍走多模态（修复不得误伤真多模态路径）
+        String imgReq = "{\"model\":\"m\",\"messages\":[{\"role\":\"user\",\"content\":[" + "{\"type\":\"text\",\"text\":\"look\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AAAA\"}}]}]}";
+        String imgResp = "{\"id\":\"c2\",\"model\":\"m\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Paris.\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":1}}";
+        InteractionRecord image = ingestAndLoad("sess-align-image", imgReq, imgResp);
+        assertTrue(image.isMultimodalInput(), "含图像 part 的数组必须保持多模态");
+        assertNotNull(image.getMultimodalContent());
+    }
+
+    /**
+     * 按会话摄取并读回该会话唯一记录（跨方言对齐钉专用——多方言连续摄取同一库）
+     */
+    private InteractionRecord ingestAndLoad(String sessionId, String request, String response) {
+        Map<String, Object> call = new LinkedHashMap<>();
+        call.put("sessionId", sessionId);
+        call.put("request", request);
+        call.put("response", response);
+        McpToolOutcome outcome = McpRecordIngestion.ingest(dbPath, call);
+        assertEquals(0, outcome.exit, "摄取 exit 0: " + outcome.stdout);
+        SqliteStorageRepository repository = new SqliteStorageRepository(dbPath);
+        try {
+            repository.initialize();
+            List<InteractionRecord> records = repository.findBySessionId(sessionId);
+            assertEquals(1, records.size(), "会话应恰好一条: " + sessionId);
+            return records.get(0);
+        } finally {
+            repository.close();
+        }
     }
 
     @Nested
