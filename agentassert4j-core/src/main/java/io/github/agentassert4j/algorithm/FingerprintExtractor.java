@@ -55,7 +55,8 @@ public final class FingerprintExtractor {
             fp.setDeclaredBehaviors(rule.getBehaviors());
         }
 
-        fp.setHasError(record.getToolCalls() != null && record.getToolCalls().stream().anyMatch(tc -> !tc.isSuccess()));
+        // 仅显式 false 计为错误维：null 是「本层未观察执行结果」，不得当作失败
+        fp.setHasError(record.getToolCalls() != null && record.getToolCalls().stream().anyMatch(tc -> Boolean.FALSE.equals(tc.getSuccess())));
         return fp;
     }
 

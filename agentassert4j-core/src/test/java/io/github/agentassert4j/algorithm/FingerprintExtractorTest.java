@@ -268,6 +268,19 @@ class FingerprintExtractorTest {
     }
 
     @Test
+    void hasError_falseWhenSuccessUnobserved() {
+        // success=null（本层未观察执行结果，如外部驱动的工具回路）不进错误维：
+        // 未观察到失败不等于失败
+        ToolCall unobserved = tc("tool", null, true);
+        unobserved.setSuccess(null);
+        InteractionRecord r = record(Collections.singletonList(unobserved), "ok");
+
+        DeterministicFingerprint fp = FingerprintExtractor.extract(r, null, null);
+
+        assertFalse(fp.isHasError());
+    }
+
+    @Test
     void extractWithRules_overridesDim3And4() {
         InteractionRecord r = record(null, "hello");
 

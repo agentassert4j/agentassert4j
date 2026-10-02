@@ -175,7 +175,7 @@ class LangChain4jRecordMapperTest {
             assertEquals("getOrder", record.getToolCalls().get(0).getToolName());
             assertEquals("call-9", record.getToolCalls().get(0).getToolCallId());
             assertEquals(Map.of("orderId", "8841"), record.getToolCalls().get(0).getArguments());
-            assertTrue(record.getToolCalls().get(0).isSuccess());
+            assertNull(record.getToolCalls().get(0).getSuccess(), "响应侧映射无执行观察，success 为未观察");
             assertTrue(record.isHasToolCalls());
         }
 

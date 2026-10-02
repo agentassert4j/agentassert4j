@@ -198,7 +198,9 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 > **声明何时生效**：规则声明在**钉入基线的时刻**绑定——`baseline`/`--force` 播种或 `accept` 入集
 > （候选指纹按当时的规则提取）。报告头的 `Rules:` 行披露当前加载的文件，但判定只消费指纹携带的
 > 钉定声明；建档后改规则文件不会静默重判历史（存在差异时 establish 会给规则漂移告警并指路
-> check→accept 无副作用刷新或 `--force` 重播种）。
+> check→accept 无副作用刷新或 `--force` 重播种）。两句并读才完整：**当前规则文件即时参与新链
+> 判定**——文件内容与基线钉定不一致时，新链按文件规则评估并以在途候选可见落库（不静默），
+> 与「钉定基线不动」同时成立；孤立读前句会误判为「改文件不影响判定」。
 
 
 ### 2.4 密钥与凭据配置（官方姿势）
@@ -703,13 +705,39 @@ split（同标签裂出的未建档新键）、self-established tasks（该请�
 录制即自建基线、暂无链间对齐证据）、multi-step unlabeled chains（多步零标签链）。全程零新机制，只是把录制契约
 里已有的三个可选字段按需点亮。
 
+### 8.2 宿主形态指引（真实宿主验证所学）
+
+三条来自真实宿主（spring-ai-alibaba/Lynxe）验证的接入形态事实：
+
+- **starter 自动包装只覆盖容器内 ChatModel bean**：BeanPostProcessor 挂点按 Spring bean
+  装配命中；宿主在服务内部按需构建 ChatModel、不注册进容器时（如 Lynxe 的
+  `LlmService` 动态构建），自动包装零命中、静默零录制。此类宿主在构建点手工
+  `RecordingChatModel.wrap(chatModel, recorder)`（SDK 公开 API 的官方支持用法），
+  录制器 bean 经 `@Autowired(required = false)` 注入、`agentassert4j.enabled=false`
+  时为 null 不包装。接入后用 `doctor`/`status` 确认记录落库——「以为在录、实际没录」
+  比接入失败更危险。
+- **模板漂移锚定依赖 SystemMessage**：SDK 从请求里的 SystemMessage 计算模板哈希
+  （模板身份与 prompt 变更检测的锚点）。宿主以 UserMessage 类型承载系统提示（模板引擎
+  渲染后随用户消息进入请求）时模板哈希不生成——各出口以 zero-template invocation 如实
+  披露「模板漂移不可检」，工具编排与输出形状两维指纹不受影响。宿主可改的把系统提示按
+  SystemMessage 传入即可点亮。
+- **多场景宿主应逐技能声明调用点标签**：全部记录共用一个默认标签时，不同场景（不同输出
+  形状/工具面）落在同一调用点桶里，验收时以彼此形状为参照产生 CHANGED——这是共用桶的
+  预期行为，不是误报。宿主按技能经 RecordingContext.withInvocationId 声明各自标签。
+  两个使声明从「可选优化」变成「共库前置条件」的宿主形态事实：其一，编排型宿主
+  （计划/多步执行入口）的链首文本常是环境样板（工作目录、工具状态等）而非任务要求
+  ——任务要求在更早轮的帧里，不进链键，`--task` 请求文本前缀缩域对该入口失效，
+  且同形态任务跨宿主互相配对；其二，未声明会话身份时每次模型调用各自独立成链
+  （会话键兜底为记录 id），跨运行结构对比退化为相邻调用比较。共库环境下无声明
+  的宿主没有可用的缩域手段（桶是共享的、任务键不可分辨），先声明再共库。
+
 ## 9. 版本与兼容语义
 
 | 标识 | 当前值 | 语义 |
 |------|--------|------|
 | 存储 schema（`PRAGMA user_version`） | 1 | 预发布固定不演进，schema 变更=删库重建；发布后只增不改 |
 | 判定语义 | `det-v1` | 改变「同样差异得出什么判定」的变更必须递增；发布前恒定 |
-| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`（含 `localServedModel`：跨模型验收时机器面可自足重建两侧模型对照）、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`candidate-diff/1`（`status --diff --json`：逐调用点的候选 vs 锚定形态结构化差异，供 AI 消费者给出裁决建议）、`graph/1`（`nodes` 全键清单 + `scanned` 扫描统计；HIGH 边含 `evidence`：命中值 + 源/目标记录 id）、`rules/1`、`doctor/1`、`audit/1`、`record/1`（MCP record 摄取回执：status/recordId/invocationKey/turnIndex/tokens，duplicate 与形状降级经 note 披露）、`record-view/1`（`record show --json`：单记录全量视图，recordKind 区分业务与重驱观测）（每命令 `--json` 各对应其一；replay 的 mode 分段见 §4）、`error/1`（`--json` 失败包络：errorCode 四族 + hints + nextAction） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
+| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`（含 `localServedModel`：跨模型验收时机器面可自足重建两侧模型对照）、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`candidate-diff/1`（`status --diff --json`：逐调用点的候选 vs 锚定形态结构化差异，供 AI 消费者给出裁决建议）、`graph/1`（`nodes` 全键清单 + `scanned` 扫描统计；HIGH 边含 `evidence`：命中值 + 源/目标记录 id）、`rules/1`、`doctor/1`、`audit/1`、`record/1`（MCP record 摄取回执：status/recordId/invocationKey/turnIndex/tokens，duplicate 与形状降级经 note 披露）、`record-view/1`（`record show --json`：单记录全量视图，recordKind 区分业务与重驱观测；结构化内容条件投影——userInput/modelResponse/finishReason/samplingParams/previousTurns 条数/toolCalls（success 三态原样投影，null=本层未观察执行结果），SDK 无 raw 捕获的内容经此可读）（每命令 `--json` 各对应其一；replay 的 mode 分段见 §4）、`error/1`（`--json` 失败包络：errorCode 四族 + hints + nextAction） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
 | Maven 版本 | `1.0.0-SNAPSHOT` | 发布时转正式版 |
 | CLI 可执行形态 | `agentassert4j-cli-standalone` | cli 模块的全依赖 shaded 产物（含 slf4j-nop 与 Main-Class），`java -jar` 直接运行 |
 

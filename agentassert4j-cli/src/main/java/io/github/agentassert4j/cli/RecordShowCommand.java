@@ -1,6 +1,8 @@
 package io.github.agentassert4j.cli;
 
 import io.github.agentassert4j.model.InteractionRecord;
+import io.github.agentassert4j.model.ToolCall;
+import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import io.github.agentassert4j.util.RedriveMarkerUtil;
@@ -13,11 +15,13 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 
 /**
- * record show 命令 — 按寻址族回显一条交互的 raw wire 双列与关键元数据。
+ * record show 命令 — 按寻址族回显一条交互的 raw wire 双列、结构化内容与关键元数据。
  *
  * <p>排障/取证用途：报告与指纹只承载结构结论，正文原文只存在 raw 双列里。
  * wire 摄取的记录双列恒在；SDK 捕获的记录可能无 raw（ChatModel 层不含 wire），
- * 此时如实标注缺失。超长正文全量输出——本命令的职责就是给全文。</p>
+ * 此时如实标注缺失并按库内结构化列代偿渲染（用户输入/模型响应/结束原因/
+ * 采样参数/历史轮次概要），工具调用节恒渲染——执行观察值不在 wire raw 里。
+ * 超长正文全量输出——本命令的职责就是给全文。</p>
  *
  * <p>寻址族三种形态恰好命中一条记录：{@code --record-id} 精确直达；
  * {@code --session <id> [--index N|--latest]} 按会话规范序（时间、序号、
@@ -186,16 +190,78 @@ public class RecordShowCommand implements Callable<Integer> {
             // 取证视图不得比库少知道东西：metadata 全量落库，人读面就全量回显
             out.println("  Metadata: " + record.getMetadata());
         }
-        printRaw(record.getModelRequestRaw(), "request");
-        printRaw(record.getModelResponseRaw(), "response");
+        printRaw(record, record.getModelRequestRaw(), "request");
+        printRaw(record, record.getModelResponseRaw(), "response");
+        printToolCalls(record);
     }
 
-    private void printRaw(String raw, String label) {
+    private void printRaw(InteractionRecord record, String raw, String label) {
         out.println("  -- " + label + " (raw) --");
         if (raw == null || raw.isEmpty()) {
-            out.println("  (no raw " + label + " stored -- this interaction was captured without wire payloads)");
+            out.println("  (no raw " + label + " stored -- structured capture below)");
+            // SDK 捕获（ChatModel 层无 wire）的记录按库内结构化列代偿——取证视图
+            // 不得因 raw 缺席而失明；wire 摄取的记录 raw 即全文，不重复刷屏
+            if ("request".equals(label)) {
+                printStructuredRequest(record);
+            } else {
+                printStructuredResponse(record);
+            }
         } else {
             printMultiline("  " + prettyRaw(raw));
+        }
+    }
+
+    private void printStructuredRequest(InteractionRecord record) {
+        if (record.getUserInput() != null && !record.getUserInput().isEmpty()) {
+            printMultiline("  User input: " + record.getUserInput());
+        }
+        if (record.getSamplingParams() != null && !record.getSamplingParams().isEmpty()) {
+            printMultiline("  Sampling: " + prettyRaw(record.getSamplingParams()));
+        }
+        List<TurnContext> turns = record.getPreviousTurns();
+        if (turns != null && !turns.isEmpty()) {
+            StringBuilder roles = new StringBuilder();
+            for (TurnContext turn : turns) {
+                if (roles.length() > 0) {
+                    roles.append(", ");
+                }
+                roles.append(CliSupport.visibleText(turn.getRole()));
+            }
+            out.println("  Previous turns: " + turns.size() + " (" + roles + ")");
+        }
+    }
+
+    private void printStructuredResponse(InteractionRecord record) {
+        if (record.getModelResponse() != null && !record.getModelResponse().isEmpty()) {
+            printMultiline("  Model response: " + record.getModelResponse());
+        }
+        if (record.getFinishReason() != null) {
+            out.println("  Finish reason: " + record.getFinishReason());
+        }
+    }
+
+    /**
+     * 工具调用节恒渲染（有内容时）：观察到的执行结果与 success 三态是框架观察值，
+     * 不在 wire raw 里——raw 在场也不得缺席。
+     */
+    private void printToolCalls(InteractionRecord record) {
+        if (record.getToolCalls() == null || record.getToolCalls().isEmpty()) {
+            return;
+        }
+        out.println("  Tool calls: " + record.getToolCalls().size());
+        for (ToolCall call : record.getToolCalls()) {
+            StringBuilder line = new StringBuilder("    - ").append(CliSupport.visibleText(call.getToolName()));
+            if (call.getToolCallId() != null) {
+                line.append(" [").append(call.getToolCallId()).append(']');
+            }
+            line.append(" success=").append(call.getSuccess());
+            out.println(line);
+            if (call.getArguments() != null && !call.getArguments().isEmpty()) {
+                printMultiline("      arguments: " + prettyRaw(RecursiveJsonParser.serialize(call.getArguments())));
+            }
+            if (call.getResult() != null && !call.getResult().isEmpty()) {
+                printMultiline("      result: " + call.getResult());
+            }
         }
     }
 
@@ -302,9 +368,55 @@ public class RecordShowCommand implements Callable<Integer> {
             sb.append(",\"usageRaw\":\"").append(RecursiveJsonParser.escape(record.getUsageRaw())).append('"');
         }
         sb.append(",\"hasToolCalls\":").append(record.isHasToolCalls());
+        appendStructuredFields(sb, record);
         appendRawField(sb, "modelRequestRaw", record.getModelRequestRaw());
         appendRawField(sb, "modelResponseRaw", record.getModelResponseRaw());
         return sb.append('}').toString();
+    }
+
+    /**
+     * 结构化内容字段条件投影（非 null 才出现）：SDK 捕获的记录无 raw wire，
+     * 机器消费者经这些字段读取内容；wire 摄取的记录 raw 与结构化字段并存，
+     * 字段集稳定便于统一消费。previousTurns 投影条数（帧原文经 SDK 库行可取，
+     * 报告面不重复展开）。
+     */
+    private void appendStructuredFields(StringBuilder sb, InteractionRecord record) {
+        if (record.getUserInput() != null) {
+            sb.append(",\"userInput\":\"").append(RecursiveJsonParser.escape(record.getUserInput())).append('"');
+        }
+        if (record.getModelResponse() != null) {
+            sb.append(",\"modelResponse\":\"").append(RecursiveJsonParser.escape(record.getModelResponse())).append('"');
+        }
+        if (record.getFinishReason() != null) {
+            sb.append(",\"finishReason\":\"").append(RecursiveJsonParser.escape(record.getFinishReason())).append('"');
+        }
+        if (record.getSamplingParams() != null) {
+            sb.append(",\"samplingParams\":\"").append(RecursiveJsonParser.escape(record.getSamplingParams())).append('"');
+        }
+        if (record.getPreviousTurns() != null && !record.getPreviousTurns().isEmpty()) {
+            sb.append(",\"previousTurns\":").append(record.getPreviousTurns().size());
+        }
+        if (record.getToolCalls() != null && !record.getToolCalls().isEmpty()) {
+            sb.append(",\"toolCalls\":[");
+            for (int i = 0; i < record.getToolCalls().size(); i++) {
+                ToolCall call = record.getToolCalls().get(i);
+                if (i > 0) {
+                    sb.append(',');
+                }
+                sb.append("{\"toolName\":").append(jsonValue(call.getToolName()));
+                sb.append(",\"toolCallId\":").append(jsonValue(call.getToolCallId()));
+                // success 三态原样投影：null=本层未观察执行结果，不得退化为 false
+                sb.append(",\"success\":").append(call.getSuccess() == null ? "null" : call.getSuccess().toString());
+                sb.append(",\"result\":").append(jsonValue(call.getResult()));
+                sb.append(",\"arguments\":").append(call.getArguments() == null ? "null" : RecursiveJsonParser.serialize(call.getArguments()));
+                sb.append('}');
+            }
+            sb.append(']');
+        }
+    }
+
+    private static String jsonValue(String value) {
+        return value == null ? "null" : "\"" + RecursiveJsonParser.escape(value) + "\"";
     }
 
     private void appendRawField(StringBuilder sb, String name, String raw) {

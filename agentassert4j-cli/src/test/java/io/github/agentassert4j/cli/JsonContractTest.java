@@ -4,6 +4,7 @@ import io.github.agentassert4j.algorithm.FingerprintExtractor;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.InvocationProfile;
 import io.github.agentassert4j.model.ToolCall;
+import io.github.agentassert4j.model.TurnContext;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 import io.github.agentassert4j.util.RecursiveJsonParser;
 import org.junit.jupiter.api.*;
@@ -646,6 +647,77 @@ class JsonContractTest {
             String business = singleLineReport();
             assertTrue(business.contains("\"recordKind\":\"business\""), "业务记录身份恒在场: " + business);
             assertFalse(business.contains("reasoningTokens"), "无明细时键不得出现（null 与 0 不混淆）: " + business);
+        }
+
+        @Test
+        @DisplayName("record show：SDK 形态（无 raw）记录渲染结构化内容，success 三态原样投影")
+        void recordShow_structuredFallbackAndTriStateSuccess() throws Exception {
+            // SDK 捕获形态：无 raw wire，内容住结构化列；外部驱动回路的工具调用
+            // success=null（未观察），不得退化为 false
+            InteractionRecord r = new InteractionRecord();
+            r.setRecordId("rec-sdk");
+            r.setSessionId("session-1");
+            r.setTimestamp(1000L);
+            r.setSeq(1L);
+            r.setInvocationId("queryOrder");
+            r.setTurnIndex(1);
+            r.setUserInput("查询订单 ORD-77");
+            r.setModelResponse("订单已发货");
+            r.setFinishReason("stop");
+            r.setSamplingParams("{\"temperature\":0.7}");
+            ToolCall call = new ToolCall();
+            call.setToolName("queryOrder");
+            call.setToolCallId("call_9");
+            call.setSuccess(null);
+            java.util.Map<String, Object> args = new java.util.LinkedHashMap<>();
+            args.put("orderId", "ORD-77");
+            call.setArguments(args);
+            List<ToolCall> calls = new ArrayList<>();
+            calls.add(call);
+            r.setToolCalls(calls);
+            List<TurnContext> turns = new ArrayList<>();
+            turns.add(new TurnContext("user", "前面一帧"));
+            r.setPreviousTurns(turns);
+            repository.saveInteractionIfAbsent(r);
+
+            int exit = execute("record", "show", "--db", dbPath, "--record-id", "rec-sdk", "--json");
+            assertEquals(0, exit);
+            String report = singleLineReport();
+            assertTrue(report.contains("\"userInput\":\"查询订单 ORD-77\""), "SDK 路径内容必须可读（用户输入）: " + report);
+            assertTrue(report.contains("\"modelResponse\":\"订单已发货\""), "SDK 路径内容必须可读（模型响应）: " + report);
+            assertTrue(report.contains("\"finishReason\":\"stop\""), report);
+            assertTrue(report.contains("\"samplingParams\":\"{\\\"temperature\\\":0.7}\""), report);
+            assertTrue(report.contains("\"previousTurns\":1"), "历史轮次概要投影条数: " + report);
+            assertTrue(report.contains("\"toolCalls\":[{\"toolName\":\"queryOrder\""), report);
+            assertTrue(report.contains("\"success\":null"), "success 三态原样投影（未观察≠失败）: " + report);
+            assertTrue(report.contains("\"arguments\":{\"orderId\":\"ORD-77\"}"), report);
+
+            int humanExit = execute("record", "show", "--db", dbPath, "--record-id", "rec-sdk");
+            assertEquals(0, humanExit);
+            String human = stdout();
+            assertTrue(human.contains("(no raw request stored -- structured capture below)"), "raw 缺席如实标注: " + human);
+            assertTrue(human.contains("User input: 查询订单 ORD-77"), "降级节渲染结构化内容: " + human);
+            assertTrue(human.contains("Model response: 订单已发货"), human);
+            assertTrue(human.contains("Finish reason: stop"), human);
+            assertTrue(human.contains("Previous turns: 1 (user)"), human);
+            assertTrue(human.contains("Tool calls: 1"), "工具调用节恒渲染: " + human);
+            assertTrue(human.contains("success=null"), "人读三态可见: " + human);
+
+            // wire 形态对照：raw 在场时渲染 raw 全文，不重复刷结构化降级节
+            // （独立记录——INSERT OR IGNORE 幂等会让「先存后改」静默无效）
+            InteractionRecord wire = new InteractionRecord();
+            wire.setRecordId("rec-wire");
+            wire.setSessionId("session-1");
+            wire.setTimestamp(1000L);
+            wire.setSeq(2L);
+            wire.setInvocationId("queryOrder");
+            wire.setTurnIndex(0);
+            wire.setModelRequestRaw("{\"role\":\"user\"}");
+            repository.saveInteractionIfAbsent(wire);
+            assertEquals(0, execute("record", "show", "--db", dbPath, "--record-id", "rec-wire"));
+            String wireHuman = stdout();
+            assertFalse(wireHuman.contains("(no raw request stored"), "raw 在场不进降级节: " + wireHuman);
+            assertTrue(wireHuman.contains("-- request (raw) --"), wireHuman);
         }
 
         @Test

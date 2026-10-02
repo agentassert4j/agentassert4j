@@ -65,7 +65,7 @@ final class JsonMapper {
             ToolCall tc = new ToolCall();
             tc.setToolName(asString(m.get("toolName")));
             tc.setToolCallId(asString(m.get("toolCallId")));
-            tc.setSuccess(asBool(m.get("success")));
+            tc.setSuccess(asObservedBool(m.get("success")));
             tc.setResult(asString(m.get("result")));
             tc.setArguments(asObjectMap(m.get("arguments")));
             tc.setArgTypes(RecursiveJsonParser.asStringMap(m.get("argTypes")));
@@ -158,7 +158,7 @@ final class JsonMapper {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("toolName", tc.getToolName());
         m.put("toolCallId", tc.getToolCallId());
-        m.put("success", tc.isSuccess());
+        m.put("success", tc.getSuccess());
         m.put("result", tc.getResult());
         m.put("arguments", tc.getArguments());
         m.put("argTypes", tc.getArgTypes());
@@ -181,7 +181,14 @@ final class JsonMapper {
         return v != null ? String.valueOf(v) : null;
     }
 
-    private static boolean asBool(Object v) {
+    /**
+     * success 列的三态还原：显式 true/false 原样返回，缺失或 null 保持 null
+     * （= 本层未观察执行结果），不得退化为 false。
+     */
+    private static Boolean asObservedBool(Object v) {
+        if (v == null) {
+            return null;
+        }
         return Boolean.TRUE.equals(v);
     }
 

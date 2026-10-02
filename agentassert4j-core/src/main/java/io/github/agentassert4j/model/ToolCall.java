@@ -26,7 +26,12 @@ public class ToolCall {
      */
     private Map<String, String> argTypes;
     private String result;
-    private boolean success;
+    /**
+     * 工具执行结果观察值：true/false = 录制层观察到执行成功/失败；
+     * null = 本层未观察执行结果（外部驱动的工具回路，录制时刻工具尚未执行，
+     * 结果出现在下一记录的请求历史 tool 帧）。
+     */
+    private Boolean success;
 
     /**
      * arguments 值树重建/脱敏的深度上限，与 RecursiveJsonParser 的解析封顶同一量级。
@@ -80,11 +85,11 @@ public class ToolCall {
         this.result = result;
     }
 
-    public boolean isSuccess() {
+    public Boolean getSuccess() {
         return success;
     }
 
-    public void setSuccess(boolean success) {
+    public void setSuccess(Boolean success) {
         this.success = success;
     }
 

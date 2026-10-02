@@ -209,7 +209,7 @@ class RecordingChatModelTest {
         assertEquals("SO-1", record.getToolCalls().get(0).getArguments().get("orderId"));
         assertEquals("SO-2", record.getToolCalls().get(1).getArguments().get("orderId"));
         assertEquals("{\"status\":\"shipped\"}", record.getToolCalls().get(0).getResult(), "结果原文捕获（链式半重放的前提）");
-        assertTrue(record.getToolCalls().get(0).isSuccess());
+        assertEquals(Boolean.TRUE, record.getToolCalls().get(0).getSuccess(), "观察缓冲携带真实执行观察值");
         assertTrue(record.getToolCalls().get(0).getArgTypes().containsValue("string"), "参数类型经 ArgTypeUtil 同词表派生");
         assertEquals(2, callCount.get(), "业务工具真实执行次数不受装饰影响");
     }
@@ -239,8 +239,8 @@ class RecordingChatModelTest {
     }
 
     @Test
-    @DisplayName("响应自带 native toolCalls 时（ChatClient 逐轮方式）观察缓冲静默丢弃，不双计")
-    void nativeToolCallsPresent_observationDiscarded() {
+    @DisplayName("响应自带 native toolCalls 时（ChatClient 逐轮方式）观察缓冲优先，不双计且补齐 toolCallId")
+    void nativeToolCallsPresent_observationWins() {
         AtomicInteger callCount = new AtomicInteger();
         ToolCallback tool = stubTool("get_order", callCount);
         StubChatModel stub = new StubChatModel() {
@@ -259,7 +259,8 @@ class RecordingChatModelTest {
         model.call(new Prompt(List.of(new UserMessage("hi")), options));
 
         InteractionRecord record = interceptor.records.get(0);
-        assertEquals(1, record.getToolCalls().size(), "只保留 native 决策，观察缓冲不双计");
-        assertNull(record.getToolCalls().get(0).getResult(), "native 决策无结果字段（结果在下一轮上下文）");
+        assertEquals(1, record.getToolCalls().size(), "观察缓冲与 native 决策合一，不双计");
+        assertEquals("id-1", record.getToolCalls().get(0).getToolCallId(), "toolCallId 从响应侧按位补齐");
+        assertEquals(Boolean.TRUE, record.getToolCalls().get(0).getSuccess(), "观察缓冲携带真实执行观察值");
     }
 }

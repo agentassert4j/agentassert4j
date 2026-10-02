@@ -294,7 +294,8 @@ public class RegressionTestExecutor {
         // 捕获路径的 argTypes 由接入层填写；重放路径的核心自身就是当前记录的
         // 组装方，必须按同一词表补齐参数类型，否则与基线指纹比对必失配
         call.setArgTypes(ArgTypeUtil.derive(tc.getArguments()));
-        call.setSuccess(true); // 重放不执行工具，默认成功
+        // 重放不执行工具：执行结果未观察，与外部驱动录制路径的 null 语义对齐
+        call.setSuccess(null);
         return call;
     }
 
@@ -371,14 +372,15 @@ public class RegressionTestExecutor {
             current.setUserInput(effectiveInput != null ? effectiveInput : baseline.getUserInput());
             current.setTurnIndex(baseline.getTurnIndex());
             current.setSessionId(baseline.getSessionId());
-            // 决策逐轮匹配成立：当前编排与基线一致（名称/参数/成功标记同值比对）
+            // 决策逐轮匹配成立（名称/参数，见 matchesSlice）：编排按基线存档复制，
+            // success 保持基线观察值原样透传（含 null=未观察）
             List<ToolCall> matched = new ArrayList<>();
             for (ToolCall call : orchestration) {
                 ToolCall copy = new ToolCall();
                 copy.setToolName(call.getToolName());
                 copy.setArguments(call.getArguments());
                 copy.setArgTypes(call.getArgTypes());
-                copy.setSuccess(call.isSuccess());
+                copy.setSuccess(call.getSuccess());
                 matched.add(copy);
             }
             current.setToolCalls(matched);

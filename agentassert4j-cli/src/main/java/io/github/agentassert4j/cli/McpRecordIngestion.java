@@ -1023,7 +1023,9 @@ final class McpRecordIngestion {
         }
         toolCall.setArguments(args);
         toolCall.setArgTypes(ArgTypeUtil.derive(args));
-        toolCall.setSuccess(true);
+        // wire 响应只携带模型的调用请求，执行结果不在本条响应上：success 置 null
+        // （真实结果出现在下一请求的历史 tool 帧）
+        toolCall.setSuccess(null);
         return toolCall;
     }
 

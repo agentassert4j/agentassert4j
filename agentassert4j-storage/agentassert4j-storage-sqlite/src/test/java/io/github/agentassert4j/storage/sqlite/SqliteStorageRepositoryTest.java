@@ -398,7 +398,38 @@ class SqliteStorageRepositoryTest {
         assertEquals(1, loadedTc.size());
         assertEquals("queryOrder", loadedTc.get(0).getToolName());
         assertEquals("tc-001", loadedTc.get(0).getToolCallId());
-        assertTrue(loadedTc.get(0).isSuccess());
+        assertEquals(Boolean.TRUE, loadedTc.get(0).getSuccess());
+    }
+
+    @Test
+    void toolCallSuccessTriStateRoundTrip() {
+        // success 三态往返：true/false/null 各自保真，null（未观察）不得退化为 false
+        List<ToolCall> toolCalls = new ArrayList<>();
+        ToolCall observed = new ToolCall();
+        observed.setToolName("ok-tool");
+        observed.setSuccess(Boolean.TRUE);
+        observed.setResult("done");
+        toolCalls.add(observed);
+        ToolCall failed = new ToolCall();
+        failed.setToolName("bad-tool");
+        failed.setSuccess(Boolean.FALSE);
+        toolCalls.add(failed);
+        ToolCall unobserved = new ToolCall();
+        unobserved.setToolName("external-tool");
+        unobserved.setSuccess(null);
+        toolCalls.add(unobserved);
+        InteractionRecord r = createSampleRecord("rec-tri", "sess-tri", "sk-tri", "h-tri");
+        r.setToolCalls(toolCalls);
+
+        repo.saveInteractionIfAbsent(r);
+
+        List<InteractionRecord> loaded = repo.findByInvocationId("sk-tri");
+        assertEquals(1, loaded.size());
+        List<ToolCall> roundTripped = loaded.get(0).getToolCalls();
+        assertEquals(3, roundTripped.size());
+        assertEquals(Boolean.TRUE, roundTripped.get(0).getSuccess());
+        assertEquals(Boolean.FALSE, roundTripped.get(1).getSuccess());
+        assertNull(roundTripped.get(2).getSuccess());
     }
 
     @Test
@@ -752,7 +783,7 @@ class SqliteStorageRepositoryTest {
         ToolCall b = back.getToolCalls().get(0);
         assertEquals("query\"Order", b.getToolName());
         assertEquals("call\\1", b.getToolCallId());
-        assertTrue(b.isSuccess());
+        assertEquals(Boolean.TRUE, b.getSuccess());
         assertEquals(tc.getResult(), b.getResult());
         assertEquals("A\"B", b.getArguments().get("id"));
         assertEquals(3, ((Number) b.getArguments().get("count")).intValue());

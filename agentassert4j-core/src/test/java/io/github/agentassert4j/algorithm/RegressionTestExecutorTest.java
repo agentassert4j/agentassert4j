@@ -181,7 +181,8 @@ class RegressionTestExecutorTest {
         assertEquals(1, current.getToolCalls().size());
         assertEquals("queryOrder", current.getToolCalls().get(0).getToolName());
         assertEquals("call_1", current.getToolCalls().get(0).getToolCallId());
-        assertTrue(current.getToolCalls().get(0).isSuccess());
+        // 重放不执行工具：success 保持未观察（null），不再合成 true
+        assertNull(current.getToolCalls().get(0).getSuccess());
     }
 
     @Test

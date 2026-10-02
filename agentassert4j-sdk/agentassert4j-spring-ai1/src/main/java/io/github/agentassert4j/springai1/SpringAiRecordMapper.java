@@ -70,11 +70,18 @@ final class SpringAiRecordMapper {
             mapResponse(response, record);
         }
 
-        if (observed == null || observed.isEmpty() || record.isHasToolCalls()) {
+        if (observed == null || observed.isEmpty()) {
+            // 外部驱动的工具回路（业务侧自行执行工具再发起下一轮）：观察缓冲为空，
+            // 响应侧条目已就位，其 success 保持 null（录制时刻工具尚未执行，
+            // 结果出现在下一记录的请求历史 tool 帧，不在本条断言）
             return record;
         }
+        // 观察缓冲带真实执行结果，优先于响应侧组装；toolCallId 是响应侧独有信息，
+        // 按位补齐（模型请求序与执行序一致）
+        List<ToolCall> responseSide = record.getToolCalls();
         List<ToolCall> calls = new ArrayList<>();
-        for (ObservedToolInvocation invocation : observed) {
+        for (int i = 0; i < observed.size(); i++) {
+            ObservedToolInvocation invocation = observed.get(i);
             ToolCall call = new ToolCall();
             call.setToolName(invocation.toolName);
             Map<String, Object> arguments = parseArguments(invocation.arguments);
@@ -82,6 +89,9 @@ final class SpringAiRecordMapper {
             call.setArgTypes(ArgTypeUtil.derive(arguments));
             call.setResult(ToolResultNormalizer.normalize(invocation.result));
             call.setSuccess(invocation.success);
+            if (responseSide != null && i < responseSide.size() && responseSide.get(i).getToolCallId() != null) {
+                call.setToolCallId(responseSide.get(i).getToolCallId());
+            }
             calls.add(call);
         }
         record.setToolCalls(calls);
@@ -311,7 +321,9 @@ final class SpringAiRecordMapper {
                 call.setArguments(arguments);
                 // 捕获与重放两侧共用同一词表派生，参数类型维指纹才可比
                 call.setArgTypes(ArgTypeUtil.derive(arguments));
-                call.setSuccess(true);
+                // 响应侧只见模型的调用请求，执行结果未观察：success 置 null；
+                // 内部执行回路的真实观察值由观察缓冲在 toRecord 尾部覆盖
+                call.setSuccess(null);
                 calls.add(call);
             }
         }

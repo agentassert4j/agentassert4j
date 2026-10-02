@@ -411,7 +411,8 @@ final class LangChain4jRecordMapper {
                 call.setArguments(arguments);
                 // 捕获与重放两侧共用同一词表派生，参数类型维指纹才可比
                 call.setArgTypes(ArgTypeUtil.derive(arguments));
-                call.setSuccess(true);
+                // 响应侧只见模型的调用请求，执行结果未观察：success 置 null
+                call.setSuccess(null);
                 calls.add(call);
             }
         }
