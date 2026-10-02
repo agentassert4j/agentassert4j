@@ -525,6 +525,50 @@ class TaskReplayRunnerTest {
         }
 
         @Test
+        @DisplayName("dry-run 预算预演：cap 只对会被执行的记录报价并预告截断")
+        void reDriveDryRun_appliesBudgetCapsToEstimate() {
+            // 三记录链 + max-total-calls 1：预演必须只报 1 次调用并预告 2 条截断——
+            // 预演与真跑同预算语义，否则用户按预演报价规划、真跑按 cap 截断（r32 D11）
+            saveRecord("b-1", "session-b1", 100L, "查订单", "order", "hash-b1", "{\"result\":\"ok\"}", null);
+            saveRecord("b-2", "session-b1", 200L, "查订单", "order2", "hash-b2", "{\"result\":\"ok\"}", null);
+            saveRecord("b-3", "session-b1", 300L, "查订单", "order3", "hash-b3", "{\"result\":\"ok\"}", null);
+
+            TaskReplayRunner jsonRunner = new TaskReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), true);
+            int exit = jsonRunner.run(null, null, false, true, false, null, false, true, true, 1, null);
+
+            assertEquals(0, exit, "预演零调用: " + output);
+            String plan = output.toString();
+            assertTrue(plan.contains("\"budgetSkipped\":2"), "JSON 计划必须预告截断数: " + plan);
+
+            // 报价行走人读通道（info）——人读形态复核同语义
+            output.reset();
+            TaskReplayRunner humanRunner = new TaskReplayRunner(repository, stubClient, new DeterministicComparator(ComparatorConfig.defaults()), new InvocationRulesConfig(), TestExecutionConfig.defaults(), new PrintStream(output, true), new PrintStream(output, true), false);
+            assertEquals(0, humanRunner.run(null, null, false, true, false, null, false, true, true, 1, null));
+            String human = output.toString();
+            assertTrue(human.contains("Budget caps would fund 1 of them; 2 records skipped"), "人读计划行必须预告截断: " + human);
+            assertTrue(human.contains("Estimated 1 API call"), "报价只计会被执行的记录: " + human);
+            assertFalse(human.contains("Estimated 3 API calls"), "不得按全量记录报价: " + human);
+        }
+
+        @Test
+        @DisplayName("缩域运行的全库口径段落标注 database-wide（漂移检测与在途候选清单）")
+        void narrowedRun_annotatesDatabaseWideSections() {
+            // 骨架锚同键漂移：模板变了键不变 → 真实在途候选（Pending 段的触发前提）
+            InteractionRecord seed = saveSkeletonRecord("w-a1", "session-w1", 100L, "查订单", "order", "sk-1", "hash-w1", "{\"result\":\"ok\"}");
+            establishFromRecord(seed);
+            saveSkeletonRecord("w-a2", "session-w2", 200L, "查订单", "order", "sk-1", "hash-w2", "{\"result\":\"x\",\"extra\":1}");
+
+            int exit = runner.run("查订单", null, false, false, false, null, false, false, false, null, null);
+
+            assertEquals(1, exit, "行为差异 → 1: " + output);
+            String out = output.toString();
+            assertTrue(out.contains("detection is database-wide; narrowing applies to alignment only"),
+                    "缩域时漂移段必须标注全库口径: " + out);
+            assertTrue(out.contains("Pending adjudication (database-wide)"),
+                    "在途候选清单必须标注全库口径: " + out);
+        }
+
+        @Test
         @DisplayName("--full-chain --invocation 预算优先序：窄选调用点先占预算（计划序即可见）")
         void fullChainReDrive_narrowedInvocationConsumesBudgetFirst() {
             // 链上外围记录在链首、被窄选调用点在链后：full-chain 采集序若照链序，

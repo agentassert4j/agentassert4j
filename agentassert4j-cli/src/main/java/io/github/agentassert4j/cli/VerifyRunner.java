@@ -243,6 +243,9 @@ public class VerifyRunner {
         }
         if (integrityWarning != null) {
             info("Warning: " + integrityWarning);
+            // 降级警告必须进机器面 hints——仅人读可见时，JSON 消费者静默于「包无锚」
+            // 状态（r32 D17）
+            hints.add(integrityWarning);
         }
         info("Pack digest (SHA-256): " + packDigest);
         boolean crossModel = !localServedModels.isEmpty() && pack.getMeta().getServedModel() != null && !String.join(",", localServedModels).equals(pack.getMeta().getServedModel());
@@ -256,7 +259,7 @@ public class VerifyRunner {
         }
 
         if (jsonMode) {
-            out.println(verifyJson(pack, packDigest, pass, changed, missing, added, uncovered.size(), unmatchedLocal.size(), crossModel, taskJsons, uncovered, hints, health.jsonFragment()));
+            out.println(verifyJson(pack, packDigest, pass, changed, missing, added, uncovered.size(), unmatchedLocal.size(), crossModel, localServedModels, taskJsons, uncovered, hints, health.jsonFragment()));
         }
         if (reportPath != null) {
             writeMarkdownReport(reportPath, pack, packDigest, crossModel, rulesEmbedded, narrowedRun, localServedModels, reportSections, uncovered, unmatchedLocal, pass, changed, missing, added);
@@ -544,9 +547,10 @@ public class VerifyRunner {
         return sb.toString();
     }
 
-    private String verifyJson(AcceptancePack pack, String digest, int pass, int changed, int missing, int added, int uncovered, int unmatchedLocal, boolean crossModel, List<String> taskJsons, List<String> uncoveredKeys, List<String> hints, String healthFragment) {
+    private String verifyJson(AcceptancePack pack, String digest, int pass, int changed, int missing, int added, int uncovered, int unmatchedLocal, boolean crossModel, TreeSet<String> localServedModels, List<String> taskJsons, List<String> uncoveredKeys, List<String> hints, String healthFragment) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.VERIFY_REPORT + "\",\"judgmentSemantics\":\"").append(JudgmentSemantics.VERSION).append('"');
         sb.append(",\"pack\":{\"digest\":\"").append(RecursiveJsonParser.escape(digest)).append("\",\"servedModel\":\"").append(RecursiveJsonParser.escape(pack.getMeta().getServedModel() != null ? pack.getMeta().getServedModel() : "")).append("\"}");
+        sb.append(",\"localServedModel\":\"").append(RecursiveJsonParser.escape(localServedModels.isEmpty() ? "" : String.join(",", localServedModels))).append("\"");
         sb.append(",\"summary\":{\"tasks\":").append(taskJsons.size()).append(",\"pass\":").append(pass).append(",\"changed\":").append(changed).append(",\"missing\":").append(missing).append(",\"added\":").append(added).append(",\"uncovered\":").append(uncovered).append(",\"unmatchedLocal\":").append(unmatchedLocal).append(",\"crossModel\":").append(crossModel).append("}");
         sb.append(",\"tasks\":[").append(String.join(",", taskJsons)).append("]");
         List<String> quoted = new ArrayList<>();

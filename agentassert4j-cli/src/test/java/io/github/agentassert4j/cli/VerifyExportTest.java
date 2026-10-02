@@ -303,6 +303,65 @@ class VerifyExportTest {
     }
 
     @Test
+    @DisplayName("跨模型机器面自足：crossModel=true 时 JSON 携带 localServedModel；无锚降级进 hints")
+    void verifyJson_carriesLocalServedModel_andAnchorWarningInHints() throws Exception {
+        saveRecord("x-1", "s1", 1000L, "查订单", "invocation:verdict:h-x", "verdict", "h-x", "{\"verdict\":\"DONE\"}", "dev-model");
+        establishBaselines();
+        String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+
+        SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer-xmodel.db").toString());
+        customerDb.initialize();
+        try {
+            saveRecord("xc-1", customerDb, 9000L, "查订单", "invocation:verdict:h-x", "verdict", "h-x", "{\"verdict\":\"DONE\"}", "cust-model");
+
+            ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+            VerifyRunner jsonRunner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
+            int exit = jsonRunner.run(json, "digest", null, null, false);
+            assertEquals(0, exit);
+            String report = jsonOut.toString();
+            assertTrue(report.contains("\"crossModel\":true"), "跨模型成立: " + report);
+            assertTrue(report.contains("\"localServedModel\":\"cust-model\""),
+                    "机器面必须携带本地 servedModel（重建两侧对照不再依赖 markdown）: " + report);
+
+            // 无锚降级：异版本包剥锚 → 警告进 JSON hints（此前仅人读可见）
+            Object parsed = RecursiveJsonParser.parse(json);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> root = (Map<String, Object>) parsed;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> meta = (Map<String, Object>) root.get("meta");
+            meta.put("frameworkVersion", "0.0.0-test-noanchor");
+            meta.remove("integrityHash");
+            String anchorless = RecursiveJsonParser.serialize(root);
+
+            jsonOut.reset();
+            VerifyRunner warnRunner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
+            int warnExit = warnRunner.run(anchorless, "digest", null, null, false);
+            assertEquals(0, warnExit, "异版本无锚走降级不拒: " + jsonOut);
+            assertTrue(jsonOut.toString().contains("carries no integrity hash"),
+                    "降级警告必须进机器面: " + jsonOut);
+        } finally {
+            customerDb.close();
+        }
+    }
+
+    @Test
+    @DisplayName("出包人身份带 actorTag：共库多宿主出包可在包内分账")
+    void exportedBy_carriesActorTag() throws Exception {
+        Path config = tempDir.resolve("export-tag-config.json");
+        Files.write(config, "{\"governance\":{\"actorTag\":\"r32probe\"}}".getBytes(StandardCharsets.UTF_8));
+        System.setProperty("agentassert4j.config.path", config.toString());
+        try {
+            saveRecord("t-1", "s1", 1000L, "查订单", "invocation:verdict:h-t", "verdict", "h-t", "{\"verdict\":\"DONE\"}", "dev-model");
+            establishBaselines();
+            String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+            assertTrue(json.contains("\"exportedBy\":\"" + (System.getProperty("user.name") != null ? System.getProperty("user.name") : "unknown") + "@r32probe\""),
+                    "exportedBy 必须带 actorTag 后缀: " + json);
+        } finally {
+            System.clearProperty("agentassert4j.config.path");
+        }
+    }
+
+    @Test
     @DisplayName("包内任务纪律违规三通道具名：人读行/JSON/markdown 都携带违规明细")
     void verify_taskRuleViolation_namedAcrossChannels() throws Exception {
         // 规则声明刻意写反（second 应先于 first），本地链按 first→second 执行——

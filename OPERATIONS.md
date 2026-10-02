@@ -69,7 +69,7 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 查找链（主配置与规则文件各一套，系统属性分别为 `agentassert4j.config.path` / `agentassert4j.rules.path`，
 文件名固定 `agentassert4j.json` / `agentassert4j-rules.json`）：
 
-1. 系统属性显式路径（不可读直接报错，不静默换源）→ 2. 当前工作目录 → 3. `~/.agentassert4j/` →
+1. 系统属性显式路径（不可读直接报错，不静默换源；显式配置生效时，rules/价格等伴生文件按**该配置文件所在目录**解析）→ 2. 当前工作目录（无显式配置时的查找起点）→ 3. `~/.agentassert4j/` →
 4. classpath → 5. 安全默认值。 `storage.url` 为相对路径时按进程当前工作目录解析——服务化部署建议绝对路径。打开库的命令开头会打印实际命中的配置来源（`rules`/`completion` 不开库不打印，也不接受
 `--db`——统一脚本逐命令追加 `--db` 时对这两个命令要跳过）。`${ENV_VAR}` 引用统一替换，未设置的变量替换为空串。
 
@@ -266,7 +266,7 @@ LLM API Key **只被一个功能消费**：`replay --re-drive`（受控重驱的
 - **健康检查**：应用日志中的计数闭合账本 `recorded = written + dropped + failed`（filtered 另列）；
   任何对不上账的情况都是缺陷。
 - **幂等键是全库全局的**：去重不区分写入方（recordId 恒为幂等键；response id 仅在 recordId 缺省时充当）——多实例部署或多评估者共库
-  并行录制时，同 id 的第二条会 duplicate 并归属首录会话（报告带 `storedSessionId` 指路）。
+  并行录制时，同 id 的第二条会 duplicate 并归属首录会话（**异会话**重发时报告带 `storedSessionId` 指路；同会话重发该字段省略——归属无歧义时不多说）。
   并行写入方给 recordId/response id 带实例前缀（如 `zcode-r5-…`）可从根上避开撞车。
 - **共享库（多宿主/多人同库）三条运维规则**：①`--ci` 全库门禁对未建档键**fail-closed 拒绝**（E-GUARD
   exit 2）——这是设计行为不是故障：库里有任何未建档键，门禁就不出结论；②各宿主**判自己的域**——
@@ -275,7 +275,9 @@ LLM API Key **只被一个功能消费**：`replay --re-drive`（受控重驱的
   建档的裂键——`baseline --invocation <key>` 逐个并入基线）。**④bare `replay`（无缩域）对
   全库未建档键自动建档**——以你当时的 actorTag 署名逐键 establish，等于替并行宿主建域（漏钉
   `-Dagentassert4j.config.path` 的一次裸跑就是一轮全域治理写）；共库上的 replay 一律带
-  `--task`/`--invocation` 缩域。框架不引入「键归属」概念，共享库的治理纪律靠这几条约定承载。
+  `--task`/`--invocation` 缩域。**⑤bare `baseline export` 收录全库任务**——他方任务连同
+  任务键（未声明时即请求原文）与 servedModel 随包出境，验收侧还会把他方任务判为覆盖缺口
+  （exit 2 假阴性）；共库出包一律 `--task` 缩域。框架不引入「键归属」概念，共享库的治理纪律靠这几条约定承载。
 - **库体检**：`doctor` 命令一次性输出存储/身份/覆盖/规则四段确定性事实（存储深扫=PRAGMA
   quick_check 全库扫页——未触页的物理损坏对普通查询静默不可见，体检面主动扫出；骨架族形态、
   多步零标签链、未声明任务的重复请求文本任务族、未建档调用点、template_hash 缺失、规则期望
@@ -303,7 +305,8 @@ agentassert4j replay --ci --json
   诊断与进度走 stderr；按退出码分流消费——0/1 解析 stdout 报告，2 解析 stdout 收尾行的
   `agentassert4j.error/1` 失败包络（`errorCode` 四族：E-USAGE 用法与选择器 / E-NO-DATA
   无可操作对象 / E-GUARD 判定守卫拒绝 / E-ENV 环境与 IO；`hints[]` 可行动建议必填，
-  `nextAction` 给最可能的下一条命令）。人读模式失败路径 stdout 零产出不变。
+  `nextAction` 给最可能的下一条命令）。人读模式的用法错误路径 stdout 零产出；判定类
+  拒绝（E-GUARD，如 `--ci` fail-closed）stdout 会先输出拒绝前的报告段与引导文案。
   同一通道契约覆盖全部命令（schema 清单见 §9）。
 
 <img src="assets/cli-replay-ci.png" alt="replay --ci --json 实跑：task-report/1 逐行分段报告，exit 1 门禁红灯" width="880"/>
@@ -314,6 +317,11 @@ agentassert4j replay --ci --json
   （metadata 携带 `redriveOf` 指向被重驱记录），重驱报告的步级行回带观测记录 id——事后
   `record show` 即可取证 served 原文，不必重花钱再驱。观测记录不进任务链判定与漂移检测
   （检测仪器的观测不是业务执行），后续 `replay --ci` 不受重驱影响。
+- **重驱的在途候选**：重驱判出的 CHANGED 与普通判定同规则注册在途候选（等待
+  accept/reject——这是重驱发现的裁决路径），`status` 候选列上浮、`baseline export` 的
+  `unadjudicated steps` 警告会计入；`--ci` 门禁不受影响（门禁只看最新链对认可集合的归属）。
+- **重驱干跑的预算预演**：`--max-total-calls/--max-total-tokens` 参与干跑报价——计划行与
+  估价只计预算内会执行的记录，并预告将被截断的数量（与真跑同一预算语义）。
 - **干跑**：`replay --dry-run` 输出漂移集、对齐计划与重驱成本预估——零调用、零落库、零建档、
   零处置；重驱前先 `--dry-run` 看报价是推荐惯例。
 - **CI 凭据**：门禁本体（`replay --ci`）零 Key——CI 里 `agentassert4j.json` 只需
@@ -372,6 +380,9 @@ CLI 分析侧不受影响，仍可对既有库做巡检/验收。
 
 3. 导出时若存在**链末形态未裁决或在途候选**，导出警告并把 `unadjudicatedSteps` 计数写进报告
    （在途候选按调用点**全域**计数——裁决会改变整个集合，该调用点的全部步骤一起等）；包照常写出，
+   顺带两条披露动力学：replay 的「Pending adjudication」段只在**本次判定产生了候选**时出现
+   （全库口径、含他方在途候选，段头带 database-wide 标注），最新执行回归已认可形态后该段消失
+   （候选行仍在 `status`，等裁决或被新判定取代）；
    先 accept/reject 再重导才是干净包；
 4. 每次导出=一个文件+一个 SHA-256（标识**该文件字节**，Maven 发布物模型）；重新导出产生新摘要，
    核对认「那个文件」不认「最新导出」；
@@ -430,7 +441,7 @@ agentassert4j audit --json       # agentassert4j.audit/1 机器报告（writes �
 
 六个动词里 `collect` 的触发面最窄：同键模板身份漂移在 replay 对齐判定为 PASS（无行为差异）
 时由框架自动并入，actor 恒为框架自身——按动词检索对账时它是唯一无人工主体的动词。
-reject 与 rollback 不在画像上留状态痕迹，事件时间线是其唯一审计载体。force 的归档
+reject 与 rollback 不在画像上留状态痕迹，事件时间线是其唯一审计载体。被 reject 的形态会记入该调用点的 tracked 集合：同形态再次出现时不再注册候选（输出注记 `already tracked … previously rejected`）——防候选循环的既定语义，需要重裁时以 `baseline --force` 重建集合。force 的归档
 **无限保留**（rollback 完整性优先）：归档行是完整指纹快照（KB 级），force 是语义升级/规则
 重钉类的低频治理动作，真实负载下无膨胀风险——不设修剪。rollback 回执并列披露
 两个身份：`executor` 是本次执行回滚的操作者（与事件表 actor 同源），`approvedBy` 是恢复版本
@@ -503,8 +514,9 @@ accept/reject + re-drive + export）+ record 摄取（非 Java 栈上报交互�
 ```两种来源的
   **原文覆盖不同**：SDK 录制的记录 raw 双列恒为空——Spring AI 的 ChatModel 抽象层与
   LangChain4j 的 ChatModel 抽象层都只交付结构化消息对象、不暴露线上报文（Spring AI 1.x/2.x
-  与 LangChain4j 1.0.0/1.18.0 均经字节码核实），属框架侧既有限制而非待办；MCP 上报与 CLI
-  重驱的记录携带逐字原文，`record show` 取证时以这两类为全量来源。
+  与 LangChain4j 1.0.0/1.18.0 均经字节码核实），属框架侧既有限制而非待办；MCP 上报的记录携带逐字原文；
+  CLI 重驱的观测记录**无 raw 双列**（取证走结构化面：usage/servedModel/redriveOf，见 §6.3），
+  `record show` 取证时以 MCP 上报为原文全量来源。
 
 AI 自主回路的典型时序（人在 harness 权限系统里授权，不在框架里）：
 
@@ -516,8 +528,10 @@ record（上报交互，声明 invocation 标签与 taskKey）
   → audit（人类事后回溯全部 agent:* 治理写）
 ```
 
-工具结果为双形态：text 文本块（CLI 的 schema 标签 JSON 报告行，超预算截断）+
-structuredContent（`{"reports":[...]}`；失败态为 agentassert4j.error/1 包络对象，
+工具结果为双形态：text 文本块（CLI 的 schema 标签 JSON 报告行，超预算截断；
+含警告的 record 回执会在 text 尾部附 `stderr:` 段——**机器消费走 structuredContent**）+
+structuredContent（`{"reports":[...]}`，JSON 视图工具才有——`report {diff:true}` 返回人读
+视图时仅 content；失败态为 agentassert4j.error/1 包络对象，
 按 hints 自助续行）。判定语义（PASS/CHANGED）由报告承载，exit 0/1 都不是工具错误；
 读动词走 CI 语义（未建档拒绝并指向 establish，零治理写）。完整契约见
 `guide/spec/mcp.md`。
@@ -659,7 +673,7 @@ try {
 | 档 | 字段 | 说明 |
 |----|------|------|
 | 强烈建议显式填 | `recordId`（缺省兜底 UUID）、`sessionId`（缺省退 recordId 独立会话）、`timestamp`+`seq`（确定性排序键）、`userInput`、`modelResponse`、`invocationId` 或 `templateHash`（身份锚，双缺走 adhoc 请求哈希兜底；只填 `templateText` 时 `templateHash` 由管道派生）、`apiProtocol`、`model` | 决定身份、配对与重放质量 |
-| 影响保真 | `templateText`（落 prompt_texts 原文库）、`templateSkeleton`（动态段替换为稳定占位符的模板骨架——声明后调用点身份按骨架定格，动态模板不再随组装漂移裂键；投影 `skeletonHash` 由管道回填）、`toolsDefinition`（JSON 数组原样——重放不带工具会假阳性）、`previousTurns`（多轮上下文，重放逐字复用）、`turnIndex`、`samplingParams`、`toolCalls[].arguments/result` | 决定重放（含链式半重放）与受控重驱的保真度 |
+| 影响保真 | `templateText`（落 prompt_texts 原文库）、`templateSkeleton`（动态段替换为稳定占位符的模板骨架——声明后调用点身份按骨架定格，动态模板不再随组装漂移裂键；投影 `skeletonHash` 由管道回填）、`toolsDefinition`（JSON 数组原样——重放不带工具会假阳性）、`previousTurns`（多轮上下文，重放逐字复用）、`turnIndex`（该记录所处会话内的**用户轮次序号**，0 基、按协议各自换算——anthropic 的 tool_result 轮计为 user 轮）、`samplingParams`、`toolCalls[].arguments/result` | 决定重放（含链式半重放）与受控重驱的保真度 |
 | 遥测 | `inputTokens/outputTokens`（输入侧=总处理 token）、`cacheRead/WriteTokens`、`reasoningTokens`、`usageRaw`（供应商原始 usage 逐字）、`latencyMs/ttftMs`、`costUsd`（无价格快照则留 null 不编造）、`servedModel` | 报告与成本可见性；`servedModel` 是跨模型验收的判定依据 |
 
 其余字段（`invocationKey`、`templateHash`（缺省由 `templateText` 派生）与 `skeletonHash` 由管道 enrich 派生兜底；`endpoint`/`modelRequestRaw` 为预留位）
@@ -695,7 +709,7 @@ split（同标签裂出的未建档新键）、self-established tasks（该请�
 |------|--------|------|
 | 存储 schema（`PRAGMA user_version`） | 1 | 预发布固定不演进，schema 变更=删库重建；发布后只增不改 |
 | 判定语义 | `det-v1` | 改变「同样差异得出什么判定」的变更必须递增；发布前恒定 |
-| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`candidate-diff/1`（`status --diff --json`：逐调用点的候选 vs 锚定形态结构化差异，供 AI 消费者给出裁决建议）、`graph/1`（`nodes` 全键清单 + `scanned` 扫描统计；HIGH 边含 `evidence`：命中值 + 源/目标记录 id）、`rules/1`、`doctor/1`、`audit/1`、`record/1`（MCP record 摄取回执：status/recordId/invocationKey/turnIndex/tokens，duplicate 与形状降级经 note 披露）、`record-view/1`（`record show --json`：单记录全量视图，recordKind 区分业务与重驱观测）（每命令 `--json` 各对应其一；replay 的 mode 分段见 §4）、`error/1`（`--json` 失败包络：errorCode 四族 + hints + nextAction） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
+| 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`（含 `localServedModel`：跨模型验收时机器面可自足重建两侧模型对照）、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`candidate-diff/1`（`status --diff --json`：逐调用点的候选 vs 锚定形态结构化差异，供 AI 消费者给出裁决建议）、`graph/1`（`nodes` 全键清单 + `scanned` 扫描统计；HIGH 边含 `evidence`：命中值 + 源/目标记录 id）、`rules/1`、`doctor/1`、`audit/1`、`record/1`（MCP record 摄取回执：status/recordId/invocationKey/turnIndex/tokens，duplicate 与形状降级经 note 披露）、`record-view/1`（`record show --json`：单记录全量视图，recordKind 区分业务与重驱观测）（每命令 `--json` 各对应其一；replay 的 mode 分段见 §4）、`error/1`（`--json` 失败包络：errorCode 四族 + hints + nextAction） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
 | Maven 版本 | `1.0.0-SNAPSHOT` | 发布时转正式版 |
 | CLI 可执行形态 | `agentassert4j-cli-standalone` | cli 模块的全依赖 shaded 产物（含 slf4j-nop 与 Main-Class），`java -jar` 直接运行 |
 

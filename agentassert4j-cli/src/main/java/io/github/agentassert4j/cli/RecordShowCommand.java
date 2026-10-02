@@ -47,7 +47,7 @@ public class RecordShowCommand implements Callable<Integer> {
     @Option(names = {"--session"}, description = "Show a record from this session (position picked by --index/--latest)")
     String session;
 
-    @Option(names = {"--invocation"}, description = "Show the latest record of this invocation: business label, invocationKey, or a unique prefix")
+    @Option(names = {"--invocation"}, description = "Show the latest record of this invocation: business label, invocationKey, or a unique prefix; ambiguous selectors are rejected with guidance (a label spanning several keys, a key holding several records — pass --latest —, or a bare hash prefix without the invocation: anchor).")
     String invocation;
 
     @Option(names = {"--index"}, description = "1-based position in the session's canonical record order (with --session)")

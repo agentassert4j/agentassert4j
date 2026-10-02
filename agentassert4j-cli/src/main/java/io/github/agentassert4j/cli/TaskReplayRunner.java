@@ -75,6 +75,11 @@ public class TaskReplayRunner {
     private String narrowedInvocationKey;
 
     private final StorageRepository repository;
+    /**
+     * dry-run 预演的预算截断数（本次 run 的 max-total-calls/tokens 会跳过的记录数）——
+     * 计划 JSON 据此预告截断，与真跑语义同源
+     */
+    private int dryRunBudgetSkipped;
     private final LlmClient llmClient;
     private final DeterministicComparator comparator;
     private final InvocationRulesConfig rules;
@@ -166,7 +171,7 @@ public class TaskReplayRunner {
 
         // 第 1 层 身份检测（全项目，零调用）
         DriftReport drift = DriftDetector.detect(repository);
-        printDriftReport(drift);
+        printDriftReport(drift, taskPrefix != null || invocationKey != null);
         if (jsonMode) {
             out.println(driftJson(drift));
         }
@@ -187,7 +192,7 @@ public class TaskReplayRunner {
         boolean narrowed = taskPrefix != null || invocationKey != null;
 
         if (dryRun) {
-            return dryRunPlan(scoped, reDrive, drift, narrowed, ciMode, memberCheck, invocationKey, fullChain);
+            return dryRunPlan(scoped, reDrive, drift, narrowed, ciMode, memberCheck, invocationKey, fullChain, maxTotalCalls, maxTotalTokens);
         }
 
         // --ci 未建档守卫：缩域内存在未建档调用点即拒绝判定——
@@ -360,7 +365,9 @@ public class TaskReplayRunner {
         }
 
         if (!jsonMode && totals.pendingCandidates > 0) {
-            info("Pending adjudication: " + String.join(", ", pendingInvocationKeys()));
+            // 清单是全库口径（在途候选属共享治理面）：缩域运行不标注会让读者把他方
+            // 候选误判为自己的发现
+            info("Pending adjudication (database-wide): " + String.join(", ", pendingInvocationKeys()));
             info("Accept with `agentassert4j accept --invocation <prefix>`, or reject with `agentassert4j reject --invocation <prefix>`.");
         }
 
@@ -676,13 +683,22 @@ public class TaskReplayRunner {
      * 成本预估就此落实。预估规则 = 目标记录自身的历史 token 按其模型
      * 单价折算，属参考值而非报价承诺。
      */
-    private String reDrivePlanJson(List<InteractionRecord> planned, String fallbackModel) {
+    private String reDrivePlanJson(List<InteractionRecord> planned, List<InteractionRecord> funded, String fallbackModel) {
         StringBuilder sb = new StringBuilder("{\"schema\":\"" + ReportSchemas.TASK_REPORT + "\",\"mode\":\"" + TaskReportMode.RE_DRIVE_DRY_RUN.wireName() + "\"");
-        sb.append(",\"plan\":{\"calls\":").append(planned.size()).append(",\"records\":[");
+        sb.append(",\"plan\":{\"calls\":").append(planned.size()).append(",\"budgetSkipped\":").append(dryRunBudgetSkipped).append(",\"records\":[");
         boolean first = true;
         long estimatedTokens = 0;
         double estimatedCostUsd = 0;
         boolean costKnown = true;
+        for (InteractionRecord record : funded) {
+            estimatedTokens += record.getInputTokens() + record.getOutputTokens();
+            Double cost = CostEstimator.estimateCallCostUsd(record.getServedModel() != null ? record.getServedModel() : fallbackModel, record.getInputTokens(), record.getOutputTokens());
+            if (cost != null) {
+                estimatedCostUsd += cost;
+            } else {
+                costKnown = false;
+            }
+        }
         for (InteractionRecord record : planned) {
             if (!first) {
                 sb.append(",");
@@ -695,15 +711,6 @@ public class TaskReplayRunner {
                 sb.append(",\"protocol\":\"").append(RecursiveJsonParser.escape(record.getApiProtocol())).append('"');
             }
             sb.append('}');
-            estimatedTokens += record.getInputTokens() + record.getOutputTokens();
-            Double cost = CostEstimator.estimateCallCostUsd(record.getServedModel() != null ? record.getServedModel() : fallbackModel, record.getInputTokens(), record.getOutputTokens());
-            if (cost != null) {
-                estimatedCostUsd += cost;
-            } else {
-                // 无价不编造：机器面 null（与记录面 costUsd 留 null 同一契约），
-                // 0 会被程序化消费方读成「免费」进而误判预算（round28 LOW-1）
-                costKnown = false;
-            }
         }
         sb.append("],\"estimatedTokens\":").append(estimatedTokens);
         sb.append(",\"estimatedCostUsd\":").append(costKnown ? plainDecimal(estimatedCostUsd) : "null");
@@ -890,9 +897,6 @@ public class TaskReplayRunner {
         long now = System.currentTimeMillis();
         if (newChain.firstTimestamp() > now + 3600L * 1000L) {
             info("  Warning: latest chain carries a future timestamp (" + newChain.firstTimestamp() + " > now) — timestamp is the chain-ordering key; verify the recording clock before trusting this judgment.");
-        }
-        if (rules != null && rules.hasTaskRules() && !newChain.isDeclared()) {
-            info("Note: task has no declared taskKey; task rules do not apply.");
         }
         if (rules != null && rules.hasTaskRules() && !newChain.isDeclared()) {
             info("Note: task has no declared taskKey; task rules do not apply.");
@@ -1706,7 +1710,7 @@ public class TaskReplayRunner {
      * 只读预演：漂移集已在上文报告，这里列出将发生的任务配对与规则适用性，
      * 供 CI 在执行前核对选链是否如愿。
      */
-    private int dryRunPlan(List<TaskChain> scoped, boolean reDrive, DriftReport drift, boolean narrowed, boolean ciMode, boolean memberCheck, String invocationKey, boolean fullChain) {
+    private int dryRunPlan(List<TaskChain> scoped, boolean reDrive, DriftReport drift, boolean narrowed, boolean ciMode, boolean memberCheck, String invocationKey, boolean fullChain, Integer maxTotalCalls, Integer maxTotalTokens) {
         List<List<TaskChain>> groups = groupByRequestText(scoped);
         info("Alignment plan (dry-run; no judgments, no baselines, no dispositions): " + CliSupport.plural(groups.size(), "task") + ", zero LLM calls.");
         if (reDrive) {
@@ -1724,7 +1728,28 @@ public class TaskReplayRunner {
             if (!plannedModels.isEmpty() && !plannedModels.contains(llmClient.name())) {
                 info("Warning: replay model " + llmClient.name() + " differs from the recorded models of the re-drive targets " + new ArrayList<>(plannedModels) + "; verdicts are not directly comparable to baselines (model switching is experimental).");
             }
-            info("Re-drive plan (--re-drive): " + CliSupport.plural(planned.size(), "record") + " to re-drive with each point's latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + ".");
+            // 预演与真跑同预算语义（逐记录顺序消费 calls/tokens 池、预检宁少跑不超限）：
+            // cap 存在时 dry-run 只对会被执行的记录报价并预告截断——否则用户按预演
+            // 报价规划预算、真跑却按 cap 截断，预演成了另一场戏（r32 D11）
+            List<InteractionRecord> funded = new ArrayList<>(planned.size());
+            int budgetSkipped = 0;
+            if (maxTotalCalls != null || maxTotalTokens != null) {
+                int previewCalls = 0;
+                long previewTokens = 0L;
+                for (InteractionRecord record : planned) {
+                    if (budgetExhausted(maxTotalCalls, maxTotalTokens, previewCalls, previewTokens) || estimateExceedsBudget(maxTotalTokens, previewTokens, record)) {
+                        budgetSkipped++;
+                    } else {
+                        funded.add(record);
+                        previewCalls++;
+                        previewTokens += Math.max(record.getInputTokens() + (long) record.getOutputTokens(), 1L);
+                    }
+                }
+            } else {
+                funded.addAll(planned);
+            }
+            info("Re-drive plan (--re-drive): " + CliSupport.plural(planned.size(), "record") + " to re-drive with each point's latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + "." + (budgetSkipped > 0 ? " Budget caps would fund " + funded.size() + " of them; " + CliSupport.plural(budgetSkipped, "record") + " skipped." : ""));
+            dryRunBudgetSkipped = budgetSkipped;
             // 预演的是一次即将发生的发射：非法协议在预演面就被拦截（真跑前置同一守卫），
             // 否则 dry-run 展示一个真跑必然 exit 2 的计划，报价成了空谈（round31 实弹）
             CliSupport.ensureKnownWireProtocol(executionConfig.getWireProtocol());
@@ -1755,8 +1780,10 @@ public class TaskReplayRunner {
                     info("  Excluded from re-drive (no baseline yet, so no archived template): " + String.join(", ", shownEx) + (excluded.size() > shownEx.size() ? " ... and " + (excluded.size() - shownEx.size()) + " more" : "") + ".");
                 }
             }
-            if (!planned.isEmpty()) {
-                info(CostEstimator.estimate(planned, llmClient.name()));
+            if (!funded.isEmpty()) {
+                info(CostEstimator.estimate(funded, llmClient.name()));
+            } else if (!planned.isEmpty()) {
+                info("Estimated 0 API calls — every planned record is skipped by the budget caps.");
             }
             if (planned.isEmpty()) {
                 if (fullChain) {
@@ -1766,7 +1793,7 @@ public class TaskReplayRunner {
                 }
             }
             if (jsonMode) {
-                out.println(reDrivePlanJson(planned, llmClient.name()));
+                out.println(reDrivePlanJson(planned, funded, llmClient.name()));
             }
         }
         boolean ciAlign = ciMode && !memberCheck;
@@ -1859,13 +1886,13 @@ public class TaskReplayRunner {
      * 批量漂移多为「建档种子≠最新模板」的一次性收敛——首次全量核对后逐点并入基线，
      * 不一定是批量回归，文案显式引导该认知。
      */
-    private void printDriftReport(DriftReport drift) {
+    private void printDriftReport(DriftReport drift, boolean narrowed) {
         if (!drift.hasDrift()) {
             info("Drift: all invocation template identities consistent (" + CliSupport.plural(drift.getZeroTemplateProfiles(), "zero-template invocation") + " undetectable).");
             printZeroTemplateExplainer(drift);
             return;
         }
-        info("Drift: " + drift.getSameKeyDrifts().size() + " same-key, " + CliSupport.plural(drift.getLabelSplits().size(), "label split") + " (" + CliSupport.plural(drift.getZeroTemplateProfiles(), "zero-template invocation") + " undetectable)");
+        info("Drift: " + drift.getSameKeyDrifts().size() + " same-key, " + CliSupport.plural(drift.getLabelSplits().size(), "label split") + " (" + CliSupport.plural(drift.getZeroTemplateProfiles(), "zero-template invocation") + " undetectable)" + (narrowed ? " — detection is database-wide; narrowing applies to alignment only" : ""));
         printZeroTemplateExplainer(drift);
         for (DriftReport.DriftPoint point : drift.getSameKeyDrifts()) {
             info("  ▲ " + CliSupport.displayKey(point.getInvocationKey()) + (point.getLabel() != null ? " (" + point.getLabel() + ")" : "") + " template " + shortHash(point.getProfileTemplateHash()) + " → " + shortHash(point.getLatestTemplateHash()));
@@ -2013,7 +2040,7 @@ public class TaskReplayRunner {
             return;
         }
         List<String> shown = unpinned.size() > 3 ? unpinned.subList(0, 3) : unpinned;
-        String line = "Warning: rules drift — declarations for " + shown.stream().map(l -> "'" + l + "'").collect(Collectors.joining(", ")) + (unpinned.size() > shown.size() ? " (and " + (unpinned.size() - shown.size()) + " more)" : "") + " are not pinned into the active baselines (the rules file changed after establish, or was never pinned). --ci judges pinned declarations only; the chain-vs-chain view judges with the current file. Re-establish (`baseline --force`) or accept to pin the current declarations.";
+        String line = "Warning: rules drift — declarations for " + shown.stream().map(l -> "'" + l + "'").collect(Collectors.joining(", ")) + (unpinned.size() > shown.size() ? " (and " + (unpinned.size() - shown.size()) + " more)" : "") + " are not pinned into the active baselines (the rules file changed after establish, or was never pinned). --ci judges pinned declarations only; the chain-vs-chain view judges with the current file. Re-establish (`baseline --force`) or accept to pin the current declarations; if a declared invocation has no records in this database, record it once or remove its declaration.";
         if (jsonMode) {
             diagnostic(line);
         } else {
@@ -2169,7 +2196,8 @@ public class TaskReplayRunner {
     }
 
     private static String formatCost(Double costUsd) {
-        return costUsd == null ? "" : "/" + io.github.agentassert4j.algorithm.CostEstimator.formatUsd(costUsd);
+        // 无价不静默成空串：tokens 后面什么都不挂会被读成「免费」或漏看
+        return costUsd == null ? " (cost unknown)" : "/" + io.github.agentassert4j.algorithm.CostEstimator.formatUsd(costUsd);
     }
 
     /**

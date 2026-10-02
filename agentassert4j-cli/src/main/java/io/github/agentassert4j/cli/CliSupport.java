@@ -167,7 +167,7 @@ final class CliSupport {
             // 读面缺库语义：指向不存在的文件拒绝（不静默初始化空库）——
             // 「没录过」与「库丢了/指错了」必须可区分，静默初始化把后者伪装成前者
             //（round20/round22 双轮实弹）；写面首录走 openRepositoryCreating
-            throw new CliFailureException(CliErrorCode.E_NO_DATA, "Database not found: " + expanded,
+            throw new CliFailureException(CliErrorCode.E_NO_DATA, "Database not found: " + (expanded.isEmpty() ? "(empty --db / storage.url value)" : expanded),
                     "Check --db / storage.url against the intended database; recording creates it on first write.", "agentassert4j doctor");
         }
         // 实际打开的库路径与 Config/Rules 同格披露：同 cwd 多库工作流里，下游任何
@@ -363,6 +363,16 @@ final class CliSupport {
      * 追加宿主标识（auto:<user>@<tag>），共库多宿主（同一 OS 用户名）时自动写入
      * 仍可归因；配置热读与其他配置键同纪律。
      */
+    /**
+     * 出包人身份（OS 用户 + 可选 actorTag 后缀）——共库多宿主各自出包时，包内
+     * exportedBy 是导出动作的唯一归属字段（导出不落治理事件），不带 tag 时无法分账
+     */
+    static String exportedActor() {
+        AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
+        String tag = config.getGovernance() != null ? config.getGovernance().getActorTag() : null;
+        return currentActor() + (tag != null && !tag.isEmpty() ? "@" + tag : "");
+    }
+
     static String autoActor() {
         AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
         String tag = config.getGovernance() != null ? config.getGovernance().getActorTag() : null;

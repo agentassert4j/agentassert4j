@@ -43,7 +43,7 @@ public class BaselineExportCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--task"}, description = "Export only task chains whose request text matches this prefix (defaults to all)")
+    @Option(names = {"--task"}, description = "Export only task chains whose request text matches this prefix (defaults to all; on a shared database, narrow with --task — a bare export carries every task in the library, including other actors')")
     String task;
 
     @Option(names = {"--include-samples"}, description = "Attach per-step input/output samples (force-masked; never consumed by verdicts)")
@@ -78,7 +78,7 @@ public class BaselineExportCommand implements Callable<Integer> {
             AcceptancePack pack = new AcceptancePack();
             AcceptancePack.PackMeta meta = new AcceptancePack.PackMeta();
             meta.setExportedAt(System.currentTimeMillis());
-            meta.setExportedBy(CliSupport.currentActor());
+            meta.setExportedBy(CliSupport.exportedActor());
             meta.setJudgmentSemantics(JudgmentSemantics.VERSION);
             meta.setStorageSchemaVersion(1);
             meta.setFrameworkVersion(AgentAssert4jCli.FRAMEWORK_VERSION);
