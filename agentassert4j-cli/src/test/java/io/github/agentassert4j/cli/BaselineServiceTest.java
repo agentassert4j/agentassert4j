@@ -256,6 +256,36 @@ class BaselineServiceTest {
         return null;
     }
 
+    @Test
+    @DisplayName("派生域（--task 收集的键集）与全库扫建同守裂键豁免；域外裂键不披露")
+    void derivedScopeSkipsSplitKeys_likeFullSweep() {
+        PrintStream out = new PrintStream(output, true);
+        repository.saveInteractionIfAbsent(makeRecord("rec-orig", "splitAgent", 1000L, "{\"v\":1}"));
+        new BaselineService(repository).establishMissing(out, "tester", null, false, null, null, null, null);
+        output.reset();
+
+        InteractionRecord draft = makeRecord("rec-draft", "splitAgent", 2000L, "{\"v\":1}");
+        draft.setTemplateHash("hash-new");
+        repository.saveInteractionIfAbsent(draft);
+
+        // 派生域包含裂键：豁免必须生效——缩域 replay 从链上机械收集的键不是逐键显式
+        // 意图，历史链里带着的裂键不得被悄悄建档（round31 实弹：--task 绕过豁免）
+        Set<String> derived = new LinkedHashSet<>();
+        derived.add(invocationKeyOfDraft());
+        derived.add(invocationKeyOf("splitAgent"));
+        int established = new BaselineService(repository).establishMissing(out, "tester", null, false, derived, true, null, null, null);
+        assertEquals(0, established, "派生域不并入裂键");
+        assertTrue(output.toString().contains("Split key "), "派生域内裂键照样披露: " + output);
+        assertNull(repository.findInvocationByKey(invocationKeyOfDraft()), "派生域不产出裂键画像");
+
+        // 派生域不含裂键：域外裂键不得替别的任务披露
+        output.reset();
+        Set<String> otherScope = new LinkedHashSet<>();
+        otherScope.add(InvocationResolver.resolve(repository.findByInvocationId("splitAgent").get(0)).getInvocationKey());
+        new BaselineService(repository).establishMissing(out, "tester", null, false, otherScope, true, null, null, null);
+        assertFalse(output.toString().contains("Split key "), "域外裂键不披露: " + output);
+    }
+
     private InteractionRecord makeRecord(String recordId, String invocationId, long timestamp, String response) {
         InteractionRecord r = new InteractionRecord();
         r.setRecordId(recordId);

@@ -8,6 +8,7 @@ import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.model.TaskChain;
 import io.github.agentassert4j.result.ComparisonResult;
 import io.github.agentassert4j.result.TaskAlignment;
+import io.github.agentassert4j.result.TaskRuleViolation;
 import io.github.agentassert4j.result.Verdict;
 import io.github.agentassert4j.spi.StorageRepository;
 import io.github.agentassert4j.util.PackCodec;
@@ -166,7 +167,7 @@ public class VerifyRunner {
             if (local == null) {
                 uncovered.add(task.getTaskKey());
                 if (!jsonMode) {
-                    taskLines.add(task.getTaskKey() + ": no local chain (coverage gap)");
+                    taskLines.add(CliSupport.singleLine(task.getTaskKey()) + ": no local chain (coverage gap)");
                 }
                 continue;
             }
@@ -284,7 +285,7 @@ public class VerifyRunner {
             TaskChain local = latestLocalChain(localChains, task.getTaskKey());
             int judgedSteps = local == null ? 0 : TaskAligner.trimToLatestPerInvocation(local).getRecords().size();
             String pairing = local == null ? "no matching local chain (counts as a coverage gap when executed)" : "pairs with local chain session " + local.getSessionId() + " (" + CliSupport.plural(judgedSteps, "invocation") + " judged from " + local.getRecords().size() + " records; pack baseline " + CliSupport.plural(task.getSteps().size(), "step") + ")";
-            info("  " + task.getTaskKey() + " → " + pairing);
+            info("  " + CliSupport.singleLine(task.getTaskKey()) + " → " + pairing);
             if (jsonMode) {
                 if (pairingsJson.length() > 0) pairingsJson.append(",");
                 pairingsJson.append("{\"task\":\"").append(RecursiveJsonParser.escape(task.getTaskKey())).append('"');
@@ -365,12 +366,15 @@ public class VerifyRunner {
 
     private String renderTask(AcceptancePack.PackTask task, TaskAlignment alignment, boolean crossModel) {
         StringBuilder sb = new StringBuilder();
-        sb.append("### Task \"").append(task.getTaskKey()).append("\"\n\n");
+        sb.append("### Task \"").append(CliSupport.singleLine(task.getTaskKey())).append("\"\n\n");
         sb.append("- Verdict: **").append(alignment.getVerdict()).append("**");
         if (crossModel) {
             sb.append(" (cross-model: text differences are expected wording variation)");
         }
         sb.append('\n');
+        for (TaskRuleViolation violation : alignment.getRuleViolations()) {
+            sb.append("- Task rule violation: ").append(violation.getDetail()).append('\n');
+        }
         int index = 0;
         for (TaskAlignment.StepAlignment step : alignment.getSteps()) {
             index++;
@@ -421,7 +425,7 @@ public class VerifyRunner {
             sb.append("> Note: CHANGED compares the pack's approved shapes with this machine's latest recorded chain; a local baseline newer than the pack also reads CHANGED here — re-export on the dev side and re-verify.\n");
         }
         if (!uncovered.isEmpty()) {
-            sb.append("\n> **Coverage gaps** (pack tasks not executed locally; evidence incomplete): ").append(String.join("; ", uncovered)).append('\n');
+            sb.append("\n> **Coverage gaps** (pack tasks not executed locally; evidence incomplete): ").append(joinSingleLine(uncovered)).append('\n');
         }
         if (!unmatchedLocal.isEmpty()) {
             if (narrowedRun) {
@@ -447,6 +451,14 @@ public class VerifyRunner {
         } catch (IOException e) {
             diagnostic("Failed to write the verification report: " + e.getMessage());
         }
+    }
+
+    private static String joinSingleLine(List<String> keys) {
+        List<String> shown = new ArrayList<>();
+        for (String key : keys) {
+            shown.add(CliSupport.singleLine(key));
+        }
+        return String.join("; ", shown);
     }
 
     private static String textDiffNote(String baselineText, String replayText) {
@@ -484,10 +496,11 @@ public class VerifyRunner {
 
     /**
      * 逐任务判定行：任务键 + 结论 + 信号分；CHANGED 时附首个差异步的维度摘要，
-     * missing/added 就近计数。信息量以「能否立刻分诊」为准，明细去 --report。
+     * missing/added 就近计数，任务纪律违规就地具名（与 replay 面同措辞）。信息量以
+     * 「能否立刻分诊」为准，明细去 --report。
      */
     private static String taskVerdictLine(String taskKey, TaskAlignment alignment) {
-        StringBuilder sb = new StringBuilder(taskKey).append(": ").append(alignment.getVerdict() != null ? alignment.getVerdict() : "?");
+        StringBuilder sb = new StringBuilder(CliSupport.singleLine(taskKey)).append(": ").append(alignment.getVerdict() != null ? alignment.getVerdict() : "?");
         double sum = 0;
         int steps = 0;
         String firstDiff = null;
@@ -519,6 +532,15 @@ public class VerifyRunner {
         if (firstDiff != null) {
             sb.append(" | ").append(firstDiff);
         }
+        // 违规折叠进 CHANGED 判定但不具名时，验收人拿到 similarity 1.00 的红灯却
+        // 无从知道原因来自包内 rules.tasks——replay 面早有具名行，验收面同权
+        List<TaskRuleViolation> violations = alignment.getRuleViolations();
+        if (!violations.isEmpty()) {
+            sb.append(" | task rule violation: ").append(violations.get(0).getDetail());
+            if (violations.size() > 1) {
+                sb.append(" (+").append(violations.size() - 1).append(" more)");
+            }
+        }
         return sb.toString();
     }
 
@@ -544,6 +566,13 @@ public class VerifyRunner {
     private String taskJson(AcceptancePack.PackTask task, TaskAlignment alignment) {
         StringBuilder sb = new StringBuilder("{\"taskKey\":\"").append(RecursiveJsonParser.escape(task.getTaskKey())).append('"');
         sb.append(",\"verdict\":\"").append(alignment.getVerdict()).append('"');
+        if (!alignment.getRuleViolations().isEmpty()) {
+            List<String> violations = new ArrayList<>();
+            for (TaskRuleViolation violation : alignment.getRuleViolations()) {
+                violations.add("{\"type\":\"" + violation.getType() + "\",\"label\":\"" + RecursiveJsonParser.escape(violation.getLabel()) + "\",\"detail\":\"" + RecursiveJsonParser.escape(violation.getDetail()) + "\"}");
+            }
+            sb.append(",\"ruleViolations\":[").append(String.join(",", violations)).append(']');
+        }
         sb.append(",\"steps\":[");
         List<String> steps = new ArrayList<>();
         for (TaskAlignment.StepAlignment step : alignment.getSteps()) {

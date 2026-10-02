@@ -5,6 +5,8 @@ import io.github.agentassert4j.util.RecursiveJsonParser;
 import io.github.agentassert4j.util.TextUtil;
 
 import java.util.*;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 /**
  * 声明式规则配置 — 从 agentassert4j-rules.json 加载。
@@ -108,7 +110,7 @@ public class InvocationRulesConfig {
             for (Map.Entry<String, Object> entry : invocationsMap.entrySet()) {
                 String invocationId = entry.getKey();
                 if (entry.getValue() instanceof Map) {
-                    this.rules.put(invocationId, InvocationRule.fromJson((Map<String, Object>) entry.getValue()));
+                    this.rules.put(invocationId, InvocationRule.fromJson(invocationId, (Map<String, Object>) entry.getValue(), this.parseNotes));
                 }
             }
         }
@@ -232,7 +234,7 @@ public class InvocationRulesConfig {
             this.behaviors = behaviors;
         }
 
-        static InvocationRule fromJson(Map<String, Object> map) {
+        static InvocationRule fromJson(String invocationId, Map<String, Object> map, List<String> notes) {
             if (map == null) return EMPTY;
 
             // requiredKeywords
@@ -240,6 +242,8 @@ public class InvocationRulesConfig {
             Object reqObj = map.get("requiredKeywords");
             if (reqObj instanceof List) {
                 req = toStringSet((List<?>) reqObj);
+            } else {
+                arrayFieldNote(invocationId, "requiredKeywords", reqObj, notes);
             }
 
             // forbiddenKeywords
@@ -247,6 +251,8 @@ public class InvocationRulesConfig {
             Object forbidObj = map.get("forbiddenKeywords");
             if (forbidObj instanceof List) {
                 forbid = toStringSet((List<?>) forbidObj);
+            } else {
+                arrayFieldNote(invocationId, "forbiddenKeywords", forbidObj, notes);
             }
 
             // regexPatterns
@@ -254,6 +260,8 @@ public class InvocationRulesConfig {
             Object regexObj = map.get("regexPatterns");
             if (regexObj instanceof List) {
                 patterns = toRegexPatterns((List<?>) regexObj);
+            } else {
+                arrayFieldNote(invocationId, "regexPatterns", regexObj, notes);
             }
 
             // behaviors
@@ -261,9 +269,35 @@ public class InvocationRulesConfig {
             Object behObj = map.get("behaviors");
             if (behObj instanceof List) {
                 behaviors = toStringSet((List<?>) behObj);
+            } else {
+                arrayFieldNote(invocationId, "behaviors", behObj, notes);
+            }
+
+            // 非法正则按「永不匹配」参与判定（与运行时一致），但加载时必须点名——
+            // 写错正则与输出确实不匹配在失败列表里同形，排查时无从分诊
+            for (RegexPattern pattern : patterns) {
+                try {
+                    Pattern.compile(pattern.getPattern());
+                } catch (PatternSyntaxException e) {
+                    String shown = pattern.getPattern();
+                    if (shown.length() > 40) {
+                        shown = shown.substring(0, 40) + "...";
+                    }
+                    notes.add("invocation " + invocationId + " declares regex '" + shown + "' which is not a valid regular expression; it can never match and its rule always fails");
+                }
             }
 
             return new InvocationRule(req, forbid, patterns, behaviors);
+        }
+
+        /**
+         * 数组型字段收到非数组值：安全忽略之外必须留痕——静默丢弃约束等于门禁
+         * 无声失效（round31 双宿主实弹：regexPatterns 传字符串被无声忽略）
+         */
+        private static void arrayFieldNote(String invocationId, String field, Object value, List<String> notes) {
+            if (value != null) {
+                notes.add("invocation " + invocationId + " field " + field + " must be a JSON array; the declared value was ignored");
+            }
         }
 
         private static Set<String> toStringSet(List<?> list) {

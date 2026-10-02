@@ -136,6 +136,9 @@ public class DoctorCommand implements Callable<Integer> {
         for (InteractionRecord record : records) {
             if (record.getTemplateHash() == null || record.getTemplateHash().isEmpty()) {
                 findings.recordsMissingTemplateHash++;
+                if (findings.missingTemplateRecordIds.size() < 5) {
+                    findings.missingTemplateRecordIds.add(record.getRecordId() != null ? record.getRecordId() : "(no id)");
+                }
             }
         }
         // 协议形态失配：声明/存储的协议与响应 wire 形态不符——摄取回执有 note，但
@@ -217,7 +220,11 @@ public class DoctorCommand implements Callable<Integer> {
             out.println("  " + CliSupport.plural(findings.unestablished.size(), "unestablished invocation") + " (run `agentassert4j baseline` to collect):");
             printSampled(findings.unestablished, footprint -> "    " + CliSupport.displayKey(footprint.invocationKey) + " (" + (footprint.label != null ? footprint.label : "no label") + ") " + CliSupport.plural(footprint.recordCount, "record"));
         }
-        out.println("  Records missing template_hash: " + findings.recordsMissingTemplateHash + (findings.recordsMissingTemplateHash > 0 ? "; these records have no full-text archive and no template hash, so drift detection cannot check them (re-recording fixes this)." : "."));
+        if (findings.recordsMissingTemplateHash == 0) {
+            out.println("  Records missing template_hash: 0.");
+        } else {
+            out.println("  Records missing template_hash: " + findings.recordsMissingTemplateHash + " (e.g. " + String.join(", ", findings.missingTemplateRecordIds) + (findings.recordsMissingTemplateHash > findings.missingTemplateRecordIds.size() ? " ... and " + (findings.recordsMissingTemplateHash - findings.missingTemplateRecordIds.size()) + " more" : "") + "); these records have no full-text archive and no template hash, so drift detection cannot check them (re-recording fixes this).");
+        }
         if (findings.protocolShapeMismatches.isEmpty()) {
             out.println("  Protocol shape mismatches: none.");
         } else {
@@ -346,6 +353,10 @@ public class DoctorCommand implements Callable<Integer> {
          */
         final List<InvocationFootprint> unestablished = new ArrayList<>();
         int recordsMissingTemplateHash;
+        /**
+         * 缺模板哈希的记录 id 样本（至多 5 个）——只有计数时无法定位重录哪条
+         */
+        final List<String> missingTemplateRecordIds = new ArrayList<>();
         final java.util.List<String> protocolShapeMismatches = new java.util.ArrayList<>();
         /**
          * rules.tasks 畸形告警（全量；人类通道加 Warning: 前缀输出）。

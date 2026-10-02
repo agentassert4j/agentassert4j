@@ -177,7 +177,7 @@ final class McpTools {
                 return command;
             });
         }));
-        tools.add(McpTool.of("audit", "List governance writes from the governance event timeline for review — every establish/force-rebuild/accept/reject/rollback in order, AI (actor agent:*) and human writes on one timeline. Read-only; use it to reconcile governance writes after mutations.", "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}", CliCommands("audit"), args -> runCommand(capture -> {
+        tools.add(McpTool.of("audit", "List governance writes from the governance event timeline for review — every establish/force-rebuild/accept/reject/rollback/collect in order (collect = drift identity auto-merged by an aligned replay; the framework itself is the actor), AI (actor agent:*) and human writes on one timeline. Read-only; use it to reconcile governance writes after mutations.", "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}", CliCommands("audit"), args -> runCommand(capture -> {
             AuditCommand command = new AuditCommand();
             command.out = capture.out;
             command.err = capture.err;

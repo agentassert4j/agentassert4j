@@ -51,12 +51,30 @@ public class BaselineService {
      * @return 本次新建/重建基线的分组数
      */
     public int establishMissing(PrintStream out, String actor, String codeRef, boolean force, Set<String> invocationKeys, InvocationRulesConfig rules, List<BaselineOutcome> outcomes, String expectedVersion) {
+        return establishMissing(out, actor, codeRef, force, invocationKeys, false, rules, outcomes, expectedVersion);
+    }
+
+    /**
+     * @param derivedScope invocationKeys 是否为派生域（--task 缩域从链上机械收集），
+     *                     而非用户逐键点名的显式意图。派生域必须与全库扫建一样
+     *                     豁免裂键——裂键是模板身份变更的治理信号，「回到旧模板的
+     *                     历史链里还带着裂键」不该被一次缩域 replay 悄悄建档
+     *                     （round31 双宿主实弹：--task 绕过豁免把裂键建进了门禁认可集）
+     */
+    public int establishMissing(PrintStream out, String actor, String codeRef, boolean force, Set<String> invocationKeys, boolean derivedScope, InvocationRulesConfig rules, List<BaselineOutcome> outcomes, String expectedVersion) {
         BaselineManager manager = new BaselineManager(repository);
         int established = 0;
-        // 全库扫建路径的裂键豁免：同标签已有兄弟建档的未建档键只披露、不并入基线——裂键是
+        // 裂键豁免：同标签已有兄弟建档的未建档键只披露、不并入基线——裂键是
         // 模板身份变更的治理信号，等显式 establish（与 replay 自动建档同一条规则）；
-        // 定向 --invocation 是逐键的显式意图，不过滤
-        Set<String> sweepSkipped = invocationKeys == null ? splitKeysSkippedBySweep(out) : Collections.<String>emptySet();
+        // 定向 --invocation 是逐键的显式意图，不过滤；派生域（--task）按域过滤后豁免
+        Set<String> sweepSkipped;
+        if (invocationKeys == null) {
+            sweepSkipped = splitKeysSkippedBySweep(out, null);
+        } else if (derivedScope) {
+            sweepSkipped = splitKeysSkippedBySweep(out, invocationKeys);
+        } else {
+            sweepSkipped = Collections.<String>emptySet();
+        }
 
         // force 的乐观守卫必须两阶段：先全量校验、再统一写入——逐键检查到中途才抛，
         // 前面的键已经被重建（approver 改写、归档落库、audit 记账），「整体拒绝」的
@@ -177,10 +195,11 @@ public class BaselineService {
     }
 
     /**
-     * 全库扫建路径的裂键豁免检测：同标签下已有兄弟键建档、而本键尚无基线 → 判为裂键，
-     * 就地披露并从扫建中排除（定向 --invocation 不经过本方法）。返回被排除的键集。
+     * 裂键豁免检测：同标签下已有兄弟键建档、而本键尚无基线 → 判为裂键，
+     * 就地披露并从扫建中排除。scope 非空时只考虑域内键（派生域不得替别的任务
+     * 披露/决策），null = 全库。返回被排除的键集。
      */
-    private Set<String> splitKeysSkippedBySweep(PrintStream out) {
+    private Set<String> splitKeysSkippedBySweep(PrintStream out, Set<String> scope) {
         Map<String, List<InteractionRecord>> buckets = CliSupport.invocationBuckets(repository);
         Map<String, String> labelByBucket = new LinkedHashMap<>();
         Set<String> labelsWithBaseline = new HashSet<>();
@@ -193,6 +212,9 @@ public class BaselineService {
         }
         Set<String> skipped = new LinkedHashSet<>();
         for (String key : buckets.keySet()) {
+            if (scope != null && !scope.contains(key)) {
+                continue;
+            }
             String label = labelByBucket.get(key);
             if (!label.isEmpty() && labelsWithBaseline.contains(label) && !CliSupport.hasBaseline(repository.findInvocationByKey(key))) {
                 skipped.add(key);

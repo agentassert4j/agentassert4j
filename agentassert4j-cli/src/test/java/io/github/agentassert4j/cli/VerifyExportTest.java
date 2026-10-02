@@ -303,6 +303,78 @@ class VerifyExportTest {
     }
 
     @Test
+    @DisplayName("包内任务纪律违规三通道具名：人读行/JSON/markdown 都携带违规明细")
+    void verify_taskRuleViolation_namedAcrossChannels() throws Exception {
+        // 规则声明刻意写反（second 应先于 first），本地链按 first→second 执行——
+        // 指纹全 PASS、纯靠任务纪律翻红，是验收面最需要「说出原因」的形态
+        Path rulesFile = tempDir.resolve("rules-order.json");
+        Files.write(rulesFile, "{\"tasks\":{\"order-flow\":{\"requiredOrder\":[\"pack-second\",\"pack-first\"]}}}".getBytes(StandardCharsets.UTF_8));
+        System.setProperty(ConfigLoader.RULES_PATH_PROPERTY, rulesFile.toString());
+        try {
+            saveDeclared("d1", "s1", 1000L, "pack-first", "h-first", "{\"step\":1}");
+            saveDeclared("d2", "s1", 2000L, "pack-second", "h-second", "{\"step\":2}");
+            establishBaselines();
+            String json = exportPack(tempDir.resolve("verify.db").toString(), false);
+            assertTrue(json.contains("\"requiredOrder\""), "规则段随包出境: " + json);
+
+            SqliteStorageRepository customerDb = new SqliteStorageRepository(tempDir.resolve("customer-order.db").toString());
+            customerDb.initialize();
+            try {
+                saveDeclared("c1", customerDb, "cs1", 9000L, "pack-first", "h-first", "{\"step\":1}");
+                saveDeclared("c2", customerDb, "cs1", 9500L, "pack-second", "h-second", "{\"step\":2}");
+
+                output.reset();
+                VerifyRunner runner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
+                String reportPath = tempDir.resolve("verify-report.md").toString();
+                int exit = runner.run(json, "digest", null, reportPath, false);
+
+                assertEquals(1, exit, "违规翻红 exit 1: " + output);
+                String report = output.toString();
+                assertTrue(report.contains("task rule violation: Steps 'pack-second,pack-first' missing or out of order"),
+                        "人读判定行必须具名违规（similarity 1.00 的红灯不说原因=验收死路）: " + report);
+                String markdown = new String(Files.readAllBytes(Paths.get(reportPath)), StandardCharsets.UTF_8);
+                assertTrue(markdown.contains("Task rule violation: Steps 'pack-second,pack-first' missing or out of order"),
+                        "markdown 报告必须具名违规: " + markdown);
+
+                ByteArrayOutputStream jsonOut = new ByteArrayOutputStream();
+                VerifyRunner jsonRunner = new VerifyRunner(customerDb, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(jsonOut, true), new PrintStream(jsonOut, true), true);
+                int jsonExit = jsonRunner.run(json, "digest", null, null, false);
+                assertEquals(1, jsonExit);
+                String jsonReport = jsonOut.toString();
+                assertTrue(jsonReport.contains("\"ruleViolations\":[{\"type\":\"ORDER_VIOLATION\""),
+                        "JSON 面必须携带违规数组: " + jsonReport);
+                assertTrue(jsonReport.contains("\"label\":\"pack-second,pack-first\""), "违规标签在场: " + jsonReport);
+            } finally {
+                customerDb.close();
+            }
+        } finally {
+            System.clearProperty(ConfigLoader.RULES_PATH_PROPERTY);
+        }
+    }
+
+    /**
+     * 声明任务键的两步链记录（任务规则与包任务键都按声明值工作）。
+     */
+    private void saveDeclared(String recordId, String sessionId, long timestamp, String label, String templateHash, String response) {
+        saveDeclared(recordId, repository, sessionId, timestamp, label, templateHash, response);
+    }
+
+    private void saveDeclared(String recordId, StorageRepository repo, String sessionId, long timestamp, String label, String templateHash, String response) {
+        InteractionRecord r = new InteractionRecord();
+        r.setRecordId(recordId);
+        r.setSessionId(sessionId);
+        r.setTimestamp(timestamp);
+        r.setSeq(timestamp);
+        r.setUserInput("order-flow");
+        r.setInvocationKey("invocation:" + label + ":" + templateHash);
+        r.setInvocationId(label);
+        r.setTemplateHash(templateHash);
+        r.setModelResponse(response);
+        r.setMetadata("{\"taskKey\":\"order-flow\"}");
+        repo.saveInteractionIfAbsent(r);
+    }
+
+    @Test
     @DisplayName("自违不误报：declared 规则 × 链末偏离 → 走偏离出口，不整链排除为自违")
     void export_selfViolation_notMisdiagnosed() throws Exception {
         Path rulesFile = tempDir.resolve("rules.json");

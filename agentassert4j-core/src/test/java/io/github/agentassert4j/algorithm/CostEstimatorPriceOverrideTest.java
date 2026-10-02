@@ -8,6 +8,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * 价格覆盖文件的合并语义：并集覆盖快照（同族改价、新族补充、元信息键跳过），
@@ -63,5 +64,30 @@ class CostEstimatorPriceOverrideTest {
 
         double[] rates = prices.get("gpt-4o");
         assertEquals(1000 * rates[0] + 500 * rates[1], 1000 * 0.000001 + 500 * 0.000002, 1e-12, "覆盖后的单价必须直接参与 token 计价");
+    }
+
+    @Test
+    @DisplayName("族键改价遮蔽快照更具体键：包含匹配查找下族覆盖必须真实生效")
+    void familyOverrideShadowsSnapshotSpecificKeys() {
+        Map<String, double[]> prices = new LinkedHashMap<>();
+        prices.put("deepseek", new double[]{0.000001, 0.000004});
+        prices.put("deepseek-chat", new double[]{0.000002, 0.000008});
+
+        CostEstimator.applyPriceOverrides(prices, "{\"deepseek\":{\"input\":0.01,\"output\":0.02}}");
+
+        assertFalse(prices.containsKey("deepseek-chat"), "快照的族内具体键必须被族键覆盖移除——否则精确命中会绕过族价");
+        assertArrayEquals(new double[]{0.01, 0.02}, prices.get("deepseek"), "族键覆盖价必须生效");
+    }
+
+    @Test
+    @DisplayName("覆盖文件内自己的更长键不被族键误删（同批写入，精确优先）")
+    void overrideFileOwnLongerKeysSurvive() {
+        Map<String, double[]> prices = new LinkedHashMap<>();
+        prices.put("gpt-4o", new double[]{0.0000025, 0.00001});
+
+        CostEstimator.applyPriceOverrides(prices, "{\"gpt\":{\"input\":0.5,\"output\":0.5},\"gpt-4o\":{\"input\":0.000001,\"output\":0.000004}}");
+
+        assertArrayEquals(new double[]{0.000001, 0.000004}, prices.get("gpt-4o"), "用户自己的具体键必须保留并压过同文件的族键");
+        assertArrayEquals(new double[]{0.5, 0.5}, prices.get("gpt"), "族键同样写入（覆盖其余族内成员）");
     }
 }

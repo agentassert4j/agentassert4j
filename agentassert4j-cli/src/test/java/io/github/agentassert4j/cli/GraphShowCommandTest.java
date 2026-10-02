@@ -309,6 +309,29 @@ class GraphShowCommandTest {
         assertTrue(output.contains("substrings"), "子串包含的近失原因必须点名: " + output);
     }
 
+    @Test
+    @DisplayName("有边库上近失诊断照常在场：诊断与边数解耦，已连通的记录不误报")
+    void nearMissesRenderOnGraphsWithEdges_connectedPairsNotFlagged() {
+        // 一对连通（HIGH 边）+ 一对大小写不匹配（差在精确相等）同库共存
+        saveChainRecord("nm-1", "lookupOrder", 1000L, null, "{\"order_id\":\"ORD-77\"}");
+        saveChainRecord("nm-2", "shipOrder", 2000L, "ORD-77", null);
+        saveChainRecord("nm-3", "fetchTicket", 3000L, null, "{\"ticket\":\"TRK-9001\"}");
+        saveChainRecord("nm-4", "closeTicket", 4000L, "trk-9001", null);
+
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("graph", "show", "--db", dbPath));
+        String human = stdout.toString();
+        assertTrue(human.contains("\"ORD-77\" (nm-1 -> nm-2)"), "连通对照边必须在场: " + human);
+        assertTrue(human.contains("Near misses (1)"), "库里已有边时近失诊断仍必须渲染（此前被零边门控整体吞掉）: " + human);
+        assertTrue(human.contains("no argument value equals an upstream value exactly"), "大小写不匹配的近失原因点名: " + human);
+        assertFalse(human.contains("Near miss: shipOrder"), "已连通记录不得误报近失: " + human);
+        assertFalse(human.contains("Near miss: lookupOrder"), "已连通的上游侧同样不得误报: " + human);
+
+        assertEquals(0, new CommandLine(new AgentAssert4jCli()).execute("graph", "show", "--db", dbPath, "--json"));
+        String graphJson = stdout.toString();
+        assertTrue(graphJson.contains("\"nearMisses\":["), "JSON 面字段恒在场: " + graphJson);
+        assertTrue(graphJson.contains("closeTicket"), "近失内容点名未连通记录: " + graphJson);
+    }
+
     /**
      * 同一会话内的链式记录：responseJson 是上游 LLM 回复（含可提取字段值），
      * argValue 是下游工具参数值（与上游字段值相等即 HIGH 边）。

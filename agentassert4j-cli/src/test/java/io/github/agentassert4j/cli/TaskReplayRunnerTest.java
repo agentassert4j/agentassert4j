@@ -525,6 +525,30 @@ class TaskReplayRunnerTest {
         }
 
         @Test
+        @DisplayName("显式 --invocation 裂键建档后处置：身份已是最新不得谎称 Collected")
+        void explicitSplitKeyEstablished_dispositionStaysHonest() {
+            // 基线链 = 旧模板（已建档）；新链 = 同标签新模板（裂键）。同标签归并成
+            // 一个配对组、组锚为新链裂键：显式 --invocation 让本轮自动建档先建裂键，
+            // 链配对给该组 PASS，处置面对 label-split 点时身份已被推进——旧行为打印
+            // "Collected:"（假成功，审计无 collect 事件），必须改为如实陈述
+            saveRecord("x-a1", "session-x1", 100L, "查订单", "order", "hash-old", "{\"result\":\"ok\"}", null);
+            saveRecord("x-a2", "session-x1", 200L, "查订单", "order", "hash-new", "{\"result\":\"ok\"}", null);
+            establishedProfile("invocation:order:hash-old", "order", "hash-old");
+            // 新链把裂键记录放链首：同标签配对组的锚键取组内首条新记录，缩域到
+            // 裂键时该组步才不被排除（组锚是旧键时缩域判 0 步、裂键处置退化为 Hung）
+            saveRecord("x-b2", "session-x2", 300L, "查订单", "order", "hash-new", "{\"result\":\"ok\"}", null);
+            saveRecord("x-b1", "session-x2", 400L, "查订单", "order", "hash-old", "{\"result\":\"ok\"}", null);
+
+            int exit = runner.run(null, "invocation:order:hash-new", false, false, false, null, false, false, false, null, null);
+
+            String out = output.toString();
+            assertNotNull(repository.findInvocationByKey("invocation:order:hash-new"), "显式逐键意图照建（豁免只拦派生域）");
+            assertTrue(out.contains("Identity already current"), "身份已被本轮建档推进时必须如实陈述: " + out);
+            assertFalse(out.contains("Collected: invocation:order:hash-new"), "不得谎称收编（审计面不会有 collect 事件）: " + out);
+            assertEquals(0, exit, "同构链判定为 PASS: " + out);
+        }
+
+        @Test
         @DisplayName("裂键 CHANGED 步骤：无画像不截断报告——判定后注记建档指引，报告走完退出码走行为差异")
         void labelSplit_changedStep_completesReportWithEstablishHint() {
             // 双链逐记录配对下，hash-new 键拿到 CHANGED（输出字段集不同）：候选登记

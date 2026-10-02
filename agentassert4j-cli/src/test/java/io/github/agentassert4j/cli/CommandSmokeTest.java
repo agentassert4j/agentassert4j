@@ -1,5 +1,6 @@
 package io.github.agentassert4j.cli;
 
+import io.github.agentassert4j.config.ConfigLoader;
 import io.github.agentassert4j.model.InteractionRecord;
 import io.github.agentassert4j.storage.sqlite.SqliteStorageRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -49,6 +50,83 @@ class CommandSmokeTest {
         System.setErr(originalStderr);
         if (repository != null) {
             repository.close();
+        }
+    }
+
+    @Test
+    @DisplayName("坏规则文件告警不双行：整文件级致命注记只由 Rules warning 行披露")
+    void unparsableRules_singleWarningSurface() throws Exception {
+        seedWithResponse("session-rules", 1000L, "{\"v\":1}");
+        Path rulesFile = tempDir.resolve("agentassert4j-rules.json");
+        Files.write(rulesFile, "{not json at all".getBytes(StandardCharsets.UTF_8));
+        System.setProperty(ConfigLoader.RULES_PATH_PROPERTY, rulesFile.toString());
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(buffer, true));
+        try {
+            int exit = new CommandLine(new AgentAssert4jCli()).execute("status", "--db", dbPath);
+            assertEquals(0, exit, "坏规则退化不中断");
+            String err = buffer.toString();
+            assertTrue(err.contains("Rules warning: "), "整文件致命注记必须披露: " + err);
+            assertFalse(err.contains("rules.tasks rules file is unparsable"),
+                    "同因注记不得再以 rules.tasks 段前缀二次出现: " + err);
+        } finally {
+            System.clearProperty(ConfigLoader.RULES_PATH_PROPERTY);
+            System.setErr(originalStderr);
+        }
+    }
+
+    @Test
+    @DisplayName("audit 人读行携带 UTC 时间戳（近因分析可对时）")
+    void audit_humanLinesCarryTimestamp() {
+        seedWithResponse("session-audit", 1000L, "{\"v\":1}");
+        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", null, false, null, null, null, null);
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(buffer, true));
+        try {
+            int exit = new CommandLine(new AgentAssert4jCli()).execute("audit", "--db", dbPath);
+            assertEquals(0, exit);
+            String out = buffer.toString();
+            assertTrue(out.contains("[establish]"), "建档事件在场: " + out);
+            // Instant.toString 形态（…T…Z）；无时间列时人读时间线只能靠顺序猜先后
+            assertTrue(Pattern.compile("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z").matcher(out).find(),
+                    "人读行必须带 UTC 时间戳: " + out);
+        } finally {
+            System.setOut(originalStdout);
+        }
+    }
+
+    @Test
+    @DisplayName("re-drive dry-run 拦截非法 llm.protocol 并披露 endpoint 覆盖")
+    void reDrive_dryRun_validatesProtocolAndShowsEndpoint() throws Exception {
+        seedWithResponse("session-dry", 1000L, "{\"v\":1}");
+        new BaselineService(repository).establishMissing(new PrintStream(new ByteArrayOutputStream()), "tester", null, false, null, null, null, null);
+        Path config = tempDir.resolve("dry-protocol.json");
+        Files.write(config, ("{\"llm\":{\"protocol\":\"grpc-generic\",\"endpoint\":\"https://api.example.invalid\"}}").getBytes(StandardCharsets.UTF_8));
+        System.setProperty("agentassert4j.config.path", config.toString());
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(buffer, true));
+        try {
+            int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--re-drive", "--dry-run");
+            assertEquals(2, exit, "dry-run 预演的是即将发生的发射，非法协议必须在预演面拦截: " + buffer);
+            assertTrue(buffer.toString().contains("is not a known wire protocol"), "合法词表进消息本体: " + buffer);
+        } finally {
+            System.clearProperty("agentassert4j.config.path");
+            System.setErr(originalStderr);
+        }
+
+        // 合法协议 + endpoint 覆盖：预演行披露 endpoint（此前只在真跑行可见）
+        Files.write(config, ("{\"llm\":{\"endpoint\":\"https://api.example.invalid\"}}").getBytes(StandardCharsets.UTF_8));
+        System.setProperty("agentassert4j.config.path", config.toString());
+        ByteArrayOutputStream out2 = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(out2, true));
+        try {
+            int exit = new CommandLine(new AgentAssert4jCli()).execute("replay", "--db", dbPath, "--re-drive", "--dry-run");
+            assertEquals(0, exit, "零漂移点时预演照常: " + out2);
+            assertTrue(out2.toString().contains("via https://api.example.invalid"),
+                    "endpoint 覆盖必须在预演行可见: " + out2);
+        } finally {
+            System.clearProperty("agentassert4j.config.path");
+            System.setOut(originalStdout);
         }
     }
 

@@ -34,7 +34,7 @@ public class ReplayCommand implements Callable<Integer> {
     @Option(names = {"--db"}, description = "SQLite database path (defaults to storage.url in agentassert4j.json)")
     String db;
 
-    @Option(names = {"--task"}, description = "Task selector: matches exactly one task chain by request-text prefix (a prefix hitting several tasks errors with the candidate list; see --dry-run for the pairing plan). Task grouping spans the whole database; shared-database collaborators should declare taskKey to keep separate task domains")
+    @Option(names = {"--task"}, description = "Task selector: matches exactly one task chain by its key — the declared taskKey for chains recorded with one, otherwise the request-text prefix (a prefix hitting several tasks errors with the candidate list; see --dry-run for the pairing plan). A declared chain no longer matches its original request text. Task grouping spans the whole database; shared-database collaborators should declare taskKey to keep separate task domains")
     String task;
 
     @Option(names = {"--invocation"}, description = "Invocation selector: a business invocationId selects all its template-version buckets; an invocationKey prefix or the status display form label@8hex (@ plus exactly 8 hex characters) must resolve to exactly one key (multiple matches error with the candidate list). Narrows alignment reporting and drift/re-drive to this invocation; task discipline still sees the full chain")

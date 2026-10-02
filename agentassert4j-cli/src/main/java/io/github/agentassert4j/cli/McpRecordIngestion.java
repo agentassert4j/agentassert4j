@@ -226,7 +226,16 @@ final class McpRecordIngestion {
         record.setModelRequestRaw(requestRaw);
         mapper.mapResponse(response, responseRaw, record);
         attachCostEstimate(record);
-        record.setMetadata(mergeTaskKey(metadata, nonBlankString(args, "taskKey")));
+        String argTaskKey = nonBlankString(args, "taskKey");
+        if (argTaskKey != null && metadata != null) {
+            Object metaTaskKey = metadata.get(TaskChainView.DECLARED_TASK_KEY);
+            // 顶层参数赢是既定优先级，但「metadata 里那份被无声替换」必须可见——
+            // 两个键名同名不同值的冲突，静默取舍会把配错源伪装成单一来源
+            if (metaTaskKey != null && !String.valueOf(metaTaskKey).equals(argTaskKey)) {
+                warnings.add("Warning: metadata taskKey '" + metaTaskKey + "' was overridden by the taskKey argument '" + argTaskKey + "'.");
+            }
+        }
+        record.setMetadata(mergeTaskKey(metadata, argTaskKey));
         record.setRecordId(resolveRecordId(args, response, record, requestRaw, responseRaw));
 
         // 身份派生与录制管道同序：哈希投影先行（键锚点消费 templateHash），后键派生
@@ -777,6 +786,7 @@ final class McpRecordIngestion {
             Map<String, String> callNames = functionCallNames(items);
             List<TurnContext> turns = new ArrayList<>();
             int userCount = 0;
+            int untypedRoleItems = 0;
             Object last = items.isEmpty() ? null : items.get(items.size() - 1);
             boolean lastIsInput = last instanceof Map && "message".equals(memberString((Map<?, ?>) last, "type")) && "user".equals(memberString((Map<?, ?>) last, "role"));
             for (int i = 0; i < items.size(); i++) {
@@ -831,7 +841,15 @@ final class McpRecordIngestion {
                         }
                     }
                     turns.add(turn);
+                } else if (type == null && memberString(item, "role") != null) {
+                    // Responses 输入条目按 type 注解分派；带 role 无 type 的条目
+                    // （chat 风格混入）会被整体跳过——system 模板随之丢失，身份退化
+                    // 为纯标签键。静默跳过等于把「模板没提取到」伪装成「没有模板」
+                    untypedRoleItems++;
                 }
+            }
+            if (untypedRoleItems > 0) {
+                warnings.add("Warning: " + untypedRoleItems + " input item(s) carry a role but no 'type' field; Responses input items are type-annotated (type: message / function_call / function_call_output). Those items were skipped, so a system/developer template among them does not reach template extraction (identity degrades to the label-only key).");
             }
             if (!lastIsInput) {
                 record.setTurnIndex(userCount);

@@ -187,6 +187,12 @@ stdout JSON 报告成为工具结果本体；不经过 picocli 参数解析，�
 
 ## 复核台账
 
+- 2026-10-02 Round 31 双宿主批：①audit 工具描述动词清单补 collect（六动词与 OPERATIONS §6.1
+  对齐，触发面=同键模板身份漂移 PASS 对齐时框架自动并入、actor 恒为框架）；②record 摄取两处
+  披露：responses input 条目带 role 无 type 时警告（模板提取降级、身份退化为纯标签键）+
+  metadata.taskKey 与顶层 taskKey 冲突时就地披露覆盖取舍。透传钉 = McpRecordIngestionTest
+  untypedRoleItem/metadataTaskKey_conflict。
+
 - 2026-09-16 Round 7 验收修复批：①check 工具 schema 增 task/invocation 缩域参数（与 diff
   对齐；共享库下对端未建档键会 E-GUARD 冻结全库门禁，缩域是既定缓解面——D5）；②establish
   的 baseline-report/1 逐键明细增 `seedRecordId`（created/reestablished 携带；CLI 面种子披露

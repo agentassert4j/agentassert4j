@@ -226,6 +226,18 @@ final class CliSupport {
     }
 
     /**
+     * 标题单行化——任务键里的换行/回车原样输出会打断逐行报告（逐任务判定行、
+     * markdown 标题），控制符会触发终端转义序列；与 abbreviateText 同一套
+     * 占位规则但不截断。数据面（JSON 证据、raw 列）不受影响。
+     */
+    static String singleLine(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.replaceAll("[\\p{Cntrl}&&[^\\n\\r\\t]]", "?").replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').trim();
+    }
+
+    /**
      * 人读键形态：声明 → 标签@细分短形；骨架/模板/请求锚 → 短名@细分短形（8 位）。
      * 完整键只在 JSON 证据与巡检明细——选择器语义不受影响。标签以解码形展示
      * （键存储的是编码形），团队词汇表原样可读；分组器的 encodeComponent 只
@@ -655,7 +667,7 @@ final class CliSupport {
      */
     static void ensureKnownWireProtocol(String protocol) {
         if (protocol != null && LlmWireProtocol.fromWireName(protocol) == null) {
-            throw new CliFailureException(CliErrorCode.E_USAGE, "llm.protocol '" + protocol + "' is not a known wire protocol. Valid values: " + LlmWireProtocol.legalWireNames() + ".", "Set llm.protocol to one of " + LlmWireProtocol.legalWireNames() + ", or remove it to auto-detect per record.", "agentassert4j doctor");
+            throw new CliFailureException(CliErrorCode.E_USAGE, "llm.protocol '" + protocol + "' is not a known wire protocol. Valid values: " + LlmWireProtocol.legalWireNames() + ".", "Set llm.protocol to one of " + LlmWireProtocol.legalWireNames() + ", or remove it to auto-detect per record.", "Set llm.protocol to a legal value in agentassert4j.json, then retry");
         }
     }
 
@@ -733,6 +745,11 @@ final class CliSupport {
     static List<String> malformedTaskRuleWarnings(InvocationRulesConfig rules) {
         List<String> warnings = new ArrayList<>();
         for (String note : rules.getParseNotes()) {
+            // 整文件级致命注记由每次运行开头的「Rules warning:」行全文披露（含文件
+            // 路径与后果）；此处再渲染一遍会造成同因双行，且被错贴 rules.tasks 段前缀
+            if (note.endsWith("no declarations are in effect")) {
+                continue;
+            }
             warnings.add("rules.tasks " + note + ".");
         }
         for (String taskKey : rules.getDeclaredTaskKeys()) {

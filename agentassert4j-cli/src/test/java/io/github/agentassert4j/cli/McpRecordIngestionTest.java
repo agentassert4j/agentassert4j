@@ -91,6 +91,23 @@ class McpRecordIngestionTest {
     }
 
     @Test
+    @DisplayName("metadata.taskKey 与顶层 taskKey 冲突：顶层赢且就地披露（不静默覆盖）")
+    void metadataTaskKey_conflictDisclosed() {
+        String request = "{\"model\":\"m\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";
+        String response = "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"ok\"}}]}";
+        Map<String, Object> call = args(request, response);
+        call.put("taskKey", "task-arg");
+        call.put("metadata", "{\"taskKey\":\"task-meta\"}");
+        McpToolOutcome outcome = McpRecordIngestion.ingest(dbPath, call);
+        assertEquals(0, outcome.exit, outcome.stdout);
+        assertTrue(outcome.stderr.contains("metadata taskKey 'task-meta' was overridden by the taskKey argument 'task-arg'"),
+                "冲突取舍必须可见（经 stderr 注记通道）: " + outcome.stderr);
+        InteractionRecord record = stored();
+        assertTrue(record.getMetadata().contains("\"taskKey\":\"task-arg\""),
+                "顶层参数赢是既定优先级: " + record.getMetadata());
+    }
+
+    @Test
     @DisplayName("缺参负测：逐字段点名缺失项 + nextAction 指回 record 工具")
     void missingParams_namedIndividually() {
         Map<String, Object> onlySessionId = new LinkedHashMap<>();
@@ -413,6 +430,29 @@ class McpRecordIngestionTest {
             assertEquals(Integer.valueOf(3), record.getCacheReadTokens());
             assertEquals(Integer.valueOf(4), record.getReasoningTokens());
             assertEquals("resp_a", record.getRecordId());
+        }
+
+        @Test
+        @DisplayName("无 type 注解的 role 条目：警告点名 + 模板提取降级可见（不静默）")
+        void untypedRoleItem_warnsTemplateDegraded() {
+            // chat 风格条目（有 role 无 type）混入 Responses input——system 模板随之丢失，
+            // 此前静默跳过把「模板没提取到」伪装成「没有模板」（round31 实弹）
+            String request = "{\"model\":\"gpt-4o\",\"input\":[" + "{\"role\":\"system\",\"content\":\"You are strict.\"}," + "{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hi\"}]}]}";
+            String response = "{\"id\":\"resp_u\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"gpt-4o\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"ok\"}]}],\"usage\":{\"input_tokens\":5,\"output_tokens\":1}}";
+            McpToolOutcome outcome = McpRecordIngestion.ingest(dbPath, args(request, response));
+            assertEquals(0, outcome.exit, outcome.stdout);
+            assertTrue(outcome.stderr.contains("1 input item(s) carry a role but no 'type' field"),
+                    "无 type 条目必须点名（经 stderr 注记通道，MCP 分发层保留进工具文本）: " + outcome.stderr);
+            assertTrue(outcome.stderr.contains("identity degrades to the label-only key"),
+                    "身份降级后果必须可见: " + outcome.stderr);
+            InteractionRecord record = stored();
+            assertNull(record.getTemplateHash(), "无 type 的 system 条目不产模板哈希（如实降级）");
+
+            // 对照：type 注解齐全的 system 条目模板提取正常
+            String okRequest = "{\"model\":\"gpt-4o\",\"input\":[" + "{\"type\":\"message\",\"role\":\"system\",\"content\":\"You are strict.\"}," + "{\"type\":\"message\",\"role\":\"user\",\"content\":\"hi\"}]}";
+            McpToolOutcome ok = McpRecordIngestion.ingest(tempDir.resolve("ingest-ok.db").toString(), args(okRequest, response));
+            assertEquals(0, ok.exit, ok.stdout);
+            assertFalse(ok.stdout.contains("no 'type' field"), "注解齐全不告警: " + ok.stdout);
         }
 
         @Test

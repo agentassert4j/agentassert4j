@@ -160,6 +160,39 @@ class InvocationRulesConfigTest {
         }
 
         @Test
+        @DisplayName("调用点字段类型错值与非法正则留注记——静默弱化约束不可接受")
+        void invocationField_typeErrorsAndBadRegex_noted() {
+            // regexPatterns 传字符串（非数组）、requiredKeywords 传字符串：安全忽略之外必须留痕
+            InvocationRulesConfig config = InvocationRulesConfig.fromJson(
+                    "{\"invocations\":{\"svc\":{\"regexPatterns\":\"not-an-array\",\"requiredKeywords\":\"oops\"}}}");
+            assertTrue(config.getRulesForInvocation("svc").getRegexPatterns().isEmpty(), "非数组值按无声明处理");
+            boolean regexNoted = false;
+            boolean keywordNoted = false;
+            for (String note : config.getParseNotes()) {
+                if (note.contains("svc") && note.contains("regexPatterns") && note.contains("must be a JSON array")) {
+                    regexNoted = true;
+                }
+                if (note.contains("svc") && note.contains("requiredKeywords") && note.contains("must be a JSON array")) {
+                    keywordNoted = true;
+                }
+            }
+            assertTrue(regexNoted, "regexPatterns 类型错必须留注记: " + config.getParseNotes());
+            assertTrue(keywordNoted, "requiredKeywords 类型错必须留注记: " + config.getParseNotes());
+
+            // 非法正则按「永不匹配」参与判定，但加载时必须点名——与真不匹配可分诊
+            InvocationRulesConfig badRegex = InvocationRulesConfig.fromJson(
+                    "{\"invocations\":{\"svc\":{\"regexPatterns\":[\"[unclosed\"]}}}");
+            boolean invalidPatternNoted = false;
+            for (String note : badRegex.getParseNotes()) {
+                if (note.contains("not a valid regular expression") && note.contains("[unclosed")) {
+                    invalidPatternNoted = true;
+                }
+            }
+            assertTrue(invalidPatternNoted, "非法正则必须留注记: " + badRegex.getParseNotes());
+            assertEquals(1, badRegex.getRulesForInvocation("svc").getRegexPatterns().size(), "声明本体保留（运行时永不匹配）");
+        }
+
+        @Test
         @DisplayName("共享 EMPTY 实例无声明且不可变")
         void sharedEmpty_hasNoDeclarations() {
             InvocationRulesConfig config = InvocationRulesConfig.fromJson("{\"invocations\":{}}");

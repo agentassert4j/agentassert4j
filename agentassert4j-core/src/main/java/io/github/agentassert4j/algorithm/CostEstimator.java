@@ -242,6 +242,11 @@ public final class CostEstimator {
 
     /**
      * 用户覆盖文件（agentassert4j-prices.json）的并集覆盖：同族改价、新族补充。
+     * 族键改价的优先级必须真实成立——查价是「先精确、后最长包含匹配」，若快照
+     * 里存在更长的族内键（如 deepseek-chat），族键覆盖会被精确命中遮蔽，用户
+     * 按文档写族键改价等于没改（round31 双宿主独立实弹）。因此族键落地时先移除
+     * 快照侧所有包含该族键的更具体键，再写入覆盖行；覆盖文件内部自己的更长键
+     * 不受影响（同批写入，精确命中优先）。
      * 损坏的覆盖文件必须就近可见（SEVERE）而不是静默失效——用户写了价格文件却
      * 看不到生效，比没有文件更难排查。包级可见供合并语义的确定性验证。
      */
@@ -260,9 +265,20 @@ public final class CostEstimator {
             LOG.log(Level.SEVERE, "Price override file (agentassert4j-prices.json) is not a JSON object; ignoring it.");
             return;
         }
-        if (parseInto((Map<?, ?>) parsed, prices) == 0) {
+        Map<String, double[]> rows = new LinkedHashMap<>();
+        if (parseInto((Map<?, ?>) parsed, rows) == 0) {
             LOG.log(Level.SEVERE, "Price override file (agentassert4j-prices.json) contained no usable price rows; ignoring it.");
+            return;
         }
+        for (String overrideKey : rows.keySet()) {
+            for (Iterator<Map.Entry<String, double[]>> it = prices.entrySet().iterator(); it.hasNext(); ) {
+                Map.Entry<String, double[]> existing = it.next();
+                if (!existing.getKey().equals(overrideKey) && existing.getKey().contains(overrideKey)) {
+                    it.remove();
+                }
+            }
+        }
+        prices.putAll(rows);
     }
 
     /**

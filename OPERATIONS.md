@@ -48,11 +48,14 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
   正斜杠在 shell 引号里无需转义，示例统一用正斜杠）。
 - **Windows**：
   - 管道/重定向消费 CLI 输出（子进程读取、`>` 落盘后按 UTF-8 解析）时，启动命令加
-    `-Dfile.encoding=UTF-8`——JVM 默认按平台字符集（中文 Windows 为 GBK）写特殊字形；
-    同一解码也作用于**命令行参数**：`--db`/`--task` 含 emoji/特殊字形时可能被解码成 `?` 并误报「不存在」——参数含特殊字形时走配置文件，或同样加此参数（建议适用于 JDK 8–17），
-
+    `-Dfile.encoding=UTF-8`——JVM 默认按平台字符集（中文 Windows 为 GBK）写特殊字形，
     UTF-8 消费者会解码失败；交互式终端显示侧可配 `chcp 65001`。框架自身输出串恒为
     UTF-8 源码串，无字面 GBK 内容。
+  - **命令行参数走另一条解码链**（`sun.jnu.encoding`，由 OS 活动代码页决定，`-Dfile.encoding`
+    管不到它）：含 emoji/非 BMP 字形的 `--db`/`--task`/`--invocation` 参数在中文 Windows 上会被
+    解码成 `?` 并误报「不存在」——`-Dsun.jnu.encoding=UTF-8` 与 `JAVA_TOOL_OPTIONS` 同样无效
+    （JDK 21 实测三种补救全部无效；BMP 内 CJK 无损）。含特殊字形的标识符走 MCP 通道
+    （`record`/`check` 的参数经 JSON 传输，无参数解码层）或改用 BMP 内键名。
   - Git Bash / PowerShell / CMD 均可运行；`-D` 系统属性与 `--db` 等参数的引号规则遵循
     各 shell 惯例（PowerShell 对含空格路径用引号包裹即可）。
 - **macOS / Linux**：无额外注意事项；`java -jar` 标准用法，JRE 8+。
@@ -67,7 +70,8 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 文件名固定 `agentassert4j.json` / `agentassert4j-rules.json`）：
 
 1. 系统属性显式路径（不可读直接报错，不静默换源）→ 2. 当前工作目录 → 3. `~/.agentassert4j/` →
-4. classpath → 5. 安全默认值。 `storage.url` 为相对路径时按进程当前工作目录解析——服务化部署建议绝对路径。打开库的命令开头会打印实际命中的配置来源（`rules`/`completion` 不开库不打印）。`${ENV_VAR}` 引用统一替换，未设置的变量替换为空串。
+4. classpath → 5. 安全默认值。 `storage.url` 为相对路径时按进程当前工作目录解析——服务化部署建议绝对路径。打开库的命令开头会打印实际命中的配置来源（`rules`/`completion` 不开库不打印，也不接受
+`--db`——统一脚本逐命令追加 `--db` 时对这两个命令要跳过）。`${ENV_VAR}` 引用统一替换，未设置的变量替换为空串。
 
 全部字段（都有安全默认值，可只写需要的段）：
 
@@ -94,7 +98,7 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 |----|----|------|------|
 | storage.url | — | `~/.agentassert4j/agentassert4j.db` | SQLite 文件路径，`~` 自动展开；开库命令（status/baseline/replay/accept/reject/rollback/verify/doctor/graph show/export）的 `--db` 可逐次覆盖 |
 | regression.ignorableFields | — | 空列表 | 已知噪声字段白名单（归一化后仍不同才构成差异） |
-| llm.protocol | — | 自动推导 | 重放端点的 wire 协议。不配置时自动推导：按基线记录的原摄取方言发射（同协议原样重放零配置），无记录提示时回退 `openai-chat`；显式配置 `openai-chat`/`anthropic-messages`/`openai-responses` 覆盖推导（跨协议重放）；未知值在消费 llm 配置的命令（re-drive 等真跑路径）上报错并列全部合法值——零调用命令不触发 |
+| llm.protocol | — | 自动推导 | 重放端点的 wire 协议。不配置时自动推导：按基线记录的原摄取方言发射（同协议原样重放零配置），无记录提示时回退 `openai-chat`；显式配置 `openai-chat`/`anthropic-messages`/`openai-responses` 覆盖推导（跨协议重放）；未知值在消费 llm 配置的路径上报错并列全部合法值（re-drive 真跑与 re-drive dry-run 预演面都拦——预演不应展示真跑必然失败的计划）——不消费 llm 配置的命令不触发 |
 | llm.apiKey | — | 空 | 重放用；支持 `${ENV}` 引用；缺失时 `--re-drive` 打印警告（bare 对齐零调用，不检查 Key） |
 | llm.endpoint | — | `https://api.openai.com` | OpenAI 兼容端点（DeepSeek/通义等同协议端点均可） |
 | llm.model | — | `gpt-4o` | 重放请求的模型；与录制模型不一致时命令行告警 |
@@ -108,8 +112,11 @@ alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 > 属性（Boot 应用）与 `RecorderConfig.builder()`（非 Boot 应用）。写了 `recorder`
 > 段会收到未知键告警。
 
-内置价格快照按**模型族**键覆盖主流族（gpt/o/gemini/qwen 等；deepseek 等族不在内置清单内，缺覆盖时报 `cost unknown`——如实不编造）。价格快照缺模型族（或需要改价）时，在 `agentassert4j.json` 同目录放 `agentassert4j-prices.json`（按需惰性加载：仅在有成本估算需求——重驱报价/总结——时读取与告警，零重驱目标的运行不会触碰它）
-覆盖（格式与快照一致：模型族 → `{"input": 每token价, "output": 每token价}`，美元）：
+内置价格快照按**模型族**键覆盖主流族（gpt/o/gemini/qwen/deepseek 等；快照未覆盖的模型报 `cost unknown` 并点名该模型名——如实不编造）。价格快照缺模型族（或需要改价）时，在 `agentassert4j.json` 同目录放 `agentassert4j-prices.json`（按需惰性加载：仅在有成本估算需求——重驱报价/总结——时读取与告警，零重驱目标的运行不会触碰它）
+覆盖（格式与快照一致：模型族 → `{"input": 每token价, "output": 每token价}`，美元）。查价规则
+= 先精确键、后最长包含匹配（带日期变体归入族价）；**覆盖文件的族键真实压过快照更具体的族内键**
+（写 `deepseek` 即给全 deepseek 族改价，快照的 `deepseek-chat` 等键同时让位），覆盖文件内部
+自己的更长键仍以精确优先；未被任何模型命中的覆盖键惰性无害（不告警）：
 同族改价、新族补充；文件损坏会被 SEVERE 告警而非静默失效。也可用系统属性
 `agentassert4j.prices.path` 显式指定路径。
 三协议的端点与鉴权形态：
@@ -265,8 +272,10 @@ LLM API Key **只被一个功能消费**：`replay --re-drive`（受控重驱的
   exit 2）——这是设计行为不是故障：库里有任何未建档键，门禁就不出结论；②各宿主**判自己的域**——
   check/diff 带 `--task`/`--invocation` 缩域、establish 自己的键，别替别人裁决（跨宿主的在途候选
   对全库可见，属共享治理面）；③想跑全库门禁，前提是库里每个键都有人 establish 过（含等待显式
-  建档的裂键——`baseline --invocation <key>` 逐个并入基线）。框架不引入「键归属」概念，共享库的
-  治理纪律靠这三条约定承载。
+  建档的裂键——`baseline --invocation <key>` 逐个并入基线）。**④bare `replay`（无缩域）对
+  全库未建档键自动建档**——以你当时的 actorTag 署名逐键 establish，等于替并行宿主建域（漏钉
+  `-Dagentassert4j.config.path` 的一次裸跑就是一轮全域治理写）；共库上的 replay 一律带
+  `--task`/`--invocation` 缩域。框架不引入「键归属」概念，共享库的治理纪律靠这几条约定承载。
 - **库体检**：`doctor` 命令一次性输出身份/覆盖/规则三段确定性事实（骨架族形态、多步零标签链、
   未声明任务的重复请求文本任务族、未建档调用点、template_hash 缺失、规则期望错位）——零声明接入
   补声明、首次建档前自查都用它；只读不判定不建档。
@@ -322,7 +331,9 @@ agentassert4j replay --ci --json
   仅限单次调用）。**读数看 `matched k of N` 计数**（近邻 2/3=稳定，1/N 远古命中=考古），JSON 的
   `isMember` 布尔=「历史任一命中」，不承载阈值——AI 消费者 accept 前以计数为准。机器面字段集
   恒定：`matchedSessions` 列全部命中会话（未命中为空数组），`closestSession`/`closestScore`
-  常驻（命中为 null、零配对时 closestScore 为 null）——消费端无需按结论写条件分支。不带
+  常驻（命中为 null、零配对时 closestScore 为 null），`prefixDependent` 标记该链是否延续早前
+  会话的上下文前缀（延续链不回放前缀直接对比会把上下文缺失误判为回归，读数先看该标记）
+  ——消费端无需按结论写条件分支。不带
   `--member-check` 时 `--member-window` 单独出现按用法错误拒绝（exit 2）。
   **取样与配对语义**：窗口取「该任务最新链之前」的最近 N 条历史链（按时间序，`all`=全部
   先于最新链的历史）；每条样本链与最新链做**逐步配对**（与 bare replay 同一配对器、
@@ -408,12 +419,14 @@ requiredSteps/order/counts 的包，编排纪律同样参与判定——跨模�
 reject/rollback/collect）发生时落入治理事件时间线，agent 申报的治理写用一条命令回溯：
 
 ```bash
-agentassert4j audit              # 人类清单：[动词] 键 版本 + 主体/代码锚
+agentassert4j audit              # 人类清单：[动词] 键 版本 + 主体 + UTC 时间戳 + 代码锚
 agentassert4j audit --json       # agentassert4j.audit/1 机器报告（writes 数组）
 ```
 
 <img src="assets/cli-audit.png" alt="audit：治理事件全量时间线——establish/collect/accept/rollback 逐笔可核对，主体与代码锚在列（演示库真实输出）" width="560"/>
 
+六个动词里 `collect` 的触发面最窄：同键模板身份漂移在 replay 对齐判定为 PASS（无行为差异）
+时由框架自动并入，actor 恒为框架自身——按动词检索对账时它是唯一无人工主体的动词。
 reject 与 rollback 不在画像上留状态痕迹，事件时间线是其唯一审计载体。rollback 回执并列披露
 两个身份：`executor` 是本次执行回滚的操作者（与事件表 actor 同源），`approvedBy` 是恢复版本
 的原始审批人——回滚恢复的是历史基线，审批事实随之回退，操作者不要把 approvedBy 误读成自己
@@ -465,9 +478,15 @@ accept/reject + re-drive + export）+ record 摄取（非 Java 栈上报交互�
   （TS/Python agent 把原生 LLM 调用的原始请求/响应 JSON 上报落库，幂等可重发；
   **部分失败后重录整链时换新 recordId/session**——复用旧 id 会与库内既有记录跨运行混搭，
   tool_call_id 关联断裂会让值流图静默缺边）。
-  注意值流图的前置条件：工具结果必须**回灌给模型**（作为 tool 消息进入下一条请求的
-  history 并随该条记录上报），或由 SDK 随调用同记录——工具结果只留在你的本地脚本里时，
-  `graph` 对该值流无感知（零边 + 近失诊断会提示）。
+- **responses 方言的身份前提**：`openai-responses` 摄取的模板提取来自 `instructions`，或
+  `input` 里 `type:"message"` 且 role 为 system/developer 的条目——条目缺 `type` 注解（chat
+  风格混入）会被跳过并警告，system 模板随之丢失，身份退化为纯标签键（键无桶后缀、漂移检测
+  致盲；doctor 的 `Records missing template_hash` 计数并点名记录 id）。
+  注意值流图的两个前置条件：工具结果必须**回灌给模型**（作为 tool 消息进入下一条请求的
+  history 并随该条记录上报），且值须由 **JSON 承载**才是可提取叶子（工具结果为 JSON 对象/
+  数组、值是独立叶子；裸文本里嵌的值不可提取——确定性取舍，不做文本挖掘）。工具结果只留在
+  本地脚本、或以裸文本回灌时，`graph` 对该值流无边缘但**近失诊断按记录对提示原因**（与
+  库里边数无关恒在场：无可提取值/全被噪声排除/仅子串包含/无精确相等四类归因）。
 
 **无 MCP 宿主时的最短自写客户端路径**（python/TS 起 stdio 子进程后，三段报文即可上报；
 每次请求带递增 id，服务端响应同 id）：
@@ -660,7 +679,9 @@ try {
    声明链会在 doctor「tasks expectation mismatches」里报错位。
 
 发现-声明-验证的闭环：`agentassert4j doctor`（或 replay/status/verify 出口的 Health 一行）
-→ 按计数补上面对应层的声明 → 重新录制 → doctor 计数归零。全程零新机制，只是把录制契约
+→ 按计数补上面对应层的声明 → 重新录制 → doctor 计数归零。Health 一行的三个计数：label
+split（同标签裂出的未建档新键）、self-established tasks（该请求文本只有一条链的任务——首次
+录制即自建基线、暂无链间对齐证据）、multi-step unlabeled chains（多步零标签链）。全程零新机制，只是把录制契约
 里已有的三个可选字段按需点亮。
 
 ## 9. 版本与兼容语义

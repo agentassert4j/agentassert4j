@@ -7,6 +7,7 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import java.io.PrintStream;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -102,6 +103,11 @@ public class AuditCommand implements Callable<Integer> {
             sb.append(' ').append(event.getVersionTag());
         }
         sb.append(' ').append(event.getActor() != null ? event.getActor() : "(no actor)");
+        if (event.getHappenedAt() != null) {
+            // 近因分析（「刚才那笔是谁写的」）在人读面必须可对时——此前只有 JSON 面有
+            // happenedAt，人读时间线只能靠输出顺序猜先后；UTC 定形，无本地时区歧义
+            sb.append(' ').append(Instant.ofEpochMilli(event.getHappenedAt()).toString());
+        }
         if (event.getCodeRef() != null) {
             sb.append(" (ref ").append(event.getCodeRef()).append(')');
         }

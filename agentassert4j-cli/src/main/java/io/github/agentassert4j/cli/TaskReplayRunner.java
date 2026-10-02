@@ -181,7 +181,7 @@ public class TaskReplayRunner {
             return fail(e.errorCode, CliSupport.describe(e), e.hint, e.nextAction);
         }
         if (scoped.isEmpty()) {
-            return fail(CliErrorCode.E_NO_DATA, "No task chains matched the scope.", "Record interactions first, or check invocation keys and task prefixes with `status`.", "agentassert4j status");
+            return fail(CliErrorCode.E_NO_DATA, "No task chains matched the scope.", "Record interactions first, or check invocation keys and task prefixes with `status`. Chains recorded with a declared taskKey match by taskKey, not by their original request text.", "agentassert4j status");
         }
         info(alignmentBasisLine(ciMode, memberCheck));
         boolean narrowed = taskPrefix != null || invocationKey != null;
@@ -239,7 +239,7 @@ public class TaskReplayRunner {
             try {
                 new BaselineService(repository).establishMissing(
                         jsonMode ? discardStream() : new PrintStream(establishSink, true, StandardCharsets.UTF_8.name()),
-                        CliSupport.autoActor(), null, false, autoEstablishKeys, rules, null, null);
+                        CliSupport.autoActor(), null, false, autoEstablishKeys, invocationKey == null, rules, null, null);
             } catch (java.io.UnsupportedEncodingException e) {
                 // JVM 规范强制支持 UTF-8，此分支不可达
                 throw new IllegalStateException(e);
@@ -1142,7 +1142,7 @@ public class TaskReplayRunner {
                         } else if (noProfile) {
                             info("Difference holds against the paired chain, but this invocation has no baseline profile (label split onto a new template); no candidate registered. Establish it with `agentassert4j baseline --invocation <prefix>`, then replay to adjudicate.");
                         } else {
-                            info("Difference holds against the paired chain, but this shape is already tracked by the invocation (approved or previously rejected); no candidate registered (nothing to adjudicate).");
+                            info("Difference holds against the paired chain, but this shape is already tracked by the invocation (approved or previously rejected); no candidate registered (nothing to adjudicate). To go green, run the task again in a new session so the latest chain lands on a tracked shape, or rebuild the baseline set with `baseline --force` if the difference is intended.");
                         }
                     }
                 } else {
@@ -1426,9 +1426,18 @@ public class TaskReplayRunner {
             info("Hung: " + shown + " (split key awaits explicit establish: `baseline --invocation " + key + "`)");
         } else {
             boolean advanced = manager.advanceTemplateIdentity(key);
-            totals.collected++;
-            action = "collected";
-            info("Collected: " + shown + " (no behavioral difference; template identity " + shortHash(point.getProfileTemplateHash()) + " → " + shortHash(point.getLatestTemplateHash()) + ")");
+            if (advanced) {
+                totals.collected++;
+                action = "collected";
+                info("Collected: " + shown + " (no behavioral difference; template identity " + shortHash(point.getProfileTemplateHash()) + " → " + shortHash(point.getLatestTemplateHash()) + ")");
+            } else {
+                // 身份已是最新（本轮回建/并发方已推进过）：宣称收编等于假成功——
+                // 治理事实是「漂移点在检测后被别处解决」，审计面不会有 collect 事件，
+                // 输出必须与审计一致
+                totals.uncollected++;
+                action = "uncollected";
+                info("Identity already current: " + shown + " (template identity was advanced by this run's auto-establish or a concurrent actor after the drift was detected; nothing collected)");
+            }
         }
         if (dispositionJsons != null) {
             dispositionJsons.add("{\"invocationKey\":\"" + RecursiveJsonParser.escape(key) + "\",\"kind\":\"" + kind.wireName() + "\",\"action\":\"" + action + "\"}");
@@ -1705,7 +1714,10 @@ public class TaskReplayRunner {
                 info("Warning: replay model " + llmClient.name() + " differs from the recorded models of the re-drive targets " + new ArrayList<>(plannedModels) + "; verdicts are not directly comparable to baselines (model switching is experimental).");
             }
             info("Re-drive plan (--re-drive): " + CliSupport.plural(planned.size(), "record") + " to re-drive with each point's latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + ".");
-            info("Re-drive emitter: model " + llmClient.name() + ", protocol " + (executionConfig.getWireProtocol() != null ? executionConfig.getWireProtocol() : "auto") + ".");
+            // 预演的是一次即将发生的发射：非法协议在预演面就被拦截（真跑前置同一守卫），
+            // 否则 dry-run 展示一个真跑必然 exit 2 的计划，报价成了空谈（round31 实弹）
+            CliSupport.ensureKnownWireProtocol(executionConfig.getWireProtocol());
+            info("Re-drive emitter: model " + llmClient.name() + (executionConfig.getEndpoint() != null ? " via " + executionConfig.getEndpoint() : "") + ", protocol " + (executionConfig.getWireProtocol() != null ? executionConfig.getWireProtocol() : "auto — record protocol hint, openai-chat fallback") + ".");
             // 被排除记录逐条点名：重驱需要「该点最新归档模板」——键无基线（无归档
             // 模板）的记录被静默排除出计数，5→3 这类缩差必须让操作者看见谁缺席、
             // 为什么（round30 N-2）

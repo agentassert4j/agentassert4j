@@ -120,10 +120,14 @@ public class GraphShowCommand implements Callable<Integer> {
             if (nodesJson.length() > 0) nodesJson.append(",");
             nodesJson.append("\"").append(RecursiveJsonParser.escape(node)).append("\"");
         }
-        return "{\"schema\":\"" + ReportSchemas.GRAPH + "\",\"nodeCount\":" + nodes.size() + ",\"nodes\":[" + nodesJson + "],\"edgeCount\":" + edges.size() + ",\"edges\":[" + edgeJson + "],\"cycles\":[" + cyclesJson + "]" + ",\"scanned\":{\"sessions\":" + stats.getSessions() + ",\"records\":" + stats.getRecords() + ",\"invocationKeys\":" + stats.getInvocationKeys() + ",\"candidatePairs\":" + stats.getCandidatePairs() + "}" + (edges.isEmpty() ? ",\"note\":\"" + EDGE_CONDITIONS_JSON + "\"" : "") + graphNearMissJson(repository, edges) + "}";
+        return "{\"schema\":\"" + ReportSchemas.GRAPH + "\",\"nodeCount\":" + nodes.size() + ",\"nodes\":[" + nodesJson + "],\"edgeCount\":" + edges.size() + ",\"edges\":[" + edgeJson + "],\"cycles\":[" + cyclesJson + "]" + ",\"scanned\":{\"sessions\":" + stats.getSessions() + ",\"records\":" + stats.getRecords() + ",\"invocationKeys\":" + stats.getInvocationKeys() + ",\"candidatePairs\":" + stats.getCandidatePairs() + "}" + (edges.isEmpty() ? ",\"note\":\"" + EDGE_CONDITIONS_JSON + "\"" : "") + graphNearMissJson(repository) + "}";
     }
 
     private void renderHuman(StorageRepository repository, Set<String> nodes, List<GraphEdge> edges, InMemoryDependencyGraph graph, GraphBuildStats stats) {
+        // 近失诊断与边数解耦计算：库里只要存在任何一条真实边，「整库零边」门控就
+        // 永远不再触发——其余记录对的近失从此不可见，等于诊断面在真实项目上死亡
+        // （round31 双宿主实弹：有边库上的大小写不匹配/裸文本结果全部静默）
+        List<String> misses = nearMisses(repository);
         // 节点短形约 100 字符软换行收纳——几十个键挤一行在终端里只能水平滚动
         out.println("Nodes (" + nodes.size() + "):");
         StringBuilder nodeLine = new StringBuilder("  ");
@@ -160,12 +164,18 @@ public class GraphShowCommand implements Callable<Integer> {
             out.println("  the same record's response tool call is not drawn (edges link different records);");
             out.println("  provenance therefore starts one record later, and the shown origin is the nearest");
             out.println("  earlier carrier, which may not be the true business source.");
-            for (String miss : nearMisses(repository)) {
+            for (String miss : misses) {
                 out.println("  Near miss: " + miss);
             }
         }
         for (GraphEdge edge : edges) {
             out.println(edgeLine(edge));
+        }
+        if (!edges.isEmpty() && !misses.isEmpty()) {
+            out.println("Near misses (" + misses.size() + ") — record pairs that nearly connected:");
+            for (String miss : misses) {
+                out.println("  Near miss: " + miss);
+            }
         }
         Set<String> cycles = graph.detectCycles();
         if (cycles.isEmpty()) {
@@ -196,10 +206,11 @@ public class GraphShowCommand implements Callable<Integer> {
     }
 
     /**
-     * 近失诊断（零边时最多 3 条）：找出「带模型工具调用参数但没接上上游」的记录，
+     * 近失诊断（至多 3 条）：找出「带模型工具调用参数但没接上上游」的记录，
      * 用 tracer 同一套提取规则回答「差在哪」——上游没有可提取值、值全被噪声排除、
-     * 只有子串包含、或参数与上游值毫无交集。用户按条件构造失败时，靠它省掉
-     * 逐配方试错；全库没有任何工具调用参数时给出那条结构性事实。
+     * 只有子串包含、或参数与上游值毫无交集。任一参数已与上游值精确相等的记录
+     * 不算近失（它连通了）；诊断与边数解耦后这条排除是正确性前提，否则已连通的
+     * 记录对也会被报成「没接上」。全库没有任何工具调用参数时给出那条结构性事实。
      */
     private static List<String> nearMisses(StorageRepository repository) {
         List<String> lines = new ArrayList<>();
@@ -242,6 +253,16 @@ public class GraphShowCommand implements Callable<Integer> {
                     lines.add(CliSupport.displayKey(laterKey) + " (session " + sessionId + "): upstream values are all noise-excluded (short pure numbers and decimals, true/false, or shorter than 3 characters)");
                     continue;
                 }
+                boolean anyExactMatch = false;
+                for (String arg : args) {
+                    if (meaningful.contains(arg)) {
+                        anyExactMatch = true;
+                        break;
+                    }
+                }
+                if (anyExactMatch) {
+                    continue;
+                }
                 boolean embedsOnly = false;
                 for (String arg : args) {
                     for (String leaf : meaningful) {
@@ -265,13 +286,11 @@ public class GraphShowCommand implements Callable<Integer> {
     }
 
     /**
-     * graph/1 的近失诊断（仅零边时在场）：机器面与 human 面同一分类逻辑，
-     * 消费方零调用即可读到「差在哪」。
+     * graph/1 的近失诊断：机器面与 human 面同一分类逻辑，消费方零调用即可读到
+     * 「差在哪」。字段恒在场（含空数组）——诊断字段随边数出没会让消费方把
+     * 「无字段」误读成「无问题」。
      */
-    private static String graphNearMissJson(StorageRepository repository, List<GraphEdge> edges) {
-        if (!edges.isEmpty()) {
-            return "";
-        }
+    private static String graphNearMissJson(StorageRepository repository) {
         StringBuilder misses = new StringBuilder();
         for (String miss : nearMisses(repository)) {
             if (misses.length() > 0) misses.append(",");
