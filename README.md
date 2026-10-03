@@ -122,17 +122,19 @@ agentassert4j replay
 ```
 
 ```text
-Drift: 2 same-key, 0 label splits (0 zero-template invocations undetectable)
-  ▲ 查询物流@8d9dbac2 (查询物流) template 6feac2e8 → d15016ac
+Drift: 1 same-key, 0 label splits (0 zero-template invocations undetectable)
+  ▲ query-order@96e56b00 (query-order) template 287fb22f → 7afa1246
 Alignment basis: each task's latest chain is judged against its previous chain (same request text; declared taskKey groups first).
-Task "订单 1234 的物流太慢，我要退款": baseline chain (session demo-session-0801) → new chain (session demo-session-0901)
-  [2] 查询订单@b3e4b38c  PASS
-  [3] 查询物流@8d9dbac2  similarity=0.80 verdict=CHANGED | tool calls match | added fields: [delivery.promise]
-Candidate registered: 查询物流@8d9dbac2 (behavior change awaiting adjudication; accept adds the shape to the approved set, reject discards).
-  [4] 提交退款@b47b21ea  missing step: baseline invoked '提交退款@b47b21ea', new chain did not
-  [6] 理赔查询@3e4c2031  added step: new chain invoked '理赔查询@3e4c2031', baseline did not
+Task "Order 1234 is too slow, I want a refund": baseline chain (session demo-session-0801) → new chain (session demo-session-0901)
+  [1] identify-intent@e284ef16  PASS
+  [2] query-order@96e56b00  PASS
+  [3] check-logistics@501e40a3  similarity=0.80 verdict=CHANGED | tool calls match | added fields: [delivery.promise]
+Candidate registered: check-logistics@501e40a3 (behavior change awaiting adjudication; accept adds the shape to the approved set, reject discards).
+  [4] submit-refund@713c42ec  missing step: baseline invoked 'submit-refund@713c42ec', new chain did not
+  [6] claims-inquiry@34298087  added step: new chain invoked 'claims-inquiry@34298087', baseline did not
 Alignment summary: PASS 3 | CHANGED 1 | missing 1 | added 1
-Pending adjudication: invocation:查询物流:8d9dbac294a5abfaca4d8e825e36576c1d2df72bd0f7b06312d83c45b746cdfa
+Collected: query-order@96e56b00 (no behavioral difference; template identity 287fb22f → 7afa1246)
+Pending adjudication (database-wide): invocation:check-logistics:501e40a3…
 Accept with `agentassert4j accept --invocation <prefix>`, or reject with `agentassert4j reject --invocation <prefix>`.
 ```
 
@@ -146,8 +148,8 @@ template, add `--re-drive` (real calls; preview with `--dry-run`, cap with
 **5. Adjudicate, then let the next real run re-align automatically**
 
 ```bash
-agentassert4j accept   # bare = adjudicate every pending candidate; intended: the shape joins the approved set (previous set archived, rollback-able)
-agentassert4j reject --invocation 查询物流   # regression: discard that candidate; prompt rollback is git's job
+agentassert4j accept --invocation check-logistics   # intended change: the new shape (delivery.promise added) joins the approved set (previous set archived, rollback-able)
+agentassert4j reject --invocation <label>           # regression instead: discard the candidate; prompt rollback is git's job
 
 agentassert4j replay   # after the next real execution the new chain pairs automatically
 ```
@@ -155,7 +157,7 @@ agentassert4j replay   # after the next real execution the new chain pairs autom
 A real alignment report (genuine CLI output on the demo database — one missing step, one added step,
 one structural change, each named; exit 1):
 
-<img src="assets/cli-align-report.png" alt="replay --task alignment report: PASS 3 | CHANGED 1 | missing 1 | added 1" width="880"/>
+<img src="assets/cli-align-report.en.png" alt="replay --task alignment report: PASS 3 | CHANGED 1 | missing 1 | added 1" width="880"/>
 
 ## Iterating until it's good (the shape-set workflow)
 
@@ -184,9 +186,9 @@ approved set is versioned and rollback-able.
 5. **Roll back a whole set.** `rollback --version vN` restores the entire approved-set snapshot of that
    version (rolling back to the currently active version is refused with a pointer to `reject`).
 
-<img src="assets/cli-member-check.png" alt="replay --member-check: the stability probe samples the most recent chains and reports matched k of N — this run has no member match yet, the shape is not stable" width="720"/>
+<img src="assets/cli-member-check.en.png" alt="replay --member-check: the stability probe samples the most recent chains and reports matched k of N — this run has no member match yet, the shape is not stable" width="720"/>
 
-<img src="assets/cli-ci-green.png" alt="replay --ci after accept: the chain ending the accepted shape rechecks green — PASS (shape 2 of 2)" width="720"/>
+<img src="assets/cli-ci-green.en.png" alt="replay --ci after accept: the chain ending the accepted shape rechecks green — PASS (shape 2 of 2)" width="720"/>
 
 </details>
 
@@ -236,11 +238,6 @@ stage('AgentAssert behavior regression') {
   post { always { archiveArtifacts 'agentassert4j.db, agentassert-replay.json' } }
 }
 ```
-
-The gate in action (genuine demo output: a real behavioral deviation → exit 1, the `task-report/1`
-machine report lands line by line on stdout):
-
-<img src="assets/cli-replay-ci.png" alt="replay --ci --json: line-by-line task-report/1 machine report, exit 1 gate red" width="880"/>
 
 `--ci` judges the **latest execution of each invocation in each task's latest chain against its approved
 shape set**. It never auto-baselines: an unbaselined invocation in scope exits 2 (fail-closed) —
@@ -328,7 +325,7 @@ Every command also has a short alias (`s`, `b`, `a`, `g`, `v`, `d`, `c`, `rp`, `
 The inspection surface looks like this (genuine CLI output on the demo database — one row per invocation:
 identity, baseline status, version, candidate, archived versions, business label):
 
-<img src="assets/cli-status.png" alt="status output: invocation list and baseline status" width="820"/>
+<img src="assets/cli-status.en.png" alt="status output: invocation list and baseline status" width="820"/>
 
 </details>
 
@@ -411,9 +408,11 @@ Config lookup chain: system property `agentassert4j.config.path` → working dir
 - **[Operations handbook (OPERATIONS.md)](OPERATIONS.md)** — deployment shapes, full configuration
   reference, CI gating recipes, delivery-acceptance runbook, shared-database operating rules, MCP
   integration, minimal recording contract, troubleshooting
-- **[Framework panorama (guide/framework-panorama.md)](guide/framework-panorama.md)** — the technical
-  tour and learning path: one continuous story through every feature, each act mapped back to real
-  classes, methods and tables (for developers and contributors)
+- **[Hands-on tutorial (guide/tutorial.md)](guide/tutorial.md)** — the full lifecycle in one
+  walkthrough: wiring → baselining → adjudication → gating → re-drive → delivery → audit, every
+  command and output genuine (for new integrators)
+- **[Architecture (ARCHITECTURE.md)](ARCHITECTURE.md)** — the code map for contributors: module
+  layering, the life of an interaction, and where to start by change
 - **[A Behavior-Regression Loop for AI (guide/ai-behavior-regression-loop.md)](guide/ai-behavior-regression-loop.md)**
   — why deterministic verdicts fit self-correction loops, and how to drive the MCP surface responsibly
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — how to contribute; the full collaboration contract lives in
@@ -423,7 +422,7 @@ Config lookup chain: system property `agentassert4j.config.path` → working dir
 
 - Bug reports and feature requests → [GitHub Issues](https://github.com/agentassert4j/agentassert4j/issues)
 - Questions and integration help → open an issue with your CLI `--json` output attached
-- Contributions → [CONTRIBUTING.md](CONTRIBUTING.md)
+- Contributions → [CONTRIBUTING.md](CONTRIBUTING.md), code map in [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## License
 

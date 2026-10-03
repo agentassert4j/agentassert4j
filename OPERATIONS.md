@@ -1,12 +1,12 @@
 # AgentAssert4j Operations & Delivery Handbook
 
 > The hands-on handbook for deployment, operations and delivery engineers. For concepts and the full
-> command semantics see [README.md](README.md); for the architecture tour see
-> [guide/framework-panorama.md](guide/framework-panorama.md).
+> command semantics see [README.md](README.md); for the lifecycle walkthrough see
+> [guide/tutorial.md](guide/tutorial.md) and for the code map [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **Contents**: [1. Deployment shapes](#1-deployment-shapes) ｜ [2. Configuration reference](#2-configuration-reference) ｜ [3. Database operations](#3-database-operations) ｜
 [4. CI gating recipes](#4-ci-gating-recipes) ｜ [5. Production packaging](#5-production-packaging) ｜ [6. Delivery-acceptance runbook](#6-delivery-acceptance-runbook) ｜
-[7. Troubleshooting](#7-troubleshooting) ｜ [8. Minimal recording contract](#8-minimal-recording-contract) ｜ [9. Version & compatibility semantics](#9-version-compatibility-semantics)
+[7. Troubleshooting](#7-troubleshooting) ｜ [8. Minimal recording contract](#8-minimal-recording-contract) ｜ [9. Version and compatibility semantics](#9-version-and-compatibility-semantics)
 
 ---
 
@@ -43,7 +43,6 @@ alias (Bash example; on Windows use the full command):
 ```bash
 alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
 ```
-
 
 ### 1.2 Cross-platform notes
 
@@ -147,6 +146,7 @@ Endpoint and auth shapes per protocol:
 | `openai-chat` | `https://api.deepseek.com` (any OpenAI-compatible endpoint) | Bearer |
 | `anthropic-messages` | `https://api.anthropic.com` or a vendor's Messages-compatible endpoint (e.g. `https://api.deepseek.com/anthropic`) | `x-api-key` + `anthropic-version` (client-provided) |
 | `openai-responses` | `https://api.openai.com` or `https://api.deepseek.com` | Bearer |
+
 ### 2.2 Starter properties (`application.yml`, prefix `agentassert4j`)
 
 The property tree mirrors the `agentassert4j.json` naming (`storage.url`), with every recording-domain
@@ -179,17 +179,17 @@ builder inside a `@Bean` method — the framework ships no second file format.
 {
   "invocations": {
     "refund": {
-      "requiredKeywords": ["退款"],
+      "requiredKeywords": ["refund"],
       "forbiddenKeywords": [],
-      "regexPatterns": [{ "pattern": "订单号[:：]?\\d+", "description": "必须回显订单号" }],
+      "regexPatterns": [{ "pattern": "order[:#]?\\s?\\d+", "description": "must echo the order number" }],
       "behaviors": ["nonEmptyOutput"]
     }
   },
   "tasks": {
     "refund-flow": {
-      "requiredSteps": ["提交退款"],
-      "requiredOrder": ["意图识别", "查询订单", "提交退款"],
-      "steps": { "查询订单": { "min": 1, "max": 3 } }
+      "requiredSteps": ["submit-refund"],
+      "requiredOrder": ["identify-intent", "query-order", "submit-refund"],
+      "steps": { "query-order": { "min": 1, "max": 3 } }
     }
   }
 }
@@ -227,7 +227,7 @@ builder inside a `@Bean` method — the framework ships no second file format.
 The `rules` command lists all built-in behavior names and the rules-file syntax at any time (genuine
 output on the demo database):
 
-<img src="assets/cli-rules.png" alt="rules command: the built-in behavior catalog and an agentassert4j-rules.json example" width="880"/>
+<img src="assets/cli-rules.en.png" alt="rules command: the built-in behavior catalog and an agentassert4j-rules.json example" width="880"/>
 
 > **When declarations take effect**: rules bind **at the moment they are pinned into a baseline** —
 > `baseline`/`--force` seeding, or `accept` adding to the set (the candidate fingerprint is extracted
@@ -299,6 +299,7 @@ have nothing to leak. A server used purely for record/check/verify needs no key 
 `${ENV}` reference); the one-shot equivalent is `MY_LLM_API_KEY=... agentassert4j replay --re-drive`.
 
 ## 3. Database operations
+
 - **One file is the whole state**: backup = copy the file (prefer a write-quiesced window, or accept a
   point-in-time snapshot under append-only semantics).
 - **Append-only**: `interactions` is a history ledger; re-recording appends rather than overwrites — to
@@ -346,7 +347,7 @@ have nothing to leak. A server used purely for record/check/verify needs no key 
   expectation mismatches) — use it to add declarations when onboarding zero-declaration, or to
   self-check before first establish; read-only, judges nothing, establishes nothing.
 
-<img src="assets/cli-doctor.png" alt="doctor: three deterministic health sections — identity / coverage / rules (read-only, no judging, no establishing)" width="880"/>
+<img src="assets/cli-doctor.en.png" alt="doctor: three deterministic health sections — identity / coverage / rules (read-only, no judging, no establishing)" width="880"/>
 
 ## 4. CI gating recipes
 
@@ -380,8 +381,6 @@ agentassert4j replay --ci --json
   print the pre-refusal report segments and guidance to stdout first. The same channel contract covers
   every command (schema list in §9).
 
-<img src="assets/cli-replay-ci.png" alt="replay --ci --json live run: task-report/1 line-by-line segmented report, exit 1 gate red" width="880"/>
-
 - **Budget pool** (in effect under `--re-drive`): `--max-total-calls/--max-total-tokens` caps the sum
   of all real re-drive calls in this run; once exhausted the remaining points are marked skipped and
   the run exits 2 (incomplete evidence must never masquerade as green).
@@ -411,9 +410,9 @@ agentassert4j replay --ci --json
   gates on the exit code — structural verdicts hold across models, and with `crossModel:true` wording
   diffs are annotated as expected (full recipe in §6).
 
-<img src="assets/cli-dry-run.png" alt="replay --task --dry-run: drift set and alignment plan preview — no LLM calls, no establishing, no disposition" width="720"/>
+<img src="assets/cli-dry-run.en.png" alt="replay --task --dry-run: drift set and alignment plan preview — no LLM calls, no establishing, no disposition" width="720"/>
 
-<img src="assets/cli-re-drive-dry-run.png" alt="replay --task --re-drive --dry-run: re-drive plan and cost quote; the example environment has no key configured, the warning line is visible as-is" width="720"/>
+<img src="assets/cli-re-drive-dry-run.en.png" alt="replay --task --re-drive --dry-run: re-drive plan and cost quote; the example environment has no key configured, the warning line is visible as-is" width="720"/>
 
 - **Stability probe (`--member-check`)**: the measuring stick before approving into the set — the
   task's latest chain is compared one by one against its most recent historical chains (window 5 by
@@ -449,6 +448,7 @@ agentassert4j:
 Spot check: start the app with `enabled=false` → run normal business calls → the database file does
 not exist (or gains no new records) — the recording side is confirmed off. The CLI analysis side is
 unaffected and keeps inspecting / accepting against existing databases.
+
 ## 6. Delivery-acceptance runbook
 
 Roles: the dev side (produces the evidence) and the acceptance side (the customer environment — model
@@ -469,7 +469,7 @@ and deployment may differ). For the acceptance-side CLI, carry the standalone ja
    exclusion is an export guard: clean that chain's baseline or fix the rules declaration first, then
    re-export;
 
-<img src="assets/cli-export.png" alt="baseline export: the acceptance pack written to disk with SHA-256 and task-chain/step counts" width="880"/>
+<img src="assets/cli-export.en.png" alt="baseline export: the acceptance pack written to disk with SHA-256 and task-chain/step counts" width="880"/>
 
 3. If **chain-end shapes are unadjudicated or candidates are in flight** at export time, the export
    warns and writes `unadjudicatedSteps` counts into the report (in-flight candidates count
@@ -509,7 +509,7 @@ skipped.
    (when unsure how local chains pair with the pack, add `--dry-run` first — pairing and cross-model
    annotations only, zero judgment, zero writes).
 
-<img src="assets/cli-verify-dry-run.png" alt="verify --dry-run: pack tasks × local chains pairing preview (cross-model annotations), zero judgment zero writes" width="880"/>
+<img src="assets/cli-verify-dry-run.en.png" alt="verify --dry-run: pack tasks × local chains pairing preview (cross-model annotations), zero judgment zero writes" width="880"/>
 
 3. Reading the verdicts:
    - Structural deviations (tool set / parameter types / output structure) = **real findings** → back
@@ -538,7 +538,7 @@ skipped.
    the markdown report is the delivery evidence itself — archive it together with the pack file's
    SHA-256.
 
-<img src="assets/cli-verify.png" alt="verify summary: per-task verdict lines + cross-model annotation + SHA-256 reconciliation, markdown report written to disk" width="880"/>
+<img src="assets/cli-verify.en.png" alt="verify summary: per-task verdict lines + cross-model annotation + SHA-256 reconciliation, markdown report written to disk" width="880"/>
 
 **Exit codes**: `0` all structures agree ｜ `1` a structural deviation exists (including missing/added
 steps) ｜ `2` version-guard refusal / coverage gap / usage error.
@@ -558,7 +558,7 @@ agentassert4j audit              # human listing: [verb] key version + actor + U
 agentassert4j audit --json       # agentassert4j.audit/1 machine report (writes array)
 ```
 
-<img src="assets/cli-audit.png" alt="audit: the full governance-event timeline — establish/collect/accept/rollback checkable one by one, actor and code anchor in the listing (genuine demo-database output)" width="560"/>
+<img src="assets/cli-audit.en.png" alt="audit: the full governance-event timeline — establish/collect/accept/rollback checkable one by one, actor and code anchor in the listing (genuine demo-database output)" width="560"/>
 
 Of the six verbs, `collect` has the narrowest trigger surface: when replay's alignment judges a
 same-key template-identity drift PASS (no behavioral difference), the framework folds it in
@@ -684,6 +684,7 @@ verbs follow CI semantics (refuse on unestablished keys and point to establish, 
 writes). Full contract in `guide/spec/mcp.md`.
 
 ## 6.3 Model switches and thinking toggles
+
 Switching models, upgrading models, migrating vendors, shipping fine-tuned/distilled versions,
 turning deep thinking off for latency, prompt A/B, swapping a tool server's implementation — the
 shared question is "did behavior change, by how much, and at what price". The framework's answer: an
@@ -857,7 +858,7 @@ prompts. Each step answers one question:
    template versions and task rules gain step names to reference. Multi-step chains with no labels at
    all show up in doctor's "multi-step unlabeled chains" count.
 2. **Task key (`taskKey`)** — "which business scenario does this chain belong to". At recording time
-   write `{"taskKey":"查订单"}` into `metadata` (or let the chain's first userInput be the scenario
+   write `{"taskKey":"order-inquiry"}` into `metadata` (or let the chain's first userInput be the scenario
    name — declaration outranks derivation). Once declared, multiple executions of the same scenario
    across sessions pair automatically as "rounds of one task"; alignment / member checks / task rules
    all operate per task. Repeated-but-undeclared request-text families show up in doctor's "repeated
@@ -910,7 +911,7 @@ Three integration-shape facts verified against a real host (spring-ai-alibaba / 
   host has no usable narrowing tool (buckets are shared, task keys indistinguishable) — declare
   first, share second.
 
-## 9. Version & compatibility semantics
+## 9. Version and compatibility semantics
 
 | Identifier | Current value | Semantics |
 |------------|---------------|-----------|

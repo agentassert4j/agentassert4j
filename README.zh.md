@@ -114,17 +114,19 @@ agentassert4j replay
 ```
 
 ```text
-Drift: 2 same-key, 0 label splits (0 zero-template invocations undetectable)
-  ▲ 查询物流@8d9dbac2 (查询物流) template 6feac2e8 → d15016ac
+Drift: 1 same-key, 0 label splits (0 zero-template invocations undetectable)
+  ▲ 查询订单@b3e4b38c (查询订单) template ba3e3bc4 → c30f63a2
 Alignment basis: each task's latest chain is judged against its previous chain (same request text; declared taskKey groups first).
 Task "订单 1234 的物流太慢，我要退款": baseline chain (session demo-session-0801) → new chain (session demo-session-0901)
+  [1] 意图识别@854e05b8  PASS
   [2] 查询订单@b3e4b38c  PASS
   [3] 查询物流@8d9dbac2  similarity=0.80 verdict=CHANGED | tool calls match | added fields: [delivery.promise]
 Candidate registered: 查询物流@8d9dbac2 (behavior change awaiting adjudication; accept adds the shape to the approved set, reject discards).
   [4] 提交退款@b47b21ea  missing step: baseline invoked '提交退款@b47b21ea', new chain did not
   [6] 理赔查询@3e4c2031  added step: new chain invoked '理赔查询@3e4c2031', baseline did not
 Alignment summary: PASS 3 | CHANGED 1 | missing 1 | added 1
-Pending adjudication: invocation:查询物流:8d9dbac294a5abfaca4d8e825e36576c1d2df72bd0f7b06312d83c45b746cdfa
+Collected: 查询订单@b3e4b38c (no behavioral difference; template identity ba3e3bc4 → c30f63a2)
+Pending adjudication (database-wide): invocation:查询物流:8d9dbac2…
 Accept with `agentassert4j accept --invocation <prefix>`, or reject with `agentassert4j reject --invocation <prefix>`.
 ```
 
@@ -136,8 +138,8 @@ Accept with `agentassert4j accept --invocation <prefix>`, or reject with `agenta
 **5. 裁决，然后真实执行自动对齐**
 
 ```bash
-agentassert4j accept   # bare = 裁决全部待裁决候选；预期内：形态加入认可集合（此前整集归档可回滚）
-agentassert4j reject --invocation 查询物流   # 回归：缩域丢弃该候选；提示词回滚是 git 的事
+agentassert4j accept --invocation 查询物流   # 预期改进：新增 promise 字段的新形态加入认可集合（此前整集归档可回滚）
+agentassert4j reject --invocation <标签>     # 回归则相反：丢弃该候选；提示词回滚是 git 的事
 
 agentassert4j replay   # 下一次真实执行之后：新链自动配对，差异继续逐条点名
 ```
@@ -216,10 +218,6 @@ stage('AgentAssert 行为回归') {
 }
 ```
 
-门禁实跑长这样（演示库真实输出：存在真实行为差异 → exit 1，`task-report/1` 机器报告逐行落 stdout）：
-
-<img src="assets/cli-replay-ci.png" alt="replay --ci --json：逐行 task-report/1 机器报告，exit 1 门禁红灯" width="880"/>
-
 `--ci` 以「每任务最新链中每个调用点的最新执行 vs 该调用点的**认可形态集合**」为判定基准；
 不做任何自动建档：缩域内存在未建档调用点直接出 2（fail-closed，含等待显式建档的裂键）；漂移身份
 不在流水线里并入。`--re-drive` 属人工复核动作，不进流水线缺省。
@@ -267,7 +265,7 @@ tag，或团队约定的任何参照），只回答一个问题：**这个行为
   也不破坏锚的历史坐标语义；
 - **交付核对**——验收包携带导出时的代码锚：「这份行为承诺来自交付 X」是跨团队凭据而非口头声明；
 - **AI 提示词优化循环**——agent 天然知道自己改的 HEAD，裁决时带 `--ref HEAD` 零成本，审计链完整
-  （audit 每笔治理写都列 ref）;
+  （audit 每笔治理写都列 ref）；
 - **如实标注边界**——锚是线索不是凭证：允许空缺（合法）、从不校验，多仓库团队自行约定 ref 指向
   模板所在仓库的提交。
 
@@ -375,8 +373,10 @@ java -cp "agentassert4j-cli/target/classes;$(cat agentassert4j-cli/target/cp-cli
 
 - **[运维手册（OPERATIONS.zh.md）](OPERATIONS.zh.md)** — 部署形态、全量配置参考、CI 门禁配方、交付验收
   运行手册、共享库运维规则、MCP 接入、最小录制契约、故障排查
-- **[框架全景导读（guide/framework-panorama.zh.md）](guide/framework-panorama.zh.md)** — 框架技术全景与
-  学习路线：用一个完整故事串起全部功能，每一幕落回真实的类、方法与表结构（面向开发者与贡献者）
+- **[实战教程（guide/tutorial.zh.md）](guide/tutorial.zh.md)** — 一条走线贯穿完整生命周期：接线 →
+  建档 → 裁决 → 门禁 → 重驱 → 交付 → 审计，命令与输出全部真实（面向新接入者）
+- **[架构地图（ARCHITECTURE.zh.md）](ARCHITECTURE.zh.md)** — 面向贡献者的代码地图：模块分层、
+  一次交互的一生、按变更类型找入口
 - **[给 AI 装上行为回归回路（guide/ai-behavior-regression-loop.zh.md）](guide/ai-behavior-regression-loop.zh.md)**
   — 面向 AI 宿主集成者的人读评估：为什么确定性判定天然适配自修循环，以及如何负责任地驱动 MCP 面
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — 参与贡献的入口；完整协作契约见 [AGENTS.md](AGENTS.md)（中文）
@@ -386,7 +386,7 @@ java -cp "agentassert4j-cli/target/classes;$(cat agentassert4j-cli/target/cp-cli
 - 缺陷报告与功能建议 → [GitHub Issues](https://github.com/agentassert4j/agentassert4j/issues)
   （Gitee 用户也可用 [Gitee Issue](https://gitee.com/zm_mmm/agentassert4j/issues)，两侧同步处理）
 - 问题与接入帮助 → 开 issue 并附上 CLI 的 `--json` 输出
-- 参与贡献 → [CONTRIBUTING.md](CONTRIBUTING.md)
+- 参与贡献 → [CONTRIBUTING.md](CONTRIBUTING.md)，代码地图见 [ARCHITECTURE.zh.md](ARCHITECTURE.zh.md)
 
 ## 许可证
 

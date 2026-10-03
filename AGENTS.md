@@ -425,7 +425,7 @@ spring-ai1 与 starter-spring-ai1 随 Spring AI 保持 17，不受此条约束�
 - 现状规格（guide/spec/）是 tracked 基准文档：触碰某域的代码变更须同批更新对应 spec 节；spec 与代码冲突按「注释不作证据」铁律处置——判明符合设计与需求的一侧，修正过时侧并在该 spec 复核台账留痕；新增公开行为先补 spec 再补码。
 - 术语登记：按「术语与措辞规范」升级为正式术语的词（a 类）在 guide/spec/_TEMPLATE.md 或对应 spec 首次使用处登记定义；清理历史黑话时按同表批量替换，不逐处自创同义词。
 - **双语文档同步纪律**：对外发布文档成对双语维护——`X.md` 为英文版、`X.zh.md` 为中文版，现役对：
-  README、OPERATIONS、guide/framework-panorama、guide/ai-behavior-regression-loop。修改任一语言
+  README、OPERATIONS、ARCHITECTURE、guide/tutorial、guide/ai-behavior-regression-loop。修改任一语言
   版本必须**当批同步修改镜像版本**；镜像的是结构与语义，语言按各自母语习惯行文，不逐句直译（两
   版都遵守 §12.9 的反翻译腔要求）。**语言自洽**：英文文档只链接英文资产（含 GitHub wiki），中文
   文档只链接中文资产（含 Gitee wiki）；语言切换条互链镜像文件为唯一例外；无中文版的社区惯例文件

@@ -4,6 +4,11 @@ Thanks for your interest in contributing! This page covers the mechanics; the fu
 contract — coding style, comment rules, testing standards, review protocol — lives in
 [AGENTS.md](AGENTS.md) (in Chinese; it is the repository's single source of collaboration truth).
 
+## Finding your way around
+
+[ARCHITECTURE.md](ARCHITECTURE.md) is the code map — module layering, the life of an interaction,
+the SPI surface, and a "where to start, by change" routing table into the per-domain specs.
+
 ## Building and testing
 
 You need JDK 17+ to build (the test code itself stays Java 8 compatible, so JDK 8 contributors can run

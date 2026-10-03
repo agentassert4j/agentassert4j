@@ -1,7 +1,8 @@
 # AgentAssert4j 运维与交付手册（OPERATIONS）
 
 > 面向部署、运维与交付工程师的实操手册。概念与命令的完整语义见 [README.zh.md](README.zh.md)；
-> 架构与代码全景见 [guide/framework-panorama.zh.md](guide/framework-panorama.zh.md)。
+> 完整生命周期教程见 [guide/tutorial.zh.md](guide/tutorial.zh.md)；架构地图见
+> [ARCHITECTURE.zh.md](ARCHITECTURE.zh.md)。
 
 **目录**：[1. 部署形态](#1-部署形态) ｜ [2. 配置参考](#2-配置参考) ｜ [3. 库文件运维](#3-库文件运维) ｜
 [4. CI 门禁配方](#4-ci-门禁配方) ｜ [5. 生产打包形态](#5-生产打包形态) ｜ [6. 交付验收运行手册](#6-交付验收运行手册) ｜
@@ -311,7 +312,6 @@ agentassert4j replay --ci --json
   拒绝（E-GUARD，如 `--ci` fail-closed）stdout 会先输出拒绝前的报告段与引导文案。
   同一通道契约覆盖全部命令（schema 清单见 §9）。
 
-<img src="assets/cli-replay-ci.png" alt="replay --ci --json 实跑：task-report/1 逐行分段报告，exit 1 门禁红灯" width="880"/>
 
 - **预算池**（`--re-drive` 下生效）：`--max-total-calls/--max-total-tokens` 对本次运行全部真重驱
   合计封顶；耗尽后剩余点标 skipped，整体 exit 2（证据不完整不允许冒充绿）。
