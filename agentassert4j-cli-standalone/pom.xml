@@ -18,6 +18,14 @@
             <groupId>io.github.agentassert4j</groupId>
             <artifactId>agentassert4j-cli</artifactId>
             <version>${project.version}</version>
+            <exclusions>
+                <!-- cli 的 test 运行态用 slf4j-simple；standalone 只承载 nop 一个 provider，
+                     双 provider 会让 SLF4J 在每次启动时打印多绑定警告 -->
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-simple</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <!-- CLI 运行态不产出框架日志：诊断面由命令自身的 stdout/stderr 承载 -->
         <dependency>
