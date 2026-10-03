@@ -23,8 +23,8 @@
 - **harness / 框架开发者**（想知道每幕背后的类、方法与表）→ 直接进 Part II 第 10、11 章
   （依赖图、任务回归）与第 7 章（基线治理），按需回跳 Part I 对应幕；
 - **AI 集成者**（要把框架当 MCP server 接进自己的循环）→ 本导读第 13 章 CLI 面一览即可，
-  主战场在 [OPERATIONS.md](../OPERATIONS.md) 的 MCP 配方与
-  [给 AI 装上行为回归回路](给AI装上行为回归回路.md)。
+  主战场在 [OPERATIONS.md](../OPERATIONS.zh.md) 的 MCP 配方与
+  [给 AI 装上行为回归回路](ai-behavior-regression-loop.zh.md)。
 
 # Part I 故事串讲——小店通的三个月
 

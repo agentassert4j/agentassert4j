@@ -3,7 +3,7 @@
 > 面向 AI 宿主集成者与 harness 开发者的人读评估：为什么确定性判定天然适配 AI 自修循环，
 > 以及如何负责任地驱动 MCP 面。机器契约（manifest descriptions、错误包络、JSON schema）以
 > 工具面自描述为准，本文讲的是选型论证与使用纪律。
-> 配套：[OPERATIONS §6.2 MCP 接入](../OPERATIONS.md)、[README](../README.zh.md)。
+> 配套：[OPERATIONS §6.2 MCP 接入](../OPERATIONS.zh.md)、[README](../README.zh.md)。
 
 ## 一、自修循环缺的一环
 
@@ -75,4 +75,4 @@ record（真实交互，三协议 wire JSON 原样入）
 三协议原始 wire JSON）、`check` / `diff` / `report` / `verify` / `export` / `doctor` / `rules` /
 `graph` / `record-show`、治理四动词（`establish` / `accept` / `reject` / `rollback`）+ `audit`、
 `member-check`、`re-drive`。stdio 传输、单 jar 启动，
-注册配方与客户端矩阵见 [OPERATIONS §6.2](../OPERATIONS.md#62-mcp-接入ai-自主验证回路)。
+注册配方与客户端矩阵见 [OPERATIONS §6.2](../OPERATIONS.zh.md#62-mcp-接入ai-自主验证回路)。

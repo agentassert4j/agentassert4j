@@ -424,7 +424,44 @@ spring-ai1 与 starter-spring-ai1 随 Spring AI 保持 17，不受此条约束�
 - 文档不写随演进腐烂的规模计数（测试条数、类数等）——测试覆盖用场景枚举表达，规模以仓库现状为准，避免每次变更的维护税。
 - 现状规格（guide/spec/）是 tracked 基准文档：触碰某域的代码变更须同批更新对应 spec 节；spec 与代码冲突按「注释不作证据」铁律处置——判明符合设计与需求的一侧，修正过时侧并在该 spec 复核台账留痕；新增公开行为先补 spec 再补码。
 - 术语登记：按「术语与措辞规范」升级为正式术语的词（a 类）在 guide/spec/_TEMPLATE.md 或对应 spec 首次使用处登记定义；清理历史黑话时按同表批量替换，不逐处自创同义词。
+- **双语文档同步纪律**：对外发布文档成对双语维护——`X.md` 为英文版、`X.zh.md` 为中文版，现役对：
+  README、OPERATIONS、guide/framework-panorama、guide/ai-behavior-regression-loop。修改任一语言
+  版本必须**当批同步修改镜像版本**；镜像的是结构与语义，语言按各自母语习惯行文，不逐句直译（两
+  版都遵守 §12.9 的反翻译腔要求）。**语言自洽**：英文文档只链接英文资产（含 GitHub wiki），中文
+  文档只链接中文资产（含 Gitee wiki）；语言切换条互链镜像文件为唯一例外；无中文版的社区惯例文件
+  （LICENSE、CONTRIBUTING.md）与中文单语的 AGENTS.md 豁免，跨语言引用须显式标注语言。双语对存在
+  性与链接语言违例由 `doc-tools/scan_bilingual.py` 机器检查（特性批后与发布候选前必须执行）。
+  guide/spec/ 与 AGENTS.md 为贡献者内部文档，中文单语，不进入对外双语对；中英术语对照表见本节末。
 - 提交前自检 §八（TODO 标注）与 §九（全限定类名）两条强制规范。
+
+**中英术语对照表**（对外文档翻译的统一词表；新增正式术语当批在此登记，两语言面不得自创同义词）：
+
+| 中文 | 英文 |
+|------|------|
+| 调用点 | invocation |
+| 形态集 / 认可形态集合 | shape set / approved shape set |
+| 候选 / 在途候选 | candidate / in-flight candidate |
+| 建档 | establish |
+| 播种 | seed |
+| 裁决 | adjudicate / adjudication |
+| 漂移 | drift |
+| 标签裂键 / 裂键 | label split |
+| 重驱（受控复核） | re-drive (controlled review) |
+| 对齐 | alignment |
+| 链 / 链末执行 | chain / chain-final execution |
+| 旁路录制 | out-of-band recording |
+| 门禁 | gate |
+| 交付验收 / 验收包 | delivery acceptance / acceptance pack |
+| 指纹 / 四维指纹 | fingerprint / the four fingerprint dimensions |
+| 模板哈希 / 模板骨架 | template hash / template skeleton |
+| 任务键 / 任务纪律 | task key / task discipline |
+| 治理写 / 治理事件时间线 | governance write / governance event timeline |
+| 值流图 / 溯源 | value-flow graph / provenance |
+| 链式半重放 | chained half-replay |
+| 观测记录 | observation record |
+| 共库 / 宿主 | shared database / host |
+| 覆盖缺口 / 完整性锚 | coverage gap / integrity anchor |
+| 脱敏 | masking / sanitization |
 
 ### 12.6 代码注释规范
 

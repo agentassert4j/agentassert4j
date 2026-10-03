@@ -7,11 +7,11 @@
 录制 → 重放 → 差分：把「改完提示词心里没底」变成一条命令的差异报告。
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Java](https://img.shields.io/badge/Java-8%2B-informational)](#接入矩阵)
 [![Maven Central](https://img.shields.io/badge/Maven_Central-1.0.0-blue)](https://central.sonatype.com/search?q=io.github.agentassert4j)
-[![Storage](https://img.shields.io/badge/Storage-SQLite单文件-lightgrey)](#核心闭环)
+[![Java](https://img.shields.io/badge/Java-8%2B-informational)](#接入矩阵)
+[![Gitee](https://img.shields.io/badge/Gitee-镜像仓库-C71D23?logo=gitee)](https://gitee.com/zm_mmm/agentassert4j)
 
-[快速开始](#快速开始) · [核心闭环](#核心闭环) · [交付验收](#交付验收第二个工作流) · [CLI 参考](#cli-命令面) · [接入矩阵](#接入矩阵) · [运维手册](OPERATIONS.md)
+[快速开始](#快速开始) · [核心闭环](#核心闭环) · [交付验收](#交付验收第二个工作流) · [CI 一段式](#ci-一段式) · [接入矩阵](#接入矩阵) · [运维手册](OPERATIONS.zh.md)
 
 中文文档：**README.zh.md**（本文）｜ English: [README.md](README.md)
 
@@ -38,36 +38,16 @@
    → [交付验收](#交付验收第二个工作流)
 4. **「让 AI 自己改提示词、自己验证、自己迭代。」**
    同一引擎即 stdio MCP server（17 工具）：record 摄取、check/diff 判定、带 approver 的治理动词、
-   audit 核对——确定性判定天然适配自修循环。→ [OPERATIONS.md](OPERATIONS.md)、
-   [给 AI 装上行为回归回路](guide/给AI装上行为回归回路.md)
+   audit 核对——确定性判定天然适配自修循环。→ [运维手册 §6.2](OPERATIONS.zh.md)、
+   [给 AI 装上行为回归回路](guide/ai-behavior-regression-loop.zh.md)
 5. **「要换模型了——或者为了速度把深度思考关掉。智能体行为到底会变什么？」**
    热切 `llm.model` 后 `re-drive`：把录制过的提示词原样打给新模型，结构指纹逐调用点点名行为影响面，
    报告附 token/成本/时延对照（含 reasoning tokens）——思考档位的代价是可量化的数字，不是感觉。
-   同一配方也是模型选型评测与微调/蒸馏上线验收。→ [OPERATIONS §6.3](OPERATIONS.md)
+   → [运维手册 §6.3](OPERATIONS.zh.md)
 
-## 五分钟按角色进入
-
-- **在 Java Agent 上迭代提示词的你** → [快速开始](#快速开始)：加 starter，跑三条命令
-  （`baseline` → 改完真实跑一遍 → `replay`），`accept`/`reject` 裁决。
-- **要交付并在客户现场证明行为的你** → [交付验收](#交付验收第二个工作流)：己侧 `baseline export`，
-  对方 `verify --pack`。
-- **构建 AI 宿主的你（任意语言栈）** → 把 `agentassert4j mcp` 当 stdio server 用工具驱动整个回路：
-  `record`（收原始 wire JSON，三协议）、`check`/`diff`、带 `approver` 的治理动词、`audit`。
-  见 [OPERATIONS.md](OPERATIONS.md) 与 [给 AI 装上行为回归回路](guide/给AI装上行为回归回路.md)。
-
-## 你是什么工作形态？
-
-全部能力一张图——七种工作形态，各自的最短路径：
-
-| 工作形态 | 你醒来时带着的问题 | 最短路径 |
-|---|---|---|
-| **提示词迭代** | 「改完了——别处有没有被改坏？」 | `baseline` → 改完真实跑一遍 → `replay` → `accept`/`reject`；`replay --ci` 门禁流水线 → [形态集工作流](#迭代到满意形态集工作流) |
-| **Agent 开发（loop 形态）** | 「规划器/工具步每次跑的次数都不一样，我到底比什么？」 | loop 每一圈自动录成一条交互，零声明。判定读每个调用点的链末执行；链中段草稿以注记可见（`earlierRecords`）；纯次数差异永不翻红——真要约束次数就声明任务纪律；想知道某个值从哪进来的，`graph show` 带证据溯源；多智能体流水线按子代理各打标签，图即跨代理数据血缘——哪个代理退化了，图点名 → [核心闭环](#核心闭环)、[OPERATIONS 任务纪律](OPERATIONS.md) |
-| **AI 应用开发（少步/单调用）** | 「就一次 LLM 调用，这框架跟我有关系吗？」 | 有：按模板哈希零声明归组，`status` → `replay`，什么都不用声明 → [身份](#身份声明与零声明) |
-| **换模型 / 稳定性核验** | 「同一套提示词换了模型，行为还在吗？」 | 新模型上真实跑同任务再 `replay`：指纹与模型无关，结构判定跨模型成立，报告附 token/成本对照；思考档位开关同款观测 → [四维指纹](#四维指纹判定看什么)、[OPERATIONS §6.3](OPERATIONS.md) |
-| **内网交付验收** | 「客户环境模型不一样——证明行为还在。」 | 己侧 `baseline export`，对方真实执行后 `verify --pack`：结构判定跨模型有效 → [交付验收](#交付验收第二个工作流) |
-| **AI 自主修正回路** | 「让 AI 自己改提示词、自己验证、自己迭代。」 | `agentassert4j mcp` stdio server（17 工具）：`record` → `check`/`diff` → 带 `approver` 的治理 → `audit`；`graph` 让 agent 自己查值流 → [OPERATIONS MCP](OPERATIONS.md) |
-| **团队回溯定责** | 「行为坏了——哪次改的？谁批准的？」 | 基线携带 `--ref` 代码锚；`audit` 是全部治理写的单一时间线 → [代码锚](#代码锚接进你已有的-git-工作流) |
+一个引擎覆盖全部工作形态——Java Agent 上的提示词迭代、loop 形态的 Agent 开发（判定只读每个调用点的
+链末执行，规划器每条链跑 1~3 次永不误报）、少步/单调用应用（按模板哈希零声明归组）、模型选型评测、
+内网交付、AI 自主修正、团队回溯定责（见[代码锚](#代码锚)与[运维手册](OPERATIONS.zh.md)）。
 
 ## 核心闭环
 
@@ -81,8 +61,7 @@
 | **裁决门禁** | `accept` / `reject` | 预期改进：形态**加入认可集合**（此前整集归档为版本快照，`rollback` 可恢复）；回归：丢弃。退出码 0/1/2 直接 gating |
 
 这里的基线不是一份冻结的标准答案，而是**你认可过的行为形态集合**：判定只问一件事——最新执行落在
-不在集合里？`accept` 追加、`rollback` 恢复整集快照，CI 与验收包消费同一份真相。详见
-[迭代到满意（形态集工作流）](#迭代到满意形态集工作流)。
+不在集合里？`accept` 追加、`rollback` 恢复整集快照，CI 与验收包消费同一份真相。
 
 ## 快速开始
 
@@ -100,7 +79,7 @@
 ```
 
 启动即生效：框架自动包装所有 `ChatModel`，旁路录制每次调用——业务代码一行不改，接口时延无感。
-库文件默认 `~/.agentassert4j/agentassert4j.db`（`agentassert4j.storage.url` 可改，[全量配置](OPERATIONS.md#2-配置参考)）。
+库文件默认 `~/.agentassert4j/agentassert4j.db`（`agentassert4j.storage.url` 可改，[全量配置](OPERATIONS.zh.md#2-配置参考)）。
 需要给某次调用声明业务身份时（可选）：
 
 ```java
@@ -112,10 +91,9 @@ try (RecordingContext scope = RecordingContext.start(sessionId).withInvocationId
 **2. 准备 CLI**（一次性）
 
 ```bash
-# 从 GitHub Releases 下载 standalone jar（单文件、零安装），起个别名；Windows 用户直接用完整命令
+# 从 GitHub Releases 下载 standalone jar（单文件、零安装）；Windows 用户直接用完整命令
 alias agentassert4j='java -jar agentassert4j-cli-standalone-1.0.0.jar'
-# 可选：更短别名（kubectl 的 k 同款社区约定；完整名永远保留）
-alias aa='agentassert4j'
+alias aa='agentassert4j'   # 可选短别名（kubectl 的 k 同款社区约定；完整名永远保留）
 ```
 
 **3. 建基线**（幂等，可重复执行）
@@ -127,8 +105,6 @@ agentassert4j baseline --approver wang
 每一行都披露种子：`… baseline established (seed record <id>)`——种子=该调用点最新执行，
 即你在建档时刻认可的行为。
 
-<img src="assets/cli-baseline.png" alt="baseline 首跑建档：每个调用点逐行 baseline established，逐行披露种子记录" width="880"/>
-
 **4. 改提示词，真实跑一遍，然后全项目对齐**
 
 提示词改完先**真实执行一遍**（冒烟或 e2e——新链自动入库），然后一条命令，零参数、零 LLM 调用：
@@ -137,20 +113,15 @@ agentassert4j baseline --approver wang
 agentassert4j replay
 ```
 
-命令输出为英文单语（下面是演示库真实输出的节选）：
-
 ```text
 Drift: 2 same-key, 0 label splits (0 zero-template invocations undetectable)
   ▲ 查询物流@8d9dbac2 (查询物流) template 6feac2e8 → d15016ac
-  ▲ 查询订单@b3e4b38c (查询订单) template ba3e3bc4 → c30f63a2
 Alignment basis: each task's latest chain is judged against its previous chain (same request text; declared taskKey groups first).
 Task "订单 1234 的物流太慢，我要退款": baseline chain (session demo-session-0801) → new chain (session demo-session-0901)
-  [1] 意图识别@854e05b8  PASS
   [2] 查询订单@b3e4b38c  PASS
   [3] 查询物流@8d9dbac2  similarity=0.80 verdict=CHANGED | tool calls match | added fields: [delivery.promise]
 Candidate registered: 查询物流@8d9dbac2 (behavior change awaiting adjudication; accept adds the shape to the approved set, reject discards).
   [4] 提交退款@b47b21ea  missing step: baseline invoked '提交退款@b47b21ea', new chain did not
-  [5] 组织答复@8fd8be58  PASS
   [6] 理赔查询@3e4c2031  added step: new chain invoked '理赔查询@3e4c2031', baseline did not
 Alignment summary: PASS 3 | CHANGED 1 | missing 1 | added 1
 Pending adjudication: invocation:查询物流:8d9dbac294a5abfaca4d8e825e36576c1d2df72bd0f7b06312d83c45b746cdfa
@@ -168,8 +139,7 @@ Accept with `agentassert4j accept --invocation <prefix>`, or reject with `agenta
 agentassert4j accept   # bare = 裁决全部待裁决候选；预期内：形态加入认可集合（此前整集归档可回滚）
 agentassert4j reject --invocation 查询物流   # 回归：缩域丢弃该候选；提示词回滚是 git 的事
 
-# 下一次真实执行之后再跑一次 bare replay：新链自动配对，差异继续逐条点名
-agentassert4j replay
+agentassert4j replay   # 下一次真实执行之后：新链自动配对，差异继续逐条点名
 ```
 
 真实对齐报告长这样（虚构演示库的真实输出——缺一步、新增一步、一个结构变化，逐条点名，exit 1）：
@@ -178,7 +148,12 @@ agentassert4j replay
 
 ## 迭代到满意（形态集工作流）
 
-「多轮试错、满意了再定基线」是被一等公民支持的自然节奏：
+「多轮试错、满意了再定基线」是一等公民节奏：草稿不挡门（判定只读每个调用点的最新执行，早期草稿
+以 `unapprovedEarlier` 计数透明披露）、未经裁决的裂键永不悄悄改变门禁颜色、整个认可集合带版本
+快照可回滚。
+
+<details>
+<summary><strong>形态集工作流的五条细则</strong></summary>
 
 1. **草稿不挡门**。判定只读每个调用点的**最新执行**——链中更早的实验性草稿不会把整个运行判红，
    它以透明层披露（报告中的 `earlierRecords` / `unapprovedEarlier` 计数）。
@@ -197,9 +172,7 @@ agentassert4j replay
 
 <img src="assets/cli-ci-green.png" alt="accept 后 replay --ci：以被认可形态收尾的链复检为绿——PASS (shape 2 of 2)" width="720"/>
 
-提示词编辑改了模板身份（同标签换模板）时，新键**永远不会被静默并入基线**：它以标签裂键浮出、被门禁
-排除在外（`--ci` 出 2、fail-closed），等显式 `baseline --invocation <key>`——未经你裁决的裂键既不会
-悄悄把门禁变绿，也不会悄悄变红。
+</details>
 
 ## 交付验收（第二个工作流）
 
@@ -208,27 +181,26 @@ agentassert4j replay
 <img src="assets/acceptance-flow.zh.png" alt="交付验收流程：开发侧导出验收包 → SHA-256 核对搬运 → 验收侧真实执行 → verify 出报告" width="880"/>
 
 ```bash
-# 开发侧：导出验收包（单 JSON；天然脱敏——结构指纹、调用点键与声明规则段，无原文无模板），
-# 记录打印的 SHA-256 与验收方核对
+# 开发侧：导出验收包（单 JSON；天然脱敏——无原文无模板），记录打印的 SHA-256 与验收方核对
 agentassert4j baseline export --out acceptance-pack.json
 
 # 验收侧：客户环境真实执行验收请求后，一条命令核对并产出报告
 agentassert4j verify --pack acceptance-pack.json --report verify-report.md
 ```
 
-- 结构类偏差（工具集 / 参数类型 / 输出结构）= **真问题**，转开发侧；
-- 开发侧与本地模型不同时自动标注**跨模型验收**：措辞差异属预期内，结构判定依然有效；
-- 包内有而本地未执行的任务 = **覆盖缺口**（exit 2）——证据不完整不允许冒充通过；
-- `verify` 全程只读不落库，可反复执行；逐任务判定行（`Per-task verdicts: <任务> PASS/CHANGED
-  (similarity …)`）一眼分诊，markdown 报告即交付证据；
+- 结构类偏差（工具集 / 参数类型 / 输出结构）= **真问题**，转开发侧；开发侧与本地模型不同时自动标注
+  **跨模型验收**：措辞差异属预期内，结构判定依然有效；
+- 包内有而本地未执行的任务 = **覆盖缺口**（exit 2）——证据不完整不允许冒充通过；markdown 报告即
+  交付证据；
 - 验收包定格的是**认可形态集合**（与 CI 门禁同一真相源）；链末形态或在途候选未裁决时
-  `baseline export` 警告并在报告给出 `unadjudicatedSteps` 计数——在途候选按调用点全域计为
-  未裁决（裁决会改变集合，整个调用点一起等），先裁决再导出才干净；
-- 每次导出=一个文件+一个打印摘要——SHA-256 标识**该文件的字节**（Maven 发布物模型）；重新导出
-  产生新摘要，核对要对「那个文件」，不是「最新一次导出」。
+  `baseline export` 警告并给出 `unadjudicatedSteps` 计数——先裁决再导出才干净；
+- 每次导出=一个文件+一个打印摘要——SHA-256 标识**该文件的字节**；重新导出产生新摘要，
+  核对要对「那个文件」，不是「最新一次导出」。
 
 > 任务键 = 请求原文，随包出境。敏感任务请在录制时用
 > `RecordingContext.withMetadata("taskKey", <场景id>)` 声明任务键，原文不入包。
+
+完整运行手册——导出守卫、完整性锚、判读清单——见[运维手册 §6](OPERATIONS.zh.md#6-交付验收运行手册)。
 
 ## CI 一段式
 
@@ -248,11 +220,21 @@ stage('AgentAssert 行为回归') {
 
 <img src="assets/cli-replay-ci.png" alt="replay --ci --json：逐行 task-report/1 机器报告，exit 1 门禁红灯" width="880"/>
 
-`--ci` 以「每任务最新链中每个调用点的最新执行 vs 该调用点的**认可形态集合**」（establish 播种集合、
-accept 扩展集合——裁决立即对门禁生效）为判定基准；不做任何自动建档：缩域内存在未建档调用点直接
-出 2（fail-closed，含等待显式建档的裂键）；漂移身份不在流水线里并入（绿灯但漂移未并入时
-保持出 0 并附「Identity not collected」警告行；CHANGED 照落候选等裁决、出 1）。`--re-drive` 属
-人工复核动作，不进流水线缺省。
+`--ci` 以「每任务最新链中每个调用点的最新执行 vs 该调用点的**认可形态集合**」为判定基准；
+不做任何自动建档：缩域内存在未建档调用点直接出 2（fail-closed，含等待显式建档的裂键）；漂移身份
+不在流水线里并入。`--re-drive` 属人工复核动作，不进流水线缺省。
+
+**退出码契约**：
+
+| 退出码 | 语义 | CI 动作 |
+|-------|------|--------|
+| `0` | 无差异 | 放行 |
+| `1` | 存在行为差异（含缺步骤 / 新增步骤） | 人裁决 accept / reject |
+| `2` | 用法或基础设施故障 / 证据不完整（预算耗尽、覆盖缺口、`--ci` 遇无基线调用点、判定语义不符） | 修环境，不算回归 |
+
+`--json` 向 stdout 输出机器可读 JSON 报告、每行一个文档，诊断与进度走 stderr；
+失败的运行以 `agentassert4j.error/1` 错误包络收尾 stdout（错误码 + 可行动建议 + 下一步命令）——
+要了 JSON 就恒得 JSON。通道契约与 schema 清单见[运维手册 §4](OPERATIONS.zh.md#4-ci-门禁配方)。
 
 ## 四维指纹：判定看什么
 
@@ -265,20 +247,19 @@ accept 扩展集合——裁决立即对门禁生效）为判定基准；不做�
 | ③ 内容规则 | 必含 / 禁含关键词、正则 | 钉入基线才有 |
 | ④ 约束行为 | 内置行为约束（`nonEmptyOutput` / `jsonOutput` / `mustUseChinese` 等 8 种） | 钉入基线才有 |
 
-不给 rules 文件 = 纯结构差分（维度 ①②），默认路径零配置零噪声；需要合规类断言时按调用点声明
-`agentassert4j-rules.json`。**声明的绑定时机=钉入基线的时刻**——`baseline`/`--force`（播种）或
-`accept`（候选指纹按当时的规则提取）。报告头的 `Rules:` 行披露当前加载的规则文件；判定本身只消费
-指纹携带的钉定声明，建档后改规则文件不会静默重判历史（规则漂移告警会指给你刷新路径）。维度 ③④
-以「基线声明、当前答卷」自动生效（`rules` 命令列出全部内置行为名）。不引入第二套断言语言。文本差异
-永不进判定，只作低置信参考。同一文件的 `tasks` 段可给声明任务加链级纪律（必备步骤 / 步骤次数 /
-顺序），违规同样折叠进二值判定——写法见 [OPERATIONS §2.3](OPERATIONS.md)。
+不给 rules 文件 = 纯结构差分（维度 ①②），默认路径零配置零噪声。**声明的绑定时机=钉入基线的时刻**——
+建档后改规则文件不会静默重判历史。文本差异永不进判定，只作低置信参考。同一文件的 `tasks` 段可给
+声明任务加链级纪律（必备步骤 / 步骤次数 / 顺序），违规同样折叠进二值判定——写法见
+[运维手册 §2.3](OPERATIONS.zh.md#23-规则文件-agentassert4j-rulesjson可选精修)。
 
-## 代码锚：接进你已有的 git 工作流
+## 代码锚
 
-建档（`baseline` / `--force`）与 `accept` 可带可选 `--ref`（代码锚：git 提交号、tag，或团队约定的
-任何参照）。它是申报制而非凭证——框架从不连 git——只回答一个问题：**这个行为最后一次被认可，
-是在哪个代码版本？**（`rollback` 刻意不带 ref：恢复的快照自带当时的历史锚——回退后，活动锚
-描述的正是那个实际生效的历史基线。） 五种用法：
+建档（`baseline` / `--force`）与 `accept` 可带可选 `--ref`——申报制、从不校验的代码锚（git 提交号、
+tag，或团队约定的任何参照），只回答一个问题：**这个行为最后一次被认可，是在哪个代码版本？**
+每笔治理写都落在 `audit` 时间线上（动词/主体/时间/代码锚）——AI（`agent:*`）与人写同一条时间线。
+
+<details>
+<summary><strong>代码锚的五种团队用法</strong></summary>
 
 - **事故回溯**——线上行为出问题 → 基线的 ref 指认最后一次认可它的提交 →
   `git diff <ref>..HEAD -- prompts/` 就是嫌疑清单；
@@ -290,7 +271,10 @@ accept 扩展集合——裁决立即对门禁生效）为判定基准；不做�
 - **如实标注边界**——锚是线索不是凭证：允许空缺（合法）、从不校验，多仓库团队自行约定 ref 指向
   模板所在仓库的提交。
 
-## CLI 命令面
+</details>
+
+<details>
+<summary><strong>CLI 命令面——全部命令</strong></summary>
 
 | 命令 | 干什么 |
 |------|--------|
@@ -306,7 +290,7 @@ accept 扩展集合——裁决立即对门禁生效）为判定基准；不做�
 | `graph show` | 值溯源图只读视图（HIGH 边携带命中值与源/目标记录对） |
 | `audit` | 按治理事件时间线列出全部治理写（动词/主体/时间/代码锚，含 reject 与 rollback）——AI（`agent:*`）与人写同一条时间线，供核对 |
 | `mcp` | 以 stdio MCP server 运行（17 工具镜像 CLI 动词，供非 Java 栈 AI 宿主接入） |
-| `doctor` | 只读库体检，三段确定性事实：身份（骨架族、多步零标签链、值得声明任务键的重复请求族）、覆盖（未建档调用点、缺 template_hash 的记录）、规则（畸形声明、期望错位）；仅陈述事实，正常执行恒出 0（不承载门禁语义） |
+| `doctor` | 只读库体检，分段确定性事实：身份 / 覆盖 / 规则；仅陈述事实，正常执行恒出 0（不承载门禁语义） |
 | `completion` | 生成 shell 补全脚本（bash 风格） |
 
 每个命令另有短别名（`s`、`b`、`a`、`g`、`v`、`d`、`c`、`rp`、`rj`、`rb`、`ru`、`au`、`m`——完整名永远保留，
@@ -316,17 +300,7 @@ accept 扩展集合——裁决立即对门禁生效）为判定基准；不做�
 
 <img src="assets/cli-status.png" alt="status 输出：调用点清单与基线状态" width="820"/>
 
-**退出码契约**：
-
-| 退出码 | 语义 | CI 动作 |
-|-------|------|--------|
-| `0` | 无差异 | 放行 |
-| `1` | 存在行为差异（含缺步骤 / 新增步骤） | 人裁决 accept / reject |
-| `2` | 用法或基础设施故障 / 证据不完整（预算耗尽、覆盖缺口、`--ci` 遇无基线调用点、判定语义不符） | 修环境，不算回归 |
-
-`--json` 向 stdout 输出机器可读 JSON 报告、每行一个文档（多报告命令输出文档流；每命令一个 schema 标签），诊断与进度走 stderr；
-失败的运行以 `agentassert4j.error/1` 错误包络收尾 stdout（错误码 + 可行动建议 + 下一步命令）——
-要了 JSON 就恒得 JSON。通道契约与 schema 清单见 [OPERATIONS.md](OPERATIONS.md#4-ci-门禁配方)。
+</details>
 
 ## 接入矩阵
 
@@ -338,30 +312,22 @@ accept 扩展集合——裁决立即对门禁生效）为判定基准；不做�
 | LangChain4j（无 Spring） | `agentassert4j-langchain4j` + `recorder` + `storage-sqlite` | `RecordingChatModel.wrap(...)` 包住模型即可 |
 | Spring AI（无 Boot） | `agentassert4j-spring-ai1` / `-ai2` + `recorder` + `storage-sqlite` | 手动装配三个 Bean |
 | Spring AI + LangChain4j 同应用（混架） | 两个 starter | 共用录制器与存储，各自框架各被各的装饰器包装 |
-| JDK 8+ 任意栈（自封装 HTTP） | `agentassert4j-core` + `recorder` + `storage-sqlite` | 调用出口组装 `InteractionRecord` 后 `recorder.intercept(record)`——最小录制契约见 [OPERATIONS.md](OPERATIONS.md#8-最小录制契约) |
+| JDK 8+ 任意栈（自封装 HTTP） | `agentassert4j-core` + `recorder` + `storage-sqlite` | 调用出口组装 `InteractionRecord` 后 `recorder.intercept(record)`——最小录制契约见 [运维手册 §8](OPERATIONS.zh.md#8-最小录制契约) |
 | 自研「JSON 路由」栈（协议层无 toolCalls） | 同上 | 解析出工具名处写身份声明字段；意图识别用 rules.json 正则钉住 |
 
 Spring AI 默认在模型侧内部执行完整工具回路的，框架通过**工具回调观察装饰**把每轮工具名 / 参数 /
-结果按序记入同一条记录——业务零改动，工具维度完整可见。重放这类记录走**链式半重放**：基线录制的旧结果
-当道具逐轮续问，决策分歧当场停下并定位到轮。
-
-LangChain4j 的工具回路编排在模型之外（AiServices 层），每个 LLM 轮次各自成记录：发起帧轮携带
-工具调用，工具结果落在下一轮的请求历史里——与 Spring AI 显式关闭内部工具执行后的逐轮形状一致。
-值溯源对两种形状同等消费：记录在调用上的工具结果与携带在下一轮 tool 轮次里的结果，都能追进下游
-工具参数。
+结果按序记入同一条记录；重放这类记录走**链式半重放**（基线录制的旧结果当道具逐轮续问，决策分歧
+当场停下）。LangChain4j 的工具回路编排在模型之外，每个 LLM 轮次各自成记录——值溯源对两种形状
+同等消费。
 
 ## 身份：声明与零声明
 
 调用点（invocation）身份从记录确定性派生，优先级：**声明锚点 > 骨架锚点 > 模板锚点 > 请求锚点兜底**。
-
-- **声明跨编辑稳定**：提示词一改模板指纹就变；`withInvocationId("refund")` 或应用级
-  `agentassert4j.recorder.default-invocation-id=tavern` 是唯一跨提示词编辑稳定的身份锚；
-- **动态模板按骨架定格**：组装后提示词内嵌日期/环境等动态段时，声明模板骨架
-  （`withTemplateSkeleton(...)`，动态段换成稳定占位符）——同骨架异全文同键，
-  身份不再随每次运行漂移裂键；受控重驱仍以归档全文为准；
-- **零声明是一等公民**：不声明的记录按模板哈希归组，重放、裁决样样可用——agent loop 形态零声明
-  即可完整使用，框架不逼人表态；
-- 判定正确性与声明质量解耦：声明只影响报告粒度，不影响判定对错。
+声明跨提示词编辑稳定（`withInvocationId("refund")` 或应用级
+`agentassert4j.recorder.default-invocation-id=tavern`）；动态模板按声明的模板骨架定格
+（`withTemplateSkeleton(...)`），身份不再随每次运行漂移裂键；零声明是一等公民——不声明的记录按
+模板哈希归组，重放、裁决样样可用，agent loop 形态零声明即可完整使用。判定正确性与声明质量解耦：
+声明只影响报告粒度，不影响判定对错。
 
 ## 设计原则
 
@@ -401,19 +367,26 @@ java -cp "agentassert4j-cli/target/classes;$(cat agentassert4j-cli/target/cp-cli
 ```
 
 配置查找链：系统属性 `agentassert4j.config.path` → 当前目录 → `~/.agentassert4j/` → classpath →
-安全默认值。全量配置参考见 [OPERATIONS.md](OPERATIONS.md)。
+安全默认值。全量配置参考见 [运维手册](OPERATIONS.zh.md)。
 
 </details>
 
 ## 文档
 
-- **[OPERATIONS.md](OPERATIONS.md)** — 部署形态、全量配置参考、CI 门禁配方、交付验收运行手册、
-  共享库运维规则、MCP 接入、最小录制契约、故障排查
-- **[guide/AgentAssert框架全景导读.md](guide/AgentAssert框架全景导读.md)** — 框架技术全景与学习路线：
-  用一个完整故事串起全部功能，每一幕落回真实的类、方法与表结构（面向开发者与贡献者）
-- **[guide/给AI装上行为回归回路.md](guide/给AI装上行为回归回路.md)** — 面向 AI 宿主集成者的人读评估：
-  为什么确定性判定天然适配自修循环，以及如何负责任地驱动 MCP 面
-- **[AGENTS.md](AGENTS.md)** — 面向贡献者与 AI 编码代理的仓库协作契约
+- **[运维手册（OPERATIONS.zh.md）](OPERATIONS.zh.md)** — 部署形态、全量配置参考、CI 门禁配方、交付验收
+  运行手册、共享库运维规则、MCP 接入、最小录制契约、故障排查
+- **[框架全景导读（guide/framework-panorama.zh.md）](guide/framework-panorama.zh.md)** — 框架技术全景与
+  学习路线：用一个完整故事串起全部功能，每一幕落回真实的类、方法与表结构（面向开发者与贡献者）
+- **[给 AI 装上行为回归回路（guide/ai-behavior-regression-loop.zh.md）](guide/ai-behavior-regression-loop.zh.md)**
+  — 面向 AI 宿主集成者的人读评估：为什么确定性判定天然适配自修循环，以及如何负责任地驱动 MCP 面
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — 参与贡献的入口；完整协作契约见 [AGENTS.md](AGENTS.md)（中文）
+
+## 社区
+
+- 缺陷报告与功能建议 → [GitHub Issues](https://github.com/agentassert4j/agentassert4j/issues)
+  （Gitee 用户也可用 [Gitee Issue](https://gitee.com/zm_mmm/agentassert4j/issues)，两侧同步处理）
+- 问题与接入帮助 → 开 issue 并附上 CLI 的 `--json` 输出
+- 参与贡献 → [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## 许可证
 
