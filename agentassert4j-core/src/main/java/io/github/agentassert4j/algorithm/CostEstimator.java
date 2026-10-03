@@ -151,8 +151,7 @@ public final class CostEstimator {
                 costKnown = false;
                 // 计价优先用 servedModel——快照未命中的常常是 served 别名而非
                 // 配置模型。归因必须指实际判定的名字：文案只报配置模型会把
-                // 「served 别名不在快照」伪装成「配置模型不在快照」（round26 实弹，
-                // 两轮独立被试都被该错位文案误导判了内置快照失效）
+                // 「served 别名不在快照」伪装成「配置模型不在快照」
                 if (unmatchedName == null) {
                     unmatchedName = record.getServedModel() != null ? record.getServedModel() : model;
                 }
@@ -244,7 +243,7 @@ public final class CostEstimator {
      * 用户覆盖文件（agentassert4j-prices.json）的并集覆盖：同族改价、新族补充。
      * 族键改价的优先级必须真实成立——查价是「先精确、后最长包含匹配」，若快照
      * 里存在更长的族内键（如 deepseek-chat），族键覆盖会被精确命中遮蔽，用户
-     * 按文档写族键改价等于没改（round31 双宿主独立实弹）。因此族键落地时先移除
+     * 按文档写族键改价等于没改。因此族键落地时先移除
      * 快照侧所有包含该族键的更具体键，再写入覆盖行；覆盖文件内部自己的更长键
      * 不受影响（同批写入，精确命中优先）。
      * 损坏的覆盖文件必须就近可见（SEVERE）而不是静默失效——用户写了价格文件却

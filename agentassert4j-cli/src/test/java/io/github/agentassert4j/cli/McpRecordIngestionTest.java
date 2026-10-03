@@ -503,7 +503,7 @@ class McpRecordIngestionTest {
         @DisplayName("无 type 注解的 role 条目：警告点名 + 模板提取降级可见（不静默）")
         void untypedRoleItem_warnsTemplateDegraded() {
             // chat 风格条目（有 role 无 type）混入 Responses input——system 模板随之丢失，
-            // 此前静默跳过把「模板没提取到」伪装成「没有模板」（round31 实弹）
+            // 此前静默跳过把「模板没提取到」伪装成「没有模板」
             String request = "{\"model\":\"gpt-4o\",\"input\":[" + "{\"role\":\"system\",\"content\":\"You are strict.\"}," + "{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hi\"}]}]}";
             String response = "{\"id\":\"resp_u\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"gpt-4o\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"ok\"}]}],\"usage\":{\"input_tokens\":5,\"output_tokens\":1}}";
             McpToolOutcome outcome = McpRecordIngestion.ingest(dbPath, args(request, response));

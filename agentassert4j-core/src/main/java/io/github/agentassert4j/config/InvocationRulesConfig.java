@@ -69,7 +69,7 @@ public class InvocationRulesConfig {
 
         // 严格解析取根因：宽松 parse 失败返回 null 时静默给空配置，会把「规则文件
         // 有一处非法转义」伪装成「没有任何声明」——声明即门禁，整文件归零必须
-        // 响亮可见（round18 实弹：regex 里的 \d 非法转义废掉全部内容规则）
+        // 响亮可见（regex 里的 \d 非法转义废掉全部内容规则）
         Object parsed;
         try {
             parsed = RecursiveJsonParser.parseStrict(json);
@@ -292,7 +292,7 @@ public class InvocationRulesConfig {
 
         /**
          * 数组型字段收到非数组值：安全忽略之外必须留痕——静默丢弃约束等于门禁
-         * 无声失效（round31 双宿主实弹：regexPatterns 传字符串被无声忽略）
+         * 无声失效（regexPatterns 传字符串被无声忽略）
          */
         private static void arrayFieldNote(String invocationId, String field, Object value, List<String> notes) {
             if (value != null) {

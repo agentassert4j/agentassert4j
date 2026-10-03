@@ -138,7 +138,7 @@ public class ReplayCommand implements Callable<Integer> {
             CliSupport.applyReDriveOverrides(config, model, endpoint);
             LlmClient client = CliSupport.createLlmClient(config);
             // 只在真跑重驱（将发请求）时校验 protocol——dry-run 与全部零调用判定
-            // 路径不触发（OPERATIONS §2.1 与接入指南的承诺，round27 F1 复归）
+            // 路径不触发（OPERATIONS §2.1 与接入指南的承诺）
             if (reDrive && !dryRun) {
                 CliSupport.ensureKnownWireProtocol(config.getLlm().getProtocol());
             }

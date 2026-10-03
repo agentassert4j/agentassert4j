@@ -45,7 +45,7 @@ public class GraphShowCommand implements Callable<Integer> {
     // 出边条件的机器面表述（JSON note 与人读条目同语义，两处按同一规则维护）：
     // 必须覆盖 tracer 的全部真实匹配规则——独立 JSON 叶子、精确相等、噪声排除
     // （纯数字/布尔/过短）、载体优先级（工具结果 > 历史工具帧 > 响应全文）。
-    // 少写一条，用户按说明构造就会全部落空（round13 双宿主实测的坑）
+    // 少写一条，用户按说明构造就会全部落空
     private static final String EDGE_CONDITIONS_JSON = "an edge requires all of: the two records carry different invocation identities (declare per-step invocation labels); the upstream value is a standalone JSON leaf (a value embedded inside a longer text never matches) found in a tool result, an earlier record's request-history tool frame, or the response body (up to 4 levels deep); the value passes noise filters (short pure numbers and decimals are excluded; 6+ digit pure integers count as ids and pass; true/false excluded; length >= 3); and a later response's tool-call argument equals it exactly (substring embedding does not match). Per record only the highest-priority carrier is scanned: tool result first, then history tool frames, then the response body. A value born in a record request history and consumed by the same record response tool call produces no edge; provenance starts one record later";
 
     // 输出通道：实例字段而非直接引用系统流——包内测试可在实例化后注入替代流
@@ -126,7 +126,7 @@ public class GraphShowCommand implements Callable<Integer> {
     private void renderHuman(StorageRepository repository, Set<String> nodes, List<GraphEdge> edges, InMemoryDependencyGraph graph, GraphBuildStats stats) {
         // 近失诊断与边数解耦计算：库里只要存在任何一条真实边，「整库零边」门控就
         // 永远不再触发——其余记录对的近失从此不可见，等于诊断面在真实项目上死亡
-        // （round31 双宿主实弹：有边库上的大小写不匹配/裸文本结果全部静默）
+        // （有边库上的大小写不匹配/裸文本结果全部静默）
         List<String> misses = nearMisses(repository);
         // 节点短形约 100 字符软换行收纳——几十个键挤一行在终端里只能水平滚动
         out.println("Nodes (" + nodes.size() + "):");

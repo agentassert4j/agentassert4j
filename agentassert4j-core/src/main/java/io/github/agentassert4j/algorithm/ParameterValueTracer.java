@@ -91,8 +91,8 @@ public class ParameterValueTracer {
 
     /**
      * 值流图只画业务执行：重驱观测是检测仪器的真调，不是业务数据流——留在图里会
-     * 产出「指向观测记录的 HIGH 边 + 反向假环」这类仪器伪影（round17 实弹），
-     * 取证面不能产伪影。观测记录的取证走 record show（redriveOf 链）。
+     * 产出「指向观测记录的 HIGH 边 + 反向假环」这类仪器伪影，取证不能产伪影。
+     * 观测记录的取证走 record show（redriveOf 链）。
      */
     private static List<InteractionRecord> businessOnly(List<InteractionRecord> records) {
         if (records == null) {
@@ -120,7 +120,7 @@ public class ParameterValueTracer {
 
         // toolCallId → 发起记录下标：响应侧发出调用的记录是值的业务源头。wire 回灌
         // 模式下工具结果只出现在后续请求 history 里——按 tool_use_id 把结果值归因回
-        // 发起方，而不是归给「恰好携带它的中间记录」（round18 实弹：最常见的一轮式
+        // 发起方，而不是归给「恰好携带它的中间记录」（最常见的一轮式
         // 工具循环因此零边、出边时源头指错人）。SDK 记录无 id 时退化为携带者归因
         Map<String, Integer> callIssuer = new LinkedHashMap<>();
         for (int k = 0; k < n; k++) {
@@ -443,7 +443,7 @@ public class ParameterValueTracer {
         if ("true".equals(val) || "false".equals(val)) return false;
         // 纯小数（量测值）恒排除；纯整数按长度分流：短数字是数量/序号（高噪），
         // ≥6 位整数是订单号/工单号/时间戳形态的 ID——排掉它们等于对电商与工单类
-        // 链的跨步值系统性失明（round20 实弹：20260930 形态的值零边）
+        // 链的跨步值系统性失明
         if (val.matches("-?\\d+\\.\\d+")) return false;
         if (val.matches("-?\\d+")) return val.length() >= 6;
         return true;

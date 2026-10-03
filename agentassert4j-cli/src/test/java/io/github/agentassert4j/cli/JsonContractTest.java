@@ -899,7 +899,7 @@ class JsonContractTest {
 
             int exit = execute("verify", "--pack", packPath.toString(), "--db", emptyDb.toString(), "--json");
 
-            // verify 只读：缺库先拒绝、不创建文件（round21 实弹——曾静默初始化 64KB 空库）
+            // verify 只读：缺库先拒绝、不创建文件（曾静默初始化 64KB 空库）
             assertEquals(2, exit);
             assertFalse(java.nio.file.Files.exists(emptyDb), "缺库不得创建文件: " + emptyDb);
             String envelope = lastStdoutLine();

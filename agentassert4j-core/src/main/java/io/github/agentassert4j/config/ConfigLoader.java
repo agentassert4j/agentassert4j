@@ -322,7 +322,7 @@ public final class ConfigLoader {
      */
     /**
      * 剥离 UTF-8 BOM：带 BOM 的配置文件首字符是 U+FEFF，JSON 解析按「非法起始字符」
-     * 失败后静默回退内置默认——storage.url 被无视、数据落错库（round20 实弹）。
+     * 失败后静默回退内置默认——storage.url 被无视、数据落错库。
      * 配置文件的作者群（Windows 编辑器）高比例产出 BOM 文件，读侧统一剥除。
      */
     private static String stripBom(String text) {

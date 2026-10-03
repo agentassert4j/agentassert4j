@@ -157,22 +157,22 @@ final class CliSupport {
         String url = dbOverride != null ? dbOverride : config.getStorage().getUrl();
         String expanded = ConfigLoader.expandHome(url);
         // 路径含解码替换符 = 配置文件编码错位（GBK 写、UTF-8 读一类）：继续会静默
-        // 创建乱码文件名的新库——数据错位比拒绝启动更糟（round20 实弹）
+        // 创建乱码文件名的新库——数据错位比拒绝启动更糟
         if (expanded.indexOf('\uFFFD') >= 0) {
             throw new CliFailureException(CliErrorCode.E_ENV, "Database path contains undecodable characters (likely a charset mismatch in agentassert4j.json): " + expanded, "Save agentassert4j.json as UTF-8, then retry.", "agentassert4j doctor");
         }
         // 「从没数据」与「库丢了/指错了」必须可区分：静默初始化会把指错 --db/配置
-        // 伪装成干净空库（round16 红队实弹——截断攻击现场被 status 读作 exit 0）
+        // 伪装成干净空库（截断攻击现场被 status 读作 exit 0）
         if (!createIfMissing && !new java.io.File(expanded).isFile()) {
             // 读面缺库语义：指向不存在的文件拒绝（不静默初始化空库）——
-            // 「没录过」与「库丢了/指错了」必须可区分，静默初始化把后者伪装成前者
-            //（round20/round22 双轮实弹）；写面首录走 openRepositoryCreating
+            // 「没录过」与「库丢了/指错了」必须可区分，静默初始化把后者伪装成前者；
+            // 写面首录走 openRepositoryCreating
             throw new CliFailureException(CliErrorCode.E_NO_DATA, "Database not found: " + (expanded.isEmpty() ? "(empty --db / storage.url value)" : expanded),
                     "Check --db / storage.url against the intended database; recording creates it on first write.", "agentassert4j doctor");
         }
         // 实际打开的库路径与 Config/Rules 同格披露：同 cwd 多库工作流里，下游任何
         // 告警（如 rules drift）若不带库上下文就无法消歧「说的是哪个库」——
-        // 每次运行的开库事实是消歧的锚（round25 OBS-2）
+        // 每次运行的开库事实是消歧的锚
         diagnostics.println("Database: " + expanded);
         StorageRepository repository = new SqliteStorageRepository(expanded);
         repository.initialize();
@@ -663,7 +663,7 @@ final class CliSupport {
     static LlmClient createLlmClient(AgentAssert4jConfig config) {
         // protocol 合法性不在构造点校验：bare replay/--dry-run/MCP check 等零调用
         // 判定路径也构造发射客户端（仅取其名字做报价展示），急切校验会把一个
-        // protocol 手误打瘫主门禁与 AI 自主回路的核心动词（round27 F1）——
+        // protocol 手误瘫痪主门禁与 AI 自主回路的核心动词——
         // 校验下沉到 ensureKnownWireProtocol，只在真跑重驱发射前触发
         String protocol = config.getLlm().getProtocol();
         String endpoint = config.getLlm().getEndpoint();
@@ -676,7 +676,7 @@ final class CliSupport {
 
     /**
      * 真跑重驱前的 protocol 合法性守卫：合法词表进消息本体（人读通道只渲染
-     * message，词表藏 hints = 同一承诺只在机器通道成立，round19 承诺审计 D1）。
+     * message，词表藏 hints = 同一承诺只在机器通道成立）。
      * 只在真正要发请求的路径调用——零调用命令不触发（OPERATIONS §2.1 承诺）。
      */
     static void ensureKnownWireProtocol(String protocol) {

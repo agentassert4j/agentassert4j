@@ -205,7 +205,7 @@ class BaselineManagerTest {
         }
 
         @Test
-        @DisplayName("已拒形状不重复排队：同形状再登记返回 false 且事件携带 rejected-fingerprint 标记（round10 M5）")
+        @DisplayName("已拒形状不重复排队：同形状再登记返回 false 且事件携带 rejected-fingerprint 标记")
         void rejectedShape_notReRegistered() {
             // recordCandidate 按记录现算键找画像——画像键必须与记录锚定键一致
             InteractionRecord baselineRecord = makeToolRecord("skill-1", "search");

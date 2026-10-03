@@ -66,7 +66,7 @@ final class McpRecordIngestion {
         String requestRaw = nonBlankString(args, "request");
         String responseRaw = nonBlankString(args, "response");
         // 类型错先于缺失报：值在场只是类型不对时，报「缺字段」会把调用方引向
-        // 完全错误的排查方向（round16 实弹：request 传 JSON 对象被报 requires request）
+        // 完全错误的排查方向（request 传 JSON 对象被报 requires request）
         for (String field : new String[] {"request", "response"}) {
             Object value = args.get(field);
             if (value != null && !(value instanceof String)) {
@@ -266,9 +266,8 @@ final class McpRecordIngestion {
         @Override
         public void mapResponse(Map<String, Object> response, String responseRaw, InteractionRecord record, List<String> warnings) {
             // 空 choices 是合法 wire 形态里的正文级退化（无 assistant 内容、无 finish
-            // reason 可提取；usage 来自独立字段不受影响）——保存不拒（R10），但退化
-            // 必须在场（R11）：静默保存会让调用方以为摄取完整（round25 OBS-4 备查项
-            // 按退化可见原则升级为注记）
+            // reason 可提取；usage 来自独立字段不受影响）——保存不拒，但退化
+            // 必须显式可见：静默保存会让调用方以为摄取完整（按退化可见原则升级为注记）
             if (response.get("choices") instanceof List && ((List<?>) response.get("choices")).isEmpty()) {
                 warnings.add("Warning: response carries an empty choices array; no assistant content or finish reason was extracted (usage still comes from the response's usage field).");
             }

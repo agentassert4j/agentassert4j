@@ -22,14 +22,14 @@
 
 <img src="assets/deployment.zh.png" alt="部署形态：录制侧（应用进程内旁路运行）旁路写入 agentassert4j.db，分析侧独立 CLI 进程读写同一文件" width="760"/>
 
-数据库默认路径分侧：CLI 分析侧 `~/.agentassert4j/agentassert4j.db`，starter 录制侧为应用工作目录下的
-`agentassert4j.db`——建议在主配置/starter 属性里显式指到应用的持久化目录，两侧保持一致。
+数据库默认路径分侧：CLI 分析侧与 starter 录制侧默认均为 `~/.agentassert4j/agentassert4j.db`——建议在
+主配置/starter 属性里显式指到应用的持久化目录，两侧保持一致。
 
 ### 1.1 分析侧 CLI 获取
 
 | 方式 | 适用 | 做法 |
 |------|------|------|
-| **standalone jar**（推荐） | 人工操作、客户现场、交付物料随行 | 从 GitHub Releases 或 Maven Central 下载 `agentassert4j-cli-standalone`，`java -jar` 直接运行（只需 JRE 8+） |
+| **standalone jar**（推荐） | 人工操作、客户现场、交付物料随行 | 从 GitHub Releases 下载 `agentassert4j-cli-standalone`（不发布 Maven Central），`java -jar` 直接运行（只需 JRE 8+） |
 | Maven 依赖引用 | 平台工程统一管理工具链 | pom 引入 `agentassert4j-cli`，传递依赖自动就位 |
 | 源码构建 | 开发调试 | 见 [README.zh.md](README.zh.md)「模块结构」折叠节 |
 
@@ -260,7 +260,7 @@ LLM API Key **只被一个功能消费**：`replay --re-drive`（受控重驱的
 - **单文件即全部状态**：备份 = 复制文件（建议停写窗口或接受只追加语义下的时间点快照）。
 - **只追加**：`interactions` 是历史账本，重复录制会追加不覆盖——重建基线数据请换新文件或删除旧文件后重录。
 - **schema 契约版本**（`PRAGMA user_version`）：库版本高于 CLI 支持值时**拒开**（旧工具不误读新数据）；
-  预发布阶段 schema 变更以**删库重建**承接，不提供迁移。升级 CLI 后若报版本不符，删除库文件重新录制建档。
+  发布前 schema 变更以**删库重建**承接，不提供迁移。升级 CLI 后若报版本不符，删除库文件重新录制建档。
 - **判定语义版本**（当前 `det-v1`）：每份基线盖章时记录；CLI 升级后语义不一致时 replay **拒绝判定**
   （exit 2）并指引 `baseline --force` 重建——拿新尺子解释旧基线是被禁止的。
 - **Windows 注意**：关停应用后 CLI 才能独占写库；自带录制器 Bean 必须显式声明 destroy 方法名 `stop`，
@@ -588,7 +588,7 @@ template_hash 缺失、invocationKey 无桶后缀），不是「同标签混用�
 | 落库数与业务调用量对不上 | 读应用日志计数账本：dropped（缓冲满，调大 batch/flush 或接受丢弃）、failed（批量写失败看 ERROR）、filtered（采集门，策略性） |
 | status 看不到画像 | 建档守卫剔除了解析失败的记录——看命令告警行；`baseline` 幂等可重跑 |
 | status 报「Unestablished invocations」 | 已录制但无基线画像的键（提示词新版本或零声明调用点）——重跑 `baseline` 并入基线（幂等），或确认属待废弃版本 |
-| CLI 报「库版本高于支持值」 | 库由更新版本的框架创建——升级 CLI，或（预发布阶段）删库重建 |
+| CLI 报「库版本高于支持值」 | 库由更新版本的框架创建——升级 CLI |
 
 **7.2 判定面**
 
@@ -735,10 +735,10 @@ split（同标签裂出的未建档新键）、self-established tasks（该请�
 
 | 标识 | 当前值 | 语义 |
 |------|--------|------|
-| 存储 schema（`PRAGMA user_version`） | 1 | 预发布固定不演进，schema 变更=删库重建；发布后只增不改 |
-| 判定语义 | `det-v1` | 改变「同样差异得出什么判定」的变更必须递增；发布前恒定 |
+| 存储 schema（`PRAGMA user_version`） | 1 | 固定不演进；schema 变更=递增版本号并只增不改 |
+| 判定语义 | `det-v1` | 改变「同样差异得出什么判定」的变更必须递增 |
 | 报告 schema | `task-report/1`（replay 逐行分段报告）、`verify-report/1`（含 `localServedModel`：跨模型验收时机器面可自足重建两侧模型对照）、`acceptance-pack/1`、`export-report/1`、`baseline-report/1`、`adjudication/1`、`rollback/1`、`status/1`、`candidate-diff/1`（`status --diff --json`：逐调用点的候选 vs 锚定形态结构化差异，供 AI 消费者给出裁决建议）、`graph/1`（`nodes` 全键清单 + `scanned` 扫描统计；HIGH 边含 `evidence`：命中值 + 源/目标记录 id）、`rules/1`、`doctor/1`、`audit/1`、`record/1`（MCP record 摄取回执：status/recordId/invocationKey/turnIndex/tokens，duplicate 与形状降级经 note 披露）、`record-view/1`（`record show --json`：单记录全量视图，recordKind 区分业务与重驱观测；结构化内容条件投影——userInput/modelResponse/finishReason/samplingParams/previousTurns 条数/toolCalls（success 三态原样投影，null=本层未观察执行结果），SDK 无 raw 捕获的内容经此可读）（每命令 `--json` 各对应其一；replay 的 mode 分段见 §4）、`error/1`（`--json` 失败包络：errorCode 四族 + hints + nextAction） | schema 标识自出生冻结；验收包跨引擎由判定语义版本守卫把关 |
-| Maven 版本 | `1.0.0-SNAPSHOT` | 发布时转正式版 |
+| Maven 版本 | `1.0.0` | 已发布；后续缺陷修复递增 patch 号（1.0.1…） |
 | CLI 可执行形态 | `agentassert4j-cli-standalone` | cli 模块的全依赖 shaded 产物（含 slf4j-nop 与 Main-Class），`java -jar` 直接运行 |
 
 模块坐标前缀 `io.github.agentassert4j`；core 永不引入任何外部依赖（仅 java.base）。

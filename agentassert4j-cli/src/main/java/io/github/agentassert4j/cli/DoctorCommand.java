@@ -303,7 +303,7 @@ public class DoctorCommand implements Callable<Integer> {
             unestablishedJsons.add("{\"invocationKey\":\"" + RecursiveJsonParser.escape(footprint.invocationKey) + "\",\"label\":\"" + RecursiveJsonParser.escape(footprint.label != null ? footprint.label : "") + "\",\"recordCount\":" + footprint.recordCount + "}");
         }
         String rulesPath = ConfigLoader.resolveRulesPath();
-        // 机器面与人读面同款覆盖：协议失配行必须双面齐（round24 D1——人读有整行、
+        // 机器面与人读面同款覆盖：协议失配行必须双面齐（人读有整行、
         // JSON 面无此键，AI 消费方看不到库里的方言错配）
         StringBuilder protocolMismatchesJson = new StringBuilder();
         for (String recordId : findings.protocolShapeMismatches) {

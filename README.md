@@ -8,7 +8,7 @@ Record → replay → differ: turn "will my prompts still work?" into a one-comm
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-8%2B-informational)](#integration-matrix)
-[![Maven Central](https://img.shields.io/badge/Maven_Central-1.0.0-blue)](https://central.sonatype.com/)
+[![Maven Central](https://img.shields.io/badge/Maven_Central-1.0.0-blue)](https://central.sonatype.com/search?q=io.github.agentassert4j)
 [![Storage](https://img.shields.io/badge/Storage-single--file%20SQLite-lightgrey)](#the-core-loop)
 
 [Quick start](#quick-start) · [The core loop](#the-core-loop) · [Delivery acceptance](#delivery-acceptance-the-second-workflow) · [CLI reference](#cli-surface) · [Integration matrix](#integration-matrix) · [Operations guide](OPERATIONS.md)
@@ -380,9 +380,9 @@ Channel contract and schema list in [OPERATIONS.md](OPERATIONS.md).
 
 | Your stack | Dependencies | Effort |
 |------------|--------------|--------|
-| Spring Boot 3.x + Spring AI 1.x | `agentassert4j-starter-spring-ai1` | Zero business-code changes |
-| Spring Boot 4.x + Spring AI 2.x | `agentassert4j-starter-spring-ai2` | Zero business-code changes |
-| Spring Boot 3.x + LangChain4j 1.x | `agentassert4j-starter-langchain4j` | Zero business-code changes |
+| Spring Boot 3.4.5+ (verified baseline 3.4.5) | `agentassert4j-starter-spring-ai1` | Zero business-code changes |
+| Spring Boot 4.0+ (verified baseline 4.0.0) | `agentassert4j-starter-spring-ai2` | Zero business-code changes |
+| Spring Boot 3.4.5+ + LangChain4j 1.x | `agentassert4j-starter-langchain4j` | Zero business-code changes |
 | LangChain4j (no Spring) | `agentassert4j-langchain4j` + `recorder` + `storage-sqlite` | Wrap your `ChatModel` with `RecordingChatModel.wrap(...)` |
 | Spring AI without Boot | `agentassert4j-spring-ai1` / `-ai2` + `recorder` + `storage-sqlite` | Assemble three beans manually |
 | Spring AI + LangChain4j in one app | both starters | Shared recorder/storage, each framework wrapped by its own decorator |
@@ -464,7 +464,7 @@ Config lookup chain: system property `agentassert4j.config.path` → working dir
 
 ## Documentation
 
-- **[OPERATIONS.md](OPERATIONS.md)** — deployment forms, full configuration reference, CI gating
+- **[OPERATIONS.md](OPERATIONS.md)** (content in Chinese) — deployment forms, full configuration reference, CI gating
   recipes, delivery-acceptance runbook, shared-database operating rules, MCP integration, minimal
   recording contract, troubleshooting
 - **[guide/AgentAssert框架全景导读.md](guide/AgentAssert框架全景导读.md)** — a technical panorama and

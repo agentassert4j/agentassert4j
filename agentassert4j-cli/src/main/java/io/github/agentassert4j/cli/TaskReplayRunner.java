@@ -209,7 +209,7 @@ public class TaskReplayRunner {
             }
             // 缩域门禁的域外披露：缩域是共库礼仪的正当用法（我的门禁不替别人把门），
             // 但「缩域外还有红灯/在途候选」必须让运行者看见——否则一条流水线配置
-            // 改个 --invocation 就能让全库红旗在门禁面上隐身（round16 红队实弹）
+            // 改个 --invocation 就能让全库红旗在门禁报告里隐身
             if (narrowed) {
                 String outOfScopeNote = outOfScopeGateNote(scoped, drift);
                 if (outOfScopeNote != null) {
@@ -320,8 +320,7 @@ public class TaskReplayRunner {
         }
 
         // 多任务报告的红位索引：几十个任务里唯一的红任务埋在逐任务明细中段时，
-        // CI 日志读者要翻几百行才能定位（round18 实弹：22 任务中第 67/256 行）——
-        // 收尾前点名红任务，一眼定位回归
+        // CI 日志读者要翻几百行才能定位——收尾前点名红任务，一眼定位回归
         if (!tasksWithFindings.isEmpty()) {
             List<String> shown = new ArrayList<>();
             for (String name : tasksWithFindings) {
@@ -440,7 +439,7 @@ public class TaskReplayRunner {
         if (fullChain) {
             // --invocation 显式点名的调用点先消费预算：链序只是采集序（重驱逐记录独立、
             // 各用各的归档模板），预算耗尽时被跳过的应是外围记录而不是用户点名要重驱的
-            // 那条（round27 F3：窄选点排在链后段时预算先被链首记录花光）
+            // 那条（窄选点排在链后段时预算先被链首记录花光）
             List<InteractionRecord> named = new ArrayList<>();
             for (TaskChain chain : scoped) {
                 for (InteractionRecord record : chain.getRecords()) {
@@ -884,8 +883,8 @@ public class TaskReplayRunner {
 
         String versionNote = newChain.getRecords().size() == 1 ? "" : " (" + CliSupport.plural(judged.getRecords().size(), "invocation") + " judged from " + newChain.getRecords().size() + " records)";
         info("Task \"" + CliSupport.abbreviateText(newChain.getRequestText(), 80) + "\": baseline comparison (--ci) — new chain (session " + newChain.getSessionId() + ")" + versionNote + " against the approved shape set" + (baselineTime != null ? " (latest approval on this chain's invocations)" : ""));
-        // latest chain 健康披露：链记录数显著少于本任务历史峰值 = 时间戳劫持/丢步骤的
-        // 静默面（round17 红队实弹：注入一条未来时间戳单记录链即接管门禁判定，
+        // latest chain 健康披露：链记录数显著少于本任务历史峰值 = 时间戳劫持/丢步骤
+        // 的静默形态（注入一条未来时间戳单记录链即接管门禁判定，
         // 链上其余步骤整体逃逸）——两行可见性即可封掉这类静默换链
         int historicalMax = 0;
         for (TaskChain chain : group) {
@@ -1486,7 +1485,7 @@ public class TaskReplayRunner {
      */
     /**
      * 多步会话未声明 taskKey 时，任务面按请求文本把它裂成多个单步任务——判定只出
-     * 「[1]」会让用户以为只判了一步（round12 宿主实测的「最茫然」点）。同一会话
+     * 「[1]」会让用户以为只判了一步。同一会话
      * 裂进多个单步任务组时给一句指引：声明 taskKey 才能整链对齐。
      */
     private void hintSplitSingleStepTasks(List<List<TaskChain>> groups) {
@@ -1718,7 +1717,7 @@ public class TaskReplayRunner {
             // 拿到的是漂移点裁剪（bare 形态恒 0 条 + 建议句让用户开已开的旗标）
             List<InteractionRecord> planned = reDriveTargets(drift, fullChain, narrowed, invocationKey, scoped);
             // 换模型告警前置到 dry-run：用户先看报价再决定真跑——告警只出现在真跑
-            // 等于最贵的提示来得最晚（round19 D6）；判定不可比的决策在报价时就要在场
+            // 等于最贵的提示来得最晚；判定不可比的决策在报价时就要在场
             Set<String> plannedModels = new LinkedHashSet<>();
             for (InteractionRecord record : planned) {
                 if (record.getModel() != null && !record.getModel().isEmpty()) {
@@ -1730,7 +1729,7 @@ public class TaskReplayRunner {
             }
             // 预演与真跑同预算语义（逐记录顺序消费 calls/tokens 池、预检宁少跑不超限）：
             // cap 存在时 dry-run 只对会被执行的记录报价并预告截断——否则用户按预演
-            // 报价规划预算、真跑却按 cap 截断，预演成了另一场戏（r32 D11）
+            // 报价规划预算、真跑却按 cap 截断，预演成了另一场戏
             List<InteractionRecord> funded = new ArrayList<>(planned.size());
             int budgetSkipped = 0;
             if (maxTotalCalls != null || maxTotalTokens != null) {
@@ -1751,12 +1750,12 @@ public class TaskReplayRunner {
             info("Re-drive plan (--re-drive): " + CliSupport.plural(planned.size(), "record") + " to re-drive with each point's latest archived template" + (fullChain ? " (--full-chain)" : narrowed ? " (all invocations in scope)" : " (drift points only)") + "." + (budgetSkipped > 0 ? " Budget caps would fund " + funded.size() + " of them; " + CliSupport.plural(budgetSkipped, "record") + " skipped." : ""));
             dryRunBudgetSkipped = budgetSkipped;
             // 预演的是一次即将发生的发射：非法协议在预演面就被拦截（真跑前置同一守卫），
-            // 否则 dry-run 展示一个真跑必然 exit 2 的计划，报价成了空谈（round31 实弹）
+            // 否则 dry-run 展示一个真跑必然 exit 2 的计划，报价成了空谈
             CliSupport.ensureKnownWireProtocol(executionConfig.getWireProtocol());
             info("Re-drive emitter: model " + llmClient.name() + (executionConfig.getEndpoint() != null ? " via " + executionConfig.getEndpoint() : "") + ", protocol " + (executionConfig.getWireProtocol() != null ? executionConfig.getWireProtocol() : "auto — record protocol hint, openai-chat fallback") + ".");
             // 被排除记录逐条点名：重驱需要「该点最新归档模板」——键无基线（无归档
             // 模板）的记录被静默排除出计数，5→3 这类缩差必须让操作者看见谁缺席、
-            // 为什么（round30 N-2）
+            // 为什么
             if (fullChain || narrowed) {
                 Set<String> plannedIds = new HashSet<>();
                 for (InteractionRecord record : planned) {

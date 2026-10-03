@@ -54,7 +54,7 @@ class CliSupportLlmClientTest {
     }
 
     @Test
-    @DisplayName("本次运行覆盖（--model/--endpoint）经同一装配路径生效（round10 裁决项）")
+    @DisplayName("本次运行覆盖（--model/--endpoint）经同一装配路径生效")
     void runOverrides_reachClientConstruction() {
         AgentAssert4jConfig config = configWithProtocol(null);
         CliSupport.applyReDriveOverrides(config, "deepseek-v4-pro", "https://override.example.com");

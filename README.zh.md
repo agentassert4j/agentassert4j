@@ -8,7 +8,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-8%2B-informational)](#接入矩阵)
-[![Maven Central](https://img.shields.io/badge/Maven_Central-1.0.0-blue)](https://central.sonatype.com/)
+[![Maven Central](https://img.shields.io/badge/Maven_Central-1.0.0-blue)](https://central.sonatype.com/search?q=io.github.agentassert4j)
 [![Storage](https://img.shields.io/badge/Storage-SQLite单文件-lightgrey)](#核心闭环)
 
 [快速开始](#快速开始) · [核心闭环](#核心闭环) · [交付验收](#交付验收第二个工作流) · [CLI 参考](#cli-命令面) · [接入矩阵](#接入矩阵) · [运维手册](OPERATIONS.md)
@@ -332,9 +332,9 @@ accept 扩展集合——裁决立即对门禁生效）为判定基准；不做�
 
 | 你的栈 | 依赖 | 接入成本 |
 |--------|------|---------|
-| Spring Boot 3.x + Spring AI 1.x | `agentassert4j-starter-spring-ai1` | 零业务代码改动 |
-| Spring Boot 4.x + Spring AI 2.x | `agentassert4j-starter-spring-ai2` | 零业务代码改动 |
-| Spring Boot 3.x + LangChain4j 1.x | `agentassert4j-starter-langchain4j` | 零业务代码改动 |
+| Spring Boot 3.4.5+（验证基线 3.4.5） | `agentassert4j-starter-spring-ai1` | 零业务代码改动 |
+| Spring Boot 4.0+（验证基线 4.0.0） | `agentassert4j-starter-spring-ai2` | 零业务代码改动 |
+| Spring Boot 3.4.5+ + LangChain4j 1.x | `agentassert4j-starter-langchain4j` | 零业务代码改动 |
 | LangChain4j（无 Spring） | `agentassert4j-langchain4j` + `recorder` + `storage-sqlite` | `RecordingChatModel.wrap(...)` 包住模型即可 |
 | Spring AI（无 Boot） | `agentassert4j-spring-ai1` / `-ai2` + `recorder` + `storage-sqlite` | 手动装配三个 Bean |
 | Spring AI + LangChain4j 同应用（混架） | 两个 starter | 共用录制器与存储，各自框架各被各的装饰器包装 |

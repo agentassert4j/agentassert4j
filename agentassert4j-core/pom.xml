@@ -1,23 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xmlns="http://maven.apache.org/POM/4.0.0"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-
     <parent>
         <groupId>io.github.agentassert4j</groupId>
         <artifactId>agentassert4j-parent</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <version>1.0.0</version>
     </parent>
-
     <artifactId>agentassert4j-core</artifactId>
-    <packaging>jar</packaging>
-
     <name>AgentAssert4j Core</name>
-    <description>
-        Zero-dependency core module. Contains all models, SPI interfaces, and algorithms.
-        Depends on java.base ONLY. Must remain under 200KB.
-    </description>
+    <description>Zero-dependency core: interaction models, SPI interfaces and the deterministic fingerprint, baseline and comparison algorithms; depends on java.base only</description>
 
     <dependencies>
         <dependency>

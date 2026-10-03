@@ -59,7 +59,7 @@ public class BaselineService {
      *                     而非用户逐键点名的显式意图。派生域必须与全库扫建一样
      *                     豁免裂键——裂键是模板身份变更的治理信号，「回到旧模板的
      *                     历史链里还带着裂键」不该被一次缩域 replay 悄悄建档
-     *                     （round31 双宿主实弹：--task 绕过豁免把裂键建进了门禁认可集）
+     *                     （--task 绕过豁免会把裂键建进门禁认可集）
      */
     public int establishMissing(PrintStream out, String actor, String codeRef, boolean force, Set<String> invocationKeys, boolean derivedScope, InvocationRulesConfig rules, List<BaselineOutcome> outcomes, String expectedVersion) {
         BaselineManager manager = new BaselineManager(repository);
@@ -78,7 +78,7 @@ public class BaselineService {
 
         // force 的乐观守卫必须两阶段：先全量校验、再统一写入——逐键检查到中途才抛，
         // 前面的键已经被重建（approver 改写、归档落库、audit 记账），「整体拒绝」的
-        // 包络让操作者以为零写入，共享库多 actor 场景下等于移动了别人的基线（round26 实弹）
+        // 包络让操作者以为零写入，共享库多 actor 场景下等于移动了别人的基线
         if (force && expectedVersion != null) {
             List<String> mismatches = new ArrayList<>();
             for (Map.Entry<String, List<InteractionRecord>> bucket : CliSupport.invocationBuckets(repository).entrySet()) {
@@ -175,7 +175,7 @@ public class BaselineService {
                 continue;
             }
             established++;
-            // 不做画像二次 REPLACE（round11 前的回填动作已随 write-only 字段移除）：
+            // 不做画像二次 REPLACE：
             // 二次覆盖写入会重新打开原子建档刚关闭的并发窗口
             out.println("  " + displayLabel(records) + invocationKey + ": " + (hadBaseline ? "baseline re-established under the current judgment semantics (" + created.getVersionTag() + ")" : "baseline established") + " (seed record " + seed.getRecordId() + ")" + refSuffix(created.getCodeRef()));
             if (outcomes != null) {

@@ -269,7 +269,7 @@ class BaselineServiceTest {
         repository.saveInteractionIfAbsent(draft);
 
         // 派生域包含裂键：豁免必须生效——缩域 replay 从链上机械收集的键不是逐键显式
-        // 意图，历史链里带着的裂键不得被悄悄建档（round31 实弹：--task 绕过豁免）
+        // 意图，历史链里带着的裂键不得被悄悄建档（--task 绕过豁免）
         Set<String> derived = new LinkedHashSet<>();
         derived.add(invocationKeyOfDraft());
         derived.add(invocationKeyOf("splitAgent"));
@@ -307,7 +307,7 @@ class BaselineServiceTest {
     }
 
     @Test
-    @DisplayName("expectedVersion 守卫覆盖幂等路径：exists 降级时版本预期不符同样拒绝（round10 H1）")
+    @DisplayName("expectedVersion 守卫覆盖幂等路径：exists 降级时版本预期不符同样拒绝")
     void expectedVersion_guardCoversIdempotentPath() {
         repository.saveInteractionIfAbsent(makeRecord("rec-1", "skill-1", 1000L, "{\"a\":1}"));
         PrintStream out = new PrintStream(output, true);

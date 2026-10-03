@@ -528,7 +528,7 @@ class TaskReplayRunnerTest {
         @DisplayName("dry-run 预算预演：cap 只对会被执行的记录报价并预告截断")
         void reDriveDryRun_appliesBudgetCapsToEstimate() {
             // 三记录链 + max-total-calls 1：预演必须只报 1 次调用并预告 2 条截断——
-            // 预演与真跑同预算语义，否则用户按预演报价规划、真跑按 cap 截断（r32 D11）
+            // 预演与真跑同预算语义，否则用户按预演报价规划、真跑按 cap 截断
             saveRecord("b-1", "session-b1", 100L, "查订单", "order", "hash-b1", "{\"result\":\"ok\"}", null);
             saveRecord("b-2", "session-b1", 200L, "查订单", "order2", "hash-b2", "{\"result\":\"ok\"}", null);
             saveRecord("b-3", "session-b1", 300L, "查订单", "order3", "hash-b3", "{\"result\":\"ok\"}", null);
@@ -572,7 +572,7 @@ class TaskReplayRunnerTest {
         @DisplayName("--full-chain --invocation 预算优先序：窄选调用点先占预算（计划序即可见）")
         void fullChainReDrive_narrowedInvocationConsumesBudgetFirst() {
             // 链上外围记录在链首、被窄选调用点在链后：full-chain 采集序若照链序，
-            // 预算 1 会被外围记录花掉、用户点名要重驱的那条被 skip（round27 F3）
+            // 预算 1 会被外围记录花掉、用户点名要重驱的那条被 skip
             saveRecord("p-1", "session-p1", 100L, "查订单", "outer", "hash-o", "{\"result\":\"ok\"}", null);
             saveRecord("p-2", "session-p1", 200L, "查订单", "named", "hash-n", "{\"result\":\"ok\"}", null);
 
@@ -1274,7 +1274,7 @@ class TaskReplayRunnerTest {
         }
 
         @Test
-        @DisplayName("预算截断恒 exit 2 + 包络（即使同轮有 CHANGED——证据不完整不冒充行为差异，round10 M4）")
+        @DisplayName("预算截断恒 exit 2 + 包络（即使同轮有 CHANGED——证据不完整不冒充行为差异）")
         void reDrive_budgetTruncation_beatsChangedExitCode() {
             seedArchivedSkeletonDrift("{\"result\":\"ok\"}");
             stubClient.setScriptedContent("{\"verdict\":\"flipped\"}");

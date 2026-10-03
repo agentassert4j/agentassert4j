@@ -70,7 +70,7 @@ public class VerifyCommand implements Callable<Integer> {
             // 不得穿透给 picocli 打全栈
             AgentAssert4jConfig config = ConfigLoader.loadAgentAssert4jConfig();
             // verify 是只读命令：缺库先拒绝（openRepository 会静默初始化 64KB 空文件，
-            // 与「只读不落库」承诺矛盾——round21 实弹）
+            // 与「只读不落库」承诺矛盾）
             java.io.File dbFile = new java.io.File(db != null ? db : ConfigLoader.expandHome(ConfigLoader.loadAgentAssert4jConfig().getStorage().getUrl()));
             if (!dbFile.isFile()) {
                 return CliSupport.fail(jsonOutput, out, err, CliErrorCode.E_NO_DATA, "Database not found: " + dbFile.getPath() + " (verify does not create databases).",

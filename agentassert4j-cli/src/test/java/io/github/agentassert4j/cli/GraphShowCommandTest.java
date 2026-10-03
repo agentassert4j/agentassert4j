@@ -113,7 +113,7 @@ class GraphShowCommandTest {
     void wireRoundTripSameRecordHop_attributedToIssuer() {
         // r1：响应发出 get_order（toolCallId=T1）；r2：请求 history 携带 T1 的结果
         // {order:ORD-7}，响应即发起 create_wo(order_id=ORD-7)——值诞生与首次消费
-        // 同记录，历史上该跳零边（round18 主形态盲区）
+        // 同记录，历史上该跳零边
         InteractionRecord r1 = wireRecord("w-1", 1000L, "getOrder", "hash-w1", null, "T1", null);
         InteractionRecord r2 = wireRecord("w-2", 2000L, "createWork", "hash-w2", "T1", "T2", "ORD-7");
         repository.saveInteractionIfAbsent(r1);

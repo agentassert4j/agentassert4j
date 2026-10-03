@@ -468,7 +468,7 @@ class VerifyExportTest {
         AcceptancePack pack = PackCodec.fromJson(stripped);
         assertEquals(0, pack.getTasks().get(0).getUnadjudicatedSteps(), "缺字段缺省 0（解析健壮性，非版本迁移）");
 
-        // 剥字段即篡改载荷：完整性锚失配必须拒绝（round21 实弹——「装饰字段也可随意剥」
+        // 剥字段即篡改载荷：完整性锚失配必须拒绝（「装饰字段也可随意剥」
         // 正是锚要堵的洞）。解析层缺省 0 的健壮性与内容层守卫是两回事
         VerifyRunner runner = new VerifyRunner(repository, new DeterministicComparator(ComparatorConfig.defaults()), new PrintStream(output, true), new PrintStream(output, true), false);
         assertEquals(2, runner.run(stripped, HashUtil.sha256(stripped), null, null, false), "载荷被剥改 → 完整性锚失配拒绝: " + output);

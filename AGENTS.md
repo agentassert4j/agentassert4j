@@ -37,7 +37,7 @@
 | Java base package | `io.github.agentassert4j`  | Java 包名不允许 `-`，无需替代字符                           |
 | 目录路径              | `io/github/agentassert4j/` | 与 base package 严格对应                             |
 | artifactId 前缀     | `agentassert4j-`           | 所有模块统一前缀                                        |
-| 版本                | `1.0.0-SNAPSHOT`           | 发布时改为正式版                                        |
+| 版本                | `1.0.0`                    | 当前发布版本；缺陷修复递增 patch 号                     |
 
 **import 示例**：
 

@@ -6,12 +6,12 @@
     <parent>
         <groupId>io.github.agentassert4j</groupId>
         <artifactId>agentassert4j-parent</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <version>1.0.0</version>
     </parent>
 
     <artifactId>agentassert4j-cli-standalone</artifactId>
     <name>AgentAssert4j CLI — Standalone</name>
-    <description>cli 的全依赖可执行形态（java -jar 直接用；不发布到 Maven Central，仅随 GitHub Releases 分发）</description>
+    <description>Self-contained shaded CLI jar runnable via java -jar; distributed through GitHub Releases only, not published to Maven Central</description>
 
     <dependencies>
         <dependency>

@@ -111,7 +111,7 @@ public class VerifyRunner {
         if (expectedHash == null || expectedHash.isEmpty()) {
             // 同版本引擎导出的包恒带锚（PackCodec.toJson 必写）——锚缺席且
             // frameworkVersion 与当前引擎一致 = 锚被删的伪造形态，拒绝而非降级
-            // （round29 LOW-1：删 hash + 篡改 shape 曾可基于伪造基线产出真实判定）。
+            // （删 hash + 篡改 shape 曾可基于伪造基线产出真实判定）。
             // 版本不同的包维持警告（真历史包），锚防线的前提与绕过面见 OPERATIONS §6
             if (AgentAssert4jCli.FRAMEWORK_VERSION.equals(pack.getMeta().getFrameworkVersion())) {
                 return fail(CliErrorCode.E_GUARD, "Integrity guard: pack was exported by this engine version but carries no integrity hash (the field was removed after export).",
@@ -243,8 +243,8 @@ public class VerifyRunner {
         }
         if (integrityWarning != null) {
             info("Warning: " + integrityWarning);
-            // 降级警告必须进机器面 hints——仅人读可见时，JSON 消费者静默于「包无锚」
-            // 状态（r32 D17）
+            // 降级警告必须进机器通道的 hints——仅人读可见时，JSON 消费者静默于「包无锚」
+            // 状态
             hints.add(integrityWarning);
         }
         info("Pack digest (SHA-256): " + packDigest);
